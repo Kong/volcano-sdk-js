@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      prefix: 'chore(deps)'
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      sdk-production-dependencies:
+        dependency-type: 'production'
+        patterns:
+          - '*'
+      sdk-development-dependencies:
+        dependency-type: 'development'
+        patterns:
+          - '*'
+  - package-ecosystem: 'npm'
+    directory: '/examples/nextjs-notes-app'
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      nextjs-example-production-dependencies:
+        dependency-type: 'production'
+        patterns:
+          - '*'
+      nextjs-example-development-dependencies:
+        dependency-type: 'development'
+        patterns:
+          - '*'
