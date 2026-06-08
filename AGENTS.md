@@ -1,0 +1,2 @@
+- Before pushing changes, run `pnpm lint`.
+- Use Conventional Commits with a scope, like `fix(component): describe the change`.

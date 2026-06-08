@@ -1,0 +1,8 @@
+coverage
+dist
+node_modules
+examples/nextjs-notes-app/.next
+examples/nextjs-notes-app/node_modules
+*.tgz
+yarn.lock
+examples/nextjs-notes-app/yarn.lock

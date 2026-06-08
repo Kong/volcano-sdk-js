@@ -1,0 +1,7 @@
+packages:
+  - examples/nextjs-notes-app
+
+allowBuilds:
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
