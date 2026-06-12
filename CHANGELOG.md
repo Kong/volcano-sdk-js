@@ -17,6 +17,13 @@ All notable changes to the Volcano SDK will be documented in this file.
 - Removed server-backed integration tests from this repository. End-to-end coverage
   now lives with the platform implementation.
 
+## [1.2.1] - 2026-06-12
+
+### Changed
+
+- Publish refreshed package metadata for the `Kong/volcano-sdk-js` repository
+  rename.
+
 ## [1.2.0] - 2026-01-27
 
 ### Added

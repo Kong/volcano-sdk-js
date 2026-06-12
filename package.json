@@ -1,6 +1,6 @@
 {
   "name": "@volcano.dev/sdk",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "packageManager": "pnpm@10.34.1",
   "description": "Official JavaScript SDK for Volcano - Authentication, Database, Functions, Realtime, and more",
   "type": "commonjs",
