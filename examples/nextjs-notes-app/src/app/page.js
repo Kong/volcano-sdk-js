@@ -187,7 +187,7 @@ WHERE user_id = auth.uid()`}
           <p className="text-center text-gray-500 text-sm">
             Built with{' '}
             <a
-              href="https://github.com/Kong/sdk-volcano-js"
+              href="https://github.com/Kong/volcano-sdk-js"
               className="text-volcano-600 hover:underline"
               target="_blank"
               rel="noopener noreferrer"

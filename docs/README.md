@@ -78,7 +78,7 @@ Realtime support is included with the SDK and is available from
 
 ## Getting Help
 
-- [GitHub Issues](https://github.com/Kong/sdk-volcano-js/issues) - Report bugs or request features
+- [GitHub Issues](https://github.com/Kong/volcano-sdk-js/issues) - Report bugs or request features
 - [Volcano Documentation](https://volcano.dev/) - Product documentation and examples
 
 ## License

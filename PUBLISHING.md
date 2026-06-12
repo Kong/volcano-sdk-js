@@ -24,7 +24,7 @@ Configure the package on npmjs.com:
 - Package: `@volcano.dev/sdk`
 - Publisher: GitHub Actions
 - Organization or user: `Kong`
-- Repository: `sdk-volcano-js`
+- Repository: `volcano-sdk-js`
 - Workflow filename: `publish.yml`
 - Package environment: `npm-production`
 - Allowed action: `npm publish`
@@ -104,12 +104,12 @@ After publishing, the package is available via CDN:
 
 If npm reports an authentication error, check that:
 
-- npm trusted publishing is configured for `Kong/sdk-volcano-js`.
+- npm trusted publishing is configured for `Kong/volcano-sdk-js`.
 - The configured workflow filename is exactly `publish.yml`.
 - The workflow has `id-token: write`.
 - The job runs on a GitHub-hosted runner.
 - The package repository URL in `package.json` points to
-  `https://github.com/Kong/sdk-volcano-js.git`.
+  `https://github.com/Kong/volcano-sdk-js.git`.
 
 If publishing fails because the package version already exists on npm, update
 `package.json` to the next stable SemVer version and merge that change to
