@@ -45,6 +45,9 @@ const DEFAULT_UPLOAD_PART_SIZE = 25 * 1024 * 1024; // 25MB
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
+
+// Fragment params used by the managed hosted-auth / OAuth redirect hand-off.
+const AUTH_HASH_KEYS = new Set(['access_token', 'refresh_token', 'token_type', 'expires_in']);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
@@ -1395,10 +1398,12 @@ class VolcanoAuth {
    * Cheap peek that does not mutate state.
    */
   _hasSessionInUrl() {
-    if (!isBrowser()) return false;
+    if (!isBrowser()) {
+      return false;
+    }
     try {
       const hash = (window.location && window.location.hash) || '';
-      return hash.indexOf('access_token') !== -1;
+      return hash.includes('access_token');
     } catch {
       return false;
     }
@@ -1413,7 +1418,9 @@ class VolcanoAuth {
    * the URL. Returns true if a session was adopted. Browser-only and idempotent.
    */
   _consumeSessionFromUrl() {
-    if (!this._hasSessionInUrl()) return false;
+    if (!this._hasSessionInUrl()) {
+      return false;
+    }
 
     let params;
     try {
@@ -1423,7 +1430,9 @@ class VolcanoAuth {
     }
 
     const accessToken = params.get('access_token');
-    if (!accessToken) return false;
+    if (!accessToken) {
+      return false;
+    }
     const refreshToken = params.get('refresh_token');
 
     this.accessToken = accessToken;
@@ -1445,11 +1454,14 @@ class VolcanoAuth {
    * exclusively the hand-off params, to avoid clobbering app hash routing.
    */
   _stripAuthHashFromUrl(params) {
-    const AUTH_HASH_KEYS = ['access_token', 'refresh_token', 'token_type', 'expires_in'];
     try {
-      const onlyAuthParams = Array.from(params.keys()).every((key) => AUTH_HASH_KEYS.includes(key));
-      if (!onlyAuthParams) return;
-      if (!window.history || typeof window.history.replaceState !== 'function') return;
+      const onlyAuthParams = Array.from(params.keys()).every((key) => AUTH_HASH_KEYS.has(key));
+      if (!onlyAuthParams) {
+        return;
+      }
+      if (!window.history || typeof window.history.replaceState !== 'function') {
+        return;
+      }
       const loc = window.location;
       const cleanUrl = (loc.pathname || '/') + (loc.search || '');
       window.history.replaceState(window.history.state, '', cleanUrl);
