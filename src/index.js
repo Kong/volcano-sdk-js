@@ -46,8 +46,20 @@ const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
 
-// Fragment params used by the managed hosted-auth / OAuth redirect hand-off.
-const AUTH_HASH_KEYS = new Set(['access_token', 'refresh_token', 'token_type', 'expires_in']);
+// Fragment params produced by the managed hosted-auth / OAuth redirect hand-off.
+// Used to decide when the URL fragment is safe to strip after adopting a session:
+// the fragment is only cleared when every key is one of these, so an app's own
+// hash routing is never clobbered. Includes the standard OAuth redirect keys
+// (state/error) so tokens are still removed when they ride alongside them.
+const AUTH_HASH_KEYS = new Set([
+  'access_token',
+  'refresh_token',
+  'token_type',
+  'expires_in',
+  'state',
+  'error',
+  'error_description',
+]);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
@@ -1435,13 +1447,18 @@ class VolcanoAuth {
     }
     const refreshToken = params.get('refresh_token');
 
+    // The redirect hand-off is a complete session and fully replaces any
+    // previously stored one. Adopt its refresh token verbatim — or clear a
+    // stale stored token when the hand-off carries none — so we never pair this
+    // access token with a different session's refresh token (which could
+    // otherwise refresh into the wrong account).
     this.accessToken = accessToken;
-    if (refreshToken) {
-      this.refreshToken = refreshToken;
-    }
+    this.refreshToken = refreshToken || null;
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
       this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    } else {
+      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
     }
 
     this._stripAuthHashFromUrl(params);

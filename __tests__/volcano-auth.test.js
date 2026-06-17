@@ -466,6 +466,49 @@ describe('VolcanoAuth', () => {
       expect(v.accessToken).toBeFalsy();
       expect(window.location.hash).toBe('#section=pricing');
     });
+
+    it('clears a stored refresh token when the redirect hand-off carries none', () => {
+      // A previous session left a refresh token in storage.
+      localStorage.store['volcano_refresh_token'] = 'stale-stored-refresh';
+      // The redirect fragment carries a fresh access token but NO refresh token.
+      window.location.hash = '#access_token=fresh-access&token_type=bearer&expires_in=3600';
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      // The redirect session takes precedence: the stale refresh token is not
+      // adopted and is purged so it can't refresh into the previous account.
+      expect(v.accessToken).toBe('fresh-access');
+      expect(v.refreshToken).toBeNull();
+      expect(localStorage.store['volcano_refresh_token']).toBeUndefined();
+      expect(localStorage.removeItem).toHaveBeenCalledWith('volcano_refresh_token');
+    });
+
+    it('strips the fragment even when standard OAuth params (state) accompany the tokens', () => {
+      window.location.hash =
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=xyz';
+      const replaceSpy = jest.spyOn(window.history, 'replaceState');
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      expect(v.accessToken).toBe('hash-access');
+      expect(replaceSpy).toHaveBeenCalled();
+      expect(window.location.hash).toBe('');
+      replaceSpy.mockRestore();
+    });
+
+    it('leaves the fragment intact when an unknown app param rides alongside the tokens', () => {
+      window.location.hash =
+        '#access_token=hash-access&refresh_token=hash-refresh&app_view=billing';
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      // Session is still adopted, but the fragment is preserved so we never
+      // clobber an app's own hash state/routing.
+      expect(v.accessToken).toBe('hash-access');
+      expect(window.location.hash).toBe(
+        '#access_token=hash-access&refresh_token=hash-refresh&app_view=billing',
+      );
+    });
   });
 
   describe('Authentication - updateUser', () => {

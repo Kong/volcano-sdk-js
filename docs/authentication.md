@@ -193,7 +193,8 @@ const volcano = new VolcanoAuth({
 
 // The redirect session was already adopted when the client was created,
 // so the user is authenticated immediately.
-const { user } = await volcano.auth.getUser();
+const { user, error } = await volcano.auth.getUser();
+if (error) throw error;
 console.log('Signed in as', user.email);
 ```
 
