@@ -383,6 +383,91 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - managed auth redirect (URL hash adoption)', () => {
+    // These run under jsdom, so drive the real window/location/history.
+    afterEach(() => {
+      try {
+        window.history.replaceState(null, '', '/');
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('adopts the session from the URL fragment at construction, persists it, and strips the hash', () => {
+      window.location.hash =
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600';
+      const replaceSpy = jest.spyOn(window.history, 'replaceState');
+
+      // Construction alone must establish the session (no getUser needed).
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      expect(v.accessToken).toBe('hash-access');
+      expect(v.refreshToken).toBe('hash-refresh');
+      expect(localStorage.store['volcano_access_token']).toBe('hash-access');
+      expect(localStorage.store['volcano_refresh_token']).toBe('hash-refresh');
+      // Tokens were removed from the URL immediately.
+      expect(replaceSpy).toHaveBeenCalled();
+      expect(window.location.hash).toBe('');
+      replaceSpy.mockRestore();
+    });
+
+    it('lets an authenticated request use the adopted session without calling getUser() first', async () => {
+      window.location.hash =
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600';
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      // No getUser() call — go straight to an authenticated operation.
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'user-redirect', email: 'r@example.com' } }),
+      });
+      const result = await v.auth.updateUser({ metadata: { ok: true } });
+
+      expect(result.error).toBeNull();
+      expect(result.user.id).toBe('user-redirect');
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/user'),
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({ Authorization: 'Bearer hash-access' }),
+        }),
+      );
+    });
+
+    it('falls back to adopting the session on getUser() when the URL changes after construction', async () => {
+      // Client constructed before the redirect fragment exists.
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      expect(v.accessToken).toBeFalsy();
+
+      const callback = jest.fn();
+      v.auth.onAuthStateChange(callback);
+      callback.mockClear(); // ignore any initial emission on subscribe
+
+      // Fragment appears later (e.g. SPA navigation back from the hosted page).
+      window.location.hash =
+        '#access_token=late-access&refresh_token=late-refresh&token_type=bearer&expires_in=3600';
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'user-late' } }),
+      });
+
+      const result = await v.auth.getUser();
+      expect(result.user.id).toBe('user-late');
+      expect(v.accessToken).toBe('late-access');
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-late' }));
+    });
+
+    it('ignores a fragment that does not contain an access token', () => {
+      window.location.hash = '#section=pricing';
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      // No token adopted; app hash routing is left untouched.
+      expect(v.accessToken).toBeFalsy();
+      expect(window.location.hash).toBe('#section=pricing');
+    });
+  });
+
   describe('Authentication - updateUser', () => {
     it('should update user password', async () => {
       volcano.accessToken = 'valid-token';

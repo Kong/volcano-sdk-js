@@ -436,6 +436,11 @@ class VolcanoAuth {
       // Client-side use: Restore from localStorage if available
       this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
       this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+      // Adopt a managed hosted-auth redirect session from the URL fragment if
+      // present, so the client is authenticated at construction time — exactly
+      // like a signIn() result or a localStorage-restored session. A fresh
+      // redirect token takes precedence over any stale stored session.
+      this._consumeSessionFromUrl();
     }
 
     // Sub-objects for organization
@@ -799,6 +804,10 @@ class VolcanoAuth {
   }
 
   async getUser() {
+    // Transparently adopt a session handed off by the managed hosted auth pages
+    // (tokens in the URL fragment) so callers only ever need getUser().
+    const adoptedFromUrl = this._consumeSessionFromUrl();
+
     const result = await this._authFetch('/auth/user');
 
     if (!result.ok) {
@@ -806,6 +815,9 @@ class VolcanoAuth {
     }
 
     this.currentUser = result.data.user;
+    if (adoptedFromUrl) {
+      this._notifyAuthCallbacks(this.currentUser);
+    }
     return { user: result.data.user, error: null };
   }
 
@@ -1374,6 +1386,79 @@ class VolcanoAuth {
   }
 
   // ========================================================================
+  // Managed Auth Redirect (hosted login/signup hand-off)
+  // ========================================================================
+
+  /**
+   * Returns true when the current browser URL fragment carries a managed-auth
+   * session hand-off (i.e. an access_token from a hosted login/signup redirect).
+   * Cheap peek that does not mutate state.
+   */
+  _hasSessionInUrl() {
+    if (!isBrowser()) return false;
+    try {
+      const hash = (window.location && window.location.hash) || '';
+      return hash.indexOf('access_token') !== -1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Adopt a session handed off by the managed hosted auth pages. After a
+   * successful managed login/signup the user is redirected to the configured
+   * URL with the tokens in the URL fragment:
+   *   https://app/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...
+   * When present, the tokens are stored like any other session and removed from
+   * the URL. Returns true if a session was adopted. Browser-only and idempotent.
+   */
+  _consumeSessionFromUrl() {
+    if (!this._hasSessionInUrl()) return false;
+
+    let params;
+    try {
+      params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    } catch {
+      return false;
+    }
+
+    const accessToken = params.get('access_token');
+    if (!accessToken) return false;
+    const refreshToken = params.get('refresh_token');
+
+    this.accessToken = accessToken;
+    if (refreshToken) {
+      this.refreshToken = refreshToken;
+    }
+    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
+    if (this.refreshToken) {
+      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    }
+
+    this._stripAuthHashFromUrl(params);
+    return true;
+  }
+
+  /**
+   * Remove the managed-auth tokens from the URL fragment so they do not linger
+   * in history, referrers, or bookmarks. Only strips when the fragment is
+   * exclusively the hand-off params, to avoid clobbering app hash routing.
+   */
+  _stripAuthHashFromUrl(params) {
+    const AUTH_HASH_KEYS = ['access_token', 'refresh_token', 'token_type', 'expires_in'];
+    try {
+      const onlyAuthParams = Array.from(params.keys()).every((key) => AUTH_HASH_KEYS.includes(key));
+      if (!onlyAuthParams) return;
+      if (!window.history || typeof window.history.replaceState !== 'function') return;
+      const loc = window.location;
+      const cleanUrl = (loc.pathname || '/') + (loc.search || '');
+      window.history.replaceState(window.history.state, '', cleanUrl);
+    } catch {
+      // best-effort; leaving the fragment in place is non-fatal
+    }
+  }
+
+  // ========================================================================
   // Storage Helpers (Browser/Node.js compatible)
   // ========================================================================
 
@@ -1401,7 +1486,9 @@ class VolcanoAuth {
   // ========================================================================
 
   async initialize() {
-    if (this.accessToken && this.refreshToken) {
+    // getUser() also adopts a managed-auth session from the URL fragment when
+    // present, so trigger it if there is a stored session or a redirect hand-off.
+    if (this.accessToken || this.refreshToken || this._hasSessionInUrl()) {
       const { user, error } = await this.getUser();
       return { user, error };
     }

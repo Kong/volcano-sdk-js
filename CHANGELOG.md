@@ -4,6 +4,15 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Automatically adopt a managed hosted-auth (and OAuth) redirect session from the
+  URL fragment. When the user is redirected back with
+  `#access_token=…&refresh_token=…`, the client detects and stores the session at
+  construction (and on `getUser()`/`initialize()`) and strips the tokens from the
+  URL — so users are authenticated without a manual "consume redirect" step or a
+  required `getUser()` call first.
+
 ### Changed
 
 - Require Node.js 20 or newer for package installation and repository tooling.

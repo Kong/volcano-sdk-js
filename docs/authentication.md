@@ -139,6 +139,8 @@ if (user) {
 }
 ```
 
+The client also automatically adopts a session that is present in the page URL — for example after the user is redirected back from Volcano's hosted auth pages (or an OAuth provider). This happens when the client is created, so the user is authenticated before you call anything. See [Hosted Auth Pages (Managed Login)](#hosted-auth-pages-managed-login).
+
 ### Listen for Auth State Changes
 
 React to authentication events in real-time:
@@ -171,6 +173,46 @@ if (session) {
   console.log('Token refreshed, expires in', session.expires_in, 'seconds');
 }
 ```
+
+## Hosted Auth Pages (Managed Login)
+
+Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
+
+```
+https://your-app.com/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...
+```
+
+The SDK handles this hand-off for you. On your redirect page, just create your client — the session is detected, stored, and stripped from the URL automatically. You never parse the fragment yourself:
+
+```javascript
+// On your post-auth redirect page (e.g. /callback)
+const volcano = new VolcanoAuth({
+  apiUrl: 'https://api.example.com',
+  anonKey: 'ak-your-anon-key',
+});
+
+// The redirect session was already adopted when the client was created,
+// so the user is authenticated immediately.
+const { user } = await volcano.auth.getUser();
+console.log('Signed in as', user.email);
+```
+
+Because the session is adopted at construction (the same as a session restored from storage), **you don't have to call `getUser()` before making authenticated requests** — any authenticated call works right away:
+
+```javascript
+const volcano = new VolcanoAuth({ apiUrl, anonKey }); // session adopted from URL
+
+// Authenticated immediately — no getUser() required first.
+const { user } = await volcano.auth.updateUser({ metadata: { onboarded: true } });
+const { data } = await volcano.database('app-db').from('orders').select('*');
+```
+
+Notes:
+
+- This is browser-only (it reads `window.location.hash`).
+- The tokens are removed from the URL automatically so they don't linger in browser history or get bookmarked.
+- A normal app fragment (for example `#/dashboard`) is ignored and left untouched.
+- `getUser()` and `initialize()` also re-check the URL, so they still work if the client was created before the redirect fragment was present (e.g. in a single-page app).
 
 ## OAuth/SSO Authentication
 
@@ -210,7 +252,7 @@ These methods redirect the user to the provider's login page. After successful a
 
 ### Handle OAuth Callback
 
-After the OAuth redirect, the user returns to your app with tokens in the URL. The SDK handles this automatically when you call `initialize()`:
+After the OAuth redirect, the user returns to your app with the session in the URL fragment. The SDK adopts it automatically when the client is created (and again on `initialize()`/`getUser()`), so you don't parse the URL yourself:
 
 ```javascript
 // On your callback page or app initialization
@@ -220,6 +262,8 @@ if (user) {
   console.log('OAuth sign-in successful:', user.email);
 }
 ```
+
+This is the same hand-off described in [Hosted Auth Pages (Managed Login)](#hosted-auth-pages-managed-login).
 
 ### Link OAuth Provider to Existing Account
 

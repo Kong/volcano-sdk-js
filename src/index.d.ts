@@ -187,7 +187,18 @@ export interface Auth {
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Sign out current user */
   signOut(): Promise<{ error: Error | null }>;
-  /** Get current user data */
+  /**
+   * Get current user data.
+   *
+   * In the browser the client transparently adopts a session handed off by the
+   * managed hosted auth pages: after a successful managed login/signup the user
+   * is redirected with the tokens in the URL fragment
+   * (`#access_token=...&refresh_token=...`). That session is detected and stored
+   * (and the tokens removed from the URL) at client construction — so the client
+   * is authenticated before any call, consistent with a signIn() result or a
+   * localStorage-restored session. getUser() also re-checks the URL as a
+   * fallback, so callers never need a separate "consume redirect" step.
+   */
   getUser(): Promise<UserResponse>;
   /** Update current user */
   updateUser(options: UpdateUserOptions): Promise<UserResponse>;
