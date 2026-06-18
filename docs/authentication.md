@@ -176,13 +176,23 @@ if (session) {
 
 ## Hosted Auth Pages (Managed Login)
 
-Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
+Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. **Always start the flow with `signInWithHostedAuth()`** (or `getHostedAuthUrl()`): it stores a one-time nonce and passes it as `state`, which the SDK validates when the session comes back. This binds the returned session to the flow you started and prevents an attacker from tricking a user into adopting an attacker-controlled session (login CSRF / session fixation).
+
+```javascript
+// On your login button/page:
+volcano.auth.signInWithHostedAuth(); // or { action: 'signup' }
+// You can also get the URL without navigating:
+//   const url = volcano.auth.getHostedAuthUrl();
+//   window.location.assign(url);
+```
+
+After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
 
 ```
-https://your-app.com/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...
+https://your-app.com/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...&state=<nonce>
 ```
 
-The SDK handles this hand-off for you. On your redirect page, just create your client — the session is detected, stored, and stripped from the URL automatically. You never parse the fragment yourself:
+The SDK handles this hand-off for you. On your redirect page, just create your client — the session's `state` is validated against the stored nonce, then it's detected, stored, and stripped from the URL automatically. You never parse the fragment yourself:
 
 ```javascript
 // On your post-auth redirect page (e.g. /callback)
@@ -197,6 +207,8 @@ const { user, error } = await volcano.auth.getUser();
 if (error) throw error;
 console.log('Signed in as', user.email);
 ```
+
+> Security: a fragment whose `state` doesn't match a nonce this client stored (e.g. an unsolicited `#access_token=...` link, or a flow not started via the SDK) is **rejected** and scrubbed from the URL — it will not authenticate the user.
 
 Because the session is adopted at construction (the same as a session restored from storage), **you don't have to call `getUser()` before making authenticated requests** — any authenticated call works right away:
 
@@ -253,7 +265,7 @@ These methods redirect the user to the provider's login page. After successful a
 
 ### Handle OAuth Callback
 
-After the OAuth redirect, the user returns to your app with the session in the URL fragment. The SDK adopts it automatically when the client is created (and again on `initialize()`/`getUser()`), so you don't parse the URL yourself:
+After the OAuth redirect, the user returns to your app with the session in the URL fragment. `signInWithOAuth()` stored a one-time nonce before redirecting and the callback echoes it back as `state`, so the SDK validates it and adopts the session automatically when the client is created (and again on `initialize()`/`getUser()`) — you don't parse the URL yourself. By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override. As with hosted auth, a session whose `state` doesn't match the stored nonce is rejected:
 
 ```javascript
 // On your callback page or app initialization

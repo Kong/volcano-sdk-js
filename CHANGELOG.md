@@ -11,7 +11,22 @@ All notable changes to the Volcano SDK will be documented in this file.
   `#access_token=…&refresh_token=…`, the client detects and stores the session at
   construction (and on `getUser()`/`initialize()`) and strips the tokens from the
   URL — so users are authenticated without a manual "consume redirect" step or a
-  required `getUser()` call first.
+  required `getUser()` call first. The redirect session fully replaces any prior
+  stored session (a stale refresh token is cleared when the hand-off carries none).
+- `auth.signInWithHostedAuth()` / `auth.getHostedAuthUrl()` to start the managed
+  hosted-auth flow. They generate a one-time nonce (stored in `sessionStorage`)
+  and pass it as `state`; the returned session's `state` is validated against it.
+
+### Security
+
+- Bind adopted redirect sessions to the flow this client initiated (login-CSRF /
+  session-fixation defense). `signInWithHostedAuth()`/`getHostedAuthUrl()` and
+  `signInWithOAuth()` now store a one-time nonce; the hosted pages and OAuth
+  callback echo it back as `state`. A fragment whose `state` does not match the
+  stored nonce — e.g. an unsolicited/attacker-crafted `#access_token=…` link, or a
+  flow not initiated via the SDK — is **rejected** and scrubbed from the URL
+  instead of being adopted. `signInWithOAuth(provider, { redirectTo })` accepts an
+  optional return URL (defaults to the current page).
 
 ### Changed
 

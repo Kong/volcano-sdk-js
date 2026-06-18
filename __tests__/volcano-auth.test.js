@@ -385,17 +385,25 @@ describe('VolcanoAuth', () => {
 
   describe('Authentication - managed auth redirect (URL hash adoption)', () => {
     // These run under jsdom, so drive the real window/location/history.
+    const NONCE = 'rp-nonce-abc123';
+    // Simulate signInWithHostedAuth()/signInWithOAuth() having stored the
+    // one-time nonce in sessionStorage before the redirect.
+    const seedNonce = (nonce = NONCE) => window.sessionStorage.setItem('volcano_auth_state', nonce);
+
     afterEach(() => {
       try {
         window.history.replaceState(null, '', '/');
+        window.sessionStorage.clear();
       } catch {
         /* ignore */
       }
     });
 
     it('adopts the session from the URL fragment at construction, persists it, and strips the hash', () => {
+      seedNonce();
       window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600';
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
       const replaceSpy = jest.spyOn(window.history, 'replaceState');
 
       // Construction alone must establish the session (no getUser needed).
@@ -408,12 +416,16 @@ describe('VolcanoAuth', () => {
       // Tokens were removed from the URL immediately.
       expect(replaceSpy).toHaveBeenCalled();
       expect(window.location.hash).toBe('');
+      // The one-time nonce was consumed.
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBeNull();
       replaceSpy.mockRestore();
     });
 
     it('lets an authenticated request use the adopted session without calling getUser() first', async () => {
+      seedNonce();
       window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600';
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
       // No getUser() call — go straight to an authenticated operation.
@@ -435,6 +447,9 @@ describe('VolcanoAuth', () => {
     });
 
     it('falls back to adopting the session on getUser() when the URL changes after construction', async () => {
+      // Nonce was stored before navigating to the hosted page; it persists in
+      // sessionStorage across the redirect back.
+      seedNonce();
       // Client constructed before the redirect fragment exists.
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       expect(v.accessToken).toBeFalsy();
@@ -445,7 +460,8 @@ describe('VolcanoAuth', () => {
 
       // Fragment appears later (e.g. SPA navigation back from the hosted page).
       window.location.hash =
-        '#access_token=late-access&refresh_token=late-refresh&token_type=bearer&expires_in=3600';
+        '#access_token=late-access&refresh_token=late-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
@@ -467,11 +483,40 @@ describe('VolcanoAuth', () => {
       expect(window.location.hash).toBe('#section=pricing');
     });
 
+    it('rejects an unsolicited session when no nonce was stored (login-CSRF defense)', () => {
+      // No seedNonce(): the victim never initiated a hosted-auth flow in this tab.
+      window.location.hash =
+        '#access_token=attacker-access&refresh_token=attacker-refresh&token_type=bearer&expires_in=3600&state=attacker-state';
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      // The attacker-crafted session is NOT adopted...
+      expect(v.accessToken).toBeFalsy();
+      expect(localStorage.store['volcano_access_token']).toBeUndefined();
+      // ...and the tokens are scrubbed from the URL.
+      expect(window.location.hash).toBe('');
+    });
+
+    it('rejects a session whose state does not match the stored nonce', () => {
+      seedNonce('the-real-nonce');
+      window.location.hash =
+        '#access_token=attacker-access&refresh_token=attacker-refresh&token_type=bearer&expires_in=3600&state=a-different-nonce';
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      expect(v.accessToken).toBeFalsy();
+      expect(window.location.hash).toBe('');
+      // The stored nonce is consumed even on rejection (single-use).
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBeNull();
+    });
+
     it('clears a stored refresh token when the redirect hand-off carries none', () => {
+      seedNonce();
       // A previous session left a refresh token in storage.
       localStorage.store['volcano_refresh_token'] = 'stale-stored-refresh';
       // The redirect fragment carries a fresh access token but NO refresh token.
-      window.location.hash = '#access_token=fresh-access&token_type=bearer&expires_in=3600';
+      window.location.hash =
+        '#access_token=fresh-access&token_type=bearer&expires_in=3600&state=' + NONCE;
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
@@ -483,9 +528,11 @@ describe('VolcanoAuth', () => {
       expect(localStorage.removeItem).toHaveBeenCalledWith('volcano_refresh_token');
     });
 
-    it('strips the fragment even when standard OAuth params (state) accompany the tokens', () => {
+    it('strips the fragment cleanly when only auth params (incl. state) are present', () => {
+      seedNonce();
       window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=xyz';
+        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
       const replaceSpy = jest.spyOn(window.history, 'replaceState');
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -497,8 +544,9 @@ describe('VolcanoAuth', () => {
     });
 
     it('leaves the fragment intact when an unknown app param rides alongside the tokens', () => {
+      seedNonce();
       window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&app_view=billing';
+        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing';
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
@@ -506,8 +554,86 @@ describe('VolcanoAuth', () => {
       // clobber an app's own hash state/routing.
       expect(v.accessToken).toBe('hash-access');
       expect(window.location.hash).toBe(
-        '#access_token=hash-access&refresh_token=hash-refresh&app_view=billing',
+        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing',
       );
+    });
+
+    it('adopts the URL session only once even when the preserved hash keeps tokens around', async () => {
+      seedNonce();
+      // App params keep the hash (and thus the tokens) in the URL after adoption.
+      window.location.hash =
+        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing';
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      const callback = jest.fn();
+      v.auth.onAuthStateChange(callback);
+      callback.mockClear(); // ignore the initial emission on subscribe
+
+      // The session was already consumed at construction, so repeated getUser()
+      // calls must not re-adopt or re-fire the auth callback even though the
+      // tokens are still present in window.location.hash.
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'user-once', email: 'once@example.com' } }),
+      });
+
+      await v.auth.getUser();
+      await v.auth.getUser();
+      await v.auth.getUser();
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(window.location.hash).toBe(
+        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing',
+      );
+      expect(v.accessToken).toBe('hash-access');
+    });
+  });
+
+  describe('Authentication - hosted auth / OAuth initiation (RP nonce)', () => {
+    afterEach(() => {
+      try {
+        window.sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('getHostedAuthUrl stores a nonce and includes it as state with anon_key', () => {
+      // anonKey must be a JWT carrying project_id for projectId derivation.
+      const anonKey = createTestJwtToken('11111111-1111-1111-1111-111111111111');
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey });
+
+      const url = v.auth.getHostedAuthUrl({ action: 'signup' });
+      const parsed = new URL(url);
+
+      expect(parsed.pathname).toBe('/projects/11111111-1111-1111-1111-111111111111/auth/hosted');
+      expect(parsed.searchParams.get('anon_key')).toBe(anonKey);
+      expect(parsed.searchParams.get('action')).toBe('signup');
+      const stateInUrl = parsed.searchParams.get('state');
+      expect(stateInUrl).toBeTruthy();
+      // The same nonce is stored for validation on return.
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(stateInUrl);
+    });
+
+    it('getHostedAuthUrl accepts an explicit projectId when the anon key is opaque', () => {
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-opaque-key' });
+      const url = v.auth.getHostedAuthUrl({ projectId: 'proj-xyz' });
+      expect(new URL(url).pathname).toBe('/projects/proj-xyz/auth/hosted');
+    });
+
+    it('signInWithOAuth stores a nonce and carries it in redirect_url as vh_state', () => {
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+      const oauthUrl = v.auth.signInWithOAuth('google');
+      const parsed = new URL(oauthUrl);
+
+      expect(parsed.pathname).toBe('/auth/oauth/google/authorize');
+      expect(parsed.searchParams.get('anon_key')).toBe('ak-test-key');
+      const redirectUrl = parsed.searchParams.get('redirect_url');
+      expect(redirectUrl).toBeTruthy();
+      const nonceInRedirect = new URL(redirectUrl).searchParams.get('vh_state');
+      expect(nonceInRedirect).toBeTruthy();
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonceInRedirect);
     });
   });
 
@@ -1061,10 +1187,17 @@ describe('VolcanoAuth', () => {
   });
 
   describe('OAuth', () => {
-    it('should redirect to OAuth provider', () => {
-      expect(volcano.auth.signInWithOAuth('google')).toBe(
-        'https://api.test.com/auth/oauth/google/authorize?anon_key=ak-test-anon-key',
+    it('should redirect to OAuth provider with anon_key and an RP-nonce redirect_url', () => {
+      const url = volcano.auth.signInWithOAuth('google');
+      const parsed = new URL(url);
+      expect(parsed.origin + parsed.pathname).toBe(
+        'https://api.test.com/auth/oauth/google/authorize',
       );
+      expect(parsed.searchParams.get('anon_key')).toBe('ak-test-anon-key');
+      // The redirect_url carries the one-time nonce as vh_state.
+      const redirectUrl = parsed.searchParams.get('redirect_url');
+      expect(redirectUrl).toBeTruthy();
+      expect(new URL(redirectUrl).searchParams.get('vh_state')).toBeTruthy();
     });
 
     it('should have convenience methods for all providers', () => {
