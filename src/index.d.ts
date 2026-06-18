@@ -187,7 +187,23 @@ export interface Auth {
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Sign out current user */
   signOut(): Promise<{ error: Error | null }>;
-  /** Get current user data */
+  /**
+   * Get current user data.
+   *
+   * In the browser the client transparently adopts a session handed off by the
+   * managed hosted auth pages: after a successful managed login/signup the user
+   * is redirected with the tokens in the URL fragment
+   * (`#access_token=...&refresh_token=...`). That session is detected and stored
+   * (and the tokens removed from the URL) at client construction — so the client
+   * is authenticated before any call, consistent with a signIn() result or a
+   * localStorage-restored session. getUser() also re-checks the URL as a
+   * fallback, so callers never need a separate "consume redirect" step.
+   *
+   * The redirect must be initiated via signInWithHostedAuth()/signInWithOAuth()
+   * (or getHostedAuthUrl()): those store a one-time nonce that the returned
+   * `state` is validated against, so an unsolicited/attacker-crafted
+   * `#access_token=...` link is rejected rather than silently adopted.
+   */
   getUser(): Promise<UserResponse>;
   /** Update current user */
   updateUser(options: UpdateUserOptions): Promise<UserResponse>;
@@ -224,9 +240,32 @@ export interface Auth {
   /** Cancel pending email change */
   cancelEmailChange(): Promise<MessageResponse>;
 
+  // Managed hosted auth pages
+  /**
+   * Build the managed hosted-auth URL for this project and store a one-time
+   * nonce (sessionStorage) so the returned session can be bound to this flow
+   * (login-CSRF / session-fixation defense). The nonce is sent as `state` and
+   * echoed back in the post-auth fragment, which the SDK validates on return.
+   * Browser-only. Pass `projectId` when the anon key is opaque (not a JWT).
+   */
+  getHostedAuthUrl(options?: {
+    projectId?: string;
+    action?: 'login' | 'signup' | 'forgot-password';
+  }): string;
+  /** Redirect the browser to the managed hosted-auth pages (stores the nonce). */
+  signInWithHostedAuth(options?: {
+    projectId?: string;
+    action?: 'login' | 'signup' | 'forgot-password';
+  }): string;
+
   // OAuth methods
-  /** Start OAuth flow (redirects browser). Throws if provider is invalid. */
-  signInWithOAuth(provider: OAuthProviderName): void;
+  /**
+   * Start OAuth flow (redirects browser). Throws if provider is invalid.
+   * Stores a one-time nonce and carries it through the OAuth callback so the
+   * returned session is bound to this flow (login-CSRF defense). `redirectTo`
+   * overrides the post-auth return URL (defaults to the current page).
+   */
+  signInWithOAuth(provider: OAuthProviderName, options?: { redirectTo?: string }): string;
   /** Sign in with Google */
   signInWithGoogle(): void;
   /** Sign in with GitHub */

@@ -217,7 +217,9 @@ module.exports = [
   {
     files: integrationTestFiles,
     rules: {
-      'import-x/no-unresolved': ['error', { commonjs: true, ignore: ['^dotenv$'] }],
+      // dotenv and pg are runtime-only deps of the hosting-owned integration
+      // harness, not the SDK package, so they aren't resolvable here.
+      'import-x/no-unresolved': ['error', { commonjs: true, ignore: ['^dotenv$', '^pg$'] }],
     },
   },
   {

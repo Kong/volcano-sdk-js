@@ -45,6 +45,24 @@ const DEFAULT_UPLOAD_PART_SIZE = 25 * 1024 * 1024; // 25MB
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
+// sessionStorage key holding the one-time RP nonce that binds a managed/OAuth
+// redirect session to the flow this client initiated (login-CSRF defense).
+const STORAGE_KEY_AUTH_STATE = 'volcano_auth_state';
+
+// Fragment params produced by the managed hosted-auth / OAuth redirect hand-off.
+// Used to decide when the URL fragment is safe to strip after adopting a session:
+// the fragment is only cleared when every key is one of these, so an app's own
+// hash routing is never clobbered. Includes the standard OAuth redirect keys
+// (state/error) so tokens are still removed when they ride alongside them.
+const AUTH_HASH_KEYS = new Set([
+  'access_token',
+  'refresh_token',
+  'token_type',
+  'expires_in',
+  'state',
+  'error',
+  'error_description',
+]);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
@@ -426,6 +444,16 @@ class VolcanoAuth {
     this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
     this._currentDatabaseName = null;
     this.currentUser = null;
+    // Tracks whether a managed-redirect session was already adopted from the URL
+    // fragment so repeated getUser()/initialize() calls don't re-adopt and
+    // re-fire auth callbacks when the hash can't be stripped (see
+    // _consumeSessionFromUrl / _stripAuthHashFromUrl).
+    this._urlSessionConsumed = false;
+    // A redirect session adopted in the constructor (the common SPA path) can't
+    // fire onAuthStateChange yet — no listeners are registered and currentUser
+    // is still null. Remember the adoption so the first getUser()/initialize()
+    // that resolves a user announces the SIGNED_IN transition exactly once.
+    this._pendingUrlAuthNotify = false;
     this._functionResolveState = getSharedFunctionResolveState();
 
     // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
@@ -436,6 +464,11 @@ class VolcanoAuth {
       // Client-side use: Restore from localStorage if available
       this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
       this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+      // Adopt a managed hosted-auth redirect session from the URL fragment if
+      // present, so the client is authenticated at construction time — exactly
+      // like a signIn() result or a localStorage-restored session. A fresh
+      // redirect token takes precedence over any stale stored session.
+      this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
     }
 
     // Sub-objects for organization
@@ -461,6 +494,9 @@ class VolcanoAuth {
       requestEmailChange: this.requestEmailChange.bind(this),
       confirmEmailChange: this.confirmEmailChange.bind(this),
       cancelEmailChange: this.cancelEmailChange.bind(this),
+      // Managed hosted auth pages
+      getHostedAuthUrl: this.getHostedAuthUrl.bind(this),
+      signInWithHostedAuth: this.signInWithHostedAuth.bind(this),
       // OAuth methods
       signInWithOAuth: this.signInWithOAuth.bind(this),
       signInWithGoogle: this.signInWithGoogle.bind(this),
@@ -799,6 +835,10 @@ class VolcanoAuth {
   }
 
   async getUser() {
+    // Transparently adopt a session handed off by the managed hosted auth pages
+    // (tokens in the URL fragment) so callers only ever need getUser().
+    const adoptedFromUrl = this._consumeSessionFromUrl();
+
     const result = await this._authFetch('/auth/user');
 
     if (!result.ok) {
@@ -806,6 +846,13 @@ class VolcanoAuth {
     }
 
     this.currentUser = result.data.user;
+    // Announce the redirect adoption — whether it happened just now or earlier
+    // at construction — exactly once, so onAuthStateChange listeners see the
+    // SIGNED_IN transition on the common hosted-redirect path too.
+    if (adoptedFromUrl || this._pendingUrlAuthNotify) {
+      this._pendingUrlAuthNotify = false;
+      this._notifyAuthCallbacks(this.currentUser);
+    }
     return { user: result.data.user, error: null };
   }
 
@@ -1023,14 +1070,28 @@ class VolcanoAuth {
   // OAuth / SSO Authentication
   // ========================================================================
 
-  signInWithOAuth(provider) {
+  signInWithOAuth(provider, options = {}) {
     sanitizeProvider(provider);
     if (!isBrowser()) {
       throw new Error(
         'OAuth sign-in is only available in browser environment. Use server-side auth flow for SSR.',
       );
     }
-    const oauthUrl = `${this.apiUrl}/auth/oauth/${provider}/authorize?anon_key=${encodeURIComponent(this.anonKey)}`;
+    // Bind the returned session to this flow: generate a one-time nonce, store it,
+    // and carry it in the redirect_url query as vh_state. The OAuth callback echoes
+    // it into the post-auth fragment as `state`, which _consumeSessionFromUrl
+    // validates against the stored nonce (login-CSRF / session-fixation defense).
+    const nonce = this._generateAuthStateNonce();
+    this._storeAuthState(nonce);
+
+    const redirectBase = this._resolveOAuthRedirectTarget(options.redirectTo);
+    const redirectURL = new URL(redirectBase);
+    redirectURL.searchParams.set('vh_state', nonce);
+
+    const oauthUrl =
+      `${this.apiUrl}/auth/oauth/${provider}/authorize` +
+      `?anon_key=${encodeURIComponent(this.anonKey)}` +
+      `&redirect_url=${encodeURIComponent(redirectURL.toString())}`;
     try {
       if (window.location && typeof window.location.assign === 'function') {
         window.location.assign(oauthUrl);
@@ -1044,6 +1105,68 @@ class VolcanoAuth {
       }
     }
     return oauthUrl;
+  }
+
+  // Resolve where the OAuth callback should return the browser. Defaults to the
+  // current page (without query/hash), which is also the page that will adopt
+  // the returned session.
+  _resolveOAuthRedirectTarget(redirectTo) {
+    if (typeof redirectTo === 'string' && redirectTo.trim() !== '') {
+      return redirectTo.trim();
+    }
+    const loc = window.location;
+    return `${loc.origin}${loc.pathname}`;
+  }
+
+  // Build the managed hosted-auth URL for this project and store a one-time nonce
+  // so the returned session can be bound to this flow. Pass { action: 'signup' |
+  // 'login' | 'forgot-password' } to deep-link a step. Browser-only.
+  getHostedAuthUrl(options = {}) {
+    if (!isBrowser()) {
+      throw new Error('getHostedAuthUrl is only available in the browser.');
+    }
+    const projectId = this._resolveProjectIdForHostedAuth(options.projectId);
+    const nonce = this._generateAuthStateNonce();
+    this._storeAuthState(nonce);
+
+    const url = new URL(`${this.apiUrl}/projects/${projectId}/auth/hosted`);
+    url.searchParams.set('anon_key', this.anonKey);
+    if (options.action) {
+      url.searchParams.set('action', String(options.action));
+    }
+    url.searchParams.set('state', nonce);
+    return url.toString();
+  }
+
+  // Redirect the browser to the managed hosted-auth pages (stores the nonce).
+  signInWithHostedAuth(options = {}) {
+    const url = this.getHostedAuthUrl(options);
+    try {
+      if (window.location && typeof window.location.assign === 'function') {
+        window.location.assign(url);
+      } else {
+        window.location.href = url;
+      }
+    } catch (err) {
+      const message = String((err && err.message) || err || '');
+      if (!message.includes('Not implemented: navigation')) {
+        throw err;
+      }
+    }
+    return url;
+  }
+
+  _resolveProjectIdForHostedAuth(explicitProjectId) {
+    if (typeof explicitProjectId === 'string' && explicitProjectId.trim() !== '') {
+      return explicitProjectId.trim();
+    }
+    try {
+      return extractRequiredProjectIdFromToken(this.anonKey);
+    } catch {
+      throw new Error(
+        'Unable to determine project id for hosted auth. Pass { projectId } to getHostedAuthUrl()/signInWithHostedAuth().',
+      );
+    }
   }
 
   signInWithGoogle() {
@@ -1374,6 +1497,166 @@ class VolcanoAuth {
   }
 
   // ========================================================================
+  // Managed Auth Redirect (hosted login/signup hand-off)
+  // ========================================================================
+
+  /**
+   * Returns true when the current browser URL fragment carries a managed-auth
+   * session hand-off (i.e. an access_token from a hosted login/signup redirect).
+   * Cheap peek that does not mutate state.
+   */
+  _hasSessionInUrl() {
+    if (!isBrowser()) {
+      return false;
+    }
+    try {
+      const hash = (window.location && window.location.hash) || '';
+      return hash.includes('access_token');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Adopt a session handed off by the managed hosted auth pages. After a
+   * successful managed login/signup the user is redirected to the configured
+   * URL with the tokens in the URL fragment:
+   *   https://app/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...
+   * When present, the tokens are stored like any other session and removed from
+   * the URL. Returns true if a session was adopted. Browser-only and idempotent.
+   */
+  _consumeSessionFromUrl() {
+    // Adopt at most once per client. When the fragment mixes tokens with app
+    // params we deliberately leave the hash in place, so without this guard
+    // every later getUser() would re-adopt and re-fire auth callbacks.
+    if (this._urlSessionConsumed) {
+      return false;
+    }
+    if (!this._hasSessionInUrl()) {
+      return false;
+    }
+
+    let params;
+    try {
+      params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    } catch {
+      return false;
+    }
+
+    const accessToken = params.get('access_token');
+    if (!accessToken) {
+      return false;
+    }
+
+    // Login-CSRF / session-fixation defense: only adopt a redirect session that
+    // this client initiated. signInWithHostedAuth()/signInWithOAuth() store a
+    // one-time nonce before redirecting; the hosted page and OAuth callback echo
+    // it back as `state`. Reject (and scrub) any fragment whose `state` does not
+    // match the stored nonce — e.g. an attacker-crafted #access_token link.
+    const expectedNonce = this._takeAuthState();
+    const urlState = params.get('state') || '';
+    if (!expectedNonce || urlState === '' || urlState !== expectedNonce) {
+      // Unsolicited or mismatched session: do not authenticate. Scrub the tokens
+      // from the URL so they don't linger, and mark as handled so we don't loop.
+      this._urlSessionConsumed = true;
+      this._stripAuthHashFromUrl(params);
+      return false;
+    }
+
+    const refreshToken = params.get('refresh_token');
+
+    // The redirect hand-off is a complete session and fully replaces any
+    // previously stored one. Adopt its refresh token verbatim — or clear a
+    // stale stored token when the hand-off carries none — so we never pair this
+    // access token with a different session's refresh token (which could
+    // otherwise refresh into the wrong account).
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken || null;
+    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
+    if (this.refreshToken) {
+      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    } else {
+      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    }
+
+    this._urlSessionConsumed = true;
+    this._stripAuthHashFromUrl(params);
+    return true;
+  }
+
+  /**
+   * Remove the managed-auth tokens from the URL fragment so they do not linger
+   * in history, referrers, or bookmarks. Only strips when the fragment is
+   * exclusively the hand-off params, to avoid clobbering app hash routing.
+   */
+  _stripAuthHashFromUrl(params) {
+    try {
+      const onlyAuthParams = Array.from(params.keys()).every((key) => AUTH_HASH_KEYS.has(key));
+      if (!onlyAuthParams) {
+        return;
+      }
+      if (!window.history || typeof window.history.replaceState !== 'function') {
+        return;
+      }
+      const loc = window.location;
+      const cleanUrl = (loc.pathname || '/') + (loc.search || '');
+      window.history.replaceState(window.history.state, '', cleanUrl);
+    } catch {
+      // best-effort; leaving the fragment in place is non-fatal
+    }
+  }
+
+  // ========================================================================
+  // RP nonce helpers (sessionStorage) — bind redirect sessions to this client
+  // ========================================================================
+
+  // Generate a one-time, unguessable nonce for the managed/OAuth redirect flow.
+  // This is a CSRF defense, so it must be cryptographically random — we require
+  // Web Crypto (browsers and Node >= 20 provide it) rather than fall back to a
+  // predictable PRNG.
+  _generateAuthStateNonce() {
+    const cryptoObj =
+      (isBrowser() && window.crypto) ||
+      (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
+    if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') {
+      throw new Error(
+        'A Web Crypto implementation (crypto.getRandomValues) is required to start a hosted-auth/OAuth flow.',
+      );
+    }
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
+  // survives the navigation away to the hosted page and back to this origin.
+  _storeAuthState(nonce) {
+    if (!isBrowser()) {
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY_AUTH_STATE, nonce);
+    } catch {
+      // sessionStorage may be unavailable (privacy mode); the redirect will then
+      // be rejected on return, which fails safe.
+    }
+  }
+
+  // Read and clear the stored nonce (one-time use).
+  _takeAuthState() {
+    if (!isBrowser()) {
+      return null;
+    }
+    try {
+      const nonce = window.sessionStorage.getItem(STORAGE_KEY_AUTH_STATE);
+      window.sessionStorage.removeItem(STORAGE_KEY_AUTH_STATE);
+      return nonce;
+    } catch {
+      return null;
+    }
+  }
+
+  // ========================================================================
   // Storage Helpers (Browser/Node.js compatible)
   // ========================================================================
 
@@ -1401,7 +1684,9 @@ class VolcanoAuth {
   // ========================================================================
 
   async initialize() {
-    if (this.accessToken && this.refreshToken) {
+    // getUser() also adopts a managed-auth session from the URL fragment when
+    // present, so trigger it if there is a stored session or a redirect hand-off.
+    if (this.accessToken || this.refreshToken || this._hasSessionInUrl()) {
       const { user, error } = await this.getUser();
       return { user, error };
     }
