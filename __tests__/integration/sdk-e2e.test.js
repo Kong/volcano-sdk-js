@@ -486,7 +486,9 @@ describe('SDK E2E Integration Tests', () => {
         uninstallBrowserEnv();
       }
 
-      console.log('  [ok] reloaded client restored session and authenticated an update without getUser()');
+      console.log(
+        '  [ok] reloaded client restored session and authenticated an update without getUser()',
+      );
     });
 
     // The headline test: drive the flow as a real app would. The SDK initiates
@@ -2140,7 +2142,9 @@ describe('SDK E2E Integration Tests', () => {
       result.data.forEach((item) => {
         expect(item.name.toLowerCase()).toContain('product');
       });
-      console.log(`  [ok] ilike() filter returned ${result.data.length} items containing 'product'`);
+      console.log(
+        `  [ok] ilike() filter returned ${result.data.length} items containing 'product'`,
+      );
     });
 
     test('is() - filters by null/boolean', async () => {
