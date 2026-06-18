@@ -1602,15 +1602,21 @@ class VolcanoAuth {
   // ========================================================================
 
   // Generate a one-time, unguessable nonce for the managed/OAuth redirect flow.
+  // This is a CSRF defense, so it must be cryptographically random — we require
+  // Web Crypto (browsers and Node >= 20 provide it) rather than fall back to a
+  // predictable PRNG.
   _generateAuthStateNonce() {
-    if (isBrowser() && window.crypto && typeof window.crypto.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16);
-      window.crypto.getRandomValues(bytes);
-      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const cryptoObj =
+      (isBrowser() && window.crypto) ||
+      (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
+    if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') {
+      throw new Error(
+        'A Web Crypto implementation (crypto.getRandomValues) is required to start a hosted-auth/OAuth flow.',
+      );
     }
-    // Non-crypto fallback (e.g. very old browsers); still per-flow and discarded
-    // after a single use.
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
