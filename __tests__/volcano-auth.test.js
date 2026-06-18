@@ -474,6 +474,38 @@ describe('VolcanoAuth', () => {
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-late' }));
     });
 
+    it('fires onAuthStateChange once on the first getUser() after construction-time adoption', async () => {
+      seedNonce();
+      // Fragment present at load → the session is adopted in the constructor,
+      // before any listener can subscribe (the common SPA hosted-redirect path).
+      window.location.hash =
+        '#access_token=ctor-access&refresh_token=ctor-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      expect(v.accessToken).toBe('ctor-access');
+
+      const callback = jest.fn();
+      v.auth.onAuthStateChange(callback);
+      // Immediate emission on subscribe reflects the not-yet-fetched user.
+      expect(callback).toHaveBeenLastCalledWith(null);
+      callback.mockClear();
+
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'user-ctor', email: 'c@example.com' } }),
+      });
+
+      // First getUser() announces the SIGNED_IN transition for the adoption that
+      // happened at construction.
+      await v.auth.getUser();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-ctor' }));
+
+      // Subsequent getUser() calls must not re-fire the adoption callback.
+      await v.auth.getUser();
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
     it('ignores a fragment that does not contain an access token', () => {
       window.location.hash = '#section=pricing';
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -569,9 +601,10 @@ describe('VolcanoAuth', () => {
       v.auth.onAuthStateChange(callback);
       callback.mockClear(); // ignore the initial emission on subscribe
 
-      // The session was already consumed at construction, so repeated getUser()
-      // calls must not re-adopt or re-fire the auth callback even though the
-      // tokens are still present in window.location.hash.
+      // The session was already consumed at construction, so the first getUser()
+      // announces that adoption exactly once; repeated getUser() calls must not
+      // re-adopt or re-fire the auth callback even though the tokens are still
+      // present in window.location.hash.
       global.fetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ user: { id: 'user-once', email: 'once@example.com' } }),
@@ -581,7 +614,8 @@ describe('VolcanoAuth', () => {
       await v.auth.getUser();
       await v.auth.getUser();
 
-      expect(callback).not.toHaveBeenCalled();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-once' }));
       expect(window.location.hash).toBe(
         '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing',
       );

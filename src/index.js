@@ -449,6 +449,11 @@ class VolcanoAuth {
     // re-fire auth callbacks when the hash can't be stripped (see
     // _consumeSessionFromUrl / _stripAuthHashFromUrl).
     this._urlSessionConsumed = false;
+    // A redirect session adopted in the constructor (the common SPA path) can't
+    // fire onAuthStateChange yet — no listeners are registered and currentUser
+    // is still null. Remember the adoption so the first getUser()/initialize()
+    // that resolves a user announces the SIGNED_IN transition exactly once.
+    this._pendingUrlAuthNotify = false;
     this._functionResolveState = getSharedFunctionResolveState();
 
     // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
@@ -463,7 +468,7 @@ class VolcanoAuth {
       // present, so the client is authenticated at construction time — exactly
       // like a signIn() result or a localStorage-restored session. A fresh
       // redirect token takes precedence over any stale stored session.
-      this._consumeSessionFromUrl();
+      this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
     }
 
     // Sub-objects for organization
@@ -841,7 +846,11 @@ class VolcanoAuth {
     }
 
     this.currentUser = result.data.user;
-    if (adoptedFromUrl) {
+    // Announce the redirect adoption — whether it happened just now or earlier
+    // at construction — exactly once, so onAuthStateChange listeners see the
+    // SIGNED_IN transition on the common hosted-redirect path too.
+    if (adoptedFromUrl || this._pendingUrlAuthNotify) {
+      this._pendingUrlAuthNotify = false;
       this._notifyAuthCallbacks(this.currentUser);
     }
     return { user: result.data.user, error: null };
