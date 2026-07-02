@@ -118,10 +118,11 @@ exports.handler = async (event) => {
     };
   }
 
-  // Connect to database with user context
-  const dbName = process.env.DATABASE_NAME;
-  const appName = `volcano_user_access:${dbName}:${auth.user_id}`;
-  const connStr = process.env.DATABASE_URL + '?application_name=' + encodeURIComponent(appName);
+  // Connect to database with user context. DATABASE_URL already carries the
+  // unique username the proxy routes by; databaseConnectionString only sets
+  // application_name to impersonate the auth user so Row-Level Security applies.
+  const { databaseConnectionString } = require('@volcano.dev/sdk');
+  const connStr = databaseConnectionString(process.env.DATABASE_URL, { userId: auth.user_id });
 
   const client = new Client({ connectionString: connStr });
   await client.connect();
@@ -155,9 +156,8 @@ exports.handler = async (event) => {
   const { timeframe } = event;
   const days = timeframe === 'last-7-days' ? 7 : 30;
 
-  const dbName = process.env.DATABASE_NAME;
-  const appName = `volcano_user_access:${dbName}:${auth.user_id}`;
-  const connStr = process.env.DATABASE_URL + '?application_name=' + encodeURIComponent(appName);
+  const { databaseConnectionString } = require('@volcano.dev/sdk');
+  const connStr = databaseConnectionString(process.env.DATABASE_URL, { userId: auth.user_id });
 
   const client = new Client({ connectionString: connStr });
   await client.connect();
@@ -314,9 +314,10 @@ Functions can access environment variables configured in the Volcano dashboard:
 
 ```javascript
 exports.handler = async (event) => {
-  // Built-in variables
+  // Built-in variables. DATABASE_URL already carries the unique username the
+  // proxy routes by; pass it to databaseConnectionString rather than building
+  // application_name yourself.
   const dbUrl = process.env.DATABASE_URL;
-  const dbName = process.env.DATABASE_NAME;
 
   // Custom variables (set in dashboard)
   const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -337,10 +338,11 @@ Store sensitive data like API keys as environment variables rather than in code.
 For queries that should respect Row-Level Security:
 
 ```javascript
+const { databaseConnectionString } = require('@volcano.dev/sdk');
+
 const auth = event.__volcano_auth;
-const dbName = process.env.DATABASE_NAME;
-const appName = `volcano_user_access:${dbName}:${auth.user_id}`;
-const connStr = process.env.DATABASE_URL + '?application_name=' + encodeURIComponent(appName);
+// Impersonates the auth user: application_name=volcano_user_access:{userId}
+const connStr = databaseConnectionString(process.env.DATABASE_URL, { userId: auth.user_id });
 
 const client = new Client({ connectionString: connStr });
 // Queries filtered by RLS
@@ -351,46 +353,57 @@ const client = new Client({ connectionString: connStr });
 For administrative operations:
 
 ```javascript
-const dbName = process.env.DATABASE_NAME;
-const appName = `volcano_full_access:${dbName}`;
-const connStr = process.env.DATABASE_URL + '?application_name=' + encodeURIComponent(appName);
+const { databaseConnectionString } = require('@volcano.dev/sdk');
+
+// No userId: application_name=volcano_full_access
+const connStr = databaseConnectionString(process.env.DATABASE_URL);
 
 const client = new Client({ connectionString: connStr });
 // Full access to all data
 ```
 
+The proxy routes by the globally-unique username (`volcano_client_{id}`) that is
+already in `DATABASE_URL`; `application_name` only selects the access mode. Prefer
+`databaseConnectionString` over hand-building `application_name`.
+
 ### Connection Pooling
 
-For high-throughput functions:
+The access mode and RLS identity are selected by `application_name` at
+connection startup, so they cannot be changed on a pooled connection after it is
+established. Pool connections that all share one access mode (e.g. a per-user
+function whose pool connection string already targets that user, or admin work),
+and open a fresh connection when the identity differs.
 
 ```javascript
 const { Pool } = require('pg');
+const { databaseConnectionString } = require('@volcano.dev/sdk');
 
-// Create pool outside handler (reused across invocations)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+// Admin pool created outside the handler (reused across invocations). Its
+// application_name is fixed to full_access at startup.
+const adminPool = new Pool({
+  connectionString: databaseConnectionString(process.env.DATABASE_URL),
   max: 20,
 });
 
 exports.handler = async (event) => {
   const auth = event.__volcano_auth;
-  const client = await pool.connect();
+
+  // Per-user RLS query: the connection must start up as this user, so use a
+  // short-lived client with the user-access connection string.
+  const { Client } = require('pg');
+  const client = new Client({
+    connectionString: databaseConnectionString(process.env.DATABASE_URL, { userId: auth.user_id }),
+  });
+  await client.connect();
 
   try {
-    // Set user context per request
-    const dbName = process.env.DATABASE_NAME;
-    const appName = `volcano_user_access:${dbName}:${auth.user_id}`;
-    await client.query('SET application_name = $1', [appName]);
-
-    // Query with RLS
-    const { rows } = await client.query('SELECT * FROM posts');
-
+    const { rows } = await client.query('SELECT * FROM posts'); // filtered by RLS
     return {
       statusCode: 200,
       body: JSON.stringify({ posts: rows }),
     };
   } finally {
-    client.release();
+    await client.end();
   }
 };
 ```

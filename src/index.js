@@ -417,6 +417,42 @@ function errorResult(message, extra = {}) {
   return { data: null, error: new Error(message), ...extra };
 }
 
+const FULL_ACCESS_APP_NAME = 'volcano_full_access';
+const USER_ACCESS_APP_NAME = 'volcano_user_access';
+
+/**
+ * Build a Postgres connection string for querying a Volcano database from inside
+ * a function, selecting the access mode via application_name.
+ *
+ * Pass the DATABASE_URL Volcano advertises as `baseConnectionString`. The target
+ * database is identified by the (globally-unique) username already baked into
+ * that URL, so this only sets application_name to choose the access mode — the
+ * username, host, database and password are left untouched. With no `userId` the
+ * result is a full-access (admin) connection that bypasses RLS the same way the
+ * Postgres service_role does; with a `userId` (e.g. `event.__volcano_auth.user_id`)
+ * it impersonates that user and RLS is enforced.
+ *
+ * @param {string} baseConnectionString - DATABASE_URL from the Volcano runtime
+ * @param {{ userId?: string|null }} [options]
+ * @returns {string} a connection string with the requested application_name
+ */
+function databaseConnectionString(baseConnectionString, options = {}) {
+  options = options || {};
+  if (typeof baseConnectionString !== 'string' || baseConnectionString === '') {
+    throw new Error('databaseConnectionString: baseConnectionString (DATABASE_URL) is required');
+  }
+  let url;
+  try {
+    url = new URL(baseConnectionString);
+  } catch {
+    throw new Error('databaseConnectionString: baseConnectionString is not a valid connection URL');
+  }
+  const userId = options.userId == null ? '' : String(options.userId);
+  const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
+  url.searchParams.set('application_name', appName);
+  return url.toString();
+}
+
 // ============================================================================
 // VolcanoAuth Class
 // ============================================================================
@@ -2420,6 +2456,7 @@ if (typeof window !== 'undefined') {
   window.StorageFileApi = StorageFileApi;
   window.isBrowser = isBrowser;
   window.loadRealtime = loadRealtime;
+  window.databaseConnectionString = databaseConnectionString;
 }
 
 // CommonJS exports
@@ -2431,6 +2468,7 @@ if (typeof module !== 'undefined' && module.exports !== undefined) {
   module.exports.StorageFileApi = StorageFileApi;
   module.exports.isBrowser = isBrowser;
   module.exports.loadRealtime = loadRealtime;
+  module.exports.databaseConnectionString = databaseConnectionString;
 }
 
 // AMD exports
@@ -2441,5 +2479,12 @@ if (typeof define === 'function' && define.amd) {
 }
 
 // ES Module exports (handled by rollup, but define for clarity)
-export { isBrowser, loadRealtime, QueryBuilder, StorageFileApi, VolcanoAuth };
+export {
+  databaseConnectionString,
+  isBrowser,
+  loadRealtime,
+  QueryBuilder,
+  StorageFileApi,
+  VolcanoAuth,
+};
 export default VolcanoAuth;
