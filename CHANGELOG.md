@@ -6,6 +6,13 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ### Added
 
+- `databaseConnectionString(baseConnectionString, { userId })` for connecting to
+  a Volcano database from inside a function. The target database is identified by
+  the globally-unique username already baked into the advertised `DATABASE_URL`,
+  so the helper only sets `application_name` to select the access mode —
+  `volcano_full_access` (admin, bypasses RLS) or `volcano_user_access:{userId}`
+  (RLS enforced) — leaving the username, host, database and password untouched.
+  Prefer it over hand-assembling `application_name`.
 - Automatically adopt a managed hosted-auth (and OAuth) redirect session from the
   URL fragment. When the user is redirected back with
   `#access_token=…&refresh_token=…`, the client detects and stores the session at
