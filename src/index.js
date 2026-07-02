@@ -455,7 +455,7 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   // parsers (e.g. libpq) don't treat '+' as a space, so normalize to '%20'.
   // Literal '+' in a value is already serialized as '%2B', so this only rewrites
   // space encodings.
-  url.search = url.search.replace(/\+/g, '%20');
+  url.search = url.search.replaceAll('+', '%20');
   return url.toString();
 }
 
