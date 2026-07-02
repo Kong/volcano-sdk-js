@@ -90,6 +90,10 @@ describe('databaseConnectionString', () => {
     const result = databaseConnectionString(BASE_URL, { userId: weirdUser });
     // Reading it back through URL decoding must yield the original mode string.
     expect(appNameOf(result)).toBe(`volcano_user_access:${weirdUser}`);
+    // Spaces must be RFC3986 %20 (not the form-encoding '+'), so URI parsers
+    // like libpq that don't treat '+' as a space still decode it correctly.
+    expect(result).toContain('%20');
+    expect(result).not.toMatch(/application_name=[^&]*\+/);
   });
 
   it('is idempotent — re-applying the same mode does not stack application_name', () => {

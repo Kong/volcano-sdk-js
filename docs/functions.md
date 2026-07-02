@@ -338,8 +338,10 @@ Store sensitive data like API keys as environment variables rather than in code.
 For queries that should respect Row-Level Security:
 
 ```javascript
+const { Client } = require('pg');
 const { databaseConnectionString } = require('@volcano.dev/sdk');
 
+// Inside exports.handler, where `event` is available:
 const auth = event.__volcano_auth;
 // Impersonates the auth user: application_name=volcano_user_access:{userId}
 const connStr = databaseConnectionString(process.env.DATABASE_URL, { userId: auth.user_id });
@@ -353,6 +355,7 @@ const client = new Client({ connectionString: connStr });
 For administrative operations:
 
 ```javascript
+const { Client } = require('pg');
 const { databaseConnectionString } = require('@volcano.dev/sdk');
 
 // No userId: application_name=volcano_full_access

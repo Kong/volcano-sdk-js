@@ -433,7 +433,7 @@ const USER_ACCESS_APP_NAME = 'volcano_user_access';
  * it impersonates that user and RLS is enforced.
  *
  * @param {string} baseConnectionString - DATABASE_URL from the Volcano runtime
- * @param {{ userId?: string|null }} [options]
+ * @param {{ userId?: string|null }|null} [options]
  * @returns {string} a connection string with the requested application_name
  */
 function databaseConnectionString(baseConnectionString, options = {}) {
@@ -450,6 +450,12 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   const userId = options.userId == null ? '' : String(options.userId);
   const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
   url.searchParams.set('application_name', appName);
+  // URLSearchParams encodes spaces as '+', but a Postgres connection URI is
+  // RFC3986 where '+' is a literal plus and a space must be '%20'. Some URI
+  // parsers (e.g. libpq) don't treat '+' as a space, so normalize to '%20'.
+  // Literal '+' in a value is already serialized as '%2B', so this only rewrites
+  // space encodings.
+  url.search = url.search.replace(/\+/g, '%20');
   return url.toString();
 }
 
