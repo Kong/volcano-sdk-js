@@ -728,3 +728,50 @@ export interface RealtimeModule {
  * ```
  */
 export function loadRealtime(): Promise<RealtimeModule>;
+
+/**
+ * Options for {@link databaseConnectionString}.
+ */
+export interface DatabaseConnectionStringOptions {
+  /**
+   * When set, the connection impersonates this auth user and Row-Level Security
+   * is enforced (application_name `volcano_user_access:{userId}`). Typically
+   * `event.__volcano_auth.user_id`. When omitted, the connection has full
+   * (admin) access and bypasses RLS.
+   */
+  userId?: string | null;
+}
+
+/**
+ * Build a Postgres connection string for querying a Volcano database from inside
+ * a function, selecting the access mode via `application_name`.
+ *
+ * Pass the `DATABASE_URL` Volcano advertises as `baseConnectionString`. The
+ * target database is identified by the globally-unique username already baked
+ * into that URL, so this only sets `application_name` to choose the access mode
+ * (the username, host, database and password are left untouched):
+ * - no `userId`  → `volcano_full_access` (admin, bypasses RLS)
+ * - with `userId` → `volcano_user_access:{userId}` (RLS enforced)
+ *
+ * Throws if the base connection string is missing or not a valid URL.
+ *
+ * @example
+ * ```typescript
+ * import { databaseConnectionString } from '@volcano.dev/sdk';
+ * import { Client } from 'pg';
+ *
+ * exports.handler = async (event) => {
+ *   const auth = event.__volcano_auth;
+ *   const connectionString = databaseConnectionString(process.env.DATABASE_URL, {
+ *     userId: auth?.user_id, // omit for full (admin) access
+ *   });
+ *   const client = new Client({ connectionString });
+ *   await client.connect();
+ *   // ...
+ * };
+ * ```
+ */
+export function databaseConnectionString(
+  baseConnectionString: string,
+  options?: DatabaseConnectionStringOptions,
+): string;
