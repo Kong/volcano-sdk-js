@@ -561,9 +561,46 @@ class VolcanoAuth {
       invoke: this.invokeFunction.bind(this),
     };
 
+    this.logs = {
+      search: this.searchLogs.bind(this),
+      activity: this.getLogActivity.bind(this),
+    };
+
     this.storage = {
       from: this.storageBucket.bind(this),
     };
+  }
+
+  // ========================================================================
+  // Logs Methods
+  // ========================================================================
+
+  async _postProjectLogRequest(projectId, endpoint, request) {
+    if (typeof projectId !== 'string' || projectId.trim() === '') {
+      return { data: null, error: new Error('projectId must be a non-empty string') };
+    }
+
+    const result = await this._authFetch(
+      `/projects/${encodeURIComponent(projectId)}/logs/${endpoint}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(request || {}),
+      },
+    );
+
+    if (!result.ok) {
+      return { data: null, error: result.error };
+    }
+
+    return { data: result.data, error: null };
+  }
+
+  searchLogs(projectId, request) {
+    return this._postProjectLogRequest(projectId, 'search', request);
+  }
+
+  getLogActivity(projectId, request) {
+    return this._postProjectLogRequest(projectId, 'activity', request);
   }
 
   // ========================================================================
