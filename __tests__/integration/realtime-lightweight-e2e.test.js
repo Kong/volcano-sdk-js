@@ -509,6 +509,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
     const signUpResult = await volcano.auth.signUp({
       email,
       password,
+      signInWhenAllowed: true,
     });
 
     if (signUpResult.error) {

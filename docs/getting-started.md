@@ -90,7 +90,7 @@ Let's create a user account and sign in.
 ### 1. Sign Up a New User
 
 ```javascript
-const { user, error } = await volcano.auth.signUp({
+const { confirmationRequired, message, error } = await volcano.auth.signUp({
   email: 'alice@example.com',
   password: 'secure-password-123',
 });
@@ -100,10 +100,10 @@ if (error) {
   return;
 }
 
-console.log('Account created!', user.id);
+console.log(message ?? 'Account created!');
 ```
 
-The SDK automatically stores the session in localStorage (in browsers), so subsequent requests are authenticated.
+Sign up is session-less: it creates the account but does not start a session, so you sign in next (see below) to authenticate. Pass `signInWhenAllowed: true` to have the SDK sign in automatically when the project does not require email confirmation.
 
 ### 2. Sign In an Existing User
 

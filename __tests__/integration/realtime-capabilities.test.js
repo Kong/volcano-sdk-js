@@ -356,6 +356,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     const aliceSignUp = await volcano.auth.signUp({
       email: `alice-rt-${timestamp}@example.com`,
       password,
+      signInWhenAllowed: true,
     });
     if (aliceSignUp.error) throw new Error(`Failed to create Alice: ${aliceSignUp.error.message}`);
     userAlice = aliceSignUp.user;
@@ -365,6 +366,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     const bobSignUp = await volcano.auth.signUp({
       email: `bob-rt-${timestamp}@example.com`,
       password,
+      signInWhenAllowed: true,
     });
     if (bobSignUp.error) throw new Error(`Failed to create Bob: ${bobSignUp.error.message}`);
     userBob = bobSignUp.user;
@@ -1283,6 +1285,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const signUpResult = await otherVolcano.auth.signUp({
         email: `isolation-test-${timestamp}@example.com`,
         password: 'TestPassword123!',
+        signInWhenAllowed: true,
       });
 
       if (signUpResult.error) {

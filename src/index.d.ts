@@ -66,6 +66,16 @@ export interface SignUpOptions {
   email: string;
   password: string;
   metadata?: UserMetadata;
+  /**
+   * Opt-in: when the project does not require email confirmation
+   * (`confirmationRequired === false`), perform a follow-up {@link VolcanoAuth.signIn}
+   * with the same credentials so the returned {@link SignUpResponse} carries a live
+   * `user`/`session`. Defaults to `false`, matching the server's session-less signup
+   * contract. When confirmation is required this flag has no effect. If the follow-up
+   * sign-in fails, `error` is populated and `user`/`session` remain `null` (the
+   * account is still created).
+   */
+  signInWhenAllowed?: boolean;
 }
 
 export interface SignInOptions {
@@ -122,6 +132,21 @@ export interface OAuthAPIParams {
 export interface AuthResponse {
   user: User | null;
   session: Session | null;
+  error: Error | null;
+}
+
+/**
+ * Session-less signup response (VOL-309). The server returns a uniform
+ * acknowledgement with no user and no session tokens, so `user`/`session` are
+ * always null on success; obtain a session via a separate {@link VolcanoAuth.signIn}.
+ * `message` is the server's acknowledgement and `confirmationRequired` reflects
+ * the project's auth config.
+ */
+export interface SignUpResponse {
+  user: User | null;
+  session: Session | null;
+  confirmationRequired: boolean;
+  message: string | null;
   error: Error | null;
 }
 
@@ -188,7 +213,7 @@ export type AuthStateCallback = (user: User | null) => void;
 
 export interface Auth {
   /** Sign up a new user */
-  signUp(options: SignUpOptions): Promise<AuthResponse>;
+  signUp(options: SignUpOptions): Promise<SignUpResponse>;
   /** Sign in existing user */
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Sign out current user */

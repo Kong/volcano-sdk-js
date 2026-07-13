@@ -212,6 +212,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     const signUpResult = await volcano.auth.signUp({
       email,
       password,
+      signInWhenAllowed: true,
     });
 
     if (signUpResult.error) {

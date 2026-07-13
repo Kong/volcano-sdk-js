@@ -854,24 +854,50 @@ class VolcanoAuth {
   // Authentication Methods
   // ========================================================================
 
-  async signUp({ email, password, metadata = {} }) {
+  async signUp({ email, password, metadata = {}, signInWhenAllowed = false }) {
     const result = await this._anonFetch('/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ email, password, user_metadata: metadata }),
     });
 
     if (!result.ok) {
-      return { user: null, session: null, error: result.error };
+      return {
+        user: null,
+        session: null,
+        confirmationRequired: false,
+        message: null,
+        error: result.error,
+      };
     }
 
-    this._setSession(result.data);
+    // Session-less signup (VOL-309): the server returns a uniform acknowledgement
+    // with no user object and no session tokens — identical for a new account and
+    // an already-registered email, so it cannot be used to enumerate addresses.
+    const confirmationRequired = Boolean(result.data?.confirmation_required);
+    const message = result.data?.message ?? null;
+
+    // Opt-in convenience: when the project does not require email confirmation the
+    // account is usable immediately, so establish a session with a follow-up signIn
+    // using the same credentials. Off by default so signUp mirrors the server's
+    // session-less contract unless the caller asks for auto sign-in. If the follow-up
+    // signIn fails, its error is surfaced while the account still exists server-side.
+    if (signInWhenAllowed && !confirmationRequired) {
+      const signInResult = await this.signIn({ email, password });
+      return {
+        user: signInResult.user,
+        session: signInResult.session,
+        confirmationRequired,
+        message,
+        error: signInResult.error,
+      };
+    }
+
+    // Default path: caller obtains a session via a separate signIn.
     return {
-      user: result.data.user,
-      session: {
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-        expires_in: result.data.expires_in,
-      },
+      user: null,
+      session: null,
+      confirmationRequired,
+      message,
       error: null,
     };
   }
