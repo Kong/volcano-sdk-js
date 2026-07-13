@@ -16,10 +16,14 @@ The workflow is `.github/workflows/publish.yml`.
   merged.
 - Published versions must use stable `MAJOR.MINOR.PATCH` SemVer, such as
   `1.2.0`.
+- The workflow's `push.branches` trigger in `publish.yml` restricts publishing
+  to `main`; the `npm-production` GitHub environment does not enforce a
+  `main`-only restriction itself (its `deployment_branch_policy` allows any
+  currently protected branch, not just `main`).
 - Publishing uses the `npm-production` GitHub environment to scope the OIDC
-  trusted-publishing credentials and restrict deployments to `main`. The
-  environment does not require manual reviewer approval, so publishing runs
-  immediately once a PR merges to `main`.
+  trusted-publishing credentials. The environment does not require manual
+  reviewer approval, so publishing runs immediately once a PR merges to
+  `main`.
 
 ## npm Trusted Publisher Setup
 
