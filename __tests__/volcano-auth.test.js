@@ -173,12 +173,11 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - signUp', () => {
-    it('should sign up a new user successfully', async () => {
+    it('should acknowledge a session-less signup without issuing a session', async () => {
+      // Session-less signup (VOL-309): the server returns an acknowledgement only.
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
-        access_token: 'access-token-123',
-        refresh_token: 'refresh-token-123',
-        expires_in: 3600,
+        confirmation_required: true,
+        message: 'If the account was created, a confirmation email has been sent.',
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -191,12 +190,15 @@ describe('VolcanoAuth', () => {
         password: 'password123',
       });
 
-      expect(result.user).toEqual(mockResponse.user);
-      expect(result.session.access_token).toBe('access-token-123');
-      expect(localStorage.setItem).toHaveBeenCalledWith('volcano_access_token', 'access-token-123');
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'volcano_refresh_token',
-        'refresh-token-123',
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      expect(result.confirmationRequired).toBe(true);
+      expect(result.message).toBe(mockResponse.message);
+      expect(result.error).toBeNull();
+      // No session is issued, so no tokens are persisted.
+      expect(localStorage.setItem).not.toHaveBeenCalledWith(
+        'volcano_access_token',
+        expect.anything(),
       );
     });
 
@@ -219,10 +221,8 @@ describe('VolcanoAuth', () => {
 
     it('should include error:null on successful signup', async () => {
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
-        access_token: 'access-token-123',
-        refresh_token: 'refresh-token-123',
-        expires_in: 3600,
+        confirmation_required: false,
+        message: 'If the account was created, you can now sign in.',
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -236,8 +236,8 @@ describe('VolcanoAuth', () => {
       });
 
       expect(result.error).toBeNull();
-      expect(result.user).toBeDefined();
-      expect(result.session).toBeDefined();
+      expect(result.confirmationRequired).toBe(false);
+      expect(result.message).toBe(mockResponse.message);
     });
   });
 

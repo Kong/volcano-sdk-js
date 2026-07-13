@@ -119,6 +119,21 @@ export interface AuthResponse {
   error: Error | null;
 }
 
+/**
+ * Session-less signup response (VOL-309). The server returns a uniform
+ * acknowledgement with no user and no session tokens, so `user`/`session` are
+ * always null on success; obtain a session via a separate {@link VolcanoAuth.signIn}.
+ * `message` is the server's acknowledgement and `confirmationRequired` reflects
+ * the project's auth config.
+ */
+export interface SignUpResponse {
+  user: User | null;
+  session: Session | null;
+  confirmationRequired: boolean;
+  message: string | null;
+  error: Error | null;
+}
+
 export interface UserResponse {
   user: User | null;
   error: Error | null;
@@ -182,7 +197,7 @@ export type AuthStateCallback = (user: User | null) => void;
 
 export interface Auth {
   /** Sign up a new user */
-  signUp(options: SignUpOptions): Promise<AuthResponse>;
+  signUp(options: SignUpOptions): Promise<SignUpResponse>;
   /** Sign in existing user */
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Sign out current user */

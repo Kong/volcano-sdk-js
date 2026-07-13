@@ -861,17 +861,24 @@ class VolcanoAuth {
     });
 
     if (!result.ok) {
-      return { user: null, session: null, error: result.error };
+      return {
+        user: null,
+        session: null,
+        confirmationRequired: false,
+        message: null,
+        error: result.error,
+      };
     }
 
-    this._setSession(result.data);
+    // Session-less signup (VOL-309): the server returns a uniform acknowledgement
+    // with no user object and no session tokens — identical for a new account and
+    // an already-registered email, so it cannot be used to enumerate addresses.
+    // The caller must obtain a session via a separate signIn.
     return {
-      user: result.data.user,
-      session: {
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-        expires_in: result.data.expires_in,
-      },
+      user: null,
+      session: null,
+      confirmationRequired: Boolean(result.data?.confirmation_required),
+      message: result.data?.message ?? null,
       error: null,
     };
   }
