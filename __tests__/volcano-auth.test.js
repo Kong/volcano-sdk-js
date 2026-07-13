@@ -195,11 +195,10 @@ describe('VolcanoAuth', () => {
       expect(result.confirmationRequired).toBe(true);
       expect(result.message).toBe(mockResponse.message);
       expect(result.error).toBeNull();
-      // No session is issued, so no tokens are persisted.
-      expect(localStorage.setItem).not.toHaveBeenCalledWith(
-        'volcano_access_token',
-        expect.anything(),
-      );
+      // No session is issued, so neither token key is persisted (any value, incl. undefined/null).
+      const persistedKeys = localStorage.setItem.mock.calls.map(([key]) => key);
+      expect(persistedKeys).not.toContain('volcano_access_token');
+      expect(persistedKeys).not.toContain('volcano_refresh_token');
     });
 
     it('should return error on signup failure', async () => {
@@ -289,10 +288,9 @@ describe('VolcanoAuth', () => {
       expect(result.confirmationRequired).toBe(true);
       expect(result.user).toBeNull();
       expect(result.session).toBeNull();
-      expect(localStorage.setItem).not.toHaveBeenCalledWith(
-        'volcano_access_token',
-        expect.anything(),
-      );
+      const persistedKeys = localStorage.setItem.mock.calls.map(([key]) => key);
+      expect(persistedKeys).not.toContain('volcano_access_token');
+      expect(persistedKeys).not.toContain('volcano_refresh_token');
     });
 
     it('surfaces the sign-in error when the follow-up sign-in fails', async () => {
