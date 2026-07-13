@@ -490,7 +490,7 @@ Type for user metadata:
 type UserMetadata = Record<string, JsonValue>;
 
 // Usage
-const { user } = await volcano.auth.signUp({
+await volcano.auth.signUp({
   email: 'user@example.com',
   password: 'password',
   metadata: {

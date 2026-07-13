@@ -30,7 +30,7 @@ This pattern has several advantages:
 ### Sign Up
 
 ```javascript
-const { user, session, error } = await volcano.auth.signUp({
+const { confirmationRequired, message, error } = await volcano.auth.signUp({
   email: 'user@example.com',
   password: 'weak',
 });
@@ -53,8 +53,8 @@ if (error) {
   return;
 }
 
-// Success
-console.log('Welcome!', user.email);
+// Success — sign up is session-less; sign in next to authenticate.
+console.log(message ?? 'Account created. You can now sign in.');
 ```
 
 ### Sign In
