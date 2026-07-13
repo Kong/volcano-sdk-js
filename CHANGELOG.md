@@ -4,8 +4,13 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+## [1.3.0] - 2026-07-13
+
 ### Added
 
+- `auth.signUp({ signInWhenAllowed: true })` opt-in: when the project does not
+  require email confirmation, the SDK runs the follow-up `signIn` for you so the
+  response carries a live `user`/`session`. Off by default.
 - `databaseConnectionString(baseConnectionString, { userId })` for connecting to
   a Volcano database from inside a function. The target database is identified by
   the globally-unique username already baked into the advertised `DATABASE_URL`,
@@ -37,6 +42,11 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ### Changed
 
+- **Session-less signup (VOL-309).** `auth.signUp()` now returns
+  `{ user: null, session: null, confirmationRequired, message, error }` and no
+  longer issues or persists a session by default — obtain a session via a separate
+  `signIn` (or the new `signInWhenAllowed` option). The response is uniform for a
+  new and an already-registered email, so it cannot be used to enumerate accounts.
 - Require Node.js 20 or newer for package installation and repository tooling.
 - Prepare package metadata and license files for public npm and GitHub distribution.
 - Bundle realtime runtime dependencies (`centrifuge` and `ws`) with the SDK package.
