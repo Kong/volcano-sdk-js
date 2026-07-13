@@ -2,6 +2,12 @@
  * Volcano Auth SDK Type Definitions
  */
 
+export type {
+  components as OpenAPIComponents,
+  operations as OpenAPIOperations,
+  paths as OpenAPIPaths,
+} from './generated/openapi';
+
 export interface VolcanoAuthConfig {
   /**
    * Your Volcano API base URL.

@@ -56,6 +56,7 @@ module.exports = [
       'coverage/**',
       'dist/**',
       'node_modules/**',
+      'src/generated/**',
       'examples/nextjs-notes-app/.next/**',
       'examples/nextjs-notes-app/node_modules/**',
       '*.tgz',
