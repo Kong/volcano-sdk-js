@@ -68,6 +68,12 @@ jobs:
       - name: Run linting
         run: pnpm lint
 
+      - name: Verify generated OpenAPI types
+        run: pnpm check:openapi
+
+      - name: Check TypeScript declarations
+        run: pnpm test:types
+
       - name: Run tests
         run: pnpm test
 

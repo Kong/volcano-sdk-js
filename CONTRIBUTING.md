@@ -14,6 +14,8 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 | Install dependencies   | `pnpm install --frozen-lockfile` |
 | Run linting            | `pnpm lint`                      |
 | Run unit tests         | `pnpm test`                      |
+| Regenerate API types   | `pnpm generate:openapi`          |
+| Check generated types  | `pnpm check:openapi`             |
 | Build the package      | `pnpm build`                     |
 | Check package metadata | `pnpm test:package`              |
 
@@ -32,6 +34,9 @@ server-backed SDK integration tests.
 - `src/next/middleware.js` contains Next.js middleware helpers.
 - `src/*.d.ts` and `src/next/*.d.ts` contain checked-in TypeScript
   declarations.
+- `openapi/openapi.yaml` is the vendored public API contract.
+- `src/generated/openapi.d.ts` is generated from that contract and must not be
+  edited by hand.
 - `docs/` contains user-facing guides.
 - `examples/nextjs-notes-app/` contains the Next.js example app.
 
@@ -45,8 +50,8 @@ files in `dist/`; run `pnpm build` to refresh package output.
 - Keep PRs focused to one bug fix, feature, or cohesive documentation update.
 - Include tests for behavior changes.
 - Update docs or examples when changing user-facing APIs.
-- Run `pnpm lint`, `pnpm test`, and `pnpm build` before pushing when code
-  changes are included.
+- Run `pnpm check:openapi`, `pnpm lint`, `pnpm test`, and `pnpm build` before
+  pushing when code changes are included.
 
 Security vulnerabilities should not be reported through public issues or pull
 requests. Follow `SECURITY.md` instead.
