@@ -11,11 +11,15 @@ required for normal package publishing.
 
 The workflow is `.github/workflows/publish.yml`.
 
-- Merges to `main` publish the `package.json` version to the `latest` dist-tag.
+- Merges to `main` publish the `package.json` version to the `latest` dist-tag
+  automatically, with no additional manual approval step after the PR is
+  merged.
 - Published versions must use stable `MAJOR.MINOR.PATCH` SemVer, such as
   `1.2.0`.
-- Publishing uses the `npm-production` GitHub environment so repository admins
-  can add required reviewers before public release.
+- Publishing uses the `npm-production` GitHub environment to scope the OIDC
+  trusted-publishing credentials and restrict deployments to `main`. The
+  environment does not require manual reviewer approval, so publishing runs
+  immediately once a PR merges to `main`.
 
 ## npm Trusted Publisher Setup
 
@@ -52,8 +56,8 @@ To publish a stable release:
    ```
 
 3. Merge the version change to `main`.
-4. Wait for the `Publish SDK` workflow to publish the version with the `latest`
-   dist-tag.
+4. The `Publish SDK` workflow publishes the version with the `latest` dist-tag
+   automatically once the merge lands, with no manual approval step.
 
 The publish workflow verifies that `package.json` uses stable
 `MAJOR.MINOR.PATCH` SemVer. For example, `"version": "1.2.0"` is valid, while
