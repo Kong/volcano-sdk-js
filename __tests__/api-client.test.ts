@@ -27,6 +27,39 @@ describe('createApiClient', () => {
     expect(() => createApiClient({ serviceRoleKey: 'sk-server-secret' })).not.toThrow();
   });
 
+  it('rejects service-role credentials in React Native', () => {
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { product: 'ReactNative' },
+    });
+    try {
+      expect(() => createApiClient({ serviceRoleKey: 'sk-client-secret' })).toThrow(
+        'Service keys (sk-*) cannot be used in client-side code',
+      );
+    } finally {
+      if (navigatorDescriptor) {
+        Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, 'navigator');
+      }
+    }
+  });
+
+  it('rejects service-role credentials outside Node and DOM runtimes', () => {
+    const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
+    Object.defineProperty(globalThis, 'process', { configurable: true, value: undefined });
+    try {
+      expect(() => createApiClient({ serviceRoleKey: 'sk-client-secret' })).toThrow(
+        'Service keys (sk-*) cannot be used in client-side code',
+      );
+    } finally {
+      if (processDescriptor) {
+        Object.defineProperty(globalThis, 'process', processDescriptor);
+      }
+    }
+  });
+
   it.each([
     [
       'AnonKey',

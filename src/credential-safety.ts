@@ -1,14 +1,14 @@
+import { isClientRuntime } from './version';
+
 const SERVICE_KEY_PREFIX = 'sk-';
 
-export const isBrowserServiceKey = (credential: string | null | undefined): boolean =>
-  typeof window !== 'undefined' &&
-  window.document !== undefined &&
-  Boolean(credential?.startsWith(SERVICE_KEY_PREFIX));
+export const isClientServiceKey = (credential: string | null | undefined): boolean =>
+  isClientRuntime() && Boolean(credential?.startsWith(SERVICE_KEY_PREFIX));
 
 export const assertBrowserSafeCredentials = (
   ...credentials: (string | null | undefined)[]
 ): void => {
-  if (!credentials.some((credential) => isBrowserServiceKey(credential))) {
+  if (!credentials.some((credential) => isClientServiceKey(credential))) {
     return;
   }
 

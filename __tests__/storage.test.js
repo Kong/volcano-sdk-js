@@ -198,6 +198,25 @@ describe('Storage', () => {
       expect(data).toBeNull();
       expect(error.message).toBe('File not found');
     });
+
+    it('does not refresh a download 401 when automatic refresh is disabled', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'expired' }),
+      });
+      volcano = createVolcanoClient({
+        accessToken: 'expired-token',
+        auth: { autoRefreshToken: false },
+        baseUrl: 'https://api.test.com',
+        refreshToken: 'refresh-token',
+      });
+
+      const result = await volcano.storage.from('files').download('document.txt');
+
+      expect(result.error.message).toBe('expired');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('list()', () => {
@@ -285,6 +304,26 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(requestFromFetchCall(2).headers.get('Authorization')).toBe('Bearer new-access-token');
+    });
+
+    it('does not refresh a 401 when automatic refresh is disabled', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'expired' }),
+      });
+      volcano = createVolcanoClient({
+        accessToken: 'expired-token',
+        anonKey: 'ak-test-anon-key',
+        auth: { autoRefreshToken: false },
+        baseUrl: 'https://api.test.com',
+        refreshToken: 'refresh-token',
+      });
+
+      const result = await volcano.storage.from('files').list();
+
+      expect(result.error.message).toBe('expired');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should list files with prefix', async () => {
@@ -974,52 +1013,59 @@ describe('Storage', () => {
   });
 
   describe('generated request controls', () => {
-    it.each(['list', 'move', 'copy'])('applies a per-call timeout to %s', async (operation) => {
-      let requestSignal;
-      const caller = new AbortController();
-      const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
-      const fetchMock = jest.fn(
-        (input, init) =>
-          new Promise((_resolve, reject) => {
-            requestSignal = input instanceof Request ? input.signal : init.signal;
-            if (requestSignal.aborted) {
-              reject(requestSignal.reason);
-              return;
-            }
-            requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
-              once: true,
-            });
-          }),
-      );
-      const timeoutClient = createVolcanoClient({
-        ...config,
-        auth: { persistSession: false },
-        fetch: fetchMock,
-      });
-      const bucket = timeoutClient.storage.from('files');
-      const pending =
-        operation === 'list'
-          ? bucket.list('', { signal: caller.signal, timeoutMs: 10 })
-          : bucket[operation]('from.txt', 'to.txt', {
-              signal: caller.signal,
-              timeoutMs: 10,
-            });
-      for (
-        let attempt = 0;
-        attempt < 100 && !addAbortListener.mock.calls.some(([type]) => type === 'abort');
-        attempt += 1
-      ) {
-        await Promise.resolve();
-      }
-      expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
-        once: true,
-      });
-      const result = await pending;
+    it.each(['list', 'move', 'copy'])(
+      'applies per-call request controls to %s',
+      async (operation) => {
+        const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+        try {
+          let requestSignal;
+          const caller = new AbortController();
+          const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
+          const fetchMock = jest.fn(
+            (input, init) =>
+              new Promise((_resolve, reject) => {
+                requestSignal = input instanceof Request ? input.signal : init.signal;
+                if (requestSignal.aborted) {
+                  reject(requestSignal.reason);
+                  return;
+                }
+                requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
+                  once: true,
+                });
+              }),
+          );
+          const timeoutClient = createVolcanoClient({
+            ...config,
+            auth: { persistSession: false },
+            fetch: fetchMock,
+          });
+          const bucket = timeoutClient.storage.from('files');
+          const pending =
+            operation === 'list'
+              ? bucket.list('', { signal: caller.signal, timeoutMs: 10 })
+              : bucket[operation]('from.txt', 'to.txt', {
+                  signal: caller.signal,
+                  timeoutMs: 10,
+                });
+          for (let attempt = 0; attempt < 100 && fetchMock.mock.calls.length === 0; attempt += 1) {
+            await Promise.resolve();
+          }
+          expect(fetchMock).toHaveBeenCalledTimes(1);
+          expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10);
+          expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
+            once: true,
+          });
+          caller.abort(new DOMException('Cancelled by caller', 'AbortError'));
+          const result = await pending;
 
-      expect(requestSignal).toBeDefined();
-      expect(requestSignal.aborted).toBe(true);
-      expect(requestSignal.reason).toMatchObject({ name: 'TimeoutError' });
-      expect(result.error).not.toBeNull();
-    });
+          expect(requestSignal).toBeDefined();
+          expect(requestSignal.aborted).toBe(true);
+          expect(requestSignal.reason).toMatchObject({ name: 'AbortError' });
+          expect(result.error).not.toBeNull();
+        } finally {
+          setTimeoutSpy.mockRestore();
+        }
+      },
+    );
   });
 });

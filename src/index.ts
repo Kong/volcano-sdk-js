@@ -78,7 +78,7 @@ import {
   type UploadSessionStatusResponse,
   uploadStorageObject,
 } from './api/index';
-import { assertBrowserSafeCredentials, isBrowserServiceKey } from './credential-safety';
+import { assertBrowserSafeCredentials, isClientServiceKey } from './credential-safety';
 import { VolcanoApiError } from './errors';
 import type { ResolvedRequestOptions } from './generated/api/client/index.js';
 import type { Auth } from './generated/api/core/auth.gen.js';
@@ -640,8 +640,11 @@ async function fetchWithAuthRetry(
     );
 
   let response = await doFetch();
-  if (response.status === 401 && volcanoClient.accessToken) {
-    const refreshed = await volcanoClient._refreshSessionSingleFlight(true);
+  if (response.status === 401 && volcanoClient.accessToken && volcanoClient.autoRefreshToken) {
+    const refreshed = await volcanoClient._refreshSessionForRequest(response, {
+      signal: options.signal ?? undefined,
+      timeoutMs: options.timeoutMs,
+    });
     if (!refreshed.error) {
       await discardResponse(response);
       response = await doFetch();
@@ -972,7 +975,11 @@ class VolcanoClientCore {
       return response;
     }
 
-    const refreshed = await this._refreshSessionSingleFlight(true);
+    if (!this.autoRefreshToken) {
+      return response;
+    }
+
+    const refreshed = await this._refreshSessionForRequest(response, { signal: request.signal });
     if (refreshed.error || !this.accessToken) {
       return response;
     }
@@ -1008,6 +1015,18 @@ class VolcanoClientCore {
       });
     }
     return this._refreshPromise;
+  }
+
+  async _refreshSessionForRequest(
+    response: Response,
+    controls: RequestControlOptions,
+  ): Promise<SessionResponse> {
+    try {
+      return await waitForRequest(this._refreshSessionSingleFlight(true), controls);
+    } catch (error) {
+      await discardResponse(response);
+      throw error;
+    }
   }
 
   // ========================================================================
@@ -1877,8 +1896,14 @@ class VolcanoClientCore {
         );
 
         const versionHeader = getHeaderValue(response, 'x-volcano-version');
-        if (response.status === 401 && allowRefresh && this.accessToken && !versionHeader) {
-          const refreshed = await this._refreshSessionSingleFlight(true);
+        if (
+          response.status === 401 &&
+          allowRefresh &&
+          this.autoRefreshToken &&
+          this.accessToken &&
+          !versionHeader
+        ) {
+          const refreshed = await this._refreshSessionForRequest(response, options);
           if (!refreshed.error) {
             await discardResponse(response);
             return invokeOnce(url, false);
@@ -1995,7 +2020,7 @@ class VolcanoClientCore {
       Number.isFinite(session.expires_in) &&
       typeof session.expires_at === 'number' &&
       Number.isFinite(session.expires_at) &&
-      !isBrowserServiceKey(session.access_token)
+      !isClientServiceKey(session.access_token)
     );
   }
 
@@ -2130,7 +2155,7 @@ class VolcanoClientCore {
       return null;
     }
 
-    if (isBrowserServiceKey(accessToken)) {
+    if (isClientServiceKey(accessToken)) {
       this._urlSessionConsumed = true;
       this._stripAuthHashFromUrl(params);
       return null;

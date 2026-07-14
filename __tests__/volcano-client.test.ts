@@ -80,6 +80,68 @@ describe('createVolcanoClient generated API refresh', () => {
     expect(userRequests).toBe(2);
   });
 
+  it('does not refresh a 401 when automatic refresh is disabled', async () => {
+    const fetchMock = jest.fn(async () => jsonResponse(401, { error: 'expired' }));
+    const volcano = createVolcanoClient({
+      accessToken: 'old-access-token',
+      anonKey: 'anon-key',
+      auth: { autoRefreshToken: false },
+      fetch: fetchMock,
+      refreshToken: 'refresh-token',
+    });
+
+    const result = await volcano.auth.getUser();
+
+    expect(result.error?.message).toBe('expired');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting for a shared refresh when the request is cancelled', async () => {
+    let releaseRefresh: ((response: Response) => void) | undefined;
+    let notifyRefreshStarted: (() => void) | undefined;
+    const refreshStarted = new Promise<void>((resolve) => {
+      notifyRefreshStarted = resolve;
+    });
+    const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === '/auth/refresh') {
+        notifyRefreshStarted?.();
+        return new Promise<Response>((resolve) => {
+          releaseRefresh = resolve;
+        });
+      }
+      return jsonResponse(401, { error: 'expired' });
+    });
+    const volcano = createVolcanoClient({
+      accessToken: 'old-access-token',
+      anonKey: 'anon-key',
+      fetch: fetchMock,
+      refreshToken: 'refresh-token',
+    });
+    const controller = new AbortController();
+
+    const pending = listStorageObjects({
+      client: volcano.api,
+      path: { bucketName: 'documents' },
+      signal: controller.signal,
+    });
+    await refreshStarted;
+    controller.abort(new DOMException('Cancelled by caller', 'AbortError'));
+    const result = await pending;
+
+    expect(result.error).toMatchObject({ message: 'Cancelled by caller', name: 'AbortError' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    releaseRefresh?.(
+      jsonResponse(200, {
+        access_token: 'new-access-token',
+        expires_in: 3600,
+        refresh_token: 'new-refresh-token',
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it('clears the invalid session when refresh fails', async () => {
     const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);

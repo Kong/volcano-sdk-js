@@ -138,6 +138,29 @@ describe('DNS function invocation', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('does not refresh an invocation 401 when automatic refresh is disabled', async () => {
+    const accessToken = tokenForProject('36000000-0000-0000-0000-000000000003');
+    global.fetch
+      .mockResolvedValueOnce(
+        jsonResponse({
+          cache_ttl_seconds: 300,
+          function_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401));
+    const volcano = createVolcanoClient({
+      accessToken,
+      auth: { autoRefreshToken: false },
+      baseUrl: 'https://api.test.com',
+      refreshToken: 'refresh-token',
+    });
+
+    const result = await volcano.functions.invoke('no-auto-refresh');
+
+    expect(result.error?.message).toBe('expired');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects invalid DNS names before making a request', async () => {
     const volcano = createVolcanoClient({
       accessToken: tokenForProject('40000000-0000-0000-0000-000000000004'),
@@ -192,49 +215,53 @@ describe('DNS function invocation', () => {
   });
 
   it('applies a per-call timeout while resolving a function name', async () => {
-    const accessToken = tokenForProject('60000000-0000-0000-0000-000000000006');
-    let requestSignal;
-    const fetchMock = jest.fn(
-      (input, init) =>
-        new Promise((_resolve, reject) => {
-          requestSignal = input instanceof Request ? input.signal : init.signal;
-          if (requestSignal.aborted) {
-            reject(requestSignal.reason);
-            return;
-          }
-          requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
-            once: true,
-          });
-        }),
-    );
-    const volcano = createVolcanoClient({
-      accessToken,
-      auth: { persistSession: false },
-      baseUrl: 'https://api.test.com',
-      fetch: fetchMock,
-    });
-    const caller = new AbortController();
-    const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
+    const setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+    try {
+      const accessToken = tokenForProject('60000000-0000-0000-0000-000000000006');
+      let requestSignal;
+      const fetchMock = jest.fn(
+        (input, init) =>
+          new Promise((_resolve, reject) => {
+            requestSignal = input instanceof Request ? input.signal : init.signal;
+            if (requestSignal.aborted) {
+              reject(requestSignal.reason);
+              return;
+            }
+            requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const volcano = createVolcanoClient({
+        accessToken,
+        auth: { persistSession: false },
+        baseUrl: 'https://api.test.com',
+        fetch: fetchMock,
+      });
+      const caller = new AbortController();
+      const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
 
-    const pending = volcano.functions.invoke('slow-resolver', {
-      signal: caller.signal,
-      timeoutMs: 10,
-    });
-    for (
-      let attempt = 0;
-      attempt < 100 && !addAbortListener.mock.calls.some(([type]) => type === 'abort');
-      attempt += 1
-    ) {
-      await Promise.resolve();
+      const pending = volcano.functions.invoke('slow-resolver', {
+        signal: caller.signal,
+        timeoutMs: 10,
+      });
+      for (let attempt = 0; attempt < 100 && fetchMock.mock.calls.length === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10);
+      expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
+        once: true,
+      });
+      caller.abort(new DOMException('Cancelled by caller', 'AbortError'));
+      const result = await pending;
+
+      expect(requestSignal).toBeDefined();
+      expect(requestSignal.aborted).toBe(true);
+      expect(requestSignal.reason).toMatchObject({ name: 'AbortError' });
+      expect(result.error).not.toBeNull();
+    } finally {
+      setTimeoutSpy.mockRestore();
     }
-    expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
-      once: true,
-    });
-    const result = await pending;
-
-    expect(requestSignal).toBeDefined();
-    expect(requestSignal.aborted).toBe(true);
-    expect(requestSignal.reason).toMatchObject({ name: 'TimeoutError' });
-    expect(result.error).not.toBeNull();
   });
 });
