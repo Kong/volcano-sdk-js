@@ -23,6 +23,10 @@ const authorizationHeader = (fetchMock: jest.Mock): string | null => {
 };
 
 describe('createApiClient', () => {
+  it('allows service-role credentials in a server runtime', () => {
+    expect(() => createApiClient({ serviceRoleKey: 'sk-server-secret' })).not.toThrow();
+  });
+
   it.each([
     [
       'AnonKey',

@@ -42,10 +42,47 @@ describe('createVolcanoClient auth and session behavior', () => {
     expect(() => createVolcanoClient({ userToken: 'user-token' })).not.toThrow();
   });
 
-  it('rejects a service-role credential in a browser', () => {
-    expect(() => createVolcanoClient({ serviceRoleKey: 'sk-secret' })).toThrow(
+  it.each(['accessToken', 'anonKey', 'serviceRoleKey', 'userToken'])(
+    'rejects a service key supplied as %s in a browser',
+    (credential) => {
+      expect(() => createVolcanoClient({ [credential]: 'sk-secret' })).toThrow(
+        'Service keys (sk-*) cannot be used in client-side code',
+      );
+    },
+  );
+
+  it('rejects service keys when direct API credentials rotate in a browser', () => {
+    const api = createVolcanoClient({ anonKey: 'ak-anon' }).api;
+
+    expect(() => api.setCredentials({ accessToken: 'sk-secret' })).toThrow(
       'Service keys (sk-*) cannot be used in client-side code',
     );
+  });
+
+  it('removes a persisted browser session containing a service key', async () => {
+    const storage = {
+      getItem: jest.fn(async () =>
+        JSON.stringify({
+          access_token: 'sk-secret',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          refresh_token: 'refresh-token',
+          user: null,
+        }),
+      ),
+      removeItem: jest.fn(),
+      setItem: jest.fn(),
+    };
+    const volcano = createVolcanoClient({
+      auth: { storage, storageKey: 'unsafe-session' },
+      baseUrl: 'https://api.test.com',
+    });
+
+    const result = await volcano.auth.getSession();
+
+    expect(result.session).toBeNull();
+    expect(storage.removeItem).toHaveBeenCalledWith('unsafe-session');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('signs in through the generated operation and persists the session', async () => {

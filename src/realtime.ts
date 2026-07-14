@@ -59,6 +59,7 @@ import type {
   SubscribedContext,
   Subscription,
 } from 'centrifuge';
+import { assertBrowserSafeCredentials } from './credential-safety';
 import type {
   ChannelOptions,
   ConnectContext,
@@ -160,9 +161,9 @@ async function loadWebSocket(): Promise<WebSocketConstructor> {
 class VolcanoRealtime implements VolcanoRealtimeContract {
   readonly apiUrl: string;
   readonly anonKey: string;
-  accessToken?: string;
   readonly getToken?: () => Promise<string>;
   private readonly _webSocket: WebSocketConstructor | null;
+  private _accessToken?: string;
   private _client: CentrifugeInstance | null = null;
   private readonly _channels = new Map<string, RealtimeChannel>();
   private _connected = false;
@@ -204,6 +205,7 @@ class VolcanoRealtime implements VolcanoRealtimeContract {
     if (config.anonKey === undefined) {
       throw new Error('anonKey is required');
     }
+    assertBrowserSafeCredentials(config.anonKey, config.accessToken);
 
     this.apiUrl = config.apiUrl.replace(/\/$/, ''); // Remove trailing slash
     this.anonKey = config.anonKey || ''; // Allow empty string for service keys
@@ -221,6 +223,15 @@ class VolcanoRealtime implements VolcanoRealtimeContract {
 
     // Database name for auto-fetch queries (optional)
     this._databaseName = config.databaseName || null;
+  }
+
+  get accessToken(): string | undefined {
+    return this._accessToken;
+  }
+
+  set accessToken(value: string | undefined) {
+    assertBrowserSafeCredentials(value);
+    this._accessToken = value;
   }
 
   /**

@@ -55,18 +55,19 @@ describe('VolcanoRealtime', () => {
       expect(realtime.apiUrl).toBe('https://api.example.com');
     });
 
-    test('allows empty anon key with service role key', () => {
-      // Service role keys contain the project ID, so anon key is optional
-      const realtime = new VolcanoRealtime({
-        apiUrl: 'https://api.example.com',
-        anonKey: '', // Empty is allowed for service keys
-        accessToken: 'sk-service-key-jwt-token',
-      });
-
-      expect(realtime.apiUrl).toBe('https://api.example.com');
-      expect(realtime.anonKey).toBe('');
-      expect(realtime.accessToken).toBe('sk-service-key-jwt-token');
-    });
+    test.each(['accessToken', 'anonKey'])(
+      'rejects a service role key as %s in a browser',
+      (key) => {
+        expect(
+          () =>
+            new VolcanoRealtime({
+              apiUrl: 'https://api.example.com',
+              anonKey: key === 'anonKey' ? 'sk-service-key-jwt-token' : '',
+              accessToken: key === 'accessToken' ? 'sk-service-key-jwt-token' : undefined,
+            }),
+        ).toThrow('Service keys (sk-*) cannot be used in client-side code');
+      },
+    );
   });
 
   describe('wsUrl', () => {

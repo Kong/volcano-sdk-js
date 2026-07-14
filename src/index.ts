@@ -78,6 +78,7 @@ import {
   type UploadSessionStatusResponse,
   uploadStorageObject,
 } from './api/index';
+import { assertBrowserSafeCredentials, isBrowserServiceKey } from './credential-safety';
 import { VolcanoApiError } from './errors';
 import type { ResolvedRequestOptions } from './generated/api/client/index.js';
 import type { Auth } from './generated/api/core/auth.gen.js';
@@ -785,16 +786,12 @@ class VolcanoClientCore {
   private _urlSessionConsumed = false;
 
   constructor(config: VolcanoClientConfig = {}) {
-    // SECURITY: Throw hard error if service key is used client-side
-    if (config.serviceRoleKey?.startsWith('sk-') && isBrowser()) {
-      throw new Error(
-        '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
-          'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
-          'Use an anon key (ak-*) for browser/client-side applications. ' +
-          'Service keys should only be used in secure server-side environments. ' +
-          'See: https://docs.volcano.hosting/security/keys',
-      );
-    }
+    assertBrowserSafeCredentials(
+      config.accessToken,
+      config.anonKey,
+      config.serviceRoleKey,
+      config.userToken,
+    );
 
     this.apiUrl = normalizeBaseUrl(config.baseUrl ?? DEFAULT_API_URL);
     this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
@@ -1928,8 +1925,8 @@ class VolcanoClientCore {
     let result = await invokeOnce(invokeUrl, true);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing.
-    if (result.status === 404) {
+    // On an unversioned router 404, invalidate and resolve once more before failing.
+    if (result.status === 404 && result.error && !result.version) {
       this._clearFunctionResolveCache(functionName.trim());
       try {
         resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), options);
@@ -1997,7 +1994,8 @@ class VolcanoClientCore {
       typeof session.expires_in === 'number' &&
       Number.isFinite(session.expires_in) &&
       typeof session.expires_at === 'number' &&
-      Number.isFinite(session.expires_at)
+      Number.isFinite(session.expires_at) &&
+      !isBrowserServiceKey(session.access_token)
     );
   }
 
@@ -2012,6 +2010,7 @@ class VolcanoClientCore {
   }
 
   private _adoptSession(session: Session): void {
+    assertBrowserSafeCredentials(session.access_token);
     this.currentSession = session;
     this.accessToken = session.access_token;
     this.refreshToken = session.refresh_token;
@@ -2126,6 +2125,12 @@ class VolcanoClientCore {
     if (!expectedNonce || urlState === '' || urlState !== expectedNonce) {
       // Unsolicited or mismatched session: do not authenticate. Scrub the tokens
       // from the URL so they don't linger, and mark as handled so we don't loop.
+      this._urlSessionConsumed = true;
+      this._stripAuthHashFromUrl(params);
+      return null;
+    }
+
+    if (isBrowserServiceKey(accessToken)) {
       this._urlSessionConsumed = true;
       this._stripAuthHashFromUrl(params);
       return null;

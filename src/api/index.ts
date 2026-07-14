@@ -1,3 +1,4 @@
+import { assertBrowserSafeCredentials } from '../credential-safety';
 import { type Client, createClient } from '../generated/api/client';
 import type { Auth } from '../generated/api/core/auth.gen';
 import { trackResponseLifecycle } from '../response-lifecycle';
@@ -132,6 +133,7 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
   if (typeof configuredFetch !== 'function') {
     throw new TypeError('fetch must be provided when globalThis.fetch is unavailable');
   }
+  assertBrowserSafeCredentials(accessToken, anonKey, serviceRoleKey, userToken);
 
   const baseUrl = normalizeBaseUrl(configuredBaseUrl);
   const headers = new Headers(configuredHeaders);
@@ -156,6 +158,13 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
   }) as ApiClient;
 
   client.setCredentials = (nextCredentials) => {
+    const prospectiveCredentials = { ...credentials, ...nextCredentials };
+    assertBrowserSafeCredentials(
+      prospectiveCredentials.accessToken,
+      prospectiveCredentials.anonKey,
+      prospectiveCredentials.serviceRoleKey,
+      prospectiveCredentials.userToken,
+    );
     Object.assign(credentials, nextCredentials);
   };
 

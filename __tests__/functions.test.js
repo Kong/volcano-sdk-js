@@ -113,6 +113,31 @@ describe('DNS function invocation', () => {
     ]);
   });
 
+  it('does not retry a versioned 404 returned by an executed function', async () => {
+    const accessToken = tokenForProject('35000000-0000-0000-0000-000000000003');
+    global.fetch
+      .mockResolvedValueOnce(
+        jsonResponse({
+          cache_ttl_seconds: 300,
+          function_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ error: 'record not found' }, 404, { 'X-Volcano-Version': 'v1' }),
+      );
+    const volcano = createVolcanoClient({ accessToken, baseUrl: 'https://api.test.com' });
+
+    const result = await volcano.functions.invoke('business-not-found');
+
+    expect(result).toMatchObject({
+      data: { error: 'record not found' },
+      error: null,
+      status: 404,
+      version: 'v1',
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects invalid DNS names before making a request', async () => {
     const volcano = createVolcanoClient({
       accessToken: tokenForProject('40000000-0000-0000-0000-000000000004'),
