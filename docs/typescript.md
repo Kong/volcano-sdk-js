@@ -41,19 +41,30 @@ if (result.data) {
 
 Generated operations retain the non-throwing result shape. Narrow on `error` or `data` before using the payload.
 
-## Typed database rows
+## Typed database schemas
 
 ```ts
-interface Post {
-  id: string;
-  title: string;
-  status: 'draft' | 'published';
-  created_at: string;
-}
+type Databases = {
+  application: {
+    Tables: {
+      posts: {
+        Row: {
+          id: string;
+          title: string;
+          status: 'draft' | 'published';
+          created_at: string;
+        };
+        Insert: { title: string; status?: 'draft' | 'published' };
+        Update: { title?: string; status?: 'draft' | 'published' };
+      };
+    };
+  };
+};
 
-const database = volcano.database('application');
+const typedVolcano = createVolcanoClient<Databases>(config);
+const database = typedVolcano.database('application');
 const { data, error } = await database
-  .from<Post>('posts')
+  .from('posts')
   .select('id, title, status, created_at')
   .eq('status', 'published');
 ```
@@ -67,7 +78,7 @@ const upload = await volcano.storage.from('documents').upload('reports/annual.pd
 const object: StorageObject | null = upload.data;
 
 const invocation = await volcano.functions.invoke<{ accepted: boolean }>('processor', {
-  action: 'run',
+  body: { action: 'run' },
 });
 ```
 

@@ -8,7 +8,7 @@
 // Since centrifuge is a peer dependency, we test only the parts
 // that don't require actual centrifuge client
 
-const { VolcanoRealtime, RealtimeChannel } = require('../src/realtime.js');
+const { VolcanoRealtime, RealtimeChannel } = require('../src/realtime.ts');
 
 describe('VolcanoRealtime', () => {
   beforeEach(() => {

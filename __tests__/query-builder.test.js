@@ -1,4 +1,4 @@
-const { createVolcanoClient } = require('../src/index.js');
+const { createVolcanoClient } = require('../src/index.ts');
 
 const jsonResponse = (body, status = 200) => ({
   json: () => Promise.resolve(body),
@@ -36,8 +36,6 @@ describe('database query builder', () => {
       .limit(10)
       .offset(20);
 
-    expect(query.table).toBe('posts');
-    expect(query.databaseName).toBe('test_db');
     expect(query.selectColumns).toEqual(['id', 'title']);
     expect(query.filters.map(({ operator }) => operator)).toEqual([
       'eq',
@@ -106,7 +104,7 @@ describe('database query builder', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ count: 1, data: [{ id: 1 }] }));
 
-    const result = await volcano.database('test_db').from('posts');
+    const result = await volcano.database('test_db').from('posts').select();
 
     expect(result).toEqual({ count: 1, data: [{ id: 1 }], error: null });
     expect(global.fetch).toHaveBeenCalledTimes(3);
@@ -118,7 +116,7 @@ describe('database query builder', () => {
   it('returns an ergonomic error without an access-token session', async () => {
     const volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
-    const result = await volcano.database('test_db').from('posts');
+    const result = await volcano.database('test_db').from('posts').select();
 
     expect(result.data).toBeNull();
     expect(result.count).toBe(0);
@@ -128,9 +126,9 @@ describe('database query builder', () => {
 
   it('normalizes generated API and network errors', async () => {
     global.fetch.mockResolvedValueOnce(jsonResponse({ error: 'Table not found' }, 404));
-    const apiFailure = await database.from('missing');
+    const apiFailure = await database.from('missing').select();
     global.fetch.mockRejectedValueOnce(new Error('Network error'));
-    const networkFailure = await database.from('posts');
+    const networkFailure = await database.from('posts').select();
 
     expect(apiFailure.error.message).toBe('Table not found');
     expect(networkFailure).toMatchObject({ count: 0, data: null });
@@ -143,9 +141,9 @@ describe('database query builder', () => {
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 1, title: 'Updated' }] }))
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 1 }] }));
 
-    const inserted = await database.insert('posts', { title: 'New' });
-    const updated = await database.update('posts', { title: 'Updated' }).eq('id', 1);
-    const deleted = await database.delete('posts').eq('id', 1);
+    const inserted = await database.from('posts').insert({ title: 'New' });
+    const updated = await database.from('posts').update({ title: 'Updated' }).eq('id', 1);
+    const deleted = await database.from('posts').delete().eq('id', 1);
 
     expect(inserted.data).toEqual([{ id: 1, title: 'New' }]);
     expect(updated.data).toEqual([{ id: 1, title: 'Updated' }]);
@@ -165,8 +163,8 @@ describe('database query builder', () => {
       .mockResolvedValueOnce(jsonResponse({ count: 1, data: [{ id: 1 }] }))
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 2 }] }));
 
-    await expect(database.from('posts')).resolves.toMatchObject({ data: [{ id: 1 }] });
-    await expect(database.insert('posts', { title: 'New' })).resolves.toMatchObject({
+    await expect(database.from('posts').select()).resolves.toMatchObject({ data: [{ id: 1 }] });
+    await expect(database.from('posts').insert({ title: 'New' })).resolves.toMatchObject({
       data: [{ id: 2 }],
     });
   });

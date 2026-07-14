@@ -29,8 +29,8 @@ try {
   // dotenv not installed
 }
 
-const { createVolcanoClient } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { createVolcanoClient } = require('../../src/index.ts');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
 const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';

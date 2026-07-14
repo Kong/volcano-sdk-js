@@ -14,7 +14,7 @@ const typescriptPlugin = () =>
 export default [
   // Main SDK bundle
   {
-    input: 'src/index.js',
+    input: 'src/index.ts',
     external: ['centrifuge', 'ws'],
     plugins: [typescriptPlugin()],
     output: [
@@ -23,11 +23,13 @@ export default [
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
+        sourcemap: true,
       },
       {
         file: 'dist/index.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
+        sourcemap: true,
       },
       {
         file: 'dist/volcano.umd.js',
@@ -35,11 +37,12 @@ export default [
         name: 'Volcano',
         exports: 'named',
         inlineDynamicImports: true,
+        sourcemap: true,
       },
     ],
   },
   {
-    input: 'src/index.types.ts',
+    input: 'src/index.ts',
     plugins: [dts({ tsconfig: './tsconfig.json' })],
     output: [
       { file: 'dist/index.d.ts', format: 'es' },
@@ -55,10 +58,12 @@ export default [
         file: 'dist/api/index.js',
         format: 'cjs',
         exports: 'named',
+        sourcemap: true,
       },
       {
         file: 'dist/api/index.mjs',
         format: 'es',
+        sourcemap: true,
       },
     ],
   },
@@ -78,19 +83,22 @@ export default [
   },
   // Realtime module bundle
   {
-    input: 'src/realtime.js',
+    input: 'src/realtime.ts',
     external: ['centrifuge', 'ws'],
+    plugins: [typescriptPlugin()],
     output: [
       {
         file: 'dist/realtime.js',
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
+        sourcemap: true,
       },
       {
         file: 'dist/realtime.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
+        sourcemap: true,
       },
       {
         file: 'dist/realtime.umd.js',
@@ -98,6 +106,7 @@ export default [
         name: 'VolcanoRealtime',
         exports: 'named',
         inlineDynamicImports: true,
+        sourcemap: true,
         globals: {
           centrifuge: 'Centrifuge',
           ws: 'WebSocket',
@@ -106,7 +115,7 @@ export default [
     ],
   },
   {
-    input: 'src/realtime.types.ts',
+    input: 'src/realtime.ts',
     plugins: [dts({ tsconfig: './tsconfig.json' })],
     output: [
       { file: 'dist/realtime.d.ts', format: 'es' },
@@ -115,22 +124,24 @@ export default [
   },
   // Next.js middleware helpers bundle
   {
-    input: 'src/next/middleware.js',
+    input: 'src/next/middleware.ts',
     plugins: [typescriptPlugin()],
     output: [
       {
         file: 'dist/next/middleware.js',
         format: 'cjs',
         exports: 'named',
+        sourcemap: true,
       },
       {
         file: 'dist/next/middleware.esm.mjs',
         format: 'es',
+        sourcemap: true,
       },
     ],
   },
   {
-    input: 'src/next/middleware.types.ts',
+    input: 'src/next/middleware.ts',
     plugins: [dts({ tsconfig: './tsconfig.json' })],
     output: [
       { file: 'dist/next/middleware.d.ts', format: 'es' },

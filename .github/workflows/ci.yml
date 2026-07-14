@@ -84,6 +84,9 @@ jobs:
       - name: Smoke test packed package
         run: pnpm test:package
 
+      - name: Check package types
+        run: pnpm test:attw
+
   package-node-20:
     name: Packed Package Smoke (Node 20)
     runs-on: ubuntu-latest

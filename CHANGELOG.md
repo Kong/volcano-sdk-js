@@ -14,6 +14,10 @@ All notable changes to the Volcano SDK will be documented in this file.
   and every generated schema and operation type.
 - `createVolcanoClient()` with an isolated `.api` client, credential rotation,
   request timeouts, and single-flight access-token refresh.
+- Per-client custom fetch, headers, synchronous or asynchronous auth storage,
+  namespaced session persistence, proactive refresh, and structured auth events.
+- Schema-parameterized database helpers, structured `VolcanoApiError` values,
+  request cancellation, client identification headers, and source maps.
 
 ### Changed
 
@@ -21,6 +25,8 @@ All notable changes to the Volcano SDK will be documented in this file.
   generated operations wherever the OpenAPI media type and URL semantics match.
 - Database access is explicit and instance-safe through
   `volcano.database(name).from(table)`.
+- Function invocation accepts option-wrapped bodies and custom headers; safe
+  caller headers are available to functions through `__volcano_request`.
 - Package declarations are emitted from TypeScript sources for the root, API,
   realtime, and Next.js entry points.
 - Code generation and build run on Node.js 22; the published package continues

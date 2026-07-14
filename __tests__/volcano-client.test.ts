@@ -1,7 +1,7 @@
 /** @jest-environment node */
 
 import { authGetUser, listStorageObjects } from '../src/api';
-import { createVolcanoClient } from '../src/index.js';
+import { createVolcanoClient } from '../src/index.ts';
 
 const jsonResponse = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {

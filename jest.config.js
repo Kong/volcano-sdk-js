@@ -8,5 +8,8 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/generated/**'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
 };

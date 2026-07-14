@@ -23,10 +23,18 @@ const volcano = createVolcanoClient({
   serviceRoleKey,
   userToken,
   timeoutMs: 60_000,
+  headers: { 'X-Application': 'dashboard' },
+  fetch: instrumentedFetch,
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: asyncStorage,
+    storageKey: 'volcano-my-project-auth-token',
+  },
 });
 ```
 
-Each call creates an isolated client. Credentials can also be supplied individually, so platform management calls can use only `userToken` and backend storage calls can use only `serviceRoleKey`.
+Each call creates an isolated client. Credentials can also be supplied individually, so platform management calls can use only `userToken` and backend storage calls can use only `serviceRoleKey`. `fetch`, default headers, synchronous or asynchronous auth storage, session persistence, proactive refresh, and request timeouts are configurable per instance. The SDK sends an overridable `X-Client-Info` header on HTTP requests.
 
 ## Generated API
 
@@ -69,7 +77,20 @@ const { user, session, error } = await volcano.auth.signIn({
 Database query building:
 
 ```ts
-const database = volcano.database('application');
+type Databases = {
+  application: {
+    Tables: {
+      posts: {
+        Row: { id: string; title: string; status: 'draft' | 'published'; created_at: string };
+        Insert: { title: string; status?: 'draft' | 'published' };
+        Update: { title?: string; status?: 'draft' | 'published' };
+      };
+    };
+  };
+};
+
+const typedVolcano = createVolcanoClient<Databases>({ anonKey });
+const database = typedVolcano.database('application');
 const { data, error, count } = await database
   .from('posts')
   .select('id, title')
@@ -88,8 +109,12 @@ const { data: blob } = await documents.download('users/123/report.pdf');
 DNS-based function invocation:
 
 ```ts
-const result = await volcano.functions.invoke('processor', { action: 'run' });
+const result = await volcano.functions.invoke('processor', { body: { action: 'run' } });
 ```
+
+Function calls also accept custom `headers`, an `AbortSignal`, and a per-call `timeoutMs`. The platform forwards safe custom headers to the function in `event.__volcano_request.headers` while filtering credentials, cookies, and hop-by-hop headers.
+
+Higher-level helpers return `VolcanoApiError` instances with `code`, `details`, `status`, `request`, and `response` fields. Prefer `error.code` for application decisions and `error.message` for display or logs.
 
 Realtime and Next.js middleware remain separate entry points:
 

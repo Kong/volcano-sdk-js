@@ -18,8 +18,10 @@ Functions provide:
 
 ```javascript
 const { data, status, version, error } = await volcano.functions.invoke('send-welcome-email', {
-  template: 'welcome',
-  recipientId: user.id,
+  body: {
+    template: 'welcome',
+    recipientId: user.id,
+  },
 });
 
 if (error) {
@@ -43,19 +45,32 @@ interface DashboardStats {
   revenue: number;
 }
 
-const { data, status, headers, version, error } = await volcano.functions.invoke<
-  { timeframe: string },
-  DashboardStats
->('get-dashboard-stats', {
-  timeframe: 'last-30-days',
-});
+const { data, status, headers, version, error } = await volcano.functions.invoke<DashboardStats>(
+  'get-dashboard-stats',
+  {
+    body: { timeframe: 'last-30-days' },
+    headers: { 'X-Request-ID': crypto.randomUUID() },
+    timeoutMs: 30_000,
+  },
+);
 
-if (data) {
+if (data && typeof data !== 'string') {
   console.log('HTTP status:', status);
   console.log('X-Volcano-Version:', version);
   console.log('Total users:', data.totalUsers);
   console.log('Active today:', data.activeToday);
 }
+```
+
+Use `signal` to cancel an invocation. Safe caller headers are made available to the function in `event.__volcano_request.headers`; Volcano strips authorization, cookies, proxy/browser security headers, and hop-by-hop fields.
+
+```typescript
+const controller = new AbortController();
+const result = await volcano.functions.invoke('processor', {
+  body: { action: 'run' },
+  headers: { 'X-Correlation-ID': 'job-123' },
+  signal: controller.signal,
+});
 ```
 
 ### No Payload
@@ -260,8 +275,10 @@ The browser-based query builder is better for:
 
 ```javascript
 const { data, error } = await volcano.functions.invoke('process-payment', {
-  amount: 1999,
-  currency: 'usd',
+  body: {
+    amount: 1999,
+    currency: 'usd',
+  },
 });
 
 if (error) {

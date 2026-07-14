@@ -1,14 +1,13 @@
-import type { VolcanoClient } from './index.types.js';
+import type {
+  Centrifuge,
+  ConnectedContext,
+  DisconnectedContext,
+  ErrorContext as CentrifugeErrorContext,
+  PublicationContext as CentrifugePublicationContext,
+} from 'centrifuge';
+import type { VolcanoClient } from './types.js';
 
-export interface CentrifugeClient {
-  connect(): void;
-  disconnect(): void;
-  on(event: string, callback: (...args: unknown[]) => void): void;
-  off(event: string, callback: (...args: unknown[]) => void): void;
-  newSubscription(channel: string, options?: Record<string, unknown>): unknown;
-  getSubscription(channel: string): unknown | undefined;
-  removeSubscription(subscription: unknown): void;
-}
+export type CentrifugeClient = Centrifuge;
 
 export interface FetchConfig {
   batchWindowMs?: number;
@@ -52,32 +51,20 @@ export interface PostgresChange {
 
 export type PresenceState = Record<string, Record<string, unknown>>;
 
-export interface PublicationContext<T = unknown> {
+export interface PublicationContext<T = unknown> extends Omit<
+  CentrifugePublicationContext,
+  'data'
+> {
   data: T;
-  offset?: number;
-  tags?: Record<string, string>;
 }
 
-export interface ConnectContext {
-  client?: string;
-  latency?: number;
-}
-
-export interface DisconnectContext {
-  code?: number;
-  reason?: string;
-  reconnect?: boolean;
-}
-
-export interface ErrorContext {
-  error?: Error;
-  message?: string;
-  code?: number;
-}
+export type ConnectContext = ConnectedContext;
+export type DisconnectContext = DisconnectedContext;
+export type ErrorContext = CentrifugeErrorContext;
 
 export type UnsubscribeFunction = () => void;
 
-export declare class RealtimeChannel {
+export interface RealtimeChannelContract {
   readonly name: string;
   subscribe(): Promise<void>;
   unsubscribe(): void;
@@ -97,13 +84,12 @@ export declare class RealtimeChannel {
   getPresenceState(): PresenceState;
 }
 
-export declare class VolcanoRealtime {
-  constructor(config: RealtimeConfig);
+export interface VolcanoRealtimeContract {
   readonly wsUrl: string;
   connect(): Promise<void>;
   disconnect(): void;
   isConnected(): boolean;
-  channel(name: string, options?: ChannelOptions): RealtimeChannel;
+  channel(name: string, options?: ChannelOptions): RealtimeChannelContract;
   onConnect(callback: (context: ConnectContext) => void): UnsubscribeFunction;
   onDisconnect(callback: (context: DisconnectContext) => void): UnsubscribeFunction;
   onError(callback: (context: ErrorContext) => void): UnsubscribeFunction;

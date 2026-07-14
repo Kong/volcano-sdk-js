@@ -44,13 +44,67 @@
  * ```
  */
 
+import type {
+  Centrifuge as CentrifugeInstance,
+  ConnectedContext,
+  DisconnectedContext,
+  ErrorContext as CentrifugeErrorContext,
+  JoinContext,
+  LeaveContext,
+  PublicationContext as CentrifugePublicationContext,
+  ServerJoinContext,
+  ServerLeaveContext,
+  ServerPublicationContext,
+  ServerSubscribedContext,
+  SubscribedContext,
+  Subscription,
+} from 'centrifuge';
+import type {
+  ChannelOptions,
+  ConnectContext,
+  DisconnectContext,
+  ErrorContext,
+  FetchConfig,
+  PostgresChange,
+  PresenceState,
+  PublicationContext,
+  RealtimeChannelContract,
+  RealtimeConfig,
+  UnsubscribeFunction,
+  VolcanoRealtimeContract,
+  WebSocketConstructor,
+} from './realtime-types.js';
+import type { VolcanoClient } from './types.js';
+
+export type * from './realtime-types.js';
+
+type CentrifugeConstructor = (typeof import('centrifuge'))['Centrifuge'];
+type ChannelType = NonNullable<ChannelOptions['type']>;
+type RealtimeRecord = Record<string, unknown>;
+type RealtimeCallback = (data: unknown, context?: PublicationContext) => void;
+
+interface PendingFetchCallback {
+  reject(reason?: unknown): void;
+  resolve(value: RealtimeRecord): void;
+}
+
+interface PendingFetchBatch {
+  ids: Map<string, PendingFetchCallback>;
+  schema: string;
+  table: string;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const asRealtimeRecord = (value: unknown): RealtimeRecord =>
+  value && typeof value === 'object' ? (value as RealtimeRecord) : {};
+
 // Centrifuge client - dynamically imported
-let Centrifuge = null;
+let Centrifuge: CentrifugeConstructor | null = null;
 
 /**
  * Dynamically imports the Centrifuge client
  */
-async function loadCentrifuge() {
+async function loadCentrifuge(): Promise<CentrifugeConstructor> {
   if (Centrifuge) {
     return Centrifuge;
   }
@@ -58,7 +112,7 @@ async function loadCentrifuge() {
   try {
     // Try ES module import
     const module = await import('centrifuge');
-    Centrifuge = module.Centrifuge || module.default;
+    Centrifuge = module.Centrifuge;
     return Centrifuge;
   } catch {
     throw new Error(
@@ -68,8 +122,8 @@ async function loadCentrifuge() {
 }
 
 // Load WebSocket for Node.js environments
-let WebSocketImpl = null;
-async function loadWebSocket() {
+let WebSocketImpl: WebSocketConstructor | null = null;
+async function loadWebSocket(): Promise<WebSocketConstructor> {
   if (WebSocketImpl) {
     return WebSocketImpl;
   }
@@ -83,7 +137,7 @@ async function loadWebSocket() {
   // Node.js environment - try to load ws package
   try {
     const ws = await import('ws');
-    WebSocketImpl = ws.default || ws.WebSocket || ws;
+    WebSocketImpl = (ws.default || ws.WebSocket) as unknown as WebSocketConstructor;
     return WebSocketImpl;
   } catch {
     throw new Error(
@@ -103,7 +157,32 @@ async function loadWebSocket() {
  * 1. User token: anonKey (required) + accessToken (user JWT)
  * 2. Service key: anonKey (optional) + accessToken (service role key)
  */
-class VolcanoRealtime {
+class VolcanoRealtime implements VolcanoRealtimeContract {
+  readonly apiUrl: string;
+  readonly anonKey: string;
+  accessToken?: string;
+  readonly getToken?: () => Promise<string>;
+  private readonly _webSocket: WebSocketConstructor | null;
+  private _client: CentrifugeInstance | null = null;
+  private readonly _channels = new Map<string, RealtimeChannel>();
+  private _connected = false;
+  private _connectionPromise: Promise<void> | null = null;
+  private _clientHandlers: {
+    connected(context: ConnectedContext): void;
+    disconnected(context: DisconnectedContext): void;
+    error(context: CentrifugeErrorContext): void;
+    join(context: ServerJoinContext): void;
+    leave(context: ServerLeaveContext): void;
+    publication(context: ServerPublicationContext): void;
+    subscribed(context: ServerSubscribedContext): void;
+  } | null = null;
+  private _onConnect: ((context: ConnectContext) => void)[] = [];
+  private _onDisconnect: ((context: DisconnectContext) => void)[] = [];
+  private _onError: ((context: ErrorContext) => void)[] = [];
+  private _volcanoClient: VolcanoClient | null;
+  private readonly _fetchConfig: Required<FetchConfig>;
+  private _databaseName: string | null;
+
   /**
    * Create a new VolcanoRealtime client
    * @param {Object} config - Configuration options
@@ -116,7 +195,7 @@ class VolcanoRealtime {
    * @param {Object} [config.fetchConfig] - Configuration for auto-fetch behavior
    * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage
    */
-  constructor(config) {
+  constructor(config: RealtimeConfig) {
     if (!config.apiUrl) {
       throw new Error('apiUrl is required');
     }
@@ -131,16 +210,6 @@ class VolcanoRealtime {
     this.accessToken = config.accessToken;
     this.getToken = config.getToken;
     this._webSocket = config.webSocket || null;
-
-    this._client = null;
-    this._channels = new Map();
-    this._connected = false;
-    this._connectionPromise = null;
-
-    // Callbacks
-    this._onConnect = [];
-    this._onDisconnect = [];
-    this._onError = [];
 
     // Auto-fetch support (Phase 3)
     this._volcanoClient = config.volcanoClient || null;
@@ -158,7 +227,7 @@ class VolcanoRealtime {
    * Set the Volcano client for auto-fetching
    * @param {Object} volcanoClient - Volcano client instance
    */
-  setVolcanoClient(volcanoClient) {
+  setVolcanoClient(volcanoClient: VolcanoClient): void {
     this._volcanoClient = volcanoClient;
   }
 
@@ -166,7 +235,7 @@ class VolcanoRealtime {
    * Get the configured Volcano client
    * @returns {Object|null} The Volcano client or null
    */
-  getVolcanoClient() {
+  getVolcanoClient(): VolcanoClient | null {
     return this._volcanoClient;
   }
 
@@ -174,7 +243,7 @@ class VolcanoRealtime {
    * Get the fetch configuration
    * @returns {Object} The fetch configuration
    */
-  getFetchConfig() {
+  getFetchConfig(): Required<FetchConfig> {
     return { ...this._fetchConfig };
   }
 
@@ -182,7 +251,7 @@ class VolcanoRealtime {
    * Set the database name for auto-fetch queries
    * @param {string} databaseName
    */
-  setDatabaseName(databaseName) {
+  setDatabaseName(databaseName: string): void {
     this._databaseName = databaseName;
   }
 
@@ -190,14 +259,14 @@ class VolcanoRealtime {
    * Get the configured database name
    * @returns {string|null}
    */
-  getDatabaseName() {
+  getDatabaseName(): string | null {
     return this._databaseName;
   }
 
   /**
    * Get the WebSocket URL for realtime connections
    */
-  get wsUrl() {
+  get wsUrl(): string {
     const url = new URL(this.apiUrl);
     const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${url.host}/realtime/v1/websocket`;
@@ -206,7 +275,7 @@ class VolcanoRealtime {
   /**
    * Connect to the realtime server
    */
-  async connect() {
+  async connect(): Promise<void> {
     if (this._connected) {
       return;
     }
@@ -222,23 +291,24 @@ class VolcanoRealtime {
     }
   }
 
-  async _doConnect() {
+  private async _doConnect(): Promise<void> {
     const CentrifugeClient = await loadCentrifuge();
     const WebSocket = this._webSocket || (await loadWebSocket());
 
     const wsUrl = `${this.wsUrl}?apikey=${encodeURIComponent(this.anonKey)}`;
 
+    const getToken = this.getToken;
     this._client = new CentrifugeClient(wsUrl, {
       token: this.accessToken,
-      getToken: this.getToken
+      getToken: getToken
         ? async () => {
-            const token = await this.getToken();
+            const token = await getToken();
             this.accessToken = token;
             return token;
           }
         : undefined,
       debug: false,
-      websocket: WebSocket,
+      websocket: WebSocket as never,
     });
 
     // Set up event handlers (store references for cleanup)
@@ -283,24 +353,24 @@ class VolcanoRealtime {
     this._client.on('subscribed', this._clientHandlers.subscribed);
 
     // Connect and wait for connected event
-    return new Promise((resolve, reject) => {
-      const client = this._client;
+    const client = this._client;
+    return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Connection timeout'));
       }, 10000);
 
-      function cleanupConnectionListeners() {
+      function cleanupConnectionListeners(): void {
         clearTimeout(timeout);
         client.off('connected', onConnected);
         client.off('error', onError);
       }
 
-      function onConnected() {
+      function onConnected(): void {
         cleanupConnectionListeners();
         resolve();
       }
 
-      function onError(ctx) {
+      function onError(ctx: CentrifugeErrorContext): void {
         cleanupConnectionListeners();
         reject(new Error(ctx.error?.message || 'Connection failed'));
       }
@@ -314,7 +384,7 @@ class VolcanoRealtime {
   /**
    * Disconnect from the realtime server
    */
-  disconnect() {
+  disconnect(): void {
     // Unsubscribe all channels first to clean up their timers
     for (const channel of this._channels.values()) {
       try {
@@ -340,7 +410,7 @@ class VolcanoRealtime {
 
       // Manually trigger disconnect callbacks
       this._onDisconnect.forEach((cb) => {
-        cb({ reason: 'manual' });
+        cb({ code: 0, reason: 'manual' });
       });
 
       // Disconnect the client
@@ -353,7 +423,7 @@ class VolcanoRealtime {
   /**
    * Check if connected to the realtime server
    */
-  isConnected() {
+  isConnected(): boolean {
     return this._connected;
   }
 
@@ -366,12 +436,12 @@ class VolcanoRealtime {
    * @param {number} [options.fetchBatchWindowMs] - Batch window for fetch requests
    * @param {number} [options.fetchMaxBatchSize] - Max batch size for fetch requests
    */
-  channel(name, options = {}) {
+  channel(name: string, options: ChannelOptions = {}): RealtimeChannel {
     const type = options.type || 'broadcast';
     const fullName = this._formatChannelName(name, type);
 
     if (this._channels.has(fullName)) {
-      return this._channels.get(fullName);
+      return this._channels.get(fullName)!;
     }
 
     const channel = new RealtimeChannel(this, fullName, type, options);
@@ -386,7 +456,7 @@ class VolcanoRealtime {
    * The server automatically adds the project ID prefix based on
    * the authenticated connection. Clients never need to know about project IDs.
    */
-  _formatChannelName(name, type) {
+  private _formatChannelName(name: string, type: ChannelType): string {
     return `${type}:${name}`;
   }
 
@@ -395,7 +465,7 @@ class VolcanoRealtime {
    * The server uses project-prefixed channels: "projectId:type:name"
    * We extract the type:name portion and route to the SDK channel
    */
-  _handleServerPublication(ctx) {
+  private _handleServerPublication(ctx: ServerPublicationContext): void {
     const serverChannel = ctx.channel;
 
     // Server channel format: projectId:type:name
@@ -419,7 +489,7 @@ class VolcanoRealtime {
   /**
    * Handle join events from server-side subscriptions
    */
-  _handleServerJoin(ctx) {
+  private _handleServerJoin(ctx: ServerJoinContext): void {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
     if (parts.length < 3) {
@@ -431,7 +501,7 @@ class VolcanoRealtime {
     if (channel && channel._type === 'presence') {
       // Update presence state
       if (ctx.info) {
-        channel._presenceState[ctx.info.client] = ctx.info;
+        channel._presenceState[ctx.info.client] = ctx.info as unknown as RealtimeRecord;
       }
       channel._triggerPresenceSync();
       channel._triggerEvent('join', ctx.info);
@@ -441,7 +511,7 @@ class VolcanoRealtime {
   /**
    * Handle leave events from server-side subscriptions
    */
-  _handleServerLeave(ctx) {
+  private _handleServerLeave(ctx: ServerLeaveContext): void {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
     if (parts.length < 3) {
@@ -463,7 +533,7 @@ class VolcanoRealtime {
   /**
    * Handle subscribed events - includes initial presence state
    */
-  _handleServerSubscribed(ctx) {
+  private _handleServerSubscribed(ctx: ServerSubscribedContext): void {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
     if (parts.length < 3) {
@@ -479,7 +549,7 @@ class VolcanoRealtime {
       if (ctx.data.presence) {
         channel._presenceState = {};
         for (const [clientId, info] of Object.entries(ctx.data.presence)) {
-          channel._presenceState[clientId] = info;
+          channel._presenceState[clientId] = info as RealtimeRecord;
         }
         channel._triggerPresenceSync();
       }
@@ -489,14 +559,14 @@ class VolcanoRealtime {
   /**
    * Get the underlying Centrifuge client
    */
-  getClient() {
+  getClient(): CentrifugeInstance | null {
     return this._client;
   }
 
   /**
    * Register callback for connection events
    */
-  onConnect(callback) {
+  onConnect(callback: (context: ConnectContext) => void): UnsubscribeFunction {
     this._onConnect.push(callback);
     return () => {
       this._onConnect = this._onConnect.filter((cb) => cb !== callback);
@@ -506,7 +576,7 @@ class VolcanoRealtime {
   /**
    * Register callback for disconnection events
    */
-  onDisconnect(callback) {
+  onDisconnect(callback: (context: DisconnectContext) => void): UnsubscribeFunction {
     this._onDisconnect.push(callback);
     return () => {
       this._onDisconnect = this._onDisconnect.filter((cb) => cb !== callback);
@@ -516,7 +586,7 @@ class VolcanoRealtime {
   /**
    * Register callback for error events
    */
-  onError(callback) {
+  onError(callback: (context: ErrorContext) => void): UnsubscribeFunction {
     this._onError.push(callback);
     return () => {
       this._onError = this._onError.filter((cb) => cb !== callback);
@@ -528,7 +598,7 @@ class VolcanoRealtime {
    * @param {string} name - Channel name
    * @param {string} [type='broadcast'] - Channel type
    */
-  removeChannel(name, type = 'broadcast') {
+  removeChannel(name: string, type: ChannelType = 'broadcast'): void {
     const fullName = this._formatChannelName(name, type);
     const channel = this._channels.get(fullName);
     if (channel) {
@@ -540,7 +610,7 @@ class VolcanoRealtime {
   /**
    * Remove all channels and listeners
    */
-  removeAllChannels() {
+  removeAllChannels(): void {
     for (const channel of this._channels.values()) {
       channel.unsubscribe();
     }
@@ -551,16 +621,30 @@ class VolcanoRealtime {
 /**
  * RealtimeChannel - Represents a subscription to a realtime channel
  */
-class RealtimeChannel {
-  constructor(realtime, name, type, options) {
+class RealtimeChannel implements RealtimeChannelContract {
+  readonly _realtime: VolcanoRealtime;
+  readonly _name: string;
+  readonly _type: ChannelType;
+  readonly _options: ChannelOptions;
+  _subscription: Subscription | null = null;
+  readonly _callbacks = new Map<string, RealtimeCallback[]>();
+  _presenceState: PresenceState = {};
+  private _myPresenceState: RealtimeRecord = {};
+  private readonly _fetchConfig: Required<FetchConfig>;
+  private readonly _pendingFetches = new Map<string, PendingFetchBatch>();
+  private _eventHandlers: Partial<{
+    join(context: JoinContext): void;
+    leave(context: LeaveContext): void;
+    publication(context: CentrifugePublicationContext): void;
+    subscribed(context: SubscribedContext): void;
+  }> = {};
+  private _presenceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(realtime: VolcanoRealtime, name: string, type: ChannelType, options: ChannelOptions) {
     this._realtime = realtime;
     this._name = name;
     this._type = type;
     this._options = options;
-    this._subscription = null;
-    this._callbacks = new Map();
-    this._presenceState = {};
-
     // Auto-fetch support (Phase 3)
     const parentFetchConfig = realtime.getFetchConfig();
     this._fetchConfig = {
@@ -568,24 +652,19 @@ class RealtimeChannel {
       maxBatchSize: options.fetchMaxBatchSize || parentFetchConfig.maxBatchSize,
       enabled: options.autoFetch !== false && parentFetchConfig.enabled,
     };
-    this._pendingFetches = new Map(); // table -> { ids: Map<id, {resolve, reject}>, timer }
-
-    // Event handler references for cleanup
-    this._eventHandlers = {};
-    this._presenceTimeoutId = null;
   }
 
   /**
    * Get channel name
    */
-  get name() {
+  get name(): string {
     return this._name;
   }
 
   /**
    * Subscribe to the channel
    */
-  async subscribe() {
+  async subscribe(): Promise<void> {
     if (this._subscription) {
       return;
     }
@@ -596,11 +675,9 @@ class RealtimeChannel {
     }
 
     this._subscription = client.newSubscription(this._name, {
-      // Enable presence for presence channels
-      presence: this._type === 'presence',
       joinLeave: this._type === 'presence',
       // Enable recovery for all channels
-      recover: true,
+      recoverable: true,
     });
 
     // Set up message handler (store reference for cleanup)
@@ -621,14 +698,8 @@ class RealtimeChannel {
 
     // Set up presence handlers for presence channels
     if (this._type === 'presence') {
-      this._eventHandlers.presence = (ctx) => {
-        this._updatePresenceState(ctx);
-        this._triggerPresenceSync();
-      };
-      this._subscription.on('presence', this._eventHandlers.presence);
-
       this._eventHandlers.join = (ctx) => {
-        this._presenceState[ctx.info.client] = ctx.info.data;
+        this._presenceState[ctx.info.client] = asRealtimeRecord(ctx.info.chanInfo ?? ctx.info);
         this._triggerPresenceSync();
         this._triggerEvent('join', ctx.info);
       };
@@ -657,7 +728,7 @@ class RealtimeChannel {
               if (presence && presence.clients) {
                 this._presenceState = {};
                 for (const [clientId, info] of Object.entries(presence.clients)) {
-                  this._presenceState[clientId] = info;
+                  this._presenceState[clientId] = asRealtimeRecord(info.chanInfo ?? info);
                 }
                 this._triggerPresenceSync();
               }
@@ -676,7 +747,7 @@ class RealtimeChannel {
   /**
    * Unsubscribe from the channel
    */
-  unsubscribe() {
+  unsubscribe(): void {
     // Cancel pending presence fetch timeout
     if (this._presenceTimeoutId) {
       clearTimeout(this._presenceTimeoutId);
@@ -699,12 +770,18 @@ class RealtimeChannel {
 
     if (this._subscription) {
       // Remove event listeners before unsubscribing
-      for (const [event, handler] of Object.entries(this._eventHandlers)) {
-        try {
-          this._subscription.off(event, handler);
-        } catch {
-          // Ignore errors if listener already removed
-        }
+      const handlers = this._eventHandlers;
+      if (handlers.publication) {
+        this._subscription.off('publication', handlers.publication);
+      }
+      if (handlers.join) {
+        this._subscription.off('join', handlers.join);
+      }
+      if (handlers.leave) {
+        this._subscription.off('leave', handlers.leave);
+      }
+      if (handlers.subscribed) {
+        this._subscription.off('subscribed', handlers.subscribed);
       }
       this._eventHandlers = {};
 
@@ -728,7 +805,7 @@ class RealtimeChannel {
    * Handle publication from server-side subscription
    * Called by VolcanoRealtime when a message arrives on the internal channel
    */
-  _handlePublication(ctx) {
+  _handlePublication(ctx: ServerPublicationContext): void {
     const data = ctx.data;
 
     // Check if this is a lightweight notification (Phase 3)
@@ -746,7 +823,10 @@ class RealtimeChannel {
    * @param {Object} data - Lightweight notification data
    * @param {Object} ctx - Publication context
    */
-  async _handleLightweightNotification(data, ctx) {
+  private async _handleLightweightNotification(
+    data: RealtimeRecord,
+    ctx: PublicationContext,
+  ): Promise<void> {
     const volcanoClient = this._realtime.getVolcanoClient();
 
     // DELETE notifications may include old_record, deliver immediately
@@ -778,6 +858,10 @@ class RealtimeChannel {
 
     // Auto-fetch the record for INSERT/UPDATE
     try {
+      if (typeof data.schema !== 'string' || typeof data.table !== 'string') {
+        this._deliverPayload(data, ctx);
+        return;
+      }
       const record = await this._fetchRow(data.schema, data.table, data.id);
 
       // Convert to full payload format for backward compatibility
@@ -795,7 +879,7 @@ class RealtimeChannel {
       // so the client knows something changed, even if we couldn't get the data
       console.warn(
         `[Realtime] Failed to fetch record for ${data.schema}.${data.table}:${data.id}:`,
-        err.message,
+        err instanceof Error ? err.message : err,
       );
       this._deliverPayload(data, ctx);
     }
@@ -808,10 +892,10 @@ class RealtimeChannel {
    * @param {*} id - Primary key value
    * @returns {Promise<Object>} The fetched record
    */
-  _fetchRow(schema, table, id) {
+  private _fetchRow(schema: string, table: string, id: unknown): Promise<RealtimeRecord> {
     const tableKey = `${schema}.${table}`;
 
-    return new Promise((resolve, reject) => {
+    return new Promise<RealtimeRecord>((resolve, reject) => {
       // Get or create pending batch for this table
       if (!this._pendingFetches.has(tableKey)) {
         this._pendingFetches.set(tableKey, {
@@ -822,7 +906,7 @@ class RealtimeChannel {
         });
       }
 
-      const batch = this._pendingFetches.get(tableKey);
+      const batch = this._pendingFetches.get(tableKey)!;
 
       // Add this ID to the batch
       batch.ids.set(String(id), { resolve, reject });
@@ -847,7 +931,7 @@ class RealtimeChannel {
    * @param {string} schema - Schema name
    * @param {string} table - Table name
    */
-  async _flushFetch(schema, table) {
+  private async _flushFetch(schema: string, table: string): Promise<void> {
     const tableKey = `${schema}.${table}`;
     const batch = this._pendingFetches.get(tableKey);
 
@@ -892,7 +976,7 @@ class RealtimeChannel {
       }
 
       // Build a map of id -> record
-      const recordMap = new Map();
+      const recordMap = new Map<string, RealtimeRecord>();
       for (const record of data || []) {
         recordMap.set(String(record.id), record);
       }
@@ -920,8 +1004,12 @@ class RealtimeChannel {
    * @param {Object} data - Payload data
    * @param {Object} ctx - Publication context
    */
-  _deliverPayload(data, ctx) {
-    const event = data?.event || data?.type || 'message';
+  private _deliverPayload(data: unknown, ctx: PublicationContext): void {
+    const record = asRealtimeRecord(data);
+    const event =
+      (typeof record.event === 'string' && record.event) ||
+      (typeof record.type === 'string' && record.type) ||
+      'message';
     const callbacks = this._callbacks.get(event) || [];
     callbacks.forEach((cb) => {
       cb(data, ctx);
@@ -939,11 +1027,11 @@ class RealtimeChannel {
    * @param {string} event - Event name or '*' for all events
    * @param {Function} callback - Callback function
    */
-  on(event, callback) {
+  on(event: string, callback: RealtimeCallback): UnsubscribeFunction {
     if (!this._callbacks.has(event)) {
       this._callbacks.set(event, []);
     }
-    this._callbacks.get(event).push(callback);
+    this._callbacks.get(event)!.push(callback);
 
     // Return unsubscribe function
     return () => {
@@ -959,7 +1047,7 @@ class RealtimeChannel {
    * Send a message to the channel (broadcast only)
    * @param {Object} data - Message data
    */
-  async send(data) {
+  async send(data: RealtimeRecord): Promise<void> {
     if (this._type !== 'broadcast') {
       throw new Error('send() is only available for broadcast channels');
     }
@@ -978,20 +1066,26 @@ class RealtimeChannel {
    * @param {string} table - Table name
    * @param {Function} callback - Callback function
    */
-  onPostgresChanges(event, schema, table, callback) {
+  onPostgresChanges(
+    event: 'INSERT' | 'UPDATE' | 'DELETE' | '*',
+    schema: string,
+    table: string,
+    callback: (data: PostgresChange, context?: PublicationContext) => void,
+  ): UnsubscribeFunction {
     if (this._type !== 'postgres') {
       throw new Error('onPostgresChanges() is only available for postgres channels');
     }
 
     // Filter callback to only match the requested event type
     return this.on('*', (data, ctx) => {
-      if (data.schema !== schema || data.table !== table) {
+      const change = asRealtimeRecord(data);
+      if (change.schema !== schema || change.table !== table) {
         return;
       }
-      if (event !== '*' && data.type !== event) {
+      if (event !== '*' && change.type !== event) {
         return;
       }
-      callback(data, ctx);
+      callback(change as unknown as PostgresChange, ctx);
     });
   }
 
@@ -999,12 +1093,12 @@ class RealtimeChannel {
    * Listen for presence state sync
    * @param {Function} callback - Callback with presence state
    */
-  onPresenceSync(callback) {
+  onPresenceSync(callback: (state: PresenceState) => void): UnsubscribeFunction {
     if (this._type !== 'presence') {
       throw new Error('onPresenceSync() is only available for presence channels');
     }
 
-    return this.on('presence_sync', callback);
+    return this.on('presence_sync', (state) => callback(state as PresenceState));
   }
 
   /**
@@ -1015,7 +1109,7 @@ class RealtimeChannel {
    * user metadata (from sign-up). Custom presence data should be included
    * when creating the anonymous user.
    */
-  async track(state = {}) {
+  async track(state: RealtimeRecord = {}): Promise<void> {
     if (this._type !== 'presence') {
       throw new Error('track() is only available for presence channels');
     }
@@ -1031,11 +1125,11 @@ class RealtimeChannel {
   /**
    * Get current presence state
    */
-  getPresenceState() {
+  getPresenceState(): PresenceState {
     return { ...this._presenceState };
   }
 
-  _updatePresenceState(ctx) {
+  private _updatePresenceState(ctx: { clients?: Record<string, { data: RealtimeRecord }> }): void {
     this._presenceState = {};
     if (ctx.clients) {
       for (const [clientId, info] of Object.entries(ctx.clients)) {
@@ -1044,11 +1138,11 @@ class RealtimeChannel {
     }
   }
 
-  _triggerPresenceSync() {
+  _triggerPresenceSync(): void {
     this._triggerEvent('presence_sync', this._presenceState);
   }
 
-  _triggerEvent(event, data) {
+  _triggerEvent(event: string, data: unknown): void {
     const callbacks = this._callbacks.get(event) || [];
     callbacks.forEach((cb) => {
       cb(data);

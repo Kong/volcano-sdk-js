@@ -1,4 +1,4 @@
-import { createVolcanoClient, type VolcanoClientConfig } from '../../src/index.types';
+import { createVolcanoClient, type VolcanoClientConfig } from '../../src/index';
 import type {
   AuthSignupData,
   AuthUser,
@@ -20,12 +20,24 @@ const config: VolcanoClientConfig = {
   userToken: 'user-token',
 };
 
-const volcano = createVolcanoClient(config);
-void volcano.database('application').from<{ id: string }>('projects').select('id');
+type Databases = {
+  application: {
+    Tables: {
+      projects: {
+        Insert: { id: string };
+        Row: { id: string };
+        Update: { id?: string };
+      };
+    };
+  };
+};
+
+const volcano = createVolcanoClient<Databases>(config);
+void volcano.database('application').from('projects').select('id');
 void volcano.storage.from('documents').download('nested/path/report.pdf', {
   range: 'bytes=0-1023',
 });
-void volcano.functions.invoke<{ ok: boolean }>('processor', { action: 'run' });
+void volcano.functions.invoke<{ ok: boolean }>('processor', { body: { action: 'run' } });
 void volcano.api;
 
 type SignupMetadata = NonNullable<AuthSignupData['body']['user_metadata']>;

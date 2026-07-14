@@ -1,4 +1,4 @@
-const { databaseConnectionString } = require('../src/index.js');
+const { databaseConnectionString } = require('../src/index.ts');
 
 // A Volcano-advertised DATABASE_URL. pgproxy routes by the globally-unique
 // username (volcano_client_{id}) that is baked into the userinfo; application_name

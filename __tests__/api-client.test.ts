@@ -101,11 +101,51 @@ describe('createApiClient', () => {
     expect(result.data).toEqual({});
   });
 
+  it('normalizes the base URL and sends identifying and custom headers', async () => {
+    const fetchMock = jest.fn(async () => successResponse());
+    const client = createApiClient({
+      baseUrl: ' https://api.example.com/v1/// ',
+      fetch: fetchMock,
+      headers: { 'X-Application': 'dashboard' },
+    });
+
+    await healthCheck({ client });
+
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url).toBe('https://api.example.com/v1/health');
+    expect(request.headers.get('X-Application')).toBe('dashboard');
+    expect(request.headers.get('X-Client-Info')).toBe('volcano-sdk-js/2.0.0; runtime=node');
+  });
+
+  it('preserves an explicitly configured client information header', async () => {
+    const fetchMock = jest.fn(async () => successResponse());
+    const client = createApiClient({
+      fetch: fetchMock,
+      headers: { 'X-Client-Info': 'my-app/1.0.0' },
+    });
+
+    await healthCheck({ client });
+
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.headers.get('X-Client-Info')).toBe('my-app/1.0.0');
+  });
+
+  it.each([
+    ['ftp://api.example.com', 'HTTP or HTTPS'],
+    ['https://api.example.com?tenant=one', 'query string or fragment'],
+  ])('rejects an invalid base URL: %s', (baseUrl, expectedMessage) => {
+    expect(() => createApiClient({ baseUrl })).toThrow(expectedMessage);
+  });
+
   it('cancels requests after the configured timeout', async () => {
     jest.useFakeTimers();
     const fetchMock = jest.fn(
       (request: Request) =>
         new Promise((_resolve, reject) => {
+          if (request.signal.aborted) {
+            reject(request.signal.reason);
+            return;
+          }
           request.signal.addEventListener('abort', () => reject(request.signal.reason), {
             once: true,
           });
@@ -119,5 +159,28 @@ describe('createApiClient', () => {
 
     expect(result.error).toMatchObject({ name: 'TimeoutError' });
     jest.useRealTimers();
+  });
+
+  it('preserves caller cancellation through the timeout wrapper', async () => {
+    const fetchMock = jest.fn(
+      (request: Request) =>
+        new Promise((_resolve, reject) => {
+          if (request.signal.aborted) {
+            reject(request.signal.reason);
+            return;
+          }
+          request.signal.addEventListener('abort', () => reject(request.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const client = createApiClient({ fetch: fetchMock });
+    const controller = new AbortController();
+
+    const pending = healthCheck({ client, signal: controller.signal });
+    controller.abort(new DOMException('Cancelled by caller', 'AbortError'));
+    const result = await pending;
+
+    expect(result.error).toMatchObject({ message: 'Cancelled by caller', name: 'AbortError' });
   });
 });

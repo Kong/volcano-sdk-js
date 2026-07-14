@@ -18,6 +18,23 @@ if (error) {
 console.log(data);
 ```
 
+Higher-level helpers return a `VolcanoApiError`. Use its stable `code` for control flow; `message` is intended for people and may become more specific over time. `details`, `status`, `request`, and `response` remain available for diagnostics.
+
+```javascript
+if (error) {
+  switch (error.code) {
+    case 'unauthorized':
+      redirectToLogin();
+      break;
+    case 'rate_limit_exceeded':
+      scheduleRetry(error.details);
+      break;
+    default:
+      reportError(error.toJSON());
+  }
+}
+```
+
 This pattern has several advantages:
 
 - **Explicit error handling** - You must acknowledge the error property
@@ -248,8 +265,10 @@ if (error) {
 
 ```javascript
 const { data, error } = await volcano.functions.invoke('process-payment', {
-  amount: 1999,
-  currency: 'usd',
+  body: {
+    amount: 1999,
+    currency: 'usd',
+  },
 });
 
 if (error) {

@@ -748,6 +748,16 @@ export type EmailTemplate = {
 
 export type Error = {
   error: string;
+  /**
+   * Stable, machine-readable error code.
+   */
+  code: string;
+  /**
+   * Optional structured context for the error.
+   */
+  details?: {
+    [key: string]: unknown;
+  };
 };
 
 export type GitConnection = {
@@ -1023,6 +1033,22 @@ export type FunctionInvocationRequest = {
    * }
    * }
    * ```
+   *
+   * Volcano also injects server-controlled request metadata as `__volcano_request`:
+   * ```javascript
+   * {
+   * method: "POST",
+   * headers: {
+   * "Content-Type": "application/json",
+   * "X-Client-Info": "volcano-sdk-js/2.0.0",
+   * "X-Trace-Id": "caller-supplied-value"
+   * }
+   * }
+   * ```
+   * Authentication, cookies, hop-by-hop headers, proxy forwarding
+   * headers, internal `X-Volcano-*` headers, and browser `Sec-*` headers
+   * are not forwarded. Caller-supplied `__volcano_auth` and
+   * `__volcano_request` values are always removed or replaced.
    *
    */
   payload?: {

@@ -26,16 +26,14 @@
  * ```
  */
 
-import { authGetUser, authRefresh, createApiClient } from '../api/index.ts';
+import { authGetUser, authRefresh, type AuthUser, createApiClient } from '../api/index';
+import { VolcanoApiError } from '../errors';
+import type { MiddlewareRequest, ServerClient, ServerClientConfig } from './middleware-types.js';
 
-function toError(error, fallback) {
-  if (error instanceof Error) {
-    return error;
-  }
-  if (error && typeof error === 'object') {
-    return new Error(error.error || error.message || fallback);
-  }
-  return new Error(typeof error === 'string' ? error : fallback);
+export type * from './middleware-types.js';
+
+function toError(error: unknown, fallback: string): VolcanoApiError {
+  return VolcanoApiError.from(error, fallback);
 }
 
 /**
@@ -43,7 +41,7 @@ function toError(error, fallback) {
  * @param {Request} request - Next.js request object
  * @returns {string|null} The access token or null
  */
-export function getTokenFromRequest(request) {
+export function getTokenFromRequest(request: MiddlewareRequest): string | null {
   // Check Authorization header first
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
@@ -71,7 +69,7 @@ export function getTokenFromRequest(request) {
  * @param {Function} [config.fetch] - Optional Fetch implementation
  * @returns {Object} A minimal client for server-side auth validation
  */
-export function createServerClient(config) {
+export function createServerClient(config: ServerClientConfig): ServerClient {
   const api = createApiClient({
     accessToken: config.accessToken,
     anonKey: config.anonKey,
@@ -86,9 +84,12 @@ export function createServerClient(config) {
      * @param {string} accessToken - The access token to validate
      * @returns {Promise<{user: Object|null, error: Error|null}>}
      */
-    async getUser(accessToken) {
+    async getUser(accessToken: string) {
       if (!accessToken) {
-        return { user: null, error: new Error('No access token provided') };
+        return {
+          user: null,
+          error: VolcanoApiError.from({ error: 'No access token provided' }),
+        };
       }
 
       api.setCredentials({ accessToken });
@@ -104,12 +105,12 @@ export function createServerClient(config) {
      * @param {string} refreshToken - The refresh token
      * @returns {Promise<{accessToken: string|null, refreshToken: string|null, error: Error|null}>}
      */
-    async refreshToken(refreshToken) {
+    async refreshToken(refreshToken: string) {
       if (!refreshToken) {
         return {
           accessToken: null,
           refreshToken: null,
-          error: new Error('No refresh token provided'),
+          error: VolcanoApiError.from({ error: 'No refresh token provided' }),
         };
       }
 
@@ -139,7 +140,10 @@ export function createServerClient(config) {
  * @param {Object} client - Server client created with createServerClient
  * @returns {Promise<Object|null>} The user object or null if not authenticated
  */
-export async function withAuth(request, client) {
+export async function withAuth(
+  request: MiddlewareRequest,
+  client: ServerClient,
+): Promise<AuthUser | null> {
   const token = getTokenFromRequest(request);
   if (!token) {
     return null;
@@ -158,7 +162,7 @@ export async function withAuth(request, client) {
  * Check if running in browser environment
  * @returns {boolean}
  */
-export function isBrowser() {
+export function isBrowser(): boolean {
   return typeof window !== 'undefined' && window.document !== undefined;
 }
 
@@ -166,6 +170,6 @@ export function isBrowser() {
  * Check if running in server environment (Node.js, Edge Runtime, etc.)
  * @returns {boolean}
  */
-export function isServer() {
+export function isServer(): boolean {
   return !isBrowser();
 }

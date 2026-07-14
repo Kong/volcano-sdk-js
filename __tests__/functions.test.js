@@ -1,4 +1,4 @@
-const { createVolcanoClient } = require('../src/index.js');
+const { createVolcanoClient } = require('../src/index.ts');
 
 const tokenForProject = (projectId, sessionId = 'session') => {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -32,7 +32,7 @@ describe('DNS function invocation', () => {
       baseUrl: 'https://api.test.com',
     });
 
-    const result = await volcano.functions.invoke('hello', { name: 'Volcano' });
+    const result = await volcano.functions.invoke('hello', { body: { name: 'Volcano' } });
 
     expect(result).toMatchObject({
       data: { greeting: 'hello' },
@@ -45,10 +45,15 @@ describe('DNS function invocation', () => {
       'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
     );
     expect(global.fetch.mock.calls[1][1]).toMatchObject({
-      body: JSON.stringify({ name: 'Volcano' }),
+      body: JSON.stringify({ payload: { name: 'Volcano' } }),
       method: 'POST',
     });
-    expect(global.fetch.mock.calls[1][1].headers.Authorization).toBe(`Bearer ${accessToken}`);
+    expect(new Headers(global.fetch.mock.calls[1][1].headers).get('Authorization')).toBe(
+      `Bearer ${accessToken}`,
+    );
+    expect(new Headers(global.fetch.mock.calls[1][1].headers).get('X-Client-Info')).toBe(
+      'volcano-sdk-js/2.0.0; runtime=web',
+    );
   });
 
   it('caches successful resolutions', async () => {

@@ -8,7 +8,7 @@
  * Run with: source .env && npm run test:integration -- --testPathPatterns="realtime-lightweight"
  */
 
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 
 // Mock volcano client for auto-fetch testing without full integration
 const createMockVolcanoClient = (mockData = {}) => {
@@ -313,7 +313,7 @@ describe('Realtime Lightweight E2E (Unit Mock)', () => {
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
 const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
 
-const { createVolcanoClient } = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.ts');
 
 // Helper to make management API calls
 async function mgmtFetch(path, options = {}) {

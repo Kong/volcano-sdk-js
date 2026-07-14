@@ -1,4 +1,4 @@
-const { createVolcanoClient } = require('../src/index.js');
+const { createVolcanoClient } = require('../src/index.ts');
 
 describe('Storage', () => {
   const config = {
@@ -55,14 +55,10 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/avatars/user/avatar.png',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-access-token',
-          }),
-        }),
+      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/avatars/user/avatar.png');
+      expect(fetch.mock.calls[0][1].method).toBe('POST');
+      expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+        'Bearer test-access-token',
       );
     });
 
@@ -155,14 +151,10 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toBeInstanceOf(Blob);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/files/document.txt',
-        expect.objectContaining({
-          method: 'GET',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-access-token',
-          }),
-        }),
+      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/files/document.txt');
+      expect(fetch.mock.calls[0][1].method).toBe('GET');
+      expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+        'Bearer test-access-token',
       );
     });
 
@@ -176,14 +168,7 @@ describe('Storage', () => {
 
       await volcano.storage.from('files').download('large-file.zip', { range: 'bytes=0-1023' });
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Range: 'bytes=0-1023',
-          }),
-        }),
-      );
+      expect(new Headers(fetch.mock.calls[0][1].headers).get('Range')).toBe('bytes=0-1023');
     });
 
     it('should return error when not authenticated', async () => {
@@ -660,16 +645,10 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/uploads/large-video.mp4',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-access-token',
-          }),
-        }),
-      );
+      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/uploads/large-video.mp4');
+      const headers = new Headers(fetch.mock.calls[0][1].headers);
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(headers.get('Authorization')).toBe('Bearer test-access-token');
     });
 
     it('should return error when totalSize is not provided', async () => {
@@ -713,17 +692,11 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/uploads/large-video.mp4',
-        expect.objectContaining({
-          method: 'PUT',
-          headers: expect.objectContaining({
-            'X-Upload-Session': 'sess-123',
-            'X-Part-Number': '1',
-            'Content-Type': 'application/octet-stream',
-          }),
-        }),
-      );
+      const headers = new Headers(fetch.mock.calls[0][1].headers);
+      expect(fetch.mock.calls[0][1].method).toBe('PUT');
+      expect(headers.get('X-Upload-Session')).toBe('sess-123');
+      expect(headers.get('X-Part-Number')).toBe('1');
+      expect(headers.get('Content-Type')).toBe('application/octet-stream');
     });
 
     it('should return error when not authenticated', async () => {
@@ -741,10 +714,12 @@ describe('Storage', () => {
   describe('completeUploadSession()', () => {
     it('should complete an upload session successfully', async () => {
       const mockResponse = {
-        id: 'obj-123',
-        name: 'large-video.mp4',
-        size: 100 * 1024 * 1024,
-        mime_type: 'video/mp4',
+        object: {
+          id: 'obj-123',
+          name: 'large-video.mp4',
+          size: 100 * 1024 * 1024,
+          mime_type: 'video/mp4',
+        },
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -758,16 +733,10 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/uploads/large-video.mp4',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'X-Upload-Session': 'sess-123',
-            'X-Upload-Complete': 'true',
-          }),
-        }),
-      );
+      const headers = new Headers(fetch.mock.calls[0][1].headers);
+      expect(fetch.mock.calls[0][1].method).toBe('POST');
+      expect(headers.get('X-Upload-Session')).toBe('sess-123');
+      expect(headers.get('X-Upload-Complete')).toBe('true');
     });
 
     it('should return error when not all parts uploaded', async () => {
@@ -808,15 +777,8 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/uploads/large-video.mp4',
-        expect.objectContaining({
-          method: 'GET',
-          headers: expect.objectContaining({
-            'X-Upload-Session': 'sess-123',
-          }),
-        }),
-      );
+      expect(fetch.mock.calls[0][1].method).toBe('GET');
+      expect(new Headers(fetch.mock.calls[0][1].headers).get('X-Upload-Session')).toBe('sess-123');
     });
 
     it('should return error for non-existent session', async () => {
@@ -846,15 +808,8 @@ describe('Storage', () => {
         .abortUploadSession('large-video.mp4', 'sess-123');
 
       expect(error).toBeNull();
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/uploads/large-video.mp4',
-        expect.objectContaining({
-          method: 'DELETE',
-          headers: expect.objectContaining({
-            'X-Upload-Session': 'sess-123',
-          }),
-        }),
-      );
+      expect(fetch.mock.calls[0][1].method).toBe('DELETE');
+      expect(new Headers(fetch.mock.calls[0][1].headers).get('X-Upload-Session')).toBe('sess-123');
     });
 
     it('should return error when not authenticated', async () => {
@@ -898,9 +853,11 @@ describe('Storage', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            id: 'obj-123',
-            name: 'file.bin',
-            size: 2048,
+            object: {
+              id: 'obj-123',
+              name: 'file.bin',
+              size: 2048,
+            },
           }),
       });
 

@@ -9,7 +9,7 @@
  * - For OAuth tests: mock OAuth server running
  */
 
-const { createVolcanoClient } = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.ts');
 
 // Configuration
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
@@ -1650,8 +1650,8 @@ describe('SDK E2E Integration Tests', () => {
         return originalFetch(url, options);
       };
 
-      const first = await instanceA.functions.invoke(functionName, { call: 1 });
-      const second = await instanceB.functions.invoke(functionName, { call: 2 });
+      const first = await instanceA.functions.invoke(functionName, { body: { call: 1 } });
+      const second = await instanceB.functions.invoke(functionName, { body: { call: 2 } });
 
       expect(first.error).toBeNull();
       expect(second.error).toBeNull();
@@ -1801,7 +1801,9 @@ describe('SDK E2E Integration Tests', () => {
         return originalFetch(url, options);
       };
 
-      const result = await retryVolcano.functions.invoke(functionName, { attempt: 'retry' });
+      const result = await retryVolcano.functions.invoke(functionName, {
+        body: { attempt: 'retry' },
+      });
 
       expect(result.error).toBeNull();
       expect(result.data).toEqual({ recovered: true });

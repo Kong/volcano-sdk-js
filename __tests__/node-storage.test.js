@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-const { createVolcanoClient } = require('../src/index.js');
+const { createVolcanoClient } = require('../src/index.ts');
 
 describe('createVolcanoClient Node storage handling', () => {
   it('does not restore an auth session from a Node global localStorage', () => {

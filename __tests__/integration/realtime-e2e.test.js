@@ -23,8 +23,8 @@ try {
   // dotenv not installed, use environment variables directly
 }
 
-const { createVolcanoClient } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { createVolcanoClient } = require('../../src/index.ts');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 const WebSocket = require('ws');
 
 // Configuration from environment

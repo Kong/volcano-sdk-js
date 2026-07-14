@@ -1,4 +1,4 @@
-const { createServerClient, withAuth } = require('../src/next/middleware.js');
+const { createServerClient, withAuth } = require('../src/next/middleware.ts');
 
 describe('Next.js middleware helpers', () => {
   const config = {

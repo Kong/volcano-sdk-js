@@ -1,5 +1,7 @@
 import { type Client, createClient } from '../generated/api/client';
 import type { Auth } from '../generated/api/core/auth.gen';
+import { normalizeBaseUrl } from '../url';
+import { CLIENT_INFO } from '../version';
 
 export * from '../generated/api';
 
@@ -13,6 +15,7 @@ export interface ApiCredentials {
 export type ApiClientConfig = ApiCredentials & {
   baseUrl?: string;
   fetch?: typeof fetch;
+  headers?: HeadersInit;
   timeoutMs?: number;
 };
 
@@ -104,8 +107,9 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
   const {
     accessToken,
     anonKey,
-    baseUrl = DEFAULT_API_URL,
+    baseUrl: configuredBaseUrl = DEFAULT_API_URL,
     fetch: configuredFetch = globalThis.fetch,
+    headers: configuredHeaders,
     serviceRoleKey,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     userToken,
@@ -113,6 +117,15 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
 
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new TypeError('timeoutMs must be a positive finite number');
+  }
+  if (typeof configuredFetch !== 'function') {
+    throw new TypeError('fetch must be provided when globalThis.fetch is unavailable');
+  }
+
+  const baseUrl = normalizeBaseUrl(configuredBaseUrl);
+  const headers = new Headers(configuredHeaders);
+  if (!headers.has('X-Client-Info')) {
+    headers.set('X-Client-Info', CLIENT_INFO);
   }
 
   const credentials: ApiCredentials = {
@@ -126,6 +139,7 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
     auth: (auth) => credentialForScheme(credentials, auth),
     baseUrl,
     fetch: createTimeoutFetch(configuredFetch, timeoutMs),
+    headers,
     responseStyle: 'fields',
     throwOnError: false,
   }) as ApiClient;

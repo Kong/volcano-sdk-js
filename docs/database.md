@@ -511,7 +511,7 @@ For complex queries that aren't possible with the query builder (JOINs, CTEs, st
 ```javascript
 // Call a Lambda function for complex queries
 const { data, error } = await volcano.functions.invoke('get-dashboard-stats', {
-  timeframe: 'last-30-days',
+  body: { timeframe: 'last-30-days' },
 });
 ```
 
