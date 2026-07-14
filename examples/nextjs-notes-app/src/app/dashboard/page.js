@@ -131,25 +131,25 @@ export default function DashboardPage() {
         <pre className="text-sm overflow-x-auto">
           <code className="text-green-400">
             {`// Fetch notes (RLS filters automatically)
-const { data } = await volcano
+const { data } = await database
   .from('notes')
   .select('*')
   .order('created_at', { ascending: false });
 
 // Create a note
-await volcano.insert('notes', {
+await database.insert('notes', {
   title: 'My Note',
   content: 'Hello World!',
   user_id: user.id
 });
 
 // Update a note
-await volcano
+await database
   .update('notes', { title: 'Updated' })
   .eq('id', noteId);
 
 // Delete a note
-await volcano
+await database
   .delete('notes')
   .eq('id', noteId);`}
           </code>

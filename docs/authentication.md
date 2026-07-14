@@ -145,7 +145,7 @@ When your application starts, restore any existing session:
 
 ```javascript
 // In your app initialization
-const { user, error } = await volcano.initialize();
+const { user, error } = await volcano.auth.initialize();
 
 if (user) {
   console.log('Session restored for', user.email);
@@ -212,8 +212,8 @@ The SDK handles this hand-off for you. On your redirect page, just create your c
 
 ```javascript
 // On your post-auth redirect page (e.g. /callback)
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.example.com',
+const volcano = createVolcanoClient({
+  baseUrl: 'https://api.example.com',
   anonKey: 'ak-your-anon-key',
 });
 
@@ -229,7 +229,7 @@ console.log('Signed in as', user.email);
 Because the session is adopted at construction (the same as a session restored from storage), **you don't have to call `getUser()` before making authenticated requests** — any authenticated call works right away:
 
 ```javascript
-const volcano = new VolcanoAuth({ apiUrl, anonKey }); // session adopted from URL
+const volcano = createVolcanoClient({ baseUrl: apiUrl, anonKey }); // session adopted from URL
 
 // Authenticated immediately — no getUser() required first.
 const { user } = await volcano.auth.updateUser({ metadata: { onboarded: true } });
@@ -285,7 +285,7 @@ After the OAuth redirect, the user returns to your app with the session in the U
 
 ```javascript
 // On your callback page or app initialization
-const { user, error } = await volcano.initialize();
+const { user, error } = await volcano.auth.initialize();
 
 if (user) {
   console.log('OAuth sign-in successful:', user.email);
@@ -584,8 +584,8 @@ The SDK prevents service keys (starting with `sk-`) from being used in browser e
 
 ```javascript
 // This will throw an error in the browser:
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.example.com',
+const volcano = createVolcanoClient({
+  baseUrl: 'https://api.example.com',
   anonKey: 'sk-service-key-here', // ERROR in browser!
 });
 ```

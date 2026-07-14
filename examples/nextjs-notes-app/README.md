@@ -9,18 +9,18 @@ A full-featured notes application demonstrating the **Volcano SDK** capabilities
 
 ## Features Demonstrated
 
-| Feature         | SDK Method                             | Description                  |
-| --------------- | -------------------------------------- | ---------------------------- |
-| Sign Up         | `volcano.auth.signUp()`                | Create new user account      |
-| Sign In         | `volcano.auth.signIn()`                | Authenticate existing user   |
-| Anonymous       | `volcano.auth.signInAnonymously()`     | Quick access without account |
-| Sign Out        | `volcano.auth.signOut()`               | End session                  |
-| Password Reset  | `volcano.auth.resetPasswordForEmail()` | Send reset email             |
-| Session Restore | `volcano.initialize()`                 | Restore session on page load |
-| Query Data      | `volcano.from().select()`              | Fetch notes with filters     |
-| Insert Data     | `volcano.insert()`                     | Create new notes             |
-| Update Data     | `volcano.update().eq()`                | Modify existing notes        |
-| Delete Data     | `volcano.delete().eq()`                | Remove notes                 |
+| Feature         | SDK Method                       | Description                  |
+| --------------- | -------------------------------- | ---------------------------- |
+| Sign Up         | `volcano.auth.signUp()`          | Create new user account      |
+| Sign In         | `volcano.auth.signIn()`          | Authenticate existing user   |
+| Anonymous       | `volcano.auth.signUpAnonymous()` | Quick access without account |
+| Sign Out        | `volcano.auth.signOut()`         | End session                  |
+| Password Reset  | `volcano.auth.forgotPassword()`  | Send reset email             |
+| Session Restore | `volcano.auth.initialize()`      | Restore session on page load |
+| Query Data      | `database.from().select()`       | Fetch notes with filters     |
+| Insert Data     | `database.insert()`              | Create new notes             |
+| Update Data     | `database.update().eq()`         | Modify existing notes        |
+| Delete Data     | `database.delete().eq()`         | Remove notes                 |
 
 ## Quick Start
 
@@ -143,16 +143,16 @@ nextjs-notes-app/
 ### SDK Initialization (`src/lib/volcano.js`)
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { createVolcanoClient } from '@volcano.dev/sdk';
 
 // Create a singleton instance
-export const volcano = new VolcanoAuth({
-  apiUrl: process.env.NEXT_PUBLIC_VOLCANO_API_URL,
+export const volcano = createVolcanoClient({
+  baseUrl: process.env.NEXT_PUBLIC_VOLCANO_API_URL,
   anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY,
 });
 
 // Set database for queries
-volcano.database(process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME);
+const database = volcano.database(process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME);
 ```
 
 ### Authentication Hook (`src/hooks/useAuth.js`)
@@ -197,7 +197,7 @@ await deleteNote(noteId);
 Notes are automatically filtered by user. When you query:
 
 ```javascript
-const { data } = await volcano.from('notes').select('*');
+const { data } = await database.from('notes').select('*');
 ```
 
 The database automatically applies: `WHERE user_id = auth.uid()`
@@ -211,7 +211,7 @@ Sessions are automatically saved to `localStorage`. When the app loads:
 ```javascript
 // In AuthContext.js
 useEffect(() => {
-  volcano.initialize().then(({ user }) => {
+  volcano.auth.initialize().then(({ user }) => {
     setUser(user);
   });
 }, []);
@@ -241,7 +241,7 @@ ALTER TABLE notes ADD COLUMN pinned BOOLEAN DEFAULT false;
 2. Update the SDK queries:
 
 ```javascript
-const { data } = await volcano
+const { data } = await database
   .from('notes')
   .select('id, title, content, color, pinned, created_at')
   .order('pinned', { ascending: false })
@@ -256,7 +256,9 @@ import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
 const realtime = new VolcanoRealtime({
   apiUrl: process.env.NEXT_PUBLIC_VOLCANO_API_URL,
   anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY,
-  accessToken: volcano.accessToken,
+  accessToken: session.access_token,
+  volcanoClient: volcano,
+  databaseName: process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME,
 });
 
 const channel = realtime.channel('notes', { type: 'postgres' });

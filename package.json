@@ -1,12 +1,14 @@
 {
   "name": "@volcano.dev/sdk",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "packageManager": "pnpm@10.34.1",
   "description": "Official JavaScript SDK for Volcano - Authentication, Database, Functions, Realtime, and more",
   "type": "commonjs",
   "main": "dist/index.js",
   "module": "dist/index.esm.mjs",
   "types": "dist/index.d.ts",
+  "unpkg": "dist/volcano.umd.js",
+  "jsdelivr": "dist/volcano.umd.js",
   "exports": {
     ".": {
       "import": {
@@ -62,7 +64,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "rollup -c rollup.config.mjs && node scripts/copy-types.mjs",
+    "build": "node scripts/clean.mjs && rollup -c rollup.config.mjs",
     "generate:openapi": "openapi-ts",
     "check:openapi": "node scripts/check-openapi.mjs",
     "dev": "rollup -c -w",

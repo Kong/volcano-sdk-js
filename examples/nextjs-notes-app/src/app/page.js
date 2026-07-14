@@ -142,7 +142,7 @@ export default function HomePage() {
             </p>
             <pre className="mt-4 text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto">
               <code className="text-gray-700">
-                {`await volcano
+                {`await database
   .from('notes')
   .select('*')
   .order('created_at');`}

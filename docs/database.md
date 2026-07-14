@@ -16,15 +16,15 @@ The database module provides:
 Before querying, set your database name:
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { createVolcanoClient } from '@volcano.dev/sdk';
 
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.yourproject.volcano.dev',
+const volcano = createVolcanoClient({
+  baseUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
 });
 
 // Set database name (do this once after initialization)
-volcano.database('my-database');
+const database = volcano.database('my-database');
 
 // Sign in (required for most operations)
 await volcano.auth.signIn({
@@ -42,7 +42,7 @@ The database name is typically the name you gave your database when creating it 
 Fetch all rows from a table:
 
 ```javascript
-const { data, error, count } = await volcano.from('posts').select('*');
+const { data, error, count } = await database.from('posts').select('*');
 
 if (error) {
   console.error('Query failed:', error.message);
@@ -60,7 +60,7 @@ data.forEach((post) => {
 Request only the columns you need:
 
 ```javascript
-const { data } = await volcano.from('posts').select('id, title, created_at');
+const { data } = await database.from('posts').select('id, title, created_at');
 
 // Each item only contains id, title, and created_at
 ```
@@ -75,40 +75,40 @@ The query builder supports a variety of filter operators:
 
 ```javascript
 // Posts where status equals 'published'
-const { data } = await volcano.from('posts').select('*').eq('status', 'published');
+const { data } = await database.from('posts').select('*').eq('status', 'published');
 ```
 
 #### Not Equal
 
 ```javascript
 // Posts where status is not 'draft'
-const { data } = await volcano.from('posts').select('*').neq('status', 'draft');
+const { data } = await database.from('posts').select('*').neq('status', 'draft');
 ```
 
 #### Comparison Operators
 
 ```javascript
 // Posts with more than 100 views
-const { data } = await volcano.from('posts').select('*').gt('views', 100);
+const { data } = await database.from('posts').select('*').gt('views', 100);
 
 // Posts with at least 100 views
-const { data } = await volcano.from('posts').select('*').gte('views', 100);
+const { data } = await database.from('posts').select('*').gte('views', 100);
 
 // Posts with fewer than 50 views
-const { data } = await volcano.from('posts').select('*').lt('views', 50);
+const { data } = await database.from('posts').select('*').lt('views', 50);
 
 // Posts with 50 or fewer views
-const { data } = await volcano.from('posts').select('*').lte('views', 50);
+const { data } = await database.from('posts').select('*').lte('views', 50);
 ```
 
 #### Pattern Matching
 
 ```javascript
 // Case-sensitive pattern matching
-const { data } = await volcano.from('posts').select('*').like('title', 'Getting Started%'); // Starts with "Getting Started"
+const { data } = await database.from('posts').select('*').like('title', 'Getting Started%'); // Starts with "Getting Started"
 
 // Case-insensitive pattern matching
-const { data } = await volcano.from('posts').select('*').ilike('title', '%javascript%'); // Contains "javascript" (any case)
+const { data } = await database.from('posts').select('*').ilike('title', '%javascript%'); // Contains "javascript" (any case)
 ```
 
 Pattern syntax:
@@ -120,14 +120,14 @@ Pattern syntax:
 
 ```javascript
 // Posts without a deleted timestamp
-const { data } = await volcano.from('posts').select('*').is('deleted_at', null);
+const { data } = await database.from('posts').select('*').is('deleted_at', null);
 ```
 
 #### IN Operator
 
 ```javascript
 // Posts with specific statuses
-const { data } = await volcano
+const { data } = await database
   .from('posts')
   .select('*')
   .in('status', ['draft', 'published', 'archived']);
@@ -138,7 +138,7 @@ const { data } = await volcano
 Chain multiple filters for AND logic:
 
 ```javascript
-const { data } = await volcano
+const { data } = await database
   .from('products')
   .select('id, name, price')
   .eq('category', 'electronics')
@@ -159,10 +159,10 @@ Sort results by one or more columns:
 
 ```javascript
 // Sort by created_at descending (newest first)
-const { data } = await volcano.from('posts').select('*').order('created_at', { ascending: false });
+const { data } = await database.from('posts').select('*').order('created_at', { ascending: false });
 
 // Sort by multiple columns
-const { data } = await volcano
+const { data } = await database
   .from('posts')
   .select('*')
   .order('category', { ascending: true })
@@ -177,7 +177,7 @@ Limit and offset results for pagination:
 const pageSize = 10;
 const page = 3;
 
-const { data, count } = await volcano
+const { data, count } = await database
   .from('posts')
   .select('id, title')
   .order('created_at', { ascending: false })
@@ -195,7 +195,7 @@ Here's a realistic query combining multiple features:
 async function getPublishedPosts(category, page = 1) {
   const pageSize = 20;
 
-  const { data, error, count } = await volcano
+  const { data, error, count } = await database
     .from('posts')
     .select('id, title, excerpt, author_name, created_at')
     .eq('status', 'published')
@@ -222,7 +222,7 @@ async function getPublishedPosts(category, page = 1) {
 ### Single Insert
 
 ```javascript
-const { data, error } = await volcano.insert('posts', {
+const { data, error } = await database.insert('posts', {
   title: 'My New Post',
   content: 'This is the content of my post.',
   status: 'draft',
@@ -245,7 +245,7 @@ If your table has a `user_id` column and RLS policies, the user ID is automatica
 
 ```javascript
 // Assuming posts table has user_id column with default value auth.uid()
-const { data } = await volcano.insert('posts', {
+const { data } = await database.insert('posts', {
   title: 'My Post',
   content: 'Content here',
 });
@@ -263,7 +263,7 @@ This works because Volcano injects the authenticated user's context into every d
 Always use a filter to specify which rows to update:
 
 ```javascript
-const { data, error } = await volcano
+const { data, error } = await database
   .update('posts', {
     title: 'Updated Title',
     status: 'published',
@@ -289,7 +289,7 @@ Filter conditions can match multiple rows:
 const oneYearAgo = new Date();
 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-const { data, error } = await volcano
+const { data, error } = await database
   .update('posts', {
     status: 'archived',
   })
@@ -304,7 +304,7 @@ console.log(`Archived ${data.length} posts`);
 ### Delete with Filter
 
 ```javascript
-const { data, error } = await volcano.delete('posts').eq('id', postId);
+const { data, error } = await database.delete('posts').eq('id', postId);
 
 if (error) {
   console.error('Delete failed:', error.message);
@@ -320,14 +320,14 @@ Many applications prefer soft deletes (marking records as deleted rather than re
 
 ```javascript
 // Soft delete
-const { data } = await volcano
+const { data } = await database
   .update('posts', {
     deleted_at: new Date().toISOString(),
   })
   .eq('id', postId);
 
 // Query excludes soft-deleted records
-const { data: activePosts } = await volcano.from('posts').select('*').is('deleted_at', null);
+const { data: activePosts } = await database.from('posts').select('*').is('deleted_at', null);
 ```
 
 ## Row-Level Security
@@ -371,13 +371,13 @@ With these policies, queries are automatically filtered:
 await volcano.auth.signIn({ email: 'alice@example.com', password: '...' });
 
 // This returns only Alice's posts
-const { data: alicePosts } = await volcano.from('posts').select('*');
+const { data: alicePosts } = await database.from('posts').select('*');
 
 // Bob signs in (different session)
 await volcano.auth.signIn({ email: 'bob@example.com', password: '...' });
 
 // This returns only Bob's posts
-const { data: bobPosts } = await volcano.from('posts').select('*');
+const { data: bobPosts } = await database.from('posts').select('*');
 ```
 
 Same query, different results based on who's authenticated.
@@ -421,7 +421,7 @@ if (data) {
 All database operations return an `error` object instead of throwing:
 
 ```javascript
-const { data, error } = await volcano.from('posts').select('*').eq('invalid_column', 'value');
+const { data, error } = await database.from('posts').select('*').eq('invalid_column', 'value');
 
 if (error) {
   // Handle the error
@@ -442,8 +442,8 @@ if (error) {
 Call `volcano.database()` before any queries:
 
 ```javascript
-const volcano = new VolcanoAuth({ ... });
-volcano.database('my-database');  // Do this once
+const volcano = createVolcanoClient({ ... });
+const database = volcano.database('my-database');  // Do this once
 ```
 
 ### Sign In Before Querying
@@ -452,7 +452,7 @@ Most applications require authentication:
 
 ```javascript
 // Check for existing session first
-const { user } = await volcano.initialize();
+const { user } = await volcano.auth.initialize();
 
 if (!user) {
   // Redirect to login
@@ -460,7 +460,7 @@ if (!user) {
 }
 
 // Now safe to query
-const { data } = await volcano.from('posts').select('*');
+const { data } = await database.from('posts').select('*');
 ```
 
 ### Use Specific Columns
@@ -469,10 +469,10 @@ Select only the columns you need:
 
 ```javascript
 // Good - only fetches needed columns
-const { data } = await volcano.from('posts').select('id, title, created_at');
+const { data } = await database.from('posts').select('id, title, created_at');
 
 // Avoid - fetches all columns including potentially large ones
-const { data } = await volcano.from('posts').select('*');
+const { data } = await database.from('posts').select('*');
 ```
 
 ### Paginate Large Results
@@ -480,7 +480,7 @@ const { data } = await volcano.from('posts').select('*');
 Don't fetch thousands of rows at once:
 
 ```javascript
-const { data } = await volcano
+const { data } = await database
   .from('posts')
   .select('*')
   .order('created_at', { ascending: false })
@@ -493,14 +493,14 @@ Let RLS and filters reduce the data server-side:
 
 ```javascript
 // Good - filters on server
-const { data } = await volcano
+const { data } = await database
   .from('posts')
   .select('*')
   .eq('status', 'published')
   .eq('category', category);
 
 // Avoid - fetches everything then filters client-side
-const { data } = await volcano.from('posts').select('*');
+const { data } = await database.from('posts').select('*');
 const filtered = data.filter((p) => p.status === 'published');
 ```
 

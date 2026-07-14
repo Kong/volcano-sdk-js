@@ -548,12 +548,12 @@ class VolcanoClientCore {
       );
     }
 
-    this.apiUrl = (config.baseUrl || config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '');
+    this.apiUrl = (config.baseUrl || DEFAULT_API_URL).replace(/\/$/, '');
     this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
     this.anonKey = config.anonKey || null;
     this.serviceRoleKey = config.serviceRoleKey || null;
     this.userToken = config.userToken || null;
-    this.timeout = config.timeoutMs || config.timeout || DEFAULT_TIMEOUT_MS;
+    this.timeout = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetch = config.fetch || globalThis.fetch;
     this.currentUser = null;
     // Tracks whether a managed-redirect session was already adopted from the URL
@@ -679,7 +679,7 @@ class VolcanoClientCore {
     const usesAuthUserAccessToken = (options.security || []).some(
       (security) => security.key === 'AuthUserAccessToken',
     );
-    if (response.status !== 401 || !usesAuthUserAccessToken) {
+    if (response.status !== 401 || !usesAuthUserAccessToken || !this.accessToken) {
       return response;
     }
 
@@ -726,7 +726,7 @@ class VolcanoClientCore {
 
     if (!this.functionInvocationBase) {
       throw new Error(
-        'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
+        'baseUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
       );
     }
 
@@ -1407,7 +1407,7 @@ class VolcanoClientCore {
         headers: {},
         version: null,
         error: new Error(
-          'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
+          'baseUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
         ),
       };
     }

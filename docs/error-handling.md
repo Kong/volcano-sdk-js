@@ -7,7 +7,7 @@ The Volcano SDK uses a consistent error handling pattern across all operations. 
 All SDK methods return an object with an `error` property:
 
 ```javascript
-const { data, error } = await volcano.from('posts').select('*');
+const { data, error } = await database.from('posts').select('*');
 
 if (error) {
   console.error('Something went wrong:', error.message);
@@ -113,7 +113,7 @@ if (error) {
 ### Query Errors
 
 ```javascript
-const { data, error } = await volcano.from('posts').select('*').eq('status', 'published');
+const { data, error } = await database.from('posts').select('*').eq('status', 'published');
 
 if (error) {
   switch (true) {
@@ -143,7 +143,7 @@ if (error) {
 ### Insert Errors
 
 ```javascript
-const { data, error } = await volcano.insert('posts', {
+const { data, error } = await database.insert('posts', {
   title: 'My Post',
   content: 'Content here',
 });
@@ -173,7 +173,7 @@ if (error) {
 ### Update/Delete Errors
 
 ```javascript
-const { data, error } = await volcano.update('posts', { status: 'published' }).eq('id', postId);
+const { data, error } = await database.update('posts', { status: 'published' }).eq('id', postId);
 
 if (error) {
   if (error.message.includes('permission denied')) {
@@ -366,7 +366,7 @@ export function handleApiError(error, context = 'Operation') {
 }
 
 // Usage
-const { data, error } = await volcano.from('posts').select('*');
+const { data, error } = await database.from('posts').select('*');
 
 if (error) {
   const { message, action } = handleApiError(error, 'Loading posts');
@@ -435,7 +435,7 @@ function PostList() {
 
   useEffect(() => {
     execute(() =>
-      volcano
+      database
         .from<Post>('posts')
         .select('*')
         .order('created_at', { ascending: false })
@@ -486,7 +486,7 @@ async function fetchWithRetry(fn, maxRetries = 3) {
 }
 
 // Usage
-const { data, error } = await fetchWithRetry(() => volcano.from('posts').select('*'));
+const { data, error } = await fetchWithRetry(() => database.from('posts').select('*'));
 ```
 
 ### Retry with Toast Notification
@@ -519,7 +519,7 @@ async function fetchWithProgress(fn, options = {}) {
 
 ```javascript
 // Good
-const { data, error } = await volcano.from('posts').select('*');
+const { data, error } = await database.from('posts').select('*');
 if (error) {
   handleError(error);
   return;
@@ -527,7 +527,7 @@ if (error) {
 // Use data safely
 
 // Avoid
-const { data } = await volcano.from('posts').select('*');
+const { data } = await database.from('posts').select('*');
 // data could be null if there was an error
 ```
 
@@ -560,7 +560,7 @@ if (error) {
 ### 4. Handle Network Issues
 
 ```javascript
-const { data, error } = await volcano.from('posts').select('*');
+const { data, error } = await database.from('posts').select('*');
 
 if (error) {
   if (!navigator.onLine) {
@@ -579,7 +579,7 @@ if (error) {
 setLoading(true);
 setError(null);
 
-const { data, error } = await volcano.from('posts').select('*');
+const { data, error } = await database.from('posts').select('*');
 
 setLoading(false);
 

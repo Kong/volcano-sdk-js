@@ -34,10 +34,10 @@ SDK's `ws` dependency unless you provide a custom implementation.
 For quick prototyping or simple HTML pages, you can load the SDK directly from a CDN:
 
 ```html
-<script src="https://unpkg.com/@volcano.dev/sdk@latest/dist/index.js"></script>
+<script src="https://unpkg.com/@volcano.dev/sdk@2/dist/volcano.umd.js"></script>
 <script>
-  const volcano = new VolcanoAuth({
-    apiUrl: 'https://api.yourproject.volcano.dev',
+  const volcano = Volcano.createVolcanoClient({
+    baseUrl: 'https://api.yourproject.volcano.dev',
     anonKey: 'your-anon-key',
   });
 </script>
@@ -55,10 +55,10 @@ You can find both in your project's settings dashboard.
 ### Initialize the Client
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { createVolcanoClient } from '@volcano.dev/sdk';
 
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.yourproject.volcano.dev',
+const volcano = createVolcanoClient({
+  baseUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
 });
 ```
@@ -70,8 +70,8 @@ The anon key is safe to include in client-side code. It identifies your project 
 In production, store your configuration in environment variables:
 
 ```javascript
-const volcano = new VolcanoAuth({
-  apiUrl: process.env.VOLCANO_API_URL,
+const volcano = createVolcanoClient({
+  baseUrl: process.env.VOLCANO_API_URL,
   anonKey: process.env.VOLCANO_ANON_KEY,
 });
 ```
@@ -127,10 +127,10 @@ Once signed in, you can query your PostgreSQL database directly from the browser
 
 ```javascript
 // Set your database name (do this once)
-volcano.database('my-database');
+const database = volcano.database('my-database');
 
 // Fetch all published posts
-const { data, error } = await volcano
+const { data, error } = await database
   .from('posts')
   .select('id, title, content, created_at')
   .eq('published', true)
@@ -153,7 +153,7 @@ Row-Level Security policies automatically filter results to only include data th
 ### 4. Insert Data
 
 ```javascript
-const { data, error } = await volcano.insert('posts', {
+const { data, error } = await database.insert('posts', {
   title: 'My First Post',
   content: 'Hello, Volcano!',
   published: true,
@@ -173,7 +173,7 @@ In browser environments, the SDK automatically persists the user's session to lo
 
 ```javascript
 // Check if there's an existing session
-const { user, error } = await volcano.initialize();
+const { user, error } = await volcano.auth.initialize();
 
 if (user) {
   console.log('Session restored for', user.email);

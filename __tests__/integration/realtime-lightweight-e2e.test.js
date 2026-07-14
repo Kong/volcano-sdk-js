@@ -13,11 +13,6 @@ const { VolcanoRealtime } = require('../../src/realtime.js');
 // Mock volcano client for auto-fetch testing without full integration
 const createMockVolcanoClient = (mockData = {}) => {
   const client = {
-    _currentDatabaseName: null,
-    database: jest.fn((name) => {
-      client._currentDatabaseName = name;
-      return client;
-    }),
     from: jest.fn((table) => ({
       select: jest.fn().mockReturnValue({
         in: jest.fn((column, ids) => {
@@ -27,6 +22,7 @@ const createMockVolcanoClient = (mockData = {}) => {
       }),
     })),
   };
+  client.database = jest.fn(() => ({ from: client.from }));
 
   return { client };
 };
@@ -317,7 +313,7 @@ describe('Realtime Lightweight E2E (Unit Mock)', () => {
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
 const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
 
-const VolcanoAuth = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 
 // Helper to make management API calls
 async function mgmtFetch(path, options = {}) {
@@ -495,11 +491,10 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
     console.log('[ok] Enabled realtime for project');
 
     // Initialize SDK
-    volcano = new VolcanoAuth({
-      apiUrl: API_URL,
+    volcano = createVolcanoClient({
+      baseUrl: API_URL,
       anonKey: anonKey,
     });
-    volcano.database(database.name);
     console.log('[ok] Initialized SDK');
 
     // Create an auth user for testing
@@ -549,6 +544,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
       anonKey: anonKey,
       accessToken: authSession.access_token,
       volcanoClient: volcano,
+      databaseName: database.name,
     });
 
     await realtime.connect();
@@ -561,6 +557,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
       anonKey: anonKey,
       accessToken: authSession.access_token,
       volcanoClient: volcano,
+      databaseName: database.name,
     });
 
     await realtime.connect();
@@ -583,6 +580,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
       anonKey: anonKey,
       accessToken: authSession.access_token,
       volcanoClient: volcano,
+      databaseName: database.name,
     });
 
     await realtime.connect();
@@ -600,6 +598,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
       anonKey: anonKey,
       accessToken: authSession.access_token,
       volcanoClient: volcano,
+      databaseName: database.name,
     });
 
     await realtime.connect();

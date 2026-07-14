@@ -23,7 +23,7 @@ try {
   // dotenv not installed
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const { randomUUID } = require('node:crypto');
 
@@ -270,7 +270,7 @@ describe('Realtime RLS Isolation Tests', () => {
     console.log('[ok] Enabled realtime for project');
 
     // Initialize SDK
-    const volcano = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const volcano = createVolcanoClient({ baseUrl: API_URL, anonKey });
 
     // Create two auth users: Alice and Bob
     const aliceEmail = `alice-${Date.now()}@example.com`;
@@ -319,19 +319,17 @@ describe('Realtime RLS Isolation Tests', () => {
     let volcanoBob;
 
     beforeAll(async () => {
-      volcanoAlice = new VolcanoAuth({
-        apiUrl: API_URL,
+      volcanoAlice = createVolcanoClient({
+        baseUrl: API_URL,
         anonKey,
         accessToken: sessionAlice.access_token,
       });
-      volcanoAlice.database(database.name);
 
-      volcanoBob = new VolcanoAuth({
-        apiUrl: API_URL,
+      volcanoBob = createVolcanoClient({
+        baseUrl: API_URL,
         anonKey,
         accessToken: sessionBob.access_token,
       });
-      volcanoBob.database(database.name);
 
       // Connect Alice
       realtimeAlice = new VolcanoRealtime({

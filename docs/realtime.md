@@ -29,7 +29,7 @@ import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
 const realtime = new VolcanoRealtime({
   apiUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
-  accessToken: volcano.accessToken, // From auth session
+  accessToken: session.access_token,
 });
 ```
 
@@ -65,7 +65,7 @@ class OriginWebSocket extends WebSocket {
 const realtime = new VolcanoRealtime({
   apiUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
-  accessToken: volcano.accessToken,
+  accessToken: session.access_token,
   webSocket: OriginWebSocket,
 });
 ```
@@ -198,7 +198,7 @@ channel.onPostgresChanges('*', 'public', 'posts', (change) => {
 const realtime = new VolcanoRealtime({
   apiUrl: 'https://api.example.com',
   anonKey: 'anon-key',
-  accessToken: volcano.accessToken,
+  accessToken: session.access_token,
 });
 
 await realtime.connect();
@@ -218,7 +218,7 @@ channel.onPostgresChanges('INSERT', 'public', 'messages', (change) => {
 await channel.subscribe();
 
 // Send a message (through normal database insert)
-await volcano.insert('messages', {
+await database.insert('messages', {
   content: 'Hello everyone!',
   channel_id: 'general',
 });
@@ -461,20 +461,20 @@ const realtime = new VolcanoRealtime({
 });
 ```
 
-## Integration with VolcanoAuth
+## Integration with `createVolcanoClient`
 
-For auto-fetching lightweight notifications, pass your VolcanoAuth client:
+For auto-fetching lightweight notifications, pass the factory client and a database name:
 
 ```javascript
-const volcano = new VolcanoAuth({ ... });
-volcano.database('your_database_name'); // Required for auto-fetch queries
+const volcano = createVolcanoClient({ ... });
+const { session } = await volcano.auth.signIn({ email, password });
 
 const realtime = new VolcanoRealtime({
   apiUrl: 'https://api.example.com',
   anonKey: 'anon-key',
-  accessToken: volcano.accessToken,
+  accessToken: session.access_token,
   volcanoClient: volcano, // Enables auto-fetch for lightweight mode
-  databaseName: 'your_database_name' // Optional if volcano.database(...) already called
+  databaseName: 'your_database_name'
 });
 ```
 
@@ -565,7 +565,7 @@ Load initial data, then subscribe for updates:
 
 ```javascript
 // Fetch initial data
-const { data: posts } = await volcano
+const { data: posts } = await database
   .from('posts')
   .select('*')
   .order('created_at', { ascending: false })

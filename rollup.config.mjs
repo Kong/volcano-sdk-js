@@ -20,8 +20,7 @@ export default [
     output: [
       {
         file: 'dist/index.js',
-        format: 'umd',
-        name: 'VolcanoAuth',
+        format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
       },
@@ -31,11 +30,20 @@ export default [
         inlineDynamicImports: true,
       },
       {
-        file: 'dist/index.cjs.js',
-        format: 'cjs',
+        file: 'dist/volcano.umd.js',
+        format: 'umd',
+        name: 'Volcano',
         exports: 'named',
         inlineDynamicImports: true,
       },
+    ],
+  },
+  {
+    input: 'src/index.types.ts',
+    plugins: [dts({ tsconfig: './tsconfig.json' })],
+    output: [
+      { file: 'dist/index.d.ts', format: 'es' },
+      { file: 'dist/index.esm.d.mts', format: 'es' },
     ],
   },
   // Generated OpenAPI client
@@ -75,6 +83,17 @@ export default [
     output: [
       {
         file: 'dist/realtime.js',
+        format: 'cjs',
+        exports: 'named',
+        inlineDynamicImports: true,
+      },
+      {
+        file: 'dist/realtime.esm.mjs',
+        format: 'es',
+        inlineDynamicImports: true,
+      },
+      {
+        file: 'dist/realtime.umd.js',
         format: 'umd',
         name: 'VolcanoRealtime',
         exports: 'named',
@@ -84,17 +103,14 @@ export default [
           ws: 'WebSocket',
         },
       },
-      {
-        file: 'dist/realtime.esm.mjs',
-        format: 'es',
-        inlineDynamicImports: true,
-      },
-      {
-        file: 'dist/realtime.cjs.js',
-        format: 'cjs',
-        exports: 'named',
-        inlineDynamicImports: true,
-      },
+    ],
+  },
+  {
+    input: 'src/realtime.types.ts',
+    plugins: [dts({ tsconfig: './tsconfig.json' })],
+    output: [
+      { file: 'dist/realtime.d.ts', format: 'es' },
+      { file: 'dist/realtime.esm.d.mts', format: 'es' },
     ],
   },
   // Next.js middleware helpers bundle
@@ -111,6 +127,14 @@ export default [
         file: 'dist/next/middleware.esm.mjs',
         format: 'es',
       },
+    ],
+  },
+  {
+    input: 'src/next/middleware.types.ts',
+    plugins: [dts({ tsconfig: './tsconfig.json' })],
+    output: [
+      { file: 'dist/next/middleware.d.ts', format: 'es' },
+      { file: 'dist/next/middleware.esm.d.mts', format: 'es' },
     ],
   },
 ];

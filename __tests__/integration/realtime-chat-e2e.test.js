@@ -9,7 +9,7 @@
  * 5. Multiple users in the same room
  */
 
-const { VolcanoAuth } = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 
 // Configuration from environment
@@ -141,8 +141,8 @@ describe('Realtime Chat E2E', () => {
 
   test('complete chat flow: anonymous signup -> connect -> chat', async () => {
     // 1. Sign up anonymously as "Alice"
-    const aliceAuth = new VolcanoAuth({
-      apiUrl: API_URL,
+    const aliceAuth = createVolcanoClient({
+      baseUrl: API_URL,
       anonKey: anonKey,
     });
 
@@ -201,7 +201,7 @@ describe('Realtime Chat E2E', () => {
 
   test('two users see each other symmetrically via presence', async () => {
     // Alice signs up with display_name in metadata
-    const aliceAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const aliceAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const aliceResult = await aliceAuth.auth.signUpAnonymous({ display_name: 'Alice' });
 
     const aliceRealtime = new VolcanoRealtime({
@@ -232,7 +232,7 @@ describe('Realtime Chat E2E', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Bob signs up and joins AFTER Alice
-    const bobAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const bobAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const bobResult = await bobAuth.auth.signUpAnonymous({ display_name: 'Bob' });
 
     const bobRealtime = new VolcanoRealtime({
@@ -313,10 +313,10 @@ describe('Realtime Chat E2E', () => {
 
   test('user leaving and rejoining updates presence state correctly', async () => {
     // Alice and Bob sign up
-    const aliceAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const aliceAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const aliceResult = await aliceAuth.auth.signUpAnonymous({ display_name: 'Alice' });
 
-    const bobAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const bobAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const bobResult = await bobAuth.auth.signUpAnonymous({ display_name: 'Bob' });
 
     // Both connect and subscribe to presence
@@ -437,7 +437,7 @@ describe('Realtime Chat E2E', () => {
 
   test('user can only see messages after joining', async () => {
     // Alice connects first
-    const aliceAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const aliceAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const aliceResult = await aliceAuth.auth.signUpAnonymous({ display_name: 'Alice' });
 
     const aliceRealtime = new VolcanoRealtime({
@@ -461,7 +461,7 @@ describe('Realtime Chat E2E', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Bob joins
-    const bobAuth = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    const bobAuth = createVolcanoClient({ baseUrl: API_URL, anonKey });
     const bobResult = await bobAuth.auth.signUpAnonymous({ display_name: 'Bob' });
 
     const bobRealtime = new VolcanoRealtime({

@@ -29,7 +29,7 @@ try {
   // dotenv not installed
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
@@ -346,7 +346,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     console.log('[ok] Enabled realtime for project');
 
     // 10. Initialize SDK
-    volcano = new VolcanoAuth({ apiUrl: API_URL, anonKey });
+    volcano = createVolcanoClient({ baseUrl: API_URL, anonKey });
     console.log('[ok] Initialized Volcano SDK');
 
     // 11. Create two auth users: Alice and Bob
@@ -1279,7 +1279,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('9.2 two projects with same channel name are isolated', async () => {
       // Connect to other project
       // First need to create a user in the other project
-      const otherVolcano = new VolcanoAuth({ apiUrl: API_URL, anonKey: otherAnonKey });
+      const otherVolcano = createVolcanoClient({ baseUrl: API_URL, anonKey: otherAnonKey });
       const timestamp = Date.now();
 
       const signUpResult = await otherVolcano.auth.signUp({

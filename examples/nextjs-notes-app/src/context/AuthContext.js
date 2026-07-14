@@ -78,8 +78,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function initAuth() {
       try {
-        // volcano.initialize() restores session from localStorage
-        const { user: restoredUser, error: initError } = await volcano.initialize();
+        // auth.initialize() restores session from localStorage
+        const { user: restoredUser, error: initError } = await volcano.auth.initialize();
 
         if (initError) {
           console.warn('Session restore failed:', initError.message);
@@ -268,7 +268,7 @@ export function AuthProvider({ children }) {
     setLoading(true);
 
     try {
-      const result = await volcano.auth.resetPasswordForEmail(email);
+      const result = await volcano.auth.forgotPassword(email);
 
       if (result.error) {
         setError(result.error);

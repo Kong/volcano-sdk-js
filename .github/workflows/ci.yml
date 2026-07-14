@@ -128,7 +128,7 @@ jobs:
           cd "$smoke_dir"
           npm init --yes >/dev/null
           npm install "$package_path" >/dev/null
-          node --input-type=module -e "import('@volcano.dev/sdk').then((sdk) => { if (!sdk.VolcanoAuth) throw new Error('missing ESM root export') })"
-          node -e "if (!require('@volcano.dev/sdk').VolcanoAuth) throw new Error('missing CommonJS root export')"
+          node --input-type=module -e "import('@volcano.dev/sdk').then((sdk) => { if (!sdk.createVolcanoClient) throw new Error('missing ESM root export') })"
+          node -e "if (!require('@volcano.dev/sdk').createVolcanoClient) throw new Error('missing CommonJS root export')"
           node --input-type=module -e "import('@volcano.dev/sdk/api').then((sdk) => { if (!sdk.createApiClient || !sdk.listProjects) throw new Error('missing ESM API exports') })"
           node -e "const sdk = require('@volcano.dev/sdk/api'); if (!sdk.createApiClient || !sdk.listProjects) throw new Error('missing CommonJS API exports')"

@@ -4,7 +4,8 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 
 ## Local Prerequisites
 
-- Node.js 20 or newer.
+- Node.js 22.18 or newer for generation and builds. Published-package consumers
+  remain supported on Node.js 20.
 - pnpm 10.34.1.
 
 ## Common Workflows
@@ -14,8 +15,8 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 | Install dependencies   | `pnpm install --frozen-lockfile` |
 | Run linting            | `pnpm lint`                      |
 | Run unit tests         | `pnpm test`                      |
-| Regenerate API types   | `pnpm generate:openapi`          |
-| Check generated types  | `pnpm check:openapi`             |
+| Regenerate API client  | `pnpm generate:openapi`          |
+| Check generated client | `pnpm check:openapi`             |
 | Build the package      | `pnpm build`                     |
 | Check package metadata | `pnpm test:package`              |
 
@@ -32,11 +33,9 @@ server-backed SDK integration tests.
 - `src/index.js` contains the main SDK client.
 - `src/realtime.js` contains the realtime WebSocket client.
 - `src/next/middleware.js` contains Next.js middleware helpers.
-- `src/*.d.ts` and `src/next/*.d.ts` contain checked-in TypeScript
-  declarations.
+- `src/*.types.ts` and `src/next/*.types.ts` are the declaration entry points.
 - `openapi/openapi.yaml` is the vendored public API contract.
-- `src/generated/openapi.d.ts` is generated from that contract and must not be
-  edited by hand.
+- `src/generated/api` is generated from that contract and must not be edited by hand.
 - `docs/` contains user-facing guides.
 - `examples/nextjs-notes-app/` contains the Next.js example app.
 

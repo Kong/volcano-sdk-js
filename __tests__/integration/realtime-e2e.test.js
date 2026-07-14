@@ -23,7 +23,7 @@ try {
   // dotenv not installed, use environment variables directly
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const WebSocket = require('ws');
 
@@ -199,8 +199,8 @@ describe('Realtime SDK E2E Integration Tests', () => {
     console.log('[ok] Configured realtime CORS origin');
 
     // Initialize SDK
-    volcano = new VolcanoAuth({
-      apiUrl: API_URL,
+    volcano = createVolcanoClient({
+      baseUrl: API_URL,
       anonKey: anonKey,
     });
     console.log('[ok] Initialized SDK');

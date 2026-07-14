@@ -12,7 +12,7 @@
  * export async function middleware(request) {
  *   const client = createServerClient({
  *     anonKey: process.env.VOLCANO_ANON_KEY,
- *     apiUrl: process.env.VOLCANO_API_URL,
+ *     baseUrl: process.env.VOLCANO_API_URL,
  *   });
  *
  *   const user = await withAuth(request, client);

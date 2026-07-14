@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { authGetUser } from '../src/api';
+import { authGetUser, listStorageObjects } from '../src/api';
 import { createVolcanoClient } from '../src/index.js';
 
 const jsonResponse = (status: number, body: unknown) =>
@@ -108,5 +108,24 @@ describe('createVolcanoClient generated API refresh', () => {
     const lastCall = fetchMock.mock.calls.at(-1);
     const lastRequest = lastCall ? new Request(lastCall[0], lastCall[1]) : undefined;
     expect(lastRequest?.headers.get('Authorization')).toBeNull();
+  });
+
+  it('does not refresh a multi-scheme operation using a service-role credential', async () => {
+    const fetchMock = jest.fn(async () => jsonResponse(401, { error: 'invalid service key' }));
+    const volcano = createVolcanoClient({
+      baseUrl: 'https://api.volcano.dev',
+      fetch: fetchMock,
+      serviceRoleKey: 'service-role-key',
+    });
+
+    const result = await listStorageObjects({
+      client: volcano.api,
+      path: { bucketName: 'documents' },
+    });
+
+    expect(result.error).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = new Request(fetchMock.mock.calls[0][0], fetchMock.mock.calls[0][1]);
+    expect(request.headers.get('Authorization')).toBe('Bearer service-role-key');
   });
 });

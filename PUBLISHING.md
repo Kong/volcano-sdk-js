@@ -96,8 +96,8 @@ The package includes package metadata plus the files listed in `package.json`:
 After publishing, the package is available via CDN:
 
 ```html
-<script src="https://unpkg.com/@volcano.dev/sdk@latest/dist/index.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@volcano.dev/sdk@latest/dist/index.js"></script>
+<script src="https://unpkg.com/@volcano.dev/sdk@2/dist/volcano.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@volcano.dev/sdk@2/dist/volcano.umd.js"></script>
 ```
 
 ## Troubleshooting

@@ -9,7 +9,7 @@
  * - For OAuth tests: mock OAuth server running
  */
 
-const VolcanoAuth = require('../../src/index.js');
+const { createVolcanoClient } = require('../../src/index.js');
 
 // Configuration
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
@@ -19,6 +19,13 @@ const TEST_FUNCTION_ZIP_BASE64 =
 
 function createTestFunctionZipBuffer() {
   return Buffer.from(TEST_FUNCTION_ZIP_BASE64, 'base64');
+}
+
+async function getAccessToken(client) {
+  const auth = client.api.getConfig().auth;
+  return typeof auth === 'function'
+    ? auth({ key: 'AuthUserAccessToken', scheme: 'bearer', type: 'http' })
+    : auth;
 }
 
 // Helper to make management API calls
@@ -248,8 +255,8 @@ describe('SDK E2E Integration Tests', () => {
     console.log('[ok] Anonymous signups enabled');
 
     // Initialize SDK
-    volcano = new VolcanoAuth({
-      apiUrl: API_URL,
+    volcano = createVolcanoClient({
+      baseUrl: API_URL,
       projectId: project.id,
       anonKey: anonKey,
     });
@@ -318,7 +325,7 @@ describe('SDK E2E Integration Tests', () => {
     test('signOut - clears session', async () => {
       const result = await volcano.auth.signOut();
       expect(result.error).toBeNull();
-      expect(volcano.accessToken).toBeNull();
+      expect(await getAccessToken(volcano)).toBeUndefined();
       console.log('  [ok] User signed out');
     });
 
@@ -429,8 +436,8 @@ describe('SDK E2E Integration Tests', () => {
 
     test('standard flow - session from signUp is usable for an authenticated call without getUser()', async () => {
       const hosted = await createHostedHelperProject('standard-bootstrap', 50);
-      const client = new VolcanoAuth({
-        apiUrl: API_URL,
+      const client = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: hosted.projectId,
         anonKey: hosted.anonKey,
       });
@@ -463,8 +470,8 @@ describe('SDK E2E Integration Tests', () => {
       const browser = installBrowserEnv('');
       try {
         // First client signs up; its session is persisted to (browser) storage.
-        const first = new VolcanoAuth({
-          apiUrl: API_URL,
+        const first = createVolcanoClient({
+          baseUrl: API_URL,
           projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
@@ -473,12 +480,12 @@ describe('SDK E2E Integration Tests', () => {
         expect(browser.store['volcano_access_token']).toBeTruthy();
 
         // Simulate a page reload: a brand-new client restores the session from storage.
-        const reloaded = new VolcanoAuth({
-          apiUrl: API_URL,
+        const reloaded = createVolcanoClient({
+          baseUrl: API_URL,
           projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
-        expect(reloaded.accessToken).toBe(signup.session.access_token);
+        expect(await getAccessToken(reloaded)).toBe(signup.session.access_token);
 
         // No getUser() — authenticated operation works straight away.
         const updated = await reloaded.auth.updateUser({ metadata: { bootstrapped: 'reload' } });
@@ -506,7 +513,7 @@ describe('SDK E2E Integration Tests', () => {
       try {
         // 1) The app starts the flow with the SDK on its login page. This mints a
         //    one-time nonce, stores it in sessionStorage, and returns the hosted URL.
-        const initiator = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
+        const initiator = createVolcanoClient({ baseUrl: API_URL, anonKey: hosted.anonKey });
         const hostedUrl = initiator.auth.getHostedAuthUrl({
           projectId: hosted.projectId,
           action: 'signup',
@@ -557,9 +564,8 @@ describe('SDK E2E Integration Tests', () => {
 
         // 5) A fresh client on the redirect page adopts the session AT CONSTRUCTION
         //    because the returned state matches the stored nonce. No getUser() needed.
-        const client = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
-        expect(client.accessToken).toBe(session.access_token);
-        expect(client.refreshToken).toBe(session.refresh_token);
+        const client = createVolcanoClient({ baseUrl: API_URL, anonKey: hosted.anonKey });
+        expect(await getAccessToken(client)).toBe(session.access_token);
         expect(browser.getHash()).toBe('');
         // The one-time nonce was consumed.
         expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
@@ -606,13 +612,13 @@ describe('SDK E2E Integration Tests', () => {
       // The victim never initiated a flow in this tab: no nonce in sessionStorage.
       const browser = installBrowserEnv(redirectHash);
       try {
-        const client = new VolcanoAuth({
-          apiUrl: API_URL,
+        const client = createVolcanoClient({
+          baseUrl: API_URL,
           projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
         // The unsolicited session is NOT adopted, and the tokens are scrubbed.
-        expect(client.accessToken).toBeFalsy();
+        expect(await getAccessToken(client)).toBeUndefined();
         expect(browser.getHash()).toBe('');
 
         // An authenticated call therefore fails (no session was established).
@@ -632,7 +638,7 @@ describe('SDK E2E Integration Tests', () => {
       const browser = installBrowserEnv('');
       try {
         // The user legitimately starts a flow, so a real nonce is stored.
-        const initiator = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
+        const initiator = createVolcanoClient({ baseUrl: API_URL, anonKey: hosted.anonKey });
         const hostedUrl = initiator.auth.getHostedAuthUrl({ projectId: hosted.projectId });
         const realNonce = new URL(hostedUrl).searchParams.get('state');
         expect(browser.sessionStore.volcano_auth_state).toBe(realNonce);
@@ -660,9 +666,9 @@ describe('SDK E2E Integration Tests', () => {
         frag.set('state', `${realNonce}-tampered`);
         global.window.location.hash = `#${frag.toString()}`;
 
-        const client = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
+        const client = createVolcanoClient({ baseUrl: API_URL, anonKey: hosted.anonKey });
         // Mismatched state ⇒ not adopted, tokens scrubbed, nonce consumed.
-        expect(client.accessToken).toBeFalsy();
+        expect(await getAccessToken(client)).toBeUndefined();
         expect(browser.getHash()).toBe('');
         expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
       } finally {
@@ -907,8 +913,8 @@ describe('SDK E2E Integration Tests', () => {
 
     beforeAll(() => {
       // Create fresh SDK instance for anonymous tests
-      anonVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      anonVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -950,8 +956,8 @@ describe('SDK E2E Integration Tests', () => {
   describe('Email Confirmation', () => {
     test('resendConfirmation - sends confirmation email', async () => {
       // Create a fresh user for this test
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -974,8 +980,8 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('confirmEmail - validates token format', async () => {
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -997,8 +1003,8 @@ describe('SDK E2E Integration Tests', () => {
       const email = `forgot-${Date.now()}@example.com`;
 
       // Create user first
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1017,8 +1023,8 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('resetPassword - validates token', async () => {
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1041,8 +1047,8 @@ describe('SDK E2E Integration Tests', () => {
     let emailChangeVolcano;
 
     beforeAll(async () => {
-      emailChangeVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      emailChangeVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1089,8 +1095,8 @@ describe('SDK E2E Integration Tests', () => {
 
     beforeAll(async () => {
       // Create a fresh user for session tests
-      sessionVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      sessionVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1204,8 +1210,8 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('getSessions - error when not authenticated', async () => {
-      const unauthVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const unauthVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1220,14 +1226,14 @@ describe('SDK E2E Integration Tests', () => {
 
     test('ISOLATION: User cannot see other user sessions', async () => {
       // Create two separate users
-      const aliceVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const aliceVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
 
-      const bobVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const bobVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1269,14 +1275,14 @@ describe('SDK E2E Integration Tests', () => {
 
     test('ISOLATION: User cannot delete other user session', async () => {
       // Create attacker and victim users
-      const victimVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const victimVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
 
-      const attackerVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const attackerVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1318,8 +1324,8 @@ describe('SDK E2E Integration Tests', () => {
 
     test('Session invalidation clears SDK tokens', async () => {
       // Create a fresh SDK instance and sign up
-      const testVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const testVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1332,8 +1338,7 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       // Verify tokens are set
-      expect(testVolcano.accessToken).toBeDefined();
-      expect(testVolcano.refreshToken).toBeDefined();
+      expect(await getAccessToken(testVolcano)).toBeDefined();
 
       // Get the current session ID
       const sessionsResult = await testVolcano.auth.getSessions();
@@ -1354,17 +1359,16 @@ describe('SDK E2E Integration Tests', () => {
       expect(userResult.error).toBeDefined();
 
       // CRITICAL: Verify tokens are cleared from SDK
-      expect(testVolcano.accessToken).toBeNull();
-      expect(testVolcano.refreshToken).toBeNull();
-      expect(testVolcano.currentUser).toBeNull();
+      expect(await getAccessToken(testVolcano)).toBeUndefined();
+      expect(testVolcano.auth.user()).toBeNull();
 
       console.log('  [ok] Session invalidation properly clears SDK tokens');
     });
 
     test('Banned user has SDK tokens cleared', async () => {
       // Create a fresh SDK instance and sign up
-      const testVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const testVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1377,8 +1381,7 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       // Verify tokens are set
-      expect(testVolcano.accessToken).toBeDefined();
-      expect(testVolcano.refreshToken).toBeDefined();
+      expect(await getAccessToken(testVolcano)).toBeDefined();
 
       const userId = signUpResult.user.id;
 
@@ -1398,9 +1401,8 @@ describe('SDK E2E Integration Tests', () => {
       expect(userResult.error).toBeDefined();
 
       // CRITICAL: Verify tokens are cleared from SDK
-      expect(testVolcano.accessToken).toBeNull();
-      expect(testVolcano.refreshToken).toBeNull();
-      expect(testVolcano.currentUser).toBeNull();
+      expect(await getAccessToken(testVolcano)).toBeUndefined();
+      expect(testVolcano.auth.user()).toBeNull();
 
       // Cleanup: unban user
       await platformFetch(`/projects/${project.id}/auth/users/${userId}/unban`, platformToken, {
@@ -1439,8 +1441,8 @@ describe('SDK E2E Integration Tests', () => {
       }
 
       // Create SDK instance with authenticated user for OAuth tests
-      oauthVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      oauthVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1503,21 +1505,15 @@ describe('SDK E2E Integration Tests', () => {
 
     beforeEach(() => {
       originalFetch = global.fetch;
-      if (typeof VolcanoAuth.__resetFunctionResolveCacheForTests === 'function') {
-        VolcanoAuth.__resetFunctionResolveCacheForTests();
-      }
     });
 
     afterEach(() => {
       global.fetch = originalFetch;
-      if (typeof VolcanoAuth.__resetFunctionResolveCacheForTests === 'function') {
-        VolcanoAuth.__resetFunctionResolveCacheForTests();
-      }
     });
 
     test('invoke - requires authentication', async () => {
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1531,13 +1527,12 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - rejects invalid authentication token', async () => {
-      const invalidTokenVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const invalidTokenVolcano = createVolcanoClient({
+        accessToken: 'invalid-token-value',
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
-
-      invalidTokenVolcano.accessToken = 'invalid-token-value';
 
       const result = await invalidTokenVolcano.functions.invoke('non-existent-function');
 
@@ -1552,19 +1547,19 @@ describe('SDK E2E Integration Tests', () => {
       const testPassword = 'SecureP@ssw0rd123!';
 
       // Create a fresh SDK instance and sign up a new user for this test
-      const funcVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const funcVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
 
-      await funcVolcano.auth.signUp({
+      const signup = await funcVolcano.auth.signUp({
         email: testEmail,
         password: testPassword,
         signInWhenAllowed: true,
       });
 
-      expect(funcVolcano.accessToken).toBeDefined();
+      expect(signup.session?.access_token).toBeDefined();
 
       // Should return error since function doesn't exist
       const result = await funcVolcano.functions.invoke('non-existent-function');
@@ -1575,8 +1570,8 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - negative resolver cache avoids repeated lookups for missing function', async () => {
-      const cacheVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const cacheVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1615,22 +1610,22 @@ describe('SDK E2E Integration Tests', () => {
         functionName,
       );
 
-      const instanceA = new VolcanoAuth({
-        apiUrl: API_URL,
+      const instanceA = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
-      await instanceA.auth.signUp({
+      const instanceASignup = await instanceA.auth.signUp({
         email: `invoke-shared-a-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
 
-      const instanceB = new VolcanoAuth({
-        apiUrl: API_URL,
+      const instanceB = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
-        accessToken: instanceA.accessToken,
+        accessToken: instanceASignup.session.access_token,
       });
 
       let resolveCalls = 0;
@@ -1708,8 +1703,8 @@ describe('SDK E2E Integration Tests', () => {
         sharedFunctionName,
       );
 
-      const sdkA = new VolcanoAuth({
-        apiUrl: API_URL,
+      const sdkA = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1719,8 +1714,8 @@ describe('SDK E2E Integration Tests', () => {
         signInWhenAllowed: true,
       });
 
-      const sdkB = new VolcanoAuth({
-        apiUrl: API_URL,
+      const sdkB = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: projectB.id,
         anonKey: projectBAnonKey,
       });
@@ -1769,8 +1764,8 @@ describe('SDK E2E Integration Tests', () => {
       const functionName = `cache-retry-${Date.now()}`;
       await createFunctionViaPlatform(project.id, platformToken, functionName);
 
-      const retryVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      const retryVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1861,8 +1856,8 @@ describe('SDK E2E Integration Tests', () => {
       }
 
       // Create SDK instance for database tests
-      dbVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+      dbVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1873,7 +1868,7 @@ describe('SDK E2E Integration Tests', () => {
         signInWhenAllowed: true,
       });
 
-      dbVolcano.database(database.name);
+      dbVolcano = dbVolcano.database(database.name);
       console.log('  [ok] SDK configured with database');
 
       // Create test table using platform API (direct SQL)
@@ -1941,16 +1936,15 @@ describe('SDK E2E Integration Tests', () => {
 
     // ---- Builder Tests (no database required) ----
 
-    test('database() - sets database name', () => {
+    test('database() - creates an isolated database client', () => {
       const result = volcano.database('test_db');
-      expect(result).toBe(volcano);
-      expect(volcano._currentDatabaseName).toBe('test_db');
+      expect(result).not.toBe(volcano);
+      expect(typeof result.from).toBe('function');
       console.log('  [ok] Database name set');
     });
 
     test('from() - creates QueryBuilder', () => {
-      volcano.database('test_db');
-      const qb = volcano.from('users');
+      const qb = volcano.database('test_db').from('users');
 
       expect(qb).toBeDefined();
       expect(qb.table).toBe('users');
@@ -1961,16 +1955,15 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('from().select() - chains correctly', () => {
-      volcano.database('test_db');
-      const qb = volcano.from('users').select('id, email, name');
+      const qb = volcano.database('test_db').from('users').select('id, email, name');
 
       expect(qb.selectColumns).toEqual(['id', 'email', 'name']);
       console.log('  [ok] Select columns set');
     });
 
     test('QueryBuilder filters chain correctly', () => {
-      volcano.database('test_db');
       const qb = volcano
+        .database('test_db')
         .from('users')
         .eq('status', 'active')
         .neq('role', 'admin')
@@ -1993,25 +1986,18 @@ describe('SDK E2E Integration Tests', () => {
       console.log('  [ok] All filter methods chain correctly');
     });
 
-    test('execute() - requires database ID', async () => {
-      const freshVolcano = new VolcanoAuth({
-        apiUrl: API_URL,
+    test('execute() - requires authentication', async () => {
+      const freshVolcano = createVolcanoClient({
+        baseUrl: API_URL,
         projectId: project.id,
         anonKey: anonKey,
       });
 
-      await freshVolcano.auth.signUp({
-        email: `db-test-${Date.now()}@example.com`,
-        password: 'TestP@ss123!',
-        signInWhenAllowed: true,
-      });
-
-      // No database set
-      const result = await freshVolcano.from('users').execute();
+      const result = await freshVolcano.database('test_db').from('users').execute();
 
       expect(result.error).toBeDefined();
-      expect(result.error.message).toContain('Database name not set');
-      console.log('  [ok] Execute requires database name');
+      expect(result.error.message).toContain('No active session');
+      console.log('  [ok] Execute requires authentication');
     });
 
     // ---- Real Database Operation Tests ----
@@ -2371,7 +2357,7 @@ describe('SDK E2E Integration Tests', () => {
     test('initialize() - restores session from storage', async () => {
       // This test simulates what happens when the SDK is initialized
       // with existing tokens in localStorage
-      const result = await volcano.initialize();
+      const result = await volcano.auth.initialize();
 
       expect(result).toBeDefined();
       // Will have user if there's a valid session, or null otherwise

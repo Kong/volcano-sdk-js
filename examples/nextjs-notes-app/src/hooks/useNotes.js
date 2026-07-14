@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { volcano } from '@/lib/volcano';
+import { database } from '@/lib/volcano';
 
 // ---------------------------------------------------------------------------
 // HOOK DEFINITION
@@ -93,7 +93,7 @@ export function useNotes() {
     try {
       // Query notes using the Volcano Query Builder
       // RLS automatically filters: WHERE user_id = auth.uid()
-      const { data, error: queryError } = await volcano
+      const { data, error: queryError } = await database
         .from('notes')
         .select('id, title, content, created_at, updated_at')
         .order('created_at', { ascending: false });
@@ -147,7 +147,7 @@ export function useNotes() {
       try {
         // Insert note using the Volcano SDK
         // user_id is automatically set by RLS to auth.uid()
-        const { data, error: insertError } = await volcano.insert('notes', {
+        const { data, error: insertError } = await database.insert('notes', {
           title,
           content,
           user_id: user.id, // Explicitly set for clarity (RLS validates this)
@@ -214,7 +214,7 @@ export function useNotes() {
       try {
         // Update using the Volcano SDK
         // RLS ensures you can only update YOUR notes
-        const { data, error: updateError } = await volcano
+        const { data, error: updateError } = await database
           .update('notes', {
             ...updates,
             updated_at: new Date().toISOString(),
@@ -273,7 +273,7 @@ export function useNotes() {
       try {
         // Delete using the Volcano SDK
         // RLS ensures you can only delete YOUR notes
-        const { error: deleteError } = await volcano.delete('notes').eq('id', noteId);
+        const { error: deleteError } = await database.delete('notes').eq('id', noteId);
 
         if (deleteError) {
           // Rollback on error
