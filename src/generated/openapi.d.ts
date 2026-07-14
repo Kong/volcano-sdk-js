@@ -4,6 +4,83 @@
  */
 
 export interface paths {
+  '/user/git/connect': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start a git provider connection
+     * @description Starts a platform-user git provider connection flow and returns the
+     *     provider authorization URL. The response also sets a short-lived
+     *     HttpOnly callback binding cookie used to finish the flow.
+     */
+    post: operations['startGitConnect'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/user/git/connections': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List git provider connections */
+    get: operations['listGitConnections'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/user/git/connections/{connectionId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete a git provider connection */
+    delete: operations['deleteGitConnection'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/github/callback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Complete a GitHub App connection callback
+     * @description Public GitHub App callback. The signed state and callback binding cookie
+     *     bind the provider authorization to the browser that started the flow.
+     */
+    get: operations['gitConnectCallback'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/projects': {
     parameters: {
       query?: never;
@@ -3666,6 +3743,26 @@ export interface components {
     Error: {
       error: string;
     };
+    GitConnection: {
+      /** Format: uuid */
+      id: string;
+      provider: string;
+      provider_user_id: string;
+      provider_login: string;
+      status: string;
+      /** Format: date-time */
+      last_authenticated_at: string;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    GitConnectStartResponse: {
+      authorization_url: string;
+    };
+    GitConnectionsResponse: {
+      connections: components['schemas']['GitConnection'][];
+    };
     Frontend: {
       /** Format: uuid */
       id: string;
@@ -5344,6 +5441,8 @@ export interface components {
       require_email_confirmation?: boolean;
       /** @description Email confirmation token expiry in seconds. */
       email_confirmation_timeout?: number;
+      /** @description Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true. */
+      auto_link_verified_oauth?: boolean;
       /** @description Enable transactional email sending. Cannot be false while require_email_confirmation is true. */
       email_enabled?: boolean;
       email_from_address?: string;
@@ -5753,6 +5852,243 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  startGitConnect: {
+    parameters: {
+      query?: {
+        /** @description Git provider to connect. Defaults to github. */
+        provider?: 'github';
+        /** @description URL to redirect the browser to after the provider callback completes. */
+        redirect?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Provider authorization URL */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GitConnectStartResponse'];
+        };
+      };
+      /** @description Unsupported provider or invalid redirect */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to start the connection */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  listGitConnections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Stored git provider connections */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GitConnectionsResponse'];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to list connections */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  deleteGitConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Connection ID to delete */
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Connection deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Malformed connection ID */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Connection not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to delete connection */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  gitConnectCallback: {
+    parameters: {
+      query: {
+        /** @description GitHub user authorization code. */
+        code?: string;
+        /** @description Signed connect state generated by startGitConnect. */
+        state: string;
+        /** @description Provider error returned by GitHub. */
+        error?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect back to the app after a successful or failed connect attempt */
+      303: {
+        headers: {
+          /** @description Redirect target */
+          Location?: string;
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid callback request or state */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Too many callback attempts from this client */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to complete the connection */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   listProjects: {
     parameters: {
       query?: {

@@ -45,6 +45,8 @@ tags:
     description: OAuth provider configuration (Google, GitHub, Microsoft, Apple)
   - name: OAuth Authentication
     description: OAuth login flows and provider management for end users
+  - name: Git Connections
+    description: Platform-user git provider connections for deployment source integrations
   - name: Storage Buckets
     description: Storage bucket management (platform admin)
   - name: Storage Policies
@@ -64,6 +66,208 @@ tags:
       and polls for completion. Session completion is handled by volcano.dev
       via the Management API.
 paths:
+  /user/git/connect:
+    post:
+      tags:
+        - Git Connections
+      summary: Start a git provider connection
+      description: |
+        Starts a platform-user git provider connection flow and returns the
+        provider authorization URL. The response also sets a short-lived
+        HttpOnly callback binding cookie used to finish the flow.
+      operationId: startGitConnect
+      security:
+        - UserToken: []
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          description: Git provider to connect. Defaults to github.
+          schema:
+            type: string
+            enum:
+              - github
+            default: github
+        - name: redirect
+          in: query
+          required: false
+          description: URL to redirect the browser to after the provider callback completes.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Provider authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitConnectStartResponse'
+        '400':
+          description: Unsupported provider or invalid redirect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to start the connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /user/git/connections:
+    get:
+      tags:
+        - Git Connections
+      summary: List git provider connections
+      operationId: listGitConnections
+      security:
+        - UserToken: []
+      responses:
+        '200':
+          description: Stored git provider connections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitConnectionsResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to list connections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /user/git/connections/{connectionId}:
+    delete:
+      tags:
+        - Git Connections
+      summary: Delete a git provider connection
+      operationId: deleteGitConnection
+      security:
+        - UserToken: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          description: Connection ID to delete
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Connection deleted
+        '400':
+          description: Malformed connection ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to delete connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /github/callback:
+    get:
+      tags:
+        - Git Connections
+      summary: Complete a GitHub App connection callback
+      description: |
+        Public GitHub App callback. The signed state and callback binding cookie
+        bind the provider authorization to the browser that started the flow.
+      operationId: gitConnectCallback
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: GitHub user authorization code.
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          description: Signed connect state generated by startGitConnect.
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Provider error returned by GitHub.
+          schema:
+            type: string
+      responses:
+        '303':
+          description: Redirect back to the app after a successful or failed connect attempt
+          headers:
+            Location:
+              description: Redirect target
+              schema:
+                type: string
+        '400':
+          description: Invalid callback request or state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many callback attempts from this client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to complete the connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects:
     get:
       tags:
@@ -8174,6 +8378,54 @@ components:
           type: string
       required:
         - error
+    GitConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_user_id:
+          type: string
+        provider_login:
+          type: string
+        status:
+          type: string
+        last_authenticated_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - provider
+        - provider_user_id
+        - provider_login
+        - status
+        - last_authenticated_at
+        - created_at
+        - updated_at
+    GitConnectStartResponse:
+      type: object
+      properties:
+        authorization_url:
+          type: string
+      required:
+        - authorization_url
+    GitConnectionsResponse:
+      type: object
+      properties:
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitConnection'
+      required:
+        - connections
     Frontend:
       type: object
       properties:
@@ -11128,6 +11380,9 @@ components:
         email_confirmation_timeout:
           type: integer
           description: Email confirmation token expiry in seconds.
+        auto_link_verified_oauth:
+          type: boolean
+          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
         email_enabled:
           type: boolean
           description: Enable transactional email sending. Cannot be false while require_email_confirmation is true.
