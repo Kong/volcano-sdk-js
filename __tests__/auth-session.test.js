@@ -6,6 +6,11 @@ const jsonResponse = (body, status = 200) => ({
   status,
 });
 
+const requestFromFetchCall = (index = 0) => {
+  const [input, init] = global.fetch.mock.calls[index];
+  return input instanceof Request ? input : new Request(input, init);
+};
+
 const projectToken = (projectId) => {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   return `${encode({ alg: 'none' })}.${encode({ project_id: projectId })}.signature`;
@@ -78,10 +83,13 @@ describe('createVolcanoClient auth and session behavior', () => {
       'SIGNED_IN',
       expect.objectContaining({ user: result.user }),
     );
-    const [url, init] = global.fetch.mock.calls[0];
-    expect(url).toBe('https://api.test.com/auth/signin');
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer anon-key');
-    expect(JSON.parse(init.body)).toEqual({ email: 'user@example.com', password: 'secret' });
+    const request = requestFromFetchCall();
+    expect(request.url).toBe('https://api.test.com/auth/signin');
+    expect(request.headers.get('Authorization')).toBe('Bearer anon-key');
+    await expect(request.clone().json()).resolves.toEqual({
+      email: 'user@example.com',
+      password: 'secret',
+    });
   });
 
   it('restores and updates a full session through asynchronous injected storage', async () => {
@@ -278,7 +286,7 @@ describe('createVolcanoClient auth and session behavior', () => {
     await volcano.auth.deleteAllOtherSessions();
 
     expect(sessions.sessions).toEqual([{ id: 'session-id' }]);
-    expect(global.fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(global.fetch.mock.calls.map((_call, index) => requestFromFetchCall(index).url)).toEqual([
       'https://api.test.com/auth/user/sessions?limit=10&page=2',
       'https://api.test.com/auth/user/sessions/session-id',
       'https://api.test.com/auth/user/sessions',
@@ -330,9 +338,7 @@ describe('createVolcanoClient auth and session behavior', () => {
       access_token: 'redirect-access',
       refresh_token: 'redirect-refresh',
     });
-    expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
-      'Bearer redirect-access',
-    );
+    expect(requestFromFetchCall().headers.get('Authorization')).toBe('Bearer redirect-access');
   });
 
   it('rejects an unsolicited hosted redirect session', () => {

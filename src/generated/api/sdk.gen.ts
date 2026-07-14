@@ -368,6 +368,9 @@ import type {
   ListVariablesData,
   ListVariablesErrors,
   ListVariablesResponses,
+  ManageStorageUploadSessionData,
+  ManageStorageUploadSessionErrors,
+  ManageStorageUploadSessionResponses,
   MoveStorageObjectData,
   MoveStorageObjectErrors,
   MoveStorageObjectResponses,
@@ -4590,6 +4593,45 @@ export const copyStorageObject = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Upload a file
+ *
+ * Upload a complete file in a single multipart request. Best for files under 100MB.
+ */
+export const uploadStorageObject = <ThrowOnError extends boolean = false>(
+  options: Options<UploadStorageObjectData, ThrowOnError>,
+): RequestResult<UploadStorageObjectResponses, UploadStorageObjectErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    UploadStorageObjectResponses,
+    UploadStorageObjectErrors,
+    ThrowOnError
+  >({
+    ...formDataBodySerializer,
+    security: [
+      {
+        key: 'AnonKey',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        key: 'ServiceRoleKey',
+        scheme: 'bearer',
+        type: 'http',
+      },
+      {
+        key: 'AuthUserAccessToken',
+        scheme: 'bearer',
+        type: 'http',
+      },
+    ],
+    url: '/storage/{bucketName}/upload',
+    ...options,
+    headers: {
+      'Content-Type': null,
+      ...options.headers,
+    },
+  });
+
+/**
  * Delete a file or abort upload session
  *
  * Delete a file, or abort a resumable upload session.
@@ -4667,12 +4709,7 @@ export const downloadStorageObject = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Upload a file or create resumable session
- *
- * Unified endpoint for file uploads. Behavior depends on Content-Type and headers:
- *
- * **Simple Upload (multipart/form-data):**
- * Upload a complete file in a single request. Best for files under 100MB.
+ * Create or complete a resumable upload session
  *
  * **Create Resumable Session (application/json):**
  * Create a session for chunked uploads. Best for large files or unreliable networks.
@@ -4683,12 +4720,16 @@ export const downloadStorageObject = <ThrowOnError extends boolean = false>(
  * Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
  *
  */
-export const uploadStorageObject = <ThrowOnError extends boolean = false>(
-  options: Options<UploadStorageObjectData, ThrowOnError>,
-): RequestResult<UploadStorageObjectResponses, UploadStorageObjectErrors, ThrowOnError> =>
+export const manageStorageUploadSession = <ThrowOnError extends boolean = false>(
+  options: Options<ManageStorageUploadSessionData, ThrowOnError>,
+): RequestResult<
+  ManageStorageUploadSessionResponses,
+  ManageStorageUploadSessionErrors,
+  ThrowOnError
+> =>
   (options.client ?? client).post<
-    UploadStorageObjectResponses,
-    UploadStorageObjectErrors,
+    ManageStorageUploadSessionResponses,
+    ManageStorageUploadSessionErrors,
     ThrowOnError
   >({
     security: [

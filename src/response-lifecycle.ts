@@ -11,29 +11,32 @@ const responseProperties = [
   'url',
 ] as const;
 
+const streamConsumptionMethods = new Set<PropertyKey>([
+  'cancel',
+  'getReader',
+  'pipeThrough',
+  'pipeTo',
+  'tee',
+  'values',
+  Symbol.asyncIterator,
+]);
+
 const trackBody = (
   body: ReadableStream<Uint8Array>,
   cleanup: () => void,
 ): ReadableStream<Uint8Array> => {
-  const reader = body.getReader();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const chunk = await reader.read();
-        if (chunk.done) {
-          cleanup();
-          controller.close();
-          return;
-        }
-        controller.enqueue(chunk.value);
-      } catch (error) {
-        cleanup();
-        controller.error(error);
+  return new Proxy(body, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== 'function') {
+        return value;
       }
-    },
-    async cancel(reason) {
-      cleanup();
-      await reader.cancel(reason);
+      return (...args: unknown[]) => {
+        if (streamConsumptionMethods.has(property)) {
+          cleanup();
+        }
+        return Reflect.apply(value, target, args);
+      };
     },
   });
 };

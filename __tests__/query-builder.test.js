@@ -6,6 +6,11 @@ const jsonResponse = (body, status = 200) => ({
   status,
 });
 
+const requestFromFetchCall = (index = 0) => {
+  const [input, init] = global.fetch.mock.calls[index];
+  return input instanceof Request ? input : new Request(input, init);
+};
+
 describe('database query builder', () => {
   let database;
 
@@ -75,11 +80,11 @@ describe('database query builder', () => {
       ],
       error: null,
     });
-    const [url, init] = global.fetch.mock.calls[0];
-    expect(url).toBe('https://api.test.com/databases/test_db/query/select');
-    expect(init.method).toBe('POST');
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer test-access-token');
-    expect(JSON.parse(init.body)).toEqual({
+    const request = requestFromFetchCall();
+    expect(request.url).toBe('https://api.test.com/databases/test_db/query/select');
+    expect(request.method).toBe('POST');
+    expect(request.headers.get('Authorization')).toBe('Bearer test-access-token');
+    await expect(request.clone().json()).resolves.toEqual({
       filters: [{ column: 'status', operator: 'eq', value: 'published' }],
       select: ['id', 'title'],
       table: 'posts',
@@ -108,7 +113,7 @@ describe('database query builder', () => {
     const result = await volcano.database('test_db').from('posts').select();
 
     expect(result.error).toBeNull();
-    expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+    expect(requestFromFetchCall().headers.get('Authorization')).toBe(
       'Bearer persisted-access-token',
     );
   });
@@ -135,9 +140,7 @@ describe('database query builder', () => {
 
     expect(result).toEqual({ count: 1, data: [{ id: 1 }], error: null });
     expect(global.fetch).toHaveBeenCalledTimes(3);
-    expect(new Headers(global.fetch.mock.calls[2][1].headers).get('Authorization')).toBe(
-      'Bearer new-token',
-    );
+    expect(requestFromFetchCall(2).headers.get('Authorization')).toBe('Bearer new-token');
   });
 
   it('returns an ergonomic error without an access-token session', async () => {
@@ -175,12 +178,12 @@ describe('database query builder', () => {
     expect(inserted.data).toEqual([{ id: 1, title: 'New' }]);
     expect(updated.data).toEqual([{ id: 1, title: 'Updated' }]);
     expect(deleted.data).toEqual([{ id: 1 }]);
-    expect(global.fetch.mock.calls.map(([url]) => url)).toEqual([
+    expect(global.fetch.mock.calls.map((_call, index) => requestFromFetchCall(index).url)).toEqual([
       'https://api.test.com/databases/test_db/query/insert',
       'https://api.test.com/databases/test_db/query/update',
       'https://api.test.com/databases/test_db/query/delete',
     ]);
-    expect(JSON.parse(global.fetch.mock.calls[1][1].body).filters).toEqual([
+    expect((await requestFromFetchCall(1).clone().json()).filters).toEqual([
       { column: 'id', operator: 'eq', value: 1 },
     ]);
   });

@@ -6821,17 +6821,60 @@ paths:
           description: Access denied by storage policy
         '429':
           $ref: '#/components/responses/BandwidthCapExceeded'
+  /storage/{bucketName}/upload:
+    post:
+      tags:
+        - Storage Objects
+      summary: Upload a file
+      description: Upload a complete file in a single multipart request. Best for files under 100MB.
+      operationId: uploadStorageObject
+      security:
+        - AnonKey: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/BucketName'
+        - name: path
+          in: query
+          required: true
+          description: Slash-preserving object path within the bucket
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageObject'
+        '400':
+          description: Invalid object path, request body, file size, or MIME type
+        '403':
+          description: Access denied by storage policy
+        '413':
+          description: File size exceeds plan-based limits
+        '429':
+          $ref: '#/components/responses/BandwidthCapExceeded'
   /storage/{bucketName}/{path}:
     post:
       tags:
         - Storage Objects
-      summary: Upload a file or create resumable session
+      summary: Create or complete a resumable upload session
       description: |
-        Unified endpoint for file uploads. Behavior depends on Content-Type and headers:
-
-        **Simple Upload (multipart/form-data):**
-        Upload a complete file in a single request. Best for files under 100MB.
-
         **Create Resumable Session (application/json):**
         Create a session for chunked uploads. Best for large files or unreliable networks.
         Requires: `Content-Type: application/json` with body `{"filename": "...", "content_type": "...", "total_size": ...}`
@@ -6839,7 +6882,7 @@ paths:
         **Complete Resumable Session:**
         Complete a session after all parts are uploaded.
         Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
-      operationId: uploadStorageObject
+      operationId: manageStorageUploadSession
       security:
         - AnonKey: []
         - ServiceRoleKey: []
@@ -6869,16 +6912,6 @@ paths:
       requestBody:
         required: true
         content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - file
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: File to upload (simple upload)
           application/json:
             schema:
               $ref: '#/components/schemas/CreateUploadSessionRequest'

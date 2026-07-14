@@ -9509,6 +9509,63 @@ export type CopyStorageObjectResponses = {
 export type CopyStorageObjectResponse =
   CopyStorageObjectResponses[keyof CopyStorageObjectResponses];
 
+export type UploadStorageObjectData = {
+  body: {
+    /**
+     * File to upload
+     */
+    file: Blob | File;
+  };
+  path: {
+    /**
+     * Storage bucket name
+     */
+    bucketName: string;
+  };
+  query: {
+    /**
+     * Slash-preserving object path within the bucket
+     */
+    path: string;
+  };
+  url: '/storage/{bucketName}/upload';
+};
+
+export type UploadStorageObjectErrors = {
+  /**
+   * Invalid object path, request body, file size, or MIME type
+   */
+  400: unknown;
+  /**
+   * Access denied by storage policy
+   */
+  403: unknown;
+  /**
+   * File size exceeds plan-based limits
+   */
+  413: unknown;
+  /**
+   * The platform user exceeded their monthly bandwidth cap (aggregate
+   * ingress + egress across owned projects). Enforcement is eventual:
+   * requests are rejected until the cap increases (plan/override) or the
+   * calendar-month meter resets.
+   *
+   */
+  429: Error;
+};
+
+export type UploadStorageObjectError = UploadStorageObjectErrors[keyof UploadStorageObjectErrors];
+
+export type UploadStorageObjectResponses = {
+  /**
+   * File uploaded
+   */
+  201: StorageObject;
+};
+
+export type UploadStorageObjectResponse =
+  UploadStorageObjectResponses[keyof UploadStorageObjectResponses];
+
 export type DeleteStorageObjectData = {
   body?: never;
   headers?: {
@@ -9628,7 +9685,7 @@ export type DownloadStorageObjectResponses = {
 export type DownloadStorageObjectResponse =
   DownloadStorageObjectResponses[keyof DownloadStorageObjectResponses];
 
-export type UploadStorageObjectData = {
+export type ManageStorageUploadSessionData = {
   body: CreateUploadSessionRequest;
   headers?: {
     /**
@@ -9654,7 +9711,7 @@ export type UploadStorageObjectData = {
   url: '/storage/{bucketName}/{path}';
 };
 
-export type UploadStorageObjectErrors = {
+export type ManageStorageUploadSessionErrors = {
   /**
    * Bad request. This can occur when:
    * - MIME type is not in the bucket's allowed_mime_types list
@@ -9685,9 +9742,10 @@ export type UploadStorageObjectErrors = {
   429: Error;
 };
 
-export type UploadStorageObjectError = UploadStorageObjectErrors[keyof UploadStorageObjectErrors];
+export type ManageStorageUploadSessionError =
+  ManageStorageUploadSessionErrors[keyof ManageStorageUploadSessionErrors];
 
-export type UploadStorageObjectResponses = {
+export type ManageStorageUploadSessionResponses = {
   /**
    * Resumable upload completed (when X-Upload-Complete=true)
    */
@@ -9698,8 +9756,8 @@ export type UploadStorageObjectResponses = {
   201: StorageObject | CreateUploadSessionResponse;
 };
 
-export type UploadStorageObjectResponse =
-  UploadStorageObjectResponses[keyof UploadStorageObjectResponses];
+export type ManageStorageUploadSessionResponse =
+  ManageStorageUploadSessionResponses[keyof ManageStorageUploadSessionResponses];
 
 export type UploadPartData = {
   body: Blob | File;

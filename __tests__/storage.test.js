@@ -1,5 +1,10 @@
 const { createVolcanoClient } = require('../src/index.ts');
 
+const requestFromFetchCall = (index = 0) => {
+  const [input, init] = global.fetch.mock.calls[index];
+  return input instanceof Request ? input : new Request(input, init);
+};
+
 describe('Storage', () => {
   const config = {
     accessToken: 'test-access-token',
@@ -52,14 +57,16 @@ describe('Storage', () => {
       const file = new File(['test content'], 'avatar.png', { type: 'image/png' });
 
       const { data, error } = await volcano.storage.from('avatars').upload('user/avatar.png', file);
+      const request = requestFromFetchCall();
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/avatars/user/avatar.png');
-      expect(fetch.mock.calls[0][1].method).toBe('POST');
-      expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
-        'Bearer test-access-token',
+      expect(request.url).toBe(
+        'https://api.test.com/storage/avatars/upload?path=user%2Favatar.png',
       );
+      expect(request.method).toBe('POST');
+      expect(request.headers.get('Content-Type')).toMatch(/^multipart\/form-data; boundary=/);
+      expect(request.headers.get('Authorization')).toBe('Bearer test-access-token');
     });
 
     it('should upload a Blob successfully', async () => {
@@ -237,7 +244,7 @@ describe('Storage', () => {
       const result = await volcano.storage.from('files').list();
 
       expect(result.error).toBeNull();
-      expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+      expect(requestFromFetchCall().headers.get('Authorization')).toBe(
         'Bearer persisted-access-token',
       );
     });
@@ -277,9 +284,7 @@ describe('Storage', () => {
       const { error } = await volcano.storage.from('files').list();
 
       expect(error).toBeNull();
-      expect(new Headers(global.fetch.mock.calls[2][1].headers).get('Authorization')).toBe(
-        'Bearer new-access-token',
-      );
+      expect(requestFromFetchCall(2).headers.get('Authorization')).toBe('Bearer new-access-token');
     });
 
     it('should list files with prefix', async () => {
@@ -290,9 +295,8 @@ describe('Storage', () => {
 
       await volcano.storage.from('files').list('user/documents/');
 
-      expect(fetch).toHaveBeenCalledWith(
+      expect(requestFromFetchCall().url).toBe(
         'https://api.test.com/storage/files?prefix=user%2Fdocuments%2F',
-        expect.any(Object),
       );
     });
 
@@ -305,12 +309,10 @@ describe('Storage', () => {
       const { nextCursor } = await volcano.storage
         .from('files')
         .list('', { limit: 50, cursor: 'prev-cursor' });
+      const request = requestFromFetchCall();
 
-      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('limit=50'), expect.any(Object));
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('cursor=prev-cursor'),
-        expect.any(Object),
-      );
+      expect(request.url).toContain('limit=50');
+      expect(request.url).toContain('cursor=prev-cursor');
       expect(nextCursor).toBe('cursor-abc');
     });
 
@@ -406,16 +408,16 @@ describe('Storage', () => {
       const { data, error } = await volcano.storage
         .from('files')
         .move('old/file.txt', 'new-location/file.txt');
+      const request = requestFromFetchCall();
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/files/move',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ from: 'old/file.txt', to: 'new-location/file.txt' }),
-        }),
-      );
+      expect(request.url).toBe('https://api.test.com/storage/files/move');
+      expect(request.method).toBe('POST');
+      await expect(request.clone().json()).resolves.toEqual({
+        from: 'old/file.txt',
+        to: 'new-location/file.txt',
+      });
     });
 
     it('should return error when not authenticated', async () => {
@@ -455,16 +457,16 @@ describe('Storage', () => {
       const { data, error } = await volcano.storage
         .from('files')
         .copy('original/file.txt', 'copy/file.txt');
+      const request = requestFromFetchCall();
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://api.test.com/storage/files/copy',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ from: 'original/file.txt', to: 'copy/file.txt' }),
-        }),
-      );
+      expect(request.url).toBe('https://api.test.com/storage/files/copy');
+      expect(request.method).toBe('POST');
+      await expect(request.clone().json()).resolves.toEqual({
+        from: 'original/file.txt',
+        to: 'copy/file.txt',
+      });
     });
 
     it('should return error when not authenticated', async () => {
@@ -909,6 +911,21 @@ describe('Storage', () => {
       expect(progressCalls).toHaveLength(2);
     });
 
+    it('uses the binary MIME fallback for an untyped Blob', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'stop after session request' }),
+      });
+
+      await volcano.storage
+        .from('uploads')
+        .uploadResumable('file.bin', new Blob([new ArrayBuffer(8)]));
+
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body).content_type).toBe(
+        'application/octet-stream',
+      );
+    });
+
     it('should abort and return error when part upload fails', async () => {
       // Mock create session
       global.fetch.mockResolvedValueOnce({
@@ -962,9 +979,9 @@ describe('Storage', () => {
       const caller = new AbortController();
       const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
       const fetchMock = jest.fn(
-        (_url, init) =>
+        (input, init) =>
           new Promise((_resolve, reject) => {
-            requestSignal = init.signal;
+            requestSignal = input instanceof Request ? input.signal : init.signal;
             if (requestSignal.aborted) {
               reject(requestSignal.reason);
               return;

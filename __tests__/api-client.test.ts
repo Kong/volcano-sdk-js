@@ -7,6 +7,7 @@ import {
   healthCheck,
   listProjects,
   listStorageObjects,
+  streamProjectLogs,
 } from '../src/api';
 
 const successResponse = () => ({
@@ -261,5 +262,55 @@ describe('createApiClient', () => {
       message: 'Cancelled while reading',
       name: 'AbortError',
     });
+  });
+
+  it('allows response interceptors to inspect the body without locking it', async () => {
+    const fetchMock = jest.fn(
+      async () => new Response('"healthy"', { headers: { 'Content-Type': 'application/json' } }),
+    );
+    const client = createApiClient({ fetch: fetchMock });
+    client.interceptors.response.use((response) => {
+      expect(response.body).not.toBeNull();
+      return response;
+    });
+
+    const result = await healthCheck({ client });
+
+    expect(result.data).toBe('healthy');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('does not apply the request deadline to an active SSE stream', async () => {
+    jest.useFakeTimers();
+    try {
+      let requestSignal: AbortSignal | undefined;
+      const fetchMock = jest.fn(async (request: Request) => {
+        requestSignal = request.signal;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('data: {"message":"ready"}\n\n'));
+            },
+          }),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        );
+      });
+      const client = createApiClient({ fetch: fetchMock, timeoutMs: 10, userToken: 'token' });
+      const connection = await streamProjectLogs({
+        body: { resource: { type: 'function' } },
+        client,
+        path: { id: 'project-id' },
+      });
+
+      await expect(connection.stream.next()).resolves.toMatchObject({
+        value: { message: 'ready' },
+      });
+      await jest.advanceTimersByTimeAsync(10);
+
+      expect(requestSignal?.aborted).toBe(false);
+      await connection.stream.return(undefined);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

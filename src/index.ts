@@ -76,6 +76,7 @@ import {
   type StorageObject,
   type UploadPartResponse,
   type UploadSessionStatusResponse,
+  uploadStorageObject,
 } from './api/index';
 import { VolcanoApiError } from './errors';
 import type { ResolvedRequestOptions } from './generated/api/client/index.js';
@@ -347,28 +348,6 @@ function apiError(
   response?: Response,
 ): VolcanoApiError {
   return VolcanoApiError.from(error, fallback, request, response);
-}
-
-async function dispatchRequest(
-  fetchImplementation: typeof fetch,
-  input: RequestInfo | URL,
-): Promise<Response> {
-  const request = input instanceof Request ? input : new Request(input);
-  const init: RequestInit = {
-    credentials: request.credentials,
-    headers: request.headers,
-    method: request.method,
-    redirect: request.redirect,
-    signal: request.signal,
-  };
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    const contentType = request.headers.get('Content-Type') || '';
-    init.body =
-      contentType.includes('json') || contentType.startsWith('text/')
-        ? await request.clone().text()
-        : await request.clone().arrayBuffer();
-  }
-  return fetchImplementation(request.url, init);
 }
 
 /**
@@ -847,7 +826,7 @@ class VolcanoClientCore {
       accessToken: this.accessToken || undefined,
       anonKey: this.anonKey || undefined,
       baseUrl: this.apiUrl,
-      fetch: (request) => dispatchRequest(this.fetch, request),
+      fetch: this.fetch,
       headers: this.headers,
       serviceRoleKey: this.serviceRoleKey || undefined,
       timeoutMs: this.timeout,
@@ -2565,28 +2544,43 @@ class StorageFileApi implements StorageFileClient {
     }
 
     try {
-      const formData = new FormData();
       const FileConstructor = globalThis.File;
-      let file: File;
+      let file: Blob | File;
       if (FileConstructor && fileBody instanceof FileConstructor) {
-        file = fileBody;
-      } else if (fileBody instanceof Blob || fileBody instanceof ArrayBuffer) {
-        if (!FileConstructor) {
-          return errorResult('File is unavailable in this runtime');
-        }
-        file = new FileConstructor([fileBody], path.split('/').pop() || 'file', {
-          type: options.contentType ?? 'application/octet-stream',
+        file = options.contentType
+          ? new FileConstructor([fileBody], fileBody.name, { type: options.contentType })
+          : fileBody;
+      } else if (fileBody instanceof Blob) {
+        const contentType = options.contentType || fileBody.type || 'application/octet-stream';
+        file = FileConstructor
+          ? new FileConstructor([fileBody], path.split('/').pop() || 'file', {
+              type: contentType,
+            })
+          : fileBody;
+      } else if (fileBody instanceof ArrayBuffer) {
+        const blob = new Blob([fileBody], {
+          type: options.contentType || 'application/octet-stream',
         });
+        file = FileConstructor
+          ? new FileConstructor([blob], path.split('/').pop() || 'file', { type: blob.type })
+          : blob;
       } else {
         return errorResult('Invalid file body type. Expected File, Blob, or ArrayBuffer.');
       }
-      formData.append('file', file);
-      return this._storageRequest<StorageObject>(this._buildUrl(path), {
-        method: 'POST',
-        body: formData,
-        signal: options.signal,
-        timeoutMs: options.timeoutMs,
-      });
+      const result = await this.volcanoClient._callApi(
+        uploadStorageObject,
+        {
+          body: { file },
+          path: { bucketName: this.bucketName },
+          query: { path },
+          signal: options.signal,
+        },
+        'Upload failed',
+        options,
+      );
+      return result.ok
+        ? { data: result.data as StorageObject, error: null }
+        : { data: null, error: result.error };
     } catch (error) {
       return { data: null, error: VolcanoApiError.from(error, 'Upload failed') };
     }
@@ -2878,7 +2872,7 @@ class StorageFileApi implements StorageFileClient {
       return { data: null, error: authError };
     }
     const totalSize = fileBody.size;
-    const contentType = options.contentType ?? fileBody.type ?? 'application/octet-stream';
+    const contentType = options.contentType || fileBody.type || 'application/octet-stream';
     try {
       const sessionResult = await this.createUploadSession(path, {
         totalSize,
