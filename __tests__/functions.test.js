@@ -126,4 +126,86 @@ describe('DNS function invocation', () => {
     expect(result.error.message).toBe('No active session');
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('waits for an asynchronously persisted session before checking credentials', async () => {
+    const accessToken = tokenForProject('50000000-0000-0000-0000-000000000005');
+    const storedSession = {
+      access_token: accessToken,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      refresh_token: 'stored-refresh-token',
+      user: { id: 'stored-user' },
+    };
+    const storage = {
+      getItem: jest.fn(async () => JSON.stringify(storedSession)),
+      removeItem: jest.fn(),
+      setItem: jest.fn(),
+    };
+    global.fetch
+      .mockResolvedValueOnce(
+        jsonResponse({
+          cache_ttl_seconds: 300,
+          function_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }, 200, { 'X-Volcano-Version': 'v1' }));
+    const volcano = createVolcanoClient({
+      auth: { storage, storageKey: 'persisted-function-session' },
+      baseUrl: 'https://api.test.com',
+    });
+
+    const result = await volcano.functions.invoke('persisted-function');
+
+    expect(result.error).toBeNull();
+    expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+      `Bearer ${accessToken}`,
+    );
+  });
+
+  it('applies a per-call timeout while resolving a function name', async () => {
+    const accessToken = tokenForProject('60000000-0000-0000-0000-000000000006');
+    let requestSignal;
+    const fetchMock = jest.fn(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          requestSignal = init.signal;
+          if (requestSignal.aborted) {
+            reject(requestSignal.reason);
+            return;
+          }
+          requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const volcano = createVolcanoClient({
+      accessToken,
+      auth: { persistSession: false },
+      baseUrl: 'https://api.test.com',
+      fetch: fetchMock,
+    });
+    const caller = new AbortController();
+    const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
+
+    const pending = volcano.functions.invoke('slow-resolver', {
+      signal: caller.signal,
+      timeoutMs: 10,
+    });
+    for (
+      let attempt = 0;
+      attempt < 100 && !addAbortListener.mock.calls.some(([type]) => type === 'abort');
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+    expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
+      once: true,
+    });
+    const result = await pending;
+
+    expect(requestSignal).toBeDefined();
+    expect(requestSignal.aborted).toBe(true);
+    expect(requestSignal.reason).toMatchObject({ name: 'TimeoutError' });
+    expect(result.error).not.toBeNull();
+  });
 });

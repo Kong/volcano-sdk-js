@@ -212,6 +212,36 @@ describe('Storage', () => {
       expect(nextCursor).toBeNull();
     });
 
+    it('waits for an asynchronously persisted session before checking credentials', async () => {
+      const storedSession = {
+        access_token: 'persisted-access-token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        expires_in: 3600,
+        refresh_token: 'persisted-refresh-token',
+        user: { id: 'stored-user' },
+      };
+      const storage = {
+        getItem: jest.fn(async () => JSON.stringify(storedSession)),
+        removeItem: jest.fn(),
+        setItem: jest.fn(),
+      };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ objects: [], next_cursor: null }),
+      });
+      volcano = createVolcanoClient({
+        auth: { storage, storageKey: 'persisted-storage-session' },
+        baseUrl: 'https://api.test.com',
+      });
+
+      const result = await volcano.storage.from('files').list();
+
+      expect(result.error).toBeNull();
+      expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+        'Bearer persisted-access-token',
+      );
+    });
+
     it('should refresh token on 401 and retry', async () => {
       volcano = createVolcanoClient({
         accessToken: 'expired-token',
@@ -923,6 +953,56 @@ describe('Storage', () => {
 
       expect(data).toBeNull();
       expect(error.message).toBe('No active session. Please sign in first.');
+    });
+  });
+
+  describe('generated request controls', () => {
+    it.each(['list', 'move', 'copy'])('applies a per-call timeout to %s', async (operation) => {
+      let requestSignal;
+      const caller = new AbortController();
+      const addAbortListener = jest.spyOn(caller.signal, 'addEventListener');
+      const fetchMock = jest.fn(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            requestSignal = init.signal;
+            if (requestSignal.aborted) {
+              reject(requestSignal.reason);
+              return;
+            }
+            requestSignal.addEventListener('abort', () => reject(requestSignal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const timeoutClient = createVolcanoClient({
+        ...config,
+        auth: { persistSession: false },
+        fetch: fetchMock,
+      });
+      const bucket = timeoutClient.storage.from('files');
+      const pending =
+        operation === 'list'
+          ? bucket.list('', { signal: caller.signal, timeoutMs: 10 })
+          : bucket[operation]('from.txt', 'to.txt', {
+              signal: caller.signal,
+              timeoutMs: 10,
+            });
+      for (
+        let attempt = 0;
+        attempt < 100 && !addAbortListener.mock.calls.some(([type]) => type === 'abort');
+        attempt += 1
+      ) {
+        await Promise.resolve();
+      }
+      expect(addAbortListener).toHaveBeenCalledWith('abort', expect.any(Function), {
+        once: true,
+      });
+      const result = await pending;
+
+      expect(requestSignal).toBeDefined();
+      expect(requestSignal.aborted).toBe(true);
+      expect(requestSignal.reason).toMatchObject({ name: 'TimeoutError' });
+      expect(result.error).not.toBeNull();
     });
   });
 });

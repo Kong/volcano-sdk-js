@@ -1,5 +1,6 @@
 import { type Client, createClient } from '../generated/api/client';
 import type { Auth } from '../generated/api/core/auth.gen';
+import { trackResponseLifecycle } from '../response-lifecycle';
 import { normalizeBaseUrl } from '../url';
 import { CLIENT_INFO } from '../version';
 
@@ -91,14 +92,24 @@ const createTimeoutFetch = (fetchImplementation: typeof fetch, timeoutMs: number
       controller.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError'));
     }, timeoutMs);
 
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
+      clearTimeout(timeout);
+      request.signal.removeEventListener('abort', abortFromRequest);
+    };
+
     try {
       const response = await fetchImplementation(
         new Request(request, { signal: controller.signal }),
       );
-      return normalizeResponse(response as ResponseLike);
-    } finally {
-      clearTimeout(timeout);
-      request.signal.removeEventListener('abort', abortFromRequest);
+      return trackResponseLifecycle(normalizeResponse(response as ResponseLike), cleanup);
+    } catch (error) {
+      cleanup();
+      throw error;
     }
   };
 };

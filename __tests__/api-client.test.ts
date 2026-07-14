@@ -183,4 +183,83 @@ describe('createApiClient', () => {
 
     expect(result.error).toMatchObject({ message: 'Cancelled by caller', name: 'AbortError' });
   });
+
+  it('clears the timeout for responses without a body', async () => {
+    jest.useFakeTimers();
+    try {
+      let requestSignal: AbortSignal | undefined;
+      const fetchMock = jest.fn(async (request: Request) => {
+        requestSignal = request.signal;
+        return new Response(null, { headers: { 'Content-Length': '0' } });
+      });
+      const client = createApiClient({ fetch: fetchMock, timeoutMs: 10 });
+
+      await healthCheck({ client });
+      await jest.advanceTimersByTimeAsync(10);
+
+      expect(requestSignal?.aborted).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps the timeout active while consuming the response body', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = jest.fn(
+        async (request: Request) =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                request.signal.addEventListener(
+                  'abort',
+                  () => controller.error(request.signal.reason),
+                  { once: true },
+                );
+              },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+      );
+      const client = createApiClient({ fetch: fetchMock, timeoutMs: 10 });
+
+      const pending = healthCheck({ client });
+      await jest.advanceTimersByTimeAsync(10);
+      const result = await pending;
+
+      expect(result.error).toMatchObject({ name: 'TimeoutError' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('preserves caller cancellation while consuming the response body', async () => {
+    const fetchMock = jest.fn(
+      async (request: Request) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              request.signal.addEventListener(
+                'abort',
+                () => controller.error(request.signal.reason),
+                { once: true },
+              );
+            },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    );
+    const client = createApiClient({ fetch: fetchMock });
+    const controller = new AbortController();
+
+    const pending = healthCheck({ client, signal: controller.signal });
+    await Promise.resolve();
+    controller.abort(new DOMException('Cancelled while reading', 'AbortError'));
+    const result = await pending;
+
+    expect(result.error).toMatchObject({
+      message: 'Cancelled while reading',
+      name: 'AbortError',
+    });
+  });
 });

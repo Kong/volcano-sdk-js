@@ -80,6 +80,7 @@ import {
 import { VolcanoApiError } from './errors';
 import type { ResolvedRequestOptions } from './generated/api/client/index.js';
 import type { Auth } from './generated/api/core/auth.gen.js';
+import { discardResponse, trackResponseLifecycle } from './response-lifecycle';
 import type {
   AuthChangeEvent,
   AuthClient,
@@ -249,20 +250,93 @@ async function fetchWithTimeout(
     timeoutMs,
   );
 
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromRequest);
+  };
+
   try {
     const response = await fetchImplementation(url, {
       ...options,
       signal: controller.signal,
     });
-    return response;
+    return trackResponseLifecycle(response, cleanup);
   } catch (error) {
+    cleanup();
     if (controller.signal.aborted && !options.signal?.aborted) {
       throw VolcanoApiError.from(error, `Request timed out after ${timeoutMs}ms`);
     }
     throw error;
+  }
+}
+
+function controlledRequest(
+  signal?: AbortSignal,
+  timeoutMs?: number,
+): { cleanup: () => void; signal?: AbortSignal } {
+  if (timeoutMs === undefined) {
+    return {
+      signal,
+      cleanup() {
+        // No composed timeout or event listener to release.
+      },
+    };
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError('timeoutMs must be a positive finite number');
+  }
+
+  const controller = new AbortController();
+  const abortFromRequest = () => controller.abort(signal?.reason);
+  if (signal?.aborted) {
+    abortFromRequest();
+  } else {
+    signal?.addEventListener('abort', abortFromRequest, { once: true });
+  }
+  const timeout = setTimeout(
+    () =>
+      controller.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError')),
+    timeoutMs,
+  );
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', abortFromRequest);
+    },
+  };
+}
+
+async function waitForRequest<T>(promise: Promise<T>, controls: RequestControlOptions): Promise<T> {
+  const request = controlledRequest(controls.signal, controls.timeoutMs);
+  if (!request.signal) {
+    return promise;
+  }
+
+  const signal = request.signal;
+  let abort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason ?? new DOMException('Request aborted', 'AbortError'));
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+  });
+
+  try {
+    return await Promise.race([promise, aborted]);
   } finally {
-    clearTimeout(timeoutId);
-    options.signal?.removeEventListener('abort', abortFromRequest);
+    if (abort) {
+      signal.removeEventListener('abort', abort);
+    }
+    request.cleanup();
   }
 }
 
@@ -589,6 +663,7 @@ async function fetchWithAuthRetry(
   if (response.status === 401 && volcanoClient.accessToken) {
     const refreshed = await volcanoClient._refreshSessionSingleFlight(true);
     if (!refreshed.error) {
+      await discardResponse(response);
       response = await doFetch();
     }
   }
@@ -845,6 +920,7 @@ class VolcanoClientCore {
     operation: T,
     options: OperationOptions<T> = {} as OperationOptions<T>,
     fallback = 'Request failed',
+    controls: RequestControlOptions = {},
   ): Promise<NormalizedApiResult<OperationData<T>>> {
     await this._initializationPromise;
     this.api.setCredentials({
@@ -853,9 +929,18 @@ class VolcanoClientCore {
       serviceRoleKey: this.serviceRoleKey || undefined,
       userToken: this.userToken || undefined,
     });
-    const result = (await operation({ ...options, client: this.api } as Parameters<T>[0])) as
-      | ApiResultLike
-      | undefined;
+    const optionSignal = (options as OperationOptions<T> & { signal?: AbortSignal }).signal;
+    const request = controlledRequest(controls.signal ?? optionSignal, controls.timeoutMs);
+    let result: ApiResultLike | undefined;
+    try {
+      result = (await operation({
+        ...options,
+        client: this.api,
+        signal: request.signal,
+      } as Parameters<T>[0])) as ApiResultLike | undefined;
+    } finally {
+      request.cleanup();
+    }
     if (!result) {
       return {
         data: null,
@@ -913,13 +998,13 @@ class VolcanoClientCore {
 
     const refreshed = await this._refreshSessionSingleFlight(true);
     if (refreshed.error || !this.accessToken) {
-      await this._clearSession('SIGNED_OUT');
       return response;
     }
 
     const headers = new Headers(retryRequest?.headers ?? request.headers);
     headers.set('Authorization', `Bearer ${this.accessToken}`);
     const retryFetch = this.api.getConfig().fetch || this.fetch;
+    await discardResponse(response);
     return retryFetch(new Request(retryRequest ?? request, { headers }));
   }
 
@@ -962,6 +1047,15 @@ class VolcanoClientCore {
     return new StorageFileApi(this, bucketName);
   }
 
+  async _credentialError(
+    message = 'No active session or API credential.',
+  ): Promise<VolcanoApiError | null> {
+    await this._initializationPromise;
+    return this.accessToken || this.serviceRoleKey || this.anonKey
+      ? null
+      : VolcanoApiError.from({ code: 'missing_credentials', error: message });
+  }
+
   _getFunctionInvokeUrl(functionIdentifier: string): string {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionIdentifier);
     if (!hostLabel) {
@@ -1001,7 +1095,10 @@ class VolcanoClientCore {
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
-  async _resolveFunctionIdByName(functionName: string): Promise<string> {
+  async _resolveFunctionIdByName(
+    functionName: string,
+    controls: RequestControlOptions = {},
+  ): Promise<string> {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
@@ -1027,7 +1124,7 @@ class VolcanoClientCore {
 
     const inFlight = this._functionResolveState.inFlight.get(cacheKey);
     if (inFlight) {
-      return inFlight;
+      return waitForRequest(inFlight, controls);
     }
 
     const pending = (async () => {
@@ -1035,6 +1132,7 @@ class VolcanoClientCore {
         resolveFunctionForInvocation,
         { query: { name: hostLabel } },
         'Failed to resolve function',
+        controls,
       );
       if (!result.ok) {
         if (result.status === 404) {
@@ -1067,6 +1165,10 @@ class VolcanoClientCore {
       pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
       return resolvedId;
     })();
+
+    if (controls.signal || controls.timeoutMs !== undefined) {
+      return pending;
+    }
 
     this._functionResolveState.inFlight.set(cacheKey, pending);
     try {
@@ -1221,6 +1323,9 @@ class VolcanoClientCore {
 
   private async _refreshSession(clearOnFailure: boolean): Promise<SessionResponse> {
     if (!this.refreshToken) {
+      if (clearOnFailure) {
+        await this._clearSession('SIGNED_OUT');
+      }
       return {
         session: null,
         error: VolcanoApiError.from({ code: 'missing_refresh_token', error: 'No refresh token' }),
@@ -1263,6 +1368,9 @@ class VolcanoClientCore {
     this._authCallbacks.add(callback);
     this._initializationPromise
       .then(() => {
+        if (!this._authCallbacks.has(callback)) {
+          return;
+        }
         try {
           callback('INITIAL_SESSION', this.currentSession);
         } catch (error) {
@@ -1716,13 +1824,14 @@ class VolcanoClientCore {
       };
     }
     const credential = () => this.accessToken || this.serviceRoleKey || this.anonKey;
-    if (!credential()) {
+    const credentialError = await this._credentialError('No active session');
+    if (credentialError) {
       return {
         data: null,
         status: null,
         headers: {},
         version: null,
-        error: VolcanoApiError.from({ code: 'missing_credentials', error: 'No active session' }),
+        error: credentialError,
       };
     }
     if (!this.functionInvocationBase) {
@@ -1739,12 +1848,11 @@ class VolcanoClientCore {
       };
     }
 
-    await this._initializationPromise;
     await this._ensureFreshSession();
 
     let resolvedFunctionId: string;
     try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), options);
     } catch (error) {
       return {
         data: null,
@@ -1796,6 +1904,7 @@ class VolcanoClientCore {
         if (response.status === 401 && allowRefresh && this.accessToken && !versionHeader) {
           const refreshed = await this._refreshSessionSingleFlight(true);
           if (!refreshed.error) {
+            await discardResponse(response);
             return invokeOnce(url, false);
           }
         }
@@ -1844,7 +1953,7 @@ class VolcanoClientCore {
     if (result.status === 404) {
       this._clearFunctionResolveCache(functionName.trim());
       try {
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), options);
         invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
         result = await invokeOnce(invokeUrl, true);
       } catch (error) {
@@ -2235,12 +2344,9 @@ class QueryBuilder<Row extends RowShape>
   }
 
   async execute(): Promise<QueryResult<Row>> {
-    if (
-      !this.volcanoClient.accessToken &&
-      !this.volcanoClient.serviceRoleKey &&
-      !this.volcanoClient.anonKey
-    ) {
-      return errorResult('No active session or API credential.', { count: 0 });
+    const credentialError = await this.volcanoClient._credentialError();
+    if (credentialError) {
+      return { count: 0, data: null, error: credentialError };
     }
     const body: NonNullable<OperationOptions<typeof queryDatabaseSelect>['body']> = {
       table: this.table,
@@ -2296,12 +2402,9 @@ class MutationBuilder<Row extends RowShape>
   }
 
   async execute(): Promise<MutationResult<Row>> {
-    if (
-      !this.volcanoClient.accessToken &&
-      !this.volcanoClient.serviceRoleKey &&
-      !this.volcanoClient.anonKey
-    ) {
-      return errorResult('No active session or API credential.');
+    const credentialError = await this.volcanoClient._credentialError();
+    if (credentialError) {
+      return { data: null, error: credentialError };
     }
     if (this.operation !== 'insert' && this.filters.length === 0) {
       return errorResult(`${this.operation} requires at least one filter`);
@@ -2413,15 +2516,8 @@ class StorageFileApi implements StorageFileClient {
     private readonly bucketName: string,
   ) {}
 
-  private _checkAuth(): VolcanoApiError | null {
-    return this.volcanoClient.accessToken ||
-      this.volcanoClient.serviceRoleKey ||
-      this.volcanoClient.anonKey
-      ? null
-      : VolcanoApiError.from({
-          code: 'missing_credentials',
-          error: 'No active session. Please sign in first.',
-        });
+  private _checkAuth(): Promise<VolcanoApiError | null> {
+    return this.volcanoClient._credentialError('No active session. Please sign in first.');
   }
 
   private _buildUrl(path: string): string {
@@ -2463,7 +2559,7 @@ class StorageFileApi implements StorageFileClient {
     fileBody: ArrayBuffer | Blob | File,
     options: RequestControlOptions & { contentType?: string } = {},
   ): Promise<ErrorResponse<StorageObject>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2500,7 +2596,7 @@ class StorageFileApi implements StorageFileClient {
     path: string,
     options: RequestControlOptions & { range?: string } = {},
   ): Promise<ErrorResponse<Blob>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2517,15 +2613,20 @@ class StorageFileApi implements StorageFileClient {
     prefix = '',
     options: RequestControlOptions & { cursor?: string; limit?: number } = {},
   ): Promise<ErrorResponse<StorageObject[]> & { nextCursor: string | null }> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError, nextCursor: null };
     }
-    const result = await this.volcanoClient._callApi(listStorageObjects, {
-      path: { bucketName: this.bucketName },
-      query: { cursor: options.cursor, limit: options.limit, prefix: prefix || undefined },
-      signal: options.signal,
-    });
+    const result = await this.volcanoClient._callApi(
+      listStorageObjects,
+      {
+        path: { bucketName: this.bucketName },
+        query: { cursor: options.cursor, limit: options.limit, prefix: prefix || undefined },
+        signal: options.signal,
+      },
+      'Failed to list storage objects',
+      options,
+    );
     if (!result.ok) {
       return { data: null, error: result.error, nextCursor: null };
     }
@@ -2540,7 +2641,7 @@ class StorageFileApi implements StorageFileClient {
     paths: string | string[],
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<{ deleted: string[] }>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2576,15 +2677,20 @@ class StorageFileApi implements StorageFileClient {
     toPath: string,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<StorageObject>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
-    const result = await this.volcanoClient._callApi(moveStorageObject, {
-      body: { from: fromPath, to: toPath },
-      path: { bucketName: this.bucketName },
-      signal: options.signal,
-    });
+    const result = await this.volcanoClient._callApi(
+      moveStorageObject,
+      {
+        body: { from: fromPath, to: toPath },
+        path: { bucketName: this.bucketName },
+        signal: options.signal,
+      },
+      'Failed to move storage object',
+      options,
+    );
     return result.ok
       ? { data: result.data as StorageObject, error: null }
       : { data: null, error: result.error };
@@ -2595,15 +2701,20 @@ class StorageFileApi implements StorageFileClient {
     toPath: string,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<StorageObject>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
-    const result = await this.volcanoClient._callApi(copyStorageObject, {
-      body: { from: fromPath, to: toPath },
-      path: { bucketName: this.bucketName },
-      signal: options.signal,
-    });
+    const result = await this.volcanoClient._callApi(
+      copyStorageObject,
+      {
+        body: { from: fromPath, to: toPath },
+        path: { bucketName: this.bucketName },
+        signal: options.signal,
+      },
+      'Failed to copy storage object',
+      options,
+    );
     return result.ok
       ? { data: result.data as StorageObject, error: null }
       : { data: null, error: result.error };
@@ -2630,7 +2741,7 @@ class StorageFileApi implements StorageFileClient {
     isPublic: boolean,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<StorageObject>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2651,7 +2762,7 @@ class StorageFileApi implements StorageFileClient {
       totalSize: number;
     },
   ): Promise<ErrorResponse<CreateUploadSessionResponse>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2679,7 +2790,7 @@ class StorageFileApi implements StorageFileClient {
     partData: ArrayBuffer | Blob,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<UploadPartResponse>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2701,7 +2812,7 @@ class StorageFileApi implements StorageFileClient {
     sessionId: string,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<CompleteUploadSessionResponse>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2723,7 +2834,7 @@ class StorageFileApi implements StorageFileClient {
     sessionId: string,
     options: RequestControlOptions = {},
   ): Promise<ErrorResponse<UploadSessionStatusResponse>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -2740,7 +2851,7 @@ class StorageFileApi implements StorageFileClient {
     sessionId: string,
     options: RequestControlOptions = {},
   ): Promise<{ error: VolcanoApiError | null }> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { error: authError };
     }
@@ -2762,7 +2873,7 @@ class StorageFileApi implements StorageFileClient {
       partSize?: number;
     } = {},
   ): Promise<ErrorResponse<StorageObject>> {
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { data: null, error: authError };
     }

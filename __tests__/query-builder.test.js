@@ -86,6 +86,33 @@ describe('database query builder', () => {
     });
   });
 
+  it('waits for an asynchronously persisted session before checking credentials', async () => {
+    const storedSession = {
+      access_token: 'persisted-access-token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      refresh_token: 'persisted-refresh-token',
+      user: { id: 'stored-user' },
+    };
+    const storage = {
+      getItem: jest.fn(async () => JSON.stringify(storedSession)),
+      removeItem: jest.fn(),
+      setItem: jest.fn(),
+    };
+    global.fetch.mockResolvedValueOnce(jsonResponse({ count: 0, data: [] }));
+    const volcano = createVolcanoClient({
+      auth: { storage, storageKey: 'persisted-database-session' },
+      baseUrl: 'https://api.test.com',
+    });
+
+    const result = await volcano.database('test_db').from('posts').select();
+
+    expect(result.error).toBeNull();
+    expect(new Headers(global.fetch.mock.calls[0][1].headers).get('Authorization')).toBe(
+      'Bearer persisted-access-token',
+    );
+  });
+
   it('refreshes an expired access token and retries once', async () => {
     const volcano = createVolcanoClient({
       accessToken: 'expired-token',

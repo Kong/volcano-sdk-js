@@ -139,6 +139,29 @@ describe('createVolcanoClient auth and session behavior', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('does not emit INITIAL_SESSION after an immediate unsubscribe', async () => {
+    let resolveStoredSession;
+    const storage = {
+      getItem: jest.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveStoredSession = resolve;
+          }),
+      ),
+      removeItem: jest.fn(),
+      setItem: jest.fn(),
+    };
+    const volcano = createVolcanoClient({ auth: { storage } });
+    const callback = jest.fn();
+
+    const unsubscribe = volcano.auth.onAuthStateChange(callback);
+    unsubscribe();
+    resolveStoredSession(null);
+    await volcano.auth.getSession();
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it('does not read or write session storage when persistence is disabled', async () => {
     const storage = {
       getItem: jest.fn(),

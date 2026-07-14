@@ -94,6 +94,8 @@ describe('createVolcanoClient generated API refresh', () => {
       fetch: fetchMock,
       refreshToken: 'invalid-refresh-token',
     });
+    const events: string[] = [];
+    volcano.auth.onAuthStateChange((event) => events.push(event));
 
     await volcano.auth.getUser();
     const auth = volcano.api.getConfig().auth;
@@ -108,6 +110,7 @@ describe('createVolcanoClient generated API refresh', () => {
     const lastCall = fetchMock.mock.calls.at(-1);
     const lastRequest = lastCall ? new Request(lastCall[0], lastCall[1]) : undefined;
     expect(lastRequest?.headers.get('Authorization')).toBeNull();
+    expect(events.filter((event) => event === 'SIGNED_OUT')).toHaveLength(1);
   });
 
   it('does not refresh a multi-scheme operation using a service-role credential', async () => {
