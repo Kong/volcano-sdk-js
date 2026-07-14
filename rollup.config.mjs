@@ -1,3 +1,6 @@
+import typescript from '@rollup/plugin-typescript';
+import { dts } from 'rollup-plugin-dts';
+
 export default [
   // Main SDK bundle
   {
@@ -21,6 +24,45 @@ export default [
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
+      },
+    ],
+  },
+  // Generated OpenAPI client
+  {
+    input: 'src/api/index.ts',
+    plugins: [
+      typescript({
+        compilerOptions: {
+          declaration: false,
+          emitDeclarationOnly: false,
+          noEmit: false,
+        },
+        tsconfig: './tsconfig.json',
+      }),
+    ],
+    output: [
+      {
+        file: 'dist/api/index.js',
+        format: 'cjs',
+        exports: 'named',
+      },
+      {
+        file: 'dist/api/index.mjs',
+        format: 'es',
+      },
+    ],
+  },
+  {
+    input: 'src/api/index.ts',
+    plugins: [dts({ tsconfig: './tsconfig.json' })],
+    output: [
+      {
+        file: 'dist/api/index.d.ts',
+        format: 'es',
+      },
+      {
+        file: 'dist/api/index.d.mts',
+        format: 'es',
       },
     ],
   },
