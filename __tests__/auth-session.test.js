@@ -184,6 +184,60 @@ describe('createVolcanoClient auth and session behavior', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a successful sign-in when session persistence fails', async () => {
+    const persistenceError = new Error('storage quota exceeded');
+    const storage = {
+      getItem: jest.fn(),
+      removeItem: jest.fn(),
+      setItem: jest.fn().mockRejectedValue(persistenceError),
+    };
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    global.fetch.mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'access-token',
+        expires_in: 3600,
+        refresh_token: 'refresh-token',
+        user: { id: 'user-id' },
+      }),
+    );
+    const volcano = createVolcanoClient({ anonKey: 'anon-key', auth: { storage } });
+
+    const result = await volcano.auth.signIn({ email: 'user@example.com', password: 'secret' });
+
+    expect(result.error).toBeNull();
+    expect(result.session?.access_token).toBe('access-token');
+    expect(volcano.auth.user()).toEqual({ id: 'user-id' });
+    expect(warning).toHaveBeenCalledWith(
+      '[Volcano] Failed to persist the auth session:',
+      persistenceError,
+    );
+    warning.mockRestore();
+  });
+
+  it('clears the in-memory session when persisted-session removal fails', async () => {
+    const removalError = new Error('storage unavailable');
+    const storage = {
+      getItem: jest.fn(),
+      removeItem: jest.fn().mockRejectedValue(removalError),
+      setItem: jest.fn(),
+    };
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const volcano = createVolcanoClient({
+      accessToken: 'access-token',
+      auth: { storage },
+    });
+
+    const result = await volcano.auth.signOut();
+
+    expect(result.error).toBeNull();
+    expect(volcano.auth.user()).toBeNull();
+    expect(warning).toHaveBeenCalledWith(
+      '[Volcano] Failed to remove the persisted auth session:',
+      removalError,
+    );
+    warning.mockRestore();
+  });
+
   it('does not emit INITIAL_SESSION after an immediate unsubscribe', async () => {
     let resolveStoredSession;
     const storage = {

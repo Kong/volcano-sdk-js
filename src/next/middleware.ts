@@ -32,8 +32,13 @@ import type { MiddlewareRequest, ServerClient, ServerClientConfig } from './midd
 
 export type * from './middleware-types.js';
 
-function toError(error: unknown, fallback: string): VolcanoApiError {
-  return VolcanoApiError.from(error, fallback);
+function toError(
+  error: unknown,
+  fallback: string,
+  request?: Request,
+  response?: Response,
+): VolcanoApiError {
+  return VolcanoApiError.from(error, fallback, request, response);
 }
 
 /**
@@ -95,7 +100,10 @@ export function createServerClient(config: ServerClientConfig): ServerClient {
       api.setCredentials({ accessToken });
       const result = await authGetUser({ client: api });
       if (result.error !== undefined) {
-        return { user: null, error: toError(result.error, 'Auth failed') };
+        return {
+          user: null,
+          error: toError(result.error, 'Auth failed', result.request, result.response),
+        };
       }
       return { user: result.data?.user || null, error: null };
     },
@@ -122,7 +130,7 @@ export function createServerClient(config: ServerClientConfig): ServerClient {
         return {
           accessToken: null,
           refreshToken: null,
-          error: toError(result.error, 'Refresh failed'),
+          error: toError(result.error, 'Refresh failed', result.request, result.response),
         };
       }
       return {

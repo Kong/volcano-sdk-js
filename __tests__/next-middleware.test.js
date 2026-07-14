@@ -23,6 +23,23 @@ describe('Next.js middleware helpers', () => {
     expect(user).toEqual({ id: 'user-123', email: 'test@example.com' });
   });
 
+  it('preserves HTTP metadata when getUser fails', async () => {
+    global.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 'unauthorized', error: 'expired' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      }),
+    );
+
+    const client = createServerClient(config);
+    const { error, user } = await client.getUser('expired-token');
+
+    expect(user).toBeNull();
+    expect(error).toMatchObject({ code: 'unauthorized', status: 401 });
+    expect(error.request.url).toBe('https://api.test.com/auth/user');
+    expect(error.response.status).toBe(401);
+  });
+
   it('withAuth returns user when Authorization header is present', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
@@ -65,5 +82,23 @@ describe('Next.js middleware helpers', () => {
     const request = global.fetch.mock.calls[0][0];
     expect(request.url).toBe('https://api.test.com/auth/refresh');
     expect(request.headers.get('Authorization')).toBe('Bearer ak-test-anon-key');
+  });
+
+  it('preserves HTTP metadata when refresh fails', async () => {
+    global.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 'invalid_refresh_token', error: 'invalid token' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      }),
+    );
+
+    const client = createServerClient(config);
+    const result = await client.refreshToken('invalid-token');
+
+    expect(result.accessToken).toBeNull();
+    expect(result.refreshToken).toBeNull();
+    expect(result.error).toMatchObject({ code: 'invalid_refresh_token', status: 401 });
+    expect(result.error.request.url).toBe('https://api.test.com/auth/refresh');
+    expect(result.error.response.status).toBe(401);
   });
 });

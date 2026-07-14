@@ -1999,7 +1999,7 @@ class VolcanoClientCore {
       }
       const parsed = JSON.parse(stored) as unknown;
       if (!this._isValidSession(parsed)) {
-        await this.storageAdapter.removeItem(this.storageKey);
+        await this._removePersistedSession();
         return;
       }
       this._adoptSession(parsed);
@@ -2047,7 +2047,22 @@ class VolcanoClientCore {
     if (!this.persistSession || !this.currentSession) {
       return;
     }
-    await this.storageAdapter.setItem(this.storageKey, JSON.stringify(this.currentSession));
+    try {
+      await this.storageAdapter.setItem(this.storageKey, JSON.stringify(this.currentSession));
+    } catch (error) {
+      console.warn('[Volcano] Failed to persist the auth session:', error);
+    }
+  }
+
+  private async _removePersistedSession(): Promise<void> {
+    if (!this.persistSession) {
+      return;
+    }
+    try {
+      await this.storageAdapter.removeItem(this.storageKey);
+    } catch (error) {
+      console.warn('[Volcano] Failed to remove the persisted auth session:', error);
+    }
   }
 
   private async _setSession(data: AuthTokenResponse, event: AuthChangeEvent): Promise<Session> {
@@ -2065,9 +2080,7 @@ class VolcanoClientCore {
     this.currentUser = null;
     this.api.setCredentials({ accessToken: undefined });
 
-    if (this.persistSession) {
-      await this.storageAdapter.removeItem(this.storageKey);
-    }
+    await this._removePersistedSession();
 
     this._notifyAuthCallbacks(event, null);
   }
