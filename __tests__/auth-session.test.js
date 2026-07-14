@@ -436,6 +436,7 @@ describe('createVolcanoClient auth and session behavior', () => {
       'SIGNED_IN',
       expect.objectContaining({ user: result.user }),
     );
+    expect(callback.mock.calls.filter(([event]) => event === 'SIGNED_IN')).toHaveLength(1);
   });
 
   it.each(['getUser', 'initialize'])('adopts a redirect that arrives before %s', async (method) => {

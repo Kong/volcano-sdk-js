@@ -1503,12 +1503,10 @@ describe('SDK E2E Integration Tests', () => {
   describe('Functions', () => {
     let originalFetch;
 
+    const requestUrl = (input) => (input instanceof Request ? input.url : String(input));
+
     beforeEach(() => {
       originalFetch = global.fetch;
-    });
-
-    afterEach(() => {
-      global.fetch = originalFetch;
     });
 
     test('invoke - requires authentication', async () => {
@@ -1570,8 +1568,18 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - negative resolver cache avoids repeated lookups for missing function', async () => {
+      const missingName = `missing-${Date.now()}`;
+      let resolveCalls = 0;
+      const resolvePath = `/functions/resolve?name=${encodeURIComponent(missingName)}`;
+      const trackedFetch = async (input, options) => {
+        if (requestUrl(input) === `${API_URL}${resolvePath}`) {
+          resolveCalls += 1;
+        }
+        return originalFetch(input, options);
+      };
       const cacheVolcano = createVolcanoClient({
         baseUrl: API_URL,
+        fetch: trackedFetch,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1581,17 +1589,6 @@ describe('SDK E2E Integration Tests', () => {
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
-
-      const missingName = `missing-${Date.now()}`;
-      let resolveCalls = 0;
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(missingName)}`;
-      global.fetch = async (url, options) => {
-        const requestUrl = String(url);
-        if (requestUrl === `${API_URL}${resolvePath}`) {
-          resolveCalls += 1;
-        }
-        return originalFetch(url, options);
-      };
 
       const first = await cacheVolcano.functions.invoke(missingName, {});
       const second = await cacheVolcano.functions.invoke(missingName, {});
@@ -1610,8 +1607,30 @@ describe('SDK E2E Integration Tests', () => {
         functionName,
       );
 
+      let resolveCalls = 0;
+      let invokeCalls = 0;
+      const invokeUrls = [];
+      const resolvePath = `/functions/resolve?name=${encodeURIComponent(functionName)}`;
+      const trackedFetch = async (input, options) => {
+        const url = requestUrl(input);
+        if (url === `${API_URL}${resolvePath}`) {
+          resolveCalls += 1;
+          return originalFetch(input, options);
+        }
+        if (url.startsWith(`${API_URL}/functions/`) && url.endsWith('/invoke')) {
+          invokeCalls += 1;
+          invokeUrls.push(url);
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return originalFetch(input, options);
+      };
+
       const instanceA = createVolcanoClient({
         baseUrl: API_URL,
+        fetch: trackedFetch,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1623,32 +1642,11 @@ describe('SDK E2E Integration Tests', () => {
 
       const instanceB = createVolcanoClient({
         baseUrl: API_URL,
+        fetch: trackedFetch,
         projectId: project.id,
         anonKey: anonKey,
         accessToken: instanceASignup.session.access_token,
       });
-
-      let resolveCalls = 0;
-      let invokeCalls = 0;
-      const invokeUrls = [];
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(functionName)}`;
-
-      global.fetch = async (url, options) => {
-        const requestUrl = String(url);
-        if (requestUrl === `${API_URL}${resolvePath}`) {
-          resolveCalls += 1;
-          return originalFetch(url, options);
-        }
-        if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
-          invokeCalls += 1;
-          invokeUrls.push(requestUrl);
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        return originalFetch(url, options);
-      };
 
       const first = await instanceA.functions.invoke(functionName, { body: { call: 1 } });
       const second = await instanceB.functions.invoke(functionName, { body: { call: 2 } });
@@ -1703,8 +1701,28 @@ describe('SDK E2E Integration Tests', () => {
         sharedFunctionName,
       );
 
+      let resolveCalls = 0;
+      const invokeUrls = [];
+      const resolvePath = `/functions/resolve?name=${encodeURIComponent(sharedFunctionName)}`;
+      const trackedFetch = async (input, options) => {
+        const url = requestUrl(input);
+        if (url === `${API_URL}${resolvePath}`) {
+          resolveCalls += 1;
+          return originalFetch(input, options);
+        }
+        if (url.startsWith(`${API_URL}/functions/`) && url.endsWith('/invoke')) {
+          invokeUrls.push(url);
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return originalFetch(input, options);
+      };
+
       const sdkA = createVolcanoClient({
         baseUrl: API_URL,
+        fetch: trackedFetch,
         projectId: project.id,
         anonKey: anonKey,
       });
@@ -1716,6 +1734,7 @@ describe('SDK E2E Integration Tests', () => {
 
       const sdkB = createVolcanoClient({
         baseUrl: API_URL,
+        fetch: trackedFetch,
         projectId: projectB.id,
         anonKey: projectBAnonKey,
       });
@@ -1724,26 +1743,6 @@ describe('SDK E2E Integration Tests', () => {
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
-
-      let resolveCalls = 0;
-      const invokeUrls = [];
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(sharedFunctionName)}`;
-
-      global.fetch = async (url, options) => {
-        const requestUrl = String(url);
-        if (requestUrl === `${API_URL}${resolvePath}`) {
-          resolveCalls += 1;
-          return originalFetch(url, options);
-        }
-        if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
-          invokeUrls.push(requestUrl);
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        return originalFetch(url, options);
-      };
 
       const invokeA = await sdkA.functions.invoke(sharedFunctionName, {});
       const invokeB = await sdkB.functions.invoke(sharedFunctionName, {});
@@ -1764,28 +1763,16 @@ describe('SDK E2E Integration Tests', () => {
       const functionName = `cache-retry-${Date.now()}`;
       await createFunctionViaPlatform(project.id, platformToken, functionName);
 
-      const retryVolcano = createVolcanoClient({
-        baseUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
-      });
-      await retryVolcano.auth.signUp({
-        email: `invoke-retry-${Date.now()}@example.com`,
-        password: 'SecureP@ssw0rd123!',
-        signInWhenAllowed: true,
-      });
-
       let resolveCalls = 0;
       let invokeCalls = 0;
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(functionName)}`;
-
-      global.fetch = async (url, options) => {
-        const requestUrl = String(url);
-        if (requestUrl === `${API_URL}${resolvePath}`) {
+      const trackedFetch = async (input, options) => {
+        const url = requestUrl(input);
+        if (url === `${API_URL}${resolvePath}`) {
           resolveCalls += 1;
-          return originalFetch(url, options);
+          return originalFetch(input, options);
         }
-        if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
+        if (url.startsWith(`${API_URL}/functions/`) && url.endsWith('/invoke')) {
           invokeCalls += 1;
           if (invokeCalls === 1) {
             return new Response(JSON.stringify({ error: 'function not found' }), {
@@ -1798,8 +1785,20 @@ describe('SDK E2E Integration Tests', () => {
             headers: { 'Content-Type': 'application/json' },
           });
         }
-        return originalFetch(url, options);
+        return originalFetch(input, options);
       };
+
+      const retryVolcano = createVolcanoClient({
+        baseUrl: API_URL,
+        fetch: trackedFetch,
+        projectId: project.id,
+        anonKey: anonKey,
+      });
+      await retryVolcano.auth.signUp({
+        email: `invoke-retry-${Date.now()}@example.com`,
+        password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
+      });
 
       const result = await retryVolcano.functions.invoke(functionName, {
         body: { attempt: 'retry' },
@@ -1945,15 +1944,15 @@ describe('SDK E2E Integration Tests', () => {
       console.log('  [ok] Database name set');
     });
 
-    test('from() - creates QueryBuilder', () => {
-      const qb = volcano.database('test_db').from('users');
+    test('from() - creates a table client', () => {
+      const table = volcano.database('test_db').from('users');
 
-      expect(qb).toBeDefined();
-      expect(qb.table).toBe('users');
-      expect(typeof qb.select).toBe('function');
-      expect(typeof qb.eq).toBe('function');
-      expect(typeof qb.execute).toBe('function');
-      console.log('  [ok] QueryBuilder created');
+      expect(table).toBeDefined();
+      expect(table.table).toBe('users');
+      expect(typeof table.select).toBe('function');
+      expect(typeof table.insert).toBe('function');
+      expect(typeof table.update).toBe('function');
+      console.log('  [ok] Table client created');
     });
 
     test('from().select() - chains correctly', () => {
@@ -1967,6 +1966,7 @@ describe('SDK E2E Integration Tests', () => {
       const qb = volcano
         .database('test_db')
         .from('users')
+        .select('*')
         .eq('status', 'active')
         .neq('role', 'admin')
         .gt('age', 18)
@@ -1995,7 +1995,7 @@ describe('SDK E2E Integration Tests', () => {
         anonKey: anonKey,
       });
 
-      const result = await freshVolcano.database('test_db').from('users').execute();
+      const result = await freshVolcano.database('test_db').from('users').select('*').execute();
 
       expect(result.error).toBeDefined();
       expect(result.error.message).toContain('No active session');

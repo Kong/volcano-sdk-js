@@ -2261,9 +2261,6 @@ class VolcanoClientCore {
     const generation = this._adoptSession(session);
     this._pendingRedirectSessionGeneration = generation;
     await this._persistSession(session);
-    if (generation === this._authGeneration) {
-      this._notifyAuthCallbacks('SIGNED_IN', session);
-    }
     return true;
   }
 
