@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { authGetUser, listStorageObjects } from '../src/api';
+import { authGetUser, listStorageObjects, uploadStorageObject } from '../src/api';
 import { createVolcanoClient } from '../src/index.ts';
 
 const jsonResponse = (status: number, body: unknown) =>
@@ -18,6 +18,26 @@ const deferred = <T>() => {
 };
 
 describe('createVolcanoClient generated API refresh', () => {
+  it('does not retain a replay copy for service-role uploads', async () => {
+    const cloneSpy = jest.spyOn(Request.prototype, 'clone');
+    const fetchMock = jest.fn(async () => jsonResponse(200, { path: 'nested/file.txt' }));
+    const volcano = createVolcanoClient({ fetch: fetchMock, serviceRoleKey: 'service-role-key' });
+
+    try {
+      const result = await uploadStorageObject({
+        body: { file: new Blob(['upload contents'], { type: 'text/plain' }) },
+        client: volcano.api,
+        path: { bucketName: 'documents' },
+        query: { path: 'nested/file.txt' },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(cloneSpy).not.toHaveBeenCalled();
+    } finally {
+      cloneSpy.mockRestore();
+    }
+  });
+
   it('shares concurrent public refresh calls', async () => {
     const refreshResponse = deferred<Response>();
     const refreshStarted = deferred<void>();

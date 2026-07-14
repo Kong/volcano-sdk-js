@@ -421,6 +421,8 @@ describe('createVolcanoClient auth and session behavior', () => {
       anonKey: 'anon-key',
       baseUrl: 'https://api.test.com',
     });
+    const callback = jest.fn();
+    volcano.auth.onAuthStateChange(callback);
     const result = await volcano.auth.getUser();
 
     expect(result.user.id).toBe('redirect-user');
@@ -430,6 +432,29 @@ describe('createVolcanoClient auth and session behavior', () => {
       refresh_token: 'redirect-refresh',
     });
     expect(requestFromFetchCall().headers.get('Authorization')).toBe('Bearer redirect-access');
+    expect(callback).toHaveBeenCalledWith(
+      'SIGNED_IN',
+      expect.objectContaining({ user: result.user }),
+    );
+  });
+
+  it.each(['getUser', 'initialize'])('adopts a redirect that arrives before %s', async (method) => {
+    const volcano = createVolcanoClient({
+      anonKey: 'anon-key',
+      baseUrl: 'https://api.test.com',
+    });
+    await volcano.auth.getSession();
+    window.sessionStorage.setItem('volcano-api.test.com-auth-token-oauth-state', 'late-state');
+    window.location.hash = '#access_token=late-access&refresh_token=late-refresh&state=late-state';
+    global.fetch.mockResolvedValueOnce(
+      jsonResponse({ user: { email: 'late@example.com', id: 'late-user' } }),
+    );
+
+    const result = await volcano.auth[method]();
+
+    expect(result.user).toEqual({ email: 'late@example.com', id: 'late-user' });
+    expect(window.location.hash).toBe('');
+    expect(requestFromFetchCall().headers.get('Authorization')).toBe('Bearer late-access');
   });
 
   it('rejects an unsolicited hosted redirect session', () => {

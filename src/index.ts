@@ -785,6 +785,7 @@ class VolcanoClientCore {
   private readonly _authCallbacks = new Set<AuthCallback>();
   private readonly _functionResolveState: FunctionResolveState;
   private readonly _initializationPromise: Promise<void>;
+  private _pendingRedirectSessionGeneration: number | null = null;
   private readonly _retryRequests = new WeakMap<Request, Request>();
   private _refreshState: {
     clearOnFailure: boolean;
@@ -963,7 +964,9 @@ class VolcanoClientCore {
       headers.set('Authorization', `Bearer ${this.accessToken}`);
       prepared = new Request(request, { headers });
     }
-    this._retryRequests.set(prepared, prepared.clone());
+    if (usesAuthUserAccessToken && this.accessToken && this.autoRefreshToken && prepared.body) {
+      this._retryRequests.set(prepared, prepared.clone());
+    }
     return prepared;
   }
 
@@ -1289,6 +1292,8 @@ class VolcanoClientCore {
   }
 
   async getUser(): Promise<UserResponse> {
+    await this._initializationPromise;
+    await this._adoptSessionFromUrl();
     const result = await this._callApi(authGetUser, {}, 'Failed to get user');
 
     if (!result.ok) {
@@ -1297,8 +1302,17 @@ class VolcanoClientCore {
 
     this.currentUser = result.data.user ?? null;
     if (this.currentSession) {
+      const generation = this._authGeneration;
       this.currentSession = { ...this.currentSession, user: this.currentUser };
-      await this._persistSession();
+      const session = this.currentSession;
+      await this._persistSession(session);
+      if (
+        generation === this._authGeneration &&
+        this._pendingRedirectSessionGeneration === generation
+      ) {
+        this._pendingRedirectSessionGeneration = null;
+        this._notifyAuthCallbacks('SIGNED_IN', session);
+      }
     }
     return { user: this.currentUser, error: null };
   }
@@ -2011,12 +2025,10 @@ class VolcanoClientCore {
       return;
     }
 
-    const redirectSession = this._consumeSessionFromUrl();
-    if (redirectSession) {
-      this._adoptSession(redirectSession);
-      await this._persistSession();
-      this._notifyAuthCallbacks('SIGNED_IN', redirectSession);
-      return;
+    if (this._hasSessionInUrl()) {
+      if (await this._adoptSessionFromUrl()) {
+        return;
+      }
     }
 
     if (!this.persistSession) {
@@ -2109,6 +2121,7 @@ class VolcanoClientCore {
     data: AuthTokenResponse,
     event: AuthChangeEvent,
   ): Promise<{ generation: number; session: Session }> {
+    this._pendingRedirectSessionGeneration = null;
     const session = this._sessionFromTokenResponse(data);
     const generation = this._adoptSession(session);
     await this._persistSession(session);
@@ -2119,6 +2132,7 @@ class VolcanoClientCore {
   }
 
   private async _clearSession(event: AuthChangeEvent): Promise<void> {
+    this._pendingRedirectSessionGeneration = null;
     this._authGeneration += 1;
     const generation = this._authGeneration;
     this.accessToken = null;
@@ -2238,6 +2252,21 @@ class VolcanoClientCore {
     };
   }
 
+  private async _adoptSessionFromUrl(): Promise<boolean> {
+    const session = this._consumeSessionFromUrl();
+    if (!session) {
+      return false;
+    }
+
+    const generation = this._adoptSession(session);
+    this._pendingRedirectSessionGeneration = generation;
+    await this._persistSession(session);
+    if (generation === this._authGeneration) {
+      this._notifyAuthCallbacks('SIGNED_IN', session);
+    }
+    return true;
+  }
+
   /**
    * Remove the managed-auth tokens from the URL fragment so they do not linger
    * in history, referrers, or bookmarks. Only strips when the fragment is
@@ -2317,6 +2346,7 @@ class VolcanoClientCore {
 
   async initialize(): Promise<UserResponse> {
     await this._initializationPromise;
+    await this._adoptSessionFromUrl();
     if (this.accessToken) {
       const { user, error } = await this.getUser();
       return { user, error };
