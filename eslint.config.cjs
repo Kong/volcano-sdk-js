@@ -1,5 +1,6 @@
 const js = require('@eslint/js');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
+const tsParser = require('@typescript-eslint/parser');
 const prettierConfig = require('eslint-config-prettier/flat');
 const importX = require('eslint-plugin-import-x');
 const jest = require('eslint-plugin-jest');
@@ -21,11 +22,12 @@ const sonarPlugin = sonarjs.default || sonarjs;
 const unicorn = unicornModule.default || unicornModule;
 
 const jsFiles = ['**/*.{js,cjs,mjs}'];
+const typescriptFiles = ['**/*.ts'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.js'];
 const integrationTestFiles = ['__tests__/integration/**/*.js'];
-const sdkFiles = ['src/**/*.js'];
-const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
+const sdkFiles = ['src/**/*.{js,ts}'];
+const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs', 'openapi-ts.config.ts'];
 const rootConfigFiles = ['*.config.js', '*.config.cjs', 'eslint.config.cjs'];
 const exampleFiles = ['examples/nextjs-notes-app/src/**/*.js'];
 const exampleConfigFiles = ['examples/nextjs-notes-app/*.config.js'];
@@ -37,7 +39,7 @@ const strictFiles = [
   ...exampleConfigFiles,
   ...exampleFiles,
 ];
-const lintedFiles = [...jsFiles, ...declarationFiles];
+const lintedFiles = [...jsFiles, ...typescriptFiles];
 
 const asArray = (config) => (Array.isArray(config) ? config : [config]);
 const scopeConfig = (config, files) => asArray(config).map((item) => ({ ...item, files }));
@@ -99,6 +101,12 @@ module.exports = [
     },
   },
   {
+    files: typescriptFiles,
+    languageOptions: {
+      parser: tsParser,
+    },
+  },
+  {
     files: commonjsFiles,
     languageOptions: {
       sourceType: 'commonjs',
@@ -115,8 +123,8 @@ module.exports = [
     'jest/expect-expect': 'off',
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
-  ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
-  ...scopeConfig(tsPlugin.configs['flat/stylistic'], declarationFiles),
+  ...scopeConfig(tsPlugin.configs['flat/recommended'], typescriptFiles),
+  ...scopeConfig(tsPlugin.configs['flat/stylistic'], typescriptFiles),
   prettierConfig,
 
   {
@@ -232,11 +240,24 @@ module.exports = [
     },
   },
   {
+    files: typescriptFiles,
+    rules: {
+      'no-unused-vars': 'off',
+    },
+  },
+  {
     files: declarationFiles,
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['test/types/**/*.ts'],
+    rules: {
+      '@typescript-eslint/consistent-type-definitions': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_' }],
     },
   },
 ];
