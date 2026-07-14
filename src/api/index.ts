@@ -23,6 +23,34 @@ export type ApiClient = Client & {
 const DEFAULT_API_URL = 'https://api.volcano.dev';
 const DEFAULT_TIMEOUT_MS = 60_000;
 
+type ResponseLike = Response & {
+  json?: () => Promise<unknown>;
+};
+
+const normalizeResponse = (response: ResponseLike): Response => {
+  if (typeof response.text === 'function' && typeof response.headers?.get === 'function') {
+    return response;
+  }
+
+  const normalized = Object.create(response) as ResponseLike;
+  const headers =
+    response.headers && typeof response.headers.get === 'function'
+      ? response.headers
+      : new Headers(response.headers);
+  if (typeof response.json === 'function' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  Object.defineProperty(normalized, 'headers', {
+    value: headers,
+  });
+  if (typeof response.text !== 'function' && typeof response.json === 'function') {
+    Object.defineProperty(normalized, 'text', {
+      value: async () => JSON.stringify(await response.json!()),
+    });
+  }
+  return normalized;
+};
+
 const credentialForScheme = (credentials: ApiCredentials, auth: Auth): string | undefined => {
   switch (auth.key) {
     case 'AnonKey': {
@@ -45,7 +73,8 @@ const credentialForScheme = (credentials: ApiCredentials, auth: Auth): string | 
 
 const createTimeoutFetch = (fetchImplementation: typeof fetch, timeoutMs: number): typeof fetch => {
   return async (input, init) => {
-    const request = new Request(input, init);
+    const request =
+      input instanceof Request && init === undefined ? input.clone() : new Request(input, init);
     const controller = new AbortController();
     const abortFromRequest = () => controller.abort(request.signal.reason);
 
@@ -60,7 +89,10 @@ const createTimeoutFetch = (fetchImplementation: typeof fetch, timeoutMs: number
     }, timeoutMs);
 
     try {
-      return await fetchImplementation(new Request(request, { signal: controller.signal }));
+      const response = await fetchImplementation(
+        new Request(request, { signal: controller.signal }),
+      );
+      return normalizeResponse(response as ResponseLike);
     } finally {
       clearTimeout(timeout);
       request.signal.removeEventListener('abort', abortFromRequest);

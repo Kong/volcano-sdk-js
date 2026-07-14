@@ -1,4 +1,16 @@
-const VolcanoAuth = require('../src/index.js');
+const { ReadableStream, TransformStream } = require('node:stream/web');
+const { TextDecoder, TextEncoder } = require('node:util');
+
+global.ReadableStream = ReadableStream;
+global.TransformStream = TransformStream;
+global.TextDecoder = TextDecoder;
+global.TextEncoder = TextEncoder;
+
+const { Headers, Request, Response } = require('undici');
+
+global.Headers = Headers;
+global.Request = Request;
+global.Response = Response;
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -26,7 +38,4 @@ Object.defineProperty(global, 'localStorage', {
 beforeEach(() => {
   jest.clearAllMocks();
   localStorageMock.store = {};
-  if (typeof VolcanoAuth.__resetFunctionResolveCacheForTests === 'function') {
-    VolcanoAuth.__resetFunctionResolveCacheForTests();
-  }
 });

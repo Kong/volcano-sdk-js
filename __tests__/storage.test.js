@@ -1,16 +1,16 @@
-const VolcanoAuth = require('../src/index.js');
+const { createVolcanoClient } = require('../src/index.js');
 
 describe('Storage', () => {
   const config = {
-    apiUrl: 'https://api.test.com',
+    accessToken: 'test-access-token',
     anonKey: 'ak-test-anon-key',
+    baseUrl: 'https://api.test.com',
   };
 
   let volcano;
 
   beforeEach(() => {
-    volcano = new VolcanoAuth(config);
-    volcano.accessToken = 'test-access-token';
+    volcano = createVolcanoClient(config);
   });
 
   describe('storage.from()', () => {
@@ -119,7 +119,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const file = new File(['test'], 'test.txt', { type: 'text/plain' });
       const { data, error } = await volcano.storage.from('files').upload('test.txt', file);
@@ -187,7 +187,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage.from('files').download('test.txt');
 
@@ -228,8 +228,12 @@ describe('Storage', () => {
     });
 
     it('should refresh token on 401 and retry', async () => {
-      volcano.accessToken = 'expired-token';
-      volcano.refreshToken = 'valid-refresh';
+      volcano = createVolcanoClient({
+        accessToken: 'expired-token',
+        anonKey: 'ak-test-anon-key',
+        baseUrl: 'https://api.test.com',
+        refreshToken: 'valid-refresh',
+      });
 
       // First call returns 401
       global.fetch.mockResolvedValueOnce({
@@ -258,7 +262,9 @@ describe('Storage', () => {
       const { error } = await volcano.storage.from('files').list();
 
       expect(error).toBeNull();
-      expect(volcano.accessToken).toBe('new-access-token');
+      expect(new Headers(global.fetch.mock.calls[2][1].headers).get('Authorization')).toBe(
+        'Bearer new-access-token',
+      );
     });
 
     it('should list files with prefix', async () => {
@@ -294,7 +300,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage.from('files').list();
 
@@ -361,7 +367,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage.from('files').remove('test.txt');
 
@@ -398,7 +404,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage.from('files').move('from.txt', 'to.txt');
 
@@ -447,7 +453,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage.from('files').copy('from.txt', 'to.txt');
 
@@ -481,9 +487,9 @@ describe('Storage', () => {
     let volcanoWithValidKey;
 
     beforeEach(() => {
-      volcanoWithValidKey = new VolcanoAuth({
-        apiUrl: 'https://api.test.com',
+      volcanoWithValidKey = createVolcanoClient({
         anonKey: validAnonKey,
+        baseUrl: 'https://api.test.com',
       });
     });
 
@@ -530,9 +536,9 @@ describe('Storage', () => {
     });
 
     it('should return error for invalid anon key format', () => {
-      const volcanoInvalid = new VolcanoAuth({
-        apiUrl: 'https://api.test.com',
+      const volcanoInvalid = createVolcanoClient({
         anonKey: 'ak-invalid-not-jwt',
+        baseUrl: 'https://api.test.com',
       });
 
       const { data, error } = volcanoInvalid.storage.from('bucket').getPublicUrl('file.txt');
@@ -600,7 +606,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage
         .from('files')
@@ -676,7 +682,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage
         .from('uploads')
@@ -721,7 +727,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { data, error } = await volcano.storage
         .from('uploads')
@@ -852,7 +858,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const { error } = await volcano.storage
         .from('uploads')
@@ -951,7 +957,7 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 
       const file = new Blob([new ArrayBuffer(1024)]);
       const { data, error } = await volcano.storage

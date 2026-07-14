@@ -111,7 +111,7 @@ class VolcanoRealtime {
    * @param {string} [config.anonKey] - Anon key (required for user tokens, optional for service keys)
    * @param {string} config.accessToken - Access token (user JWT) or service role key (sk-...)
    * @param {Function} [config.getToken] - Function to get/refresh token
-   * @param {Object} [config.volcanoClient] - VolcanoAuth client for auto-fetching lightweight notifications
+   * @param {Object} [config.volcanoClient] - Volcano client for auto-fetching lightweight notifications
    * @param {string} [config.databaseName] - Database name for auto-fetch queries
    * @param {Object} [config.fetchConfig] - Configuration for auto-fetch behavior
    * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage
@@ -155,16 +155,16 @@ class VolcanoRealtime {
   }
 
   /**
-   * Set the VolcanoAuth client for auto-fetching
-   * @param {Object} volcanoClient - VolcanoAuth client instance
+   * Set the Volcano client for auto-fetching
+   * @param {Object} volcanoClient - Volcano client instance
    */
   setVolcanoClient(volcanoClient) {
     this._volcanoClient = volcanoClient;
   }
 
   /**
-   * Get the configured VolcanoAuth client
-   * @returns {Object|null} The VolcanoAuth client or null
+   * Get the configured Volcano client
+   * @returns {Object|null} The Volcano client or null
    */
   getVolcanoClient() {
     return this._volcanoClient;
@@ -868,23 +868,14 @@ class RealtimeChannel {
     try {
       const volcanoClient = this._realtime.getVolcanoClient();
 
-      if (!volcanoClient?.from || typeof volcanoClient.from !== 'function') {
-        throw new Error('volcanoClient.from not available');
+      const databaseName = this._realtime.getDatabaseName?.() || null;
+      if (!databaseName) {
+        throw new TypeError('Database name not set. Pass databaseName to VolcanoRealtime.');
       }
-
-      const databaseName =
-        this._realtime.getDatabaseName?.() || volcanoClient._currentDatabaseName || null;
-      let dbClient = volcanoClient;
-      if (databaseName) {
-        if (typeof volcanoClient.database !== 'function') {
-          throw new TypeError('volcanoClient.database not available');
-        }
-        dbClient = volcanoClient.database(databaseName);
-      } else if (typeof volcanoClient.database === 'function') {
-        throw new TypeError(
-          'Database name not set. Call volcanoClient.database(name) or pass databaseName to VolcanoRealtime.',
-        );
+      if (typeof volcanoClient?.database !== 'function') {
+        throw new TypeError('volcanoClient.database not available');
       }
+      const dbClient = volcanoClient.database(databaseName);
 
       const tableName = schema && schema !== 'public' ? `${schema}.${table}` : table;
 

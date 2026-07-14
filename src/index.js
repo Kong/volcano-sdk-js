@@ -1,18 +1,18 @@
 /**
- * Volcano Auth SDK - Official JavaScript client for Volcano
+ * Official JavaScript client for Volcano
  *
  * @example
  * ```javascript
- * import { VolcanoAuth } from '@volcano.dev/sdk';
+ * import { createVolcanoClient } from '@volcano.dev/sdk';
  *
  * // Basic usage (uses https://api.volcano.dev by default)
- * const volcano = new VolcanoAuth({
+ * const volcano = createVolcanoClient({
  *   anonKey: 'your-anon-key'
  * });
  *
  * // Or with custom API URL
- * const volcano = new VolcanoAuth({
- *   apiUrl: 'https://api.yourapp.com',
+ * const volcano = createVolcanoClient({
+ *   baseUrl: 'https://api.yourapp.com',
  *   anonKey: 'your-anon-key'
  * });
  *
@@ -34,6 +34,42 @@
  * });
  * ```
  */
+
+import {
+  authCancelEmailChange,
+  authConfirmEmail,
+  authConfirmEmailChange,
+  authConvertAnonymous,
+  authDeleteAllMySessions,
+  authDeleteMySession,
+  authForgotPassword,
+  authGetMySessions,
+  authGetUser,
+  authLinkOAuthProvider,
+  authListOAuthProviders,
+  authLogout,
+  authRefresh,
+  authRequestEmailChange,
+  authResendConfirmation,
+  authResetPassword,
+  authSignin,
+  authSignup,
+  authSignupAnonymous,
+  authUnlinkOAuthProvider,
+  authUpdateUser,
+  callOAuthProviderApi,
+  copyStorageObject,
+  createApiClient,
+  getOAuthProviderToken,
+  listStorageObjects,
+  moveStorageObject,
+  queryDatabaseDelete,
+  queryDatabaseInsert,
+  queryDatabaseSelect,
+  queryDatabaseUpdate,
+  refreshOAuthProviderToken,
+  resolveFunctionForInvocation,
+} from './api/index.ts';
 
 // ============================================================================
 // Constants
@@ -101,12 +137,17 @@ function sanitizeProvider(provider) {
  * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
  * @returns {Promise<Response>}
  */
-async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  fetchImplementation = globalThis.fetch,
+) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchImplementation(url, {
       ...options,
       signal: controller.signal,
     });
@@ -119,6 +160,42 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function apiError(error, fallback = 'Request failed') {
+  if (error instanceof Error) {
+    return error;
+  }
+  if (typeof error === 'string' && error) {
+    return new Error(error);
+  }
+  if (error && typeof error === 'object') {
+    if (typeof error.error === 'string' && error.error) {
+      return new Error(error.error);
+    }
+    if (typeof error.message === 'string' && error.message) {
+      return new Error(error.message);
+    }
+  }
+  return new Error(fallback);
+}
+
+async function dispatchRequest(fetchImplementation, request) {
+  const init = {
+    credentials: request.credentials,
+    headers: request.headers,
+    method: request.method,
+    redirect: request.redirect,
+    signal: request.signal,
+  };
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    const contentType = request.headers.get('Content-Type') || '';
+    init.body =
+      contentType.includes('json') || contentType.startsWith('text/')
+        ? await request.clone().text()
+        : await request.clone().arrayBuffer();
+  }
+  return fetchImplementation(request.url, init);
 }
 
 /**
@@ -278,14 +355,6 @@ function pruneFunctionResolveCache(state, nowMs = Date.now(), force = false) {
   }
 }
 
-function clearSharedFunctionResolveStateForTests() {
-  const state = getSharedFunctionResolveState();
-  state.cache.clear();
-  state.inFlight.clear();
-  state.maxEntries = DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES;
-  state.lastPruneAtMs = 0;
-}
-
 function extractRequiredProjectIdFromToken(token) {
   if (!token || typeof token !== 'string') {
     throw new Error('No active session');
@@ -377,28 +446,31 @@ function resolveFunctionInvocationBase(apiUrl) {
 
 /**
  * Fetch with auth header and refresh retry on 401
- * @param {VolcanoAuth} volcanoAuth
+ * @param {VolcanoClientCore} volcanoClient
  * @param {string} url
  * @param {RequestInit} options
  * @returns {Promise<Response>}
  */
-async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
+async function fetchWithAuthRetry(volcanoClient, url, options = {}) {
+  const credential = () =>
+    volcanoClient.accessToken || volcanoClient.serviceRoleKey || volcanoClient.anonKey;
   const doFetch = () =>
     fetchWithTimeout(
       url,
       {
         ...options,
         headers: {
-          Authorization: `Bearer ${volcanoAuth.accessToken}`,
+          Authorization: `Bearer ${credential()}`,
           ...options.headers,
         },
       },
-      volcanoAuth.timeout,
+      volcanoClient.timeout,
+      volcanoClient.fetch,
     );
 
   let response = await doFetch();
-  if (response.status === 401) {
-    const refreshed = await volcanoAuth.refreshSession();
+  if (response.status === 401 && volcanoClient.accessToken) {
+    const refreshed = await volcanoClient._refreshSessionSingleFlight();
     if (!refreshed.error) {
       response = await doFetch();
     }
@@ -460,17 +532,13 @@ function databaseConnectionString(baseConnectionString, options = {}) {
 }
 
 // ============================================================================
-// VolcanoAuth Class
+// Stateful client core
 // ============================================================================
 
-class VolcanoAuth {
-  constructor(config) {
-    if (!config.anonKey) {
-      throw new Error('anonKey is required. Get your anon key from project settings.');
-    }
-
+class VolcanoClientCore {
+  constructor(config = {}) {
     // SECURITY: Throw hard error if service key is used client-side
-    if (config.anonKey.startsWith('sk-') && isBrowser()) {
+    if ((config.serviceRoleKey || config.anonKey || '').startsWith('sk-') && isBrowser()) {
       throw new Error(
         '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
           'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
@@ -480,11 +548,13 @@ class VolcanoAuth {
       );
     }
 
-    this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
+    this.apiUrl = (config.baseUrl || config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '');
     this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
-    this.anonKey = config.anonKey;
-    this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
-    this._currentDatabaseName = null;
+    this.anonKey = config.anonKey || null;
+    this.serviceRoleKey = config.serviceRoleKey || null;
+    this.userToken = config.userToken || null;
+    this.timeout = config.timeoutMs || config.timeout || DEFAULT_TIMEOUT_MS;
+    this.fetch = config.fetch || globalThis.fetch;
     this.currentUser = null;
     // Tracks whether a managed-redirect session was already adopted from the URL
     // fragment so repeated getUser()/initialize() calls don't re-adopt and
@@ -513,6 +583,20 @@ class VolcanoAuth {
       this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
     }
 
+    this.api = createApiClient({
+      accessToken: this.accessToken || undefined,
+      anonKey: this.anonKey || undefined,
+      baseUrl: this.apiUrl,
+      fetch: (request) => dispatchRequest(this.fetch, request),
+      serviceRoleKey: this.serviceRoleKey || undefined,
+      timeoutMs: this.timeout,
+      userToken: this.userToken || undefined,
+    });
+    this._refreshPromise = null;
+    this.api.interceptors.response.use((response, request, options) =>
+      this._handleApiResponse(response, request, options),
+    );
+
     // Sub-objects for organization
     this.auth = {
       signUp: this.signUp.bind(this),
@@ -521,6 +605,7 @@ class VolcanoAuth {
       getUser: this.getUser.bind(this),
       updateUser: this.updateUser.bind(this),
       refreshSession: this.refreshSession.bind(this),
+      initialize: this.initialize.bind(this),
       onAuthStateChange: this.onAuthStateChange.bind(this),
       user: () => this.currentUser,
       // Anonymous user methods
@@ -561,46 +646,61 @@ class VolcanoAuth {
       invoke: this.invokeFunction.bind(this),
     };
 
-    this.logs = {
-      search: this.searchLogs.bind(this),
-      activity: this.getLogActivity.bind(this),
-    };
-
     this.storage = {
       from: this.storageBucket.bind(this),
     };
   }
 
-  // ========================================================================
-  // Logs Methods
-  // ========================================================================
-
-  async _postProjectLogRequest(projectId, endpoint, request) {
-    if (typeof projectId !== 'string' || projectId.trim() === '') {
-      return { data: null, error: new Error('projectId must be a non-empty string') };
+  async _callApi(operation, options = {}, fallback = 'Request failed') {
+    this.api.setCredentials({
+      accessToken: this.accessToken || undefined,
+      anonKey: this.anonKey || undefined,
+      serviceRoleKey: this.serviceRoleKey || undefined,
+      userToken: this.userToken || undefined,
+    });
+    const result = await operation({ ...options, client: this.api });
+    if (result.error !== undefined) {
+      return {
+        data: result.data,
+        error: apiError(result.error, fallback),
+        ok: false,
+        status: result.response ? result.response.status : null,
+      };
     }
+    return {
+      data: result.data,
+      error: null,
+      ok: true,
+      status: result.response ? result.response.status : null,
+    };
+  }
 
-    const result = await this._authFetch(
-      `/projects/${encodeURIComponent(projectId)}/logs/${endpoint}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(request || {}),
-      },
+  async _handleApiResponse(response, request, options) {
+    const usesAuthUserAccessToken = (options.security || []).some(
+      (security) => security.key === 'AuthUserAccessToken',
     );
-
-    if (!result.ok) {
-      return { data: null, error: result.error };
+    if (response.status !== 401 || !usesAuthUserAccessToken) {
+      return response;
     }
 
-    return { data: result.data, error: null };
+    const refreshed = await this._refreshSessionSingleFlight();
+    if (refreshed.error || !this.accessToken) {
+      return response;
+    }
+
+    const headers = new Headers(request.headers);
+    headers.set('Authorization', `Bearer ${this.accessToken}`);
+    const retryFetch = this.api.getConfig().fetch || this.fetch;
+    return retryFetch(new Request(request, { headers }));
   }
 
-  searchLogs(projectId, request) {
-    return this._postProjectLogRequest(projectId, 'search', request);
-  }
-
-  getLogActivity(projectId, request) {
-    return this._postProjectLogRequest(projectId, 'activity', request);
+  _refreshSessionSingleFlight() {
+    if (!this._refreshPromise) {
+      this._refreshPromise = this.refreshSession().finally(() => {
+        this._refreshPromise = null;
+      });
+    }
+    return this._refreshPromise;
   }
 
   // ========================================================================
@@ -614,71 +714,6 @@ class VolcanoAuth {
    */
   storageBucket(bucketName) {
     return new StorageFileApi(this, bucketName);
-  }
-
-  // ========================================================================
-  // Internal Fetch Helpers
-  // ========================================================================
-
-  /**
-   * Make an authenticated request with access token
-   * @private
-   */
-  async _authFetch(path, options = {}) {
-    if (!this.accessToken) {
-      return { ok: false, status: null, error: new Error('No active session'), data: null };
-    }
-
-    return this._authFetchUrl(`${this.apiUrl}${path}`, options);
-  }
-
-  async _authFetchUrl(url, options = {}) {
-    if (!this.accessToken) {
-      return { ok: false, status: null, error: new Error('No active session'), data: null };
-    }
-
-    try {
-      const response = await fetchWithTimeout(
-        url,
-        {
-          ...options,
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-            ...options.headers,
-          },
-        },
-        this.timeout,
-      );
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        // Try token refresh on 401
-        if (response.status === 401 && !options._retried) {
-          const refreshed = await this.refreshSession();
-          if (!refreshed.error) {
-            return this._authFetchUrl(url, { ...options, _retried: true });
-          }
-          return { ok: false, status: response.status, error: new Error('Session expired'), data };
-        }
-        return {
-          ok: false,
-          status: response.status,
-          error: new Error(data.error || 'Request failed'),
-          data,
-        };
-      }
-
-      return { ok: true, status: response.status, data, error: null };
-    } catch (error) {
-      return {
-        ok: false,
-        status: null,
-        error: error instanceof Error ? error : new Error('Request failed'),
-        data: null,
-      };
-    }
   }
 
   _getFunctionInvokeUrl(functionIdentifier) {
@@ -709,8 +744,8 @@ class VolcanoAuth {
   }
 
   _functionResolveCacheKey(functionName) {
-    const projectScope = extractRequiredProjectIdFromToken(this.accessToken);
-    const tokenScope = this.accessToken;
+    const tokenScope = this.accessToken || this.serviceRoleKey || this.anonKey;
+    const projectScope = extractRequiredProjectIdFromToken(tokenScope);
     return `${this.apiUrl}|project:${projectScope}|token:${tokenScope}|${functionName}`;
   }
 
@@ -748,8 +783,11 @@ class VolcanoAuth {
     }
 
     const pending = (async () => {
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      const result = await this._authFetch(resolvePath, { method: 'GET' });
+      const result = await this._callApi(
+        resolveFunctionForInvocation,
+        { query: { name: hostLabel } },
+        'Failed to resolve function',
+      );
       if (!result.ok) {
         if (result.status === 404) {
           this._functionResolveState.cache.set(cacheKey, {
@@ -790,64 +828,12 @@ class VolcanoAuth {
     }
   }
 
-  /**
-   * Make a public request with anon key
-   * @private
-   */
-  async _anonFetch(path, options = {}) {
-    try {
-      const response = await fetchWithTimeout(
-        `${this.apiUrl}${path}`,
-        {
-          ...options,
-          headers: {
-            Authorization: `Bearer ${this.anonKey}`,
-            'Content-Type': 'application/json',
-            ...options.headers,
-          },
-        },
-        this.timeout,
-      );
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return { ok: false, error: new Error(data.error || 'Request failed'), data };
-      }
-
-      return { ok: true, data, error: null };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error : new Error('Request failed'),
-        data: null,
-      };
-    }
-  }
-
   // ========================================================================
   // Query Builder Methods
   // ========================================================================
 
-  from(table) {
-    return new QueryBuilder(this, table, this._currentDatabaseName);
-  }
-
   database(databaseName) {
-    this._currentDatabaseName = databaseName;
-    return this;
-  }
-
-  insert(table, values) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
-  }
-
-  update(table, values) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
-  }
-
-  delete(table) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'delete', null);
+    return new DatabaseClient(this, databaseName);
   }
 
   // ========================================================================
@@ -855,10 +841,11 @@ class VolcanoAuth {
   // ========================================================================
 
   async signUp({ email, password, metadata = {}, signInWhenAllowed = false }) {
-    const result = await this._anonFetch('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+    const result = await this._callApi(
+      authSignup,
+      { body: { email, password, user_metadata: metadata } },
+      'Sign up failed',
+    );
 
     if (!result.ok) {
       return {
@@ -903,10 +890,7 @@ class VolcanoAuth {
   }
 
   async signIn({ email, password }) {
-    const result = await this._anonFetch('/auth/signin', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
+    const result = await this._callApi(authSignin, { body: { email, password } }, 'Sign in failed');
 
     if (!result.ok) {
       return { user: null, session: null, error: result.error };
@@ -927,12 +911,9 @@ class VolcanoAuth {
   async signOut() {
     if (this.refreshToken) {
       try {
-        await this._anonFetch('/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refresh_token: this.refreshToken }),
-        });
+        await this._callApi(authLogout, { body: { refresh_token: this.refreshToken } });
       } catch (err) {
-        console.warn('[VolcanoAuth] Logout request failed:', err.message);
+        console.warn('[Volcano] Logout request failed:', err.message);
       }
     }
     this._clearSession();
@@ -944,7 +925,7 @@ class VolcanoAuth {
     // (tokens in the URL fragment) so callers only ever need getUser().
     const adoptedFromUrl = this._consumeSessionFromUrl();
 
-    const result = await this._authFetch('/auth/user');
+    const result = await this._callApi(authGetUser, {}, 'Failed to get user');
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -962,10 +943,11 @@ class VolcanoAuth {
   }
 
   async updateUser({ password, metadata }) {
-    const result = await this._authFetch('/auth/user', {
-      method: 'PUT',
-      body: JSON.stringify({ password, user_metadata: metadata }),
-    });
+    const result = await this._callApi(
+      authUpdateUser,
+      { body: { password, user_metadata: metadata } },
+      'Failed to update user',
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -981,10 +963,11 @@ class VolcanoAuth {
     }
 
     try {
-      const result = await this._anonFetch('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
-      });
+      const result = await this._callApi(
+        authRefresh,
+        { body: { refresh_token: this.refreshToken } },
+        'Session refresh failed',
+      );
 
       if (!result.ok) {
         this._clearSession();
@@ -1021,7 +1004,7 @@ class VolcanoAuth {
     try {
       callback(this.currentUser);
     } catch (err) {
-      console.error('[VolcanoAuth] Error in auth state callback:', err);
+      console.error('[Volcano] Error in auth state callback:', err);
     }
 
     return () => {
@@ -1034,10 +1017,11 @@ class VolcanoAuth {
   // ========================================================================
 
   async signUpAnonymous(metadata = {}) {
-    const result = await this._anonFetch('/auth/signup-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ user_metadata: metadata }),
-    });
+    const result = await this._callApi(
+      authSignupAnonymous,
+      { body: { user_metadata: metadata } },
+      'Anonymous sign up failed',
+    );
 
     if (!result.ok) {
       return { user: null, session: null, error: result.error };
@@ -1056,10 +1040,11 @@ class VolcanoAuth {
   }
 
   async convertAnonymous({ email, password, metadata = {} }) {
-    const result = await this._authFetch('/auth/user/convert-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+    const result = await this._callApi(
+      authConvertAnonymous,
+      { body: { email, password, user_metadata: metadata } },
+      'Anonymous account conversion failed',
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1074,10 +1059,7 @@ class VolcanoAuth {
   // ========================================================================
 
   async confirmEmail(token) {
-    const result = await this._anonFetch('/auth/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    });
+    const result = await this._callApi(authConfirmEmail, { body: { token } });
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1086,10 +1068,7 @@ class VolcanoAuth {
   }
 
   async resendConfirmation(email) {
-    const result = await this._anonFetch('/auth/resend-confirmation', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const result = await this._callApi(authResendConfirmation, { body: { email } });
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1102,10 +1081,7 @@ class VolcanoAuth {
   // ========================================================================
 
   async forgotPassword(email) {
-    const result = await this._anonFetch('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const result = await this._callApi(authForgotPassword, { body: { email } });
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1114,9 +1090,8 @@ class VolcanoAuth {
   }
 
   async resetPassword({ token, newPassword }) {
-    const result = await this._anonFetch('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, new_password: newPassword }),
+    const result = await this._callApi(authResetPassword, {
+      body: { token, new_password: newPassword },
     });
 
     if (!result.ok) {
@@ -1130,9 +1105,8 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const result = await this._authFetch('/auth/user/change-email', {
-      method: 'POST',
-      body: JSON.stringify({ new_email: newEmail }),
+    const result = await this._callApi(authRequestEmailChange, {
+      body: { new_email: newEmail },
     });
 
     if (!result.ok) {
@@ -1147,9 +1121,8 @@ class VolcanoAuth {
   }
 
   async confirmEmailChange(emailChangeToken) {
-    const result = await this._authFetch('/auth/user/confirm-email-change', {
-      method: 'POST',
-      body: JSON.stringify({ email_change_token: emailChangeToken }),
+    const result = await this._callApi(authConfirmEmailChange, {
+      body: { email_change_token: emailChangeToken },
     });
 
     if (!result.ok) {
@@ -1161,9 +1134,7 @@ class VolcanoAuth {
   }
 
   async cancelEmailChange() {
-    const result = await this._authFetch('/auth/user/cancel-email-change', {
-      method: 'DELETE',
-    });
+    const result = await this._callApi(authCancelEmailChange);
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1289,9 +1260,7 @@ class VolcanoAuth {
 
   async linkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/link`, {
-      method: 'POST',
-    });
+    const result = await this._callApi(authLinkOAuthProvider, { path: { provider } });
 
     if (!result.ok) {
       return { data: null, error: result.error };
@@ -1301,9 +1270,7 @@ class VolcanoAuth {
 
   async unlinkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/unlink`, {
-      method: 'DELETE',
-    });
+    const result = await this._callApi(authUnlinkOAuthProvider, { path: { provider } });
 
     if (!result.ok) {
       return { error: result.error };
@@ -1312,7 +1279,7 @@ class VolcanoAuth {
   }
 
   async getLinkedOAuthProviders() {
-    const result = await this._authFetch('/auth/oauth/providers');
+    const result = await this._callApi(authListOAuthProviders);
 
     if (!result.ok) {
       return { providers: null, error: result.error };
@@ -1322,9 +1289,7 @@ class VolcanoAuth {
 
   async refreshOAuthToken(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/refresh-token`, {
-      method: 'POST',
-    });
+    const result = await this._callApi(refreshOAuthProviderToken, { path: { provider } });
 
     if (!result.ok) {
       return { message: null, provider: null, expiresIn: null, error: result.error };
@@ -1339,7 +1304,7 @@ class VolcanoAuth {
 
   async getOAuthProviderToken(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/token`);
+    const result = await this._callApi(getOAuthProviderToken, { path: { provider } });
 
     if (!result.ok) {
       return { message: null, provider: null, expiresIn: null, error: result.error };
@@ -1354,15 +1319,15 @@ class VolcanoAuth {
 
   async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/call-api`, {
-      method: 'POST',
-      body: JSON.stringify({ endpoint, method, body }),
+    const result = await this._callApi(callOAuthProviderApi, {
+      body: { endpoint, method, body: body || undefined },
+      path: { provider },
     });
 
     if (!result.ok) {
       return { data: null, error: result.error };
     }
-    return { data: result.data.data, error: null };
+    return { data: result.data, error: null };
   }
 
   // ========================================================================
@@ -1371,17 +1336,7 @@ class VolcanoAuth {
 
   async getSessions(options = {}) {
     const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = new URLSearchParams();
-    if (page > 1) {
-      params.set('page', page.toString());
-    }
-    if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.set('limit', limit.toString());
-    }
-
-    const queryString = params.toString();
-    const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const result = await this._authFetch(url);
+    const result = await this._callApi(authGetMySessions, { query: { limit, page } });
 
     if (!result.ok) {
       return {
@@ -1404,9 +1359,7 @@ class VolcanoAuth {
   }
 
   async deleteSession(sessionId) {
-    const result = await this._authFetch(`/auth/user/sessions/${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-    });
+    const result = await this._callApi(authDeleteMySession, { path: { sessionId } });
 
     if (!result.ok) {
       return { error: result.error };
@@ -1415,9 +1368,7 @@ class VolcanoAuth {
   }
 
   async deleteAllOtherSessions() {
-    const result = await this._authFetch('/auth/user/sessions', {
-      method: 'DELETE',
-    });
+    const result = await this._callApi(authDeleteAllMySessions);
 
     if (!result.ok) {
       return { error: result.error };
@@ -1439,7 +1390,8 @@ class VolcanoAuth {
         error: new Error('functionName must be a non-empty string'),
       };
     }
-    if (!this.accessToken) {
+    const credential = () => this.accessToken || this.serviceRoleKey || this.anonKey;
+    if (!credential()) {
       return {
         data: null,
         status: null,
@@ -1493,16 +1445,17 @@ class VolcanoAuth {
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${this.accessToken}`,
+              Authorization: `Bearer ${credential()}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload),
           },
           this.timeout,
+          this.fetch,
         );
 
         const versionHeader = getHeaderValue(response, 'x-volcano-version');
-        if (response.status === 401 && allowRefresh && !versionHeader) {
+        if (response.status === 401 && allowRefresh && this.accessToken && !versionHeader) {
           const refreshed = await this.refreshSession();
           if (!refreshed.error) {
             return invokeOnce(url, false);
@@ -1543,7 +1496,7 @@ class VolcanoAuth {
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
     // On 404, invalidate and resolve once more before failing.
-    if (!result.ok && result.status === 404) {
+    if (result.status === 404) {
       this._clearFunctionResolveCache(functionName.trim());
       try {
         resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
@@ -1571,6 +1524,7 @@ class VolcanoAuth {
     this.accessToken = data.access_token;
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
+    this.api.setCredentials({ accessToken: this.accessToken });
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -1582,6 +1536,7 @@ class VolcanoAuth {
     this.accessToken = null;
     this.refreshToken = null;
     this.currentUser = null;
+    this.api.setCredentials({ accessToken: undefined });
 
     this._removeStorageItem(STORAGE_KEY_ACCESS_TOKEN);
     this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
@@ -1595,7 +1550,7 @@ class VolcanoAuth {
         try {
           cb(user);
         } catch (err) {
-          console.error('[VolcanoAuth] Error in auth state callback:', err);
+          console.error('[Volcano] Error in auth state callback:', err);
         }
       });
     }
@@ -1797,38 +1752,6 @@ class VolcanoAuth {
     }
     return { user: null, error: null };
   }
-
-  /**
-   * @internal Test-only helper to ensure deterministic cache behavior in unit tests.
-   */
-  static __resetFunctionResolveCacheForTests() {
-    clearSharedFunctionResolveStateForTests();
-  }
-
-  /**
-   * @internal Test-only helper for asserting global resolver cache state.
-   */
-  static __getFunctionResolveCacheMetricsForTests() {
-    const state = getSharedFunctionResolveState();
-    return {
-      cacheSize: state.cache.size,
-      inFlightSize: state.inFlight.size,
-      maxEntries: state.maxEntries,
-    };
-  }
-
-  /**
-   * @internal Test-only helper for forcing resolver cache limits.
-   */
-  static __setFunctionResolveCacheMaxEntriesForTests(maxEntries) {
-    const nextMax = Number(maxEntries);
-    if (!Number.isInteger(nextMax) || nextMax < 1) {
-      throw new Error('maxEntries must be a positive integer');
-    }
-    const state = getSharedFunctionResolveState();
-    state.maxEntries = nextMax;
-    pruneFunctionResolveCache(state, Date.now(), true);
-  }
 }
 
 // ============================================================================
@@ -1883,8 +1806,8 @@ const FilterMixin = {
 // ============================================================================
 
 class QueryBuilder {
-  constructor(volcanoAuth, table, databaseName) {
-    this.volcanoAuth = volcanoAuth;
+  constructor(volcanoClient, table, databaseName) {
+    this.volcanoClient = volcanoClient;
     this.table = table;
     this.databaseName = databaseName;
     this.selectColumns = [];
@@ -1924,7 +1847,7 @@ class QueryBuilder {
   }
 
   async execute() {
-    if (!this.volcanoAuth.accessToken) {
+    if (!this.volcanoClient.accessToken) {
       return errorResult('No active session. Please sign in first.', { count: 0 });
     }
 
@@ -1949,33 +1872,19 @@ class QueryBuilder {
       requestBody.offset = this.offsetValue;
     }
 
-    try {
-      const response = await fetchWithAuthRetry(
-        this.volcanoAuth,
-        `${this.volcanoAuth.apiUrl}/databases/${encodeURIComponent(this.databaseName)}/query/select`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        },
-      );
-
-      const result = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return errorResult(result.error || 'Query failed', { count: 0 });
-      }
-
-      return { data: result.data, error: null, count: result.count || result.data.length };
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error('Query failed'),
-        count: 0,
-      };
+    const result = await this.volcanoClient._callApi(
+      queryDatabaseSelect,
+      {
+        body: requestBody,
+        path: { databaseName: this.databaseName },
+      },
+      'Query failed',
+    );
+    if (!result.ok) {
+      return { count: 0, data: null, error: result.error };
     }
+    const data = result.data?.data || [];
+    return { data, error: null, count: result.data?.count ?? data.length };
   }
 
   then(resolve, reject) {
@@ -1990,8 +1899,8 @@ Object.assign(QueryBuilder.prototype, FilterMixin);
 // ============================================================================
 
 class MutationBuilder {
-  constructor(volcanoAuth, table, databaseName, operation, values) {
-    this.volcanoAuth = volcanoAuth;
+  constructor(volcanoClient, table, databaseName, operation, values) {
+    this.volcanoClient = volcanoClient;
     this.table = table;
     this.databaseName = databaseName;
     this.operation = operation;
@@ -2000,7 +1909,7 @@ class MutationBuilder {
   }
 
   async execute() {
-    if (!this.volcanoAuth.accessToken) {
+    if (!this.volcanoClient.accessToken) {
       return errorResult('No active session. Please sign in first.');
     }
 
@@ -2016,32 +1925,23 @@ class MutationBuilder {
       requestBody.filters = this.filters;
     }
 
-    try {
-      const response = await fetchWithAuthRetry(
-        this.volcanoAuth,
-        `${this.volcanoAuth.apiUrl}/databases/${encodeURIComponent(this.databaseName)}/query/${encodeURIComponent(this.operation)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        },
-      );
-
-      const result = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return errorResult(result.error || `${this.operation} failed`);
-      }
-
-      return { data: result.data, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error(`${this.operation} failed`),
-      };
+    const operations = {
+      delete: queryDatabaseDelete,
+      insert: queryDatabaseInsert,
+      update: queryDatabaseUpdate,
+    };
+    const result = await this.volcanoClient._callApi(
+      operations[this.operation],
+      {
+        body: requestBody,
+        path: { databaseName: this.databaseName },
+      },
+      `${this.operation} failed`,
+    );
+    if (!result.ok) {
+      return { data: null, error: result.error };
     }
+    return { data: result.data?.data || [], error: null };
   }
 
   then(resolve, reject) {
@@ -2051,13 +1951,36 @@ class MutationBuilder {
 
 Object.assign(MutationBuilder.prototype, FilterMixin);
 
+class DatabaseClient {
+  constructor(volcanoClient, databaseName) {
+    this.volcanoClient = volcanoClient;
+    this.databaseName = databaseName;
+  }
+
+  from(table) {
+    return new QueryBuilder(this.volcanoClient, table, this.databaseName);
+  }
+
+  insert(table, values) {
+    return new MutationBuilder(this.volcanoClient, table, this.databaseName, 'insert', values);
+  }
+
+  update(table, values) {
+    return new MutationBuilder(this.volcanoClient, table, this.databaseName, 'update', values);
+  }
+
+  delete(table) {
+    return new MutationBuilder(this.volcanoClient, table, this.databaseName, 'delete', null);
+  }
+}
+
 // ============================================================================
 // StorageFileApi - For storage operations on a specific bucket
 // ============================================================================
 
 class StorageFileApi {
-  constructor(volcanoAuth, bucketName) {
-    this.volcanoAuth = volcanoAuth;
+  constructor(volcanoClient, bucketName) {
+    this.volcanoClient = volcanoClient;
     this.bucketName = bucketName;
   }
 
@@ -2066,7 +1989,11 @@ class StorageFileApi {
    * @private
    */
   _checkAuth() {
-    if (!this.volcanoAuth.accessToken) {
+    if (
+      !this.volcanoClient.accessToken &&
+      !this.volcanoClient.serviceRoleKey &&
+      !this.volcanoClient.anonKey
+    ) {
       return errorResult('No active session. Please sign in first.');
     }
     return null;
@@ -2077,7 +2004,7 @@ class StorageFileApi {
    * @private
    */
   _buildUrl(path) {
-    return `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/${this._encodePath(path)}`;
+    return `${this.volcanoClient.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/${this._encodePath(path)}`;
   }
 
   /**
@@ -2097,7 +2024,7 @@ class StorageFileApi {
    */
   async _storageRequest(url, options = {}) {
     try {
-      const response = await fetchWithAuthRetry(this.volcanoAuth, url, options);
+      const response = await fetchWithAuthRetry(this.volcanoClient, url, options);
 
       // For blob responses (downloads), handle separately
       if (options.responseType === 'blob') {
@@ -2145,7 +2072,7 @@ class StorageFileApi {
 
       formData.append('file', file);
 
-      const response = await fetchWithAuthRetry(this.volcanoAuth, this._buildUrl(path), {
+      const response = await fetchWithAuthRetry(this.volcanoClient, this._buildUrl(path), {
         method: 'POST',
         body: formData,
       });
@@ -2192,23 +2119,13 @@ class StorageFileApi {
       return { ...authError, nextCursor: null };
     }
 
-    const params = new URLSearchParams();
-    if (prefix) {
-      params.set('prefix', prefix);
-    }
-    if (options.limit) {
-      params.set('limit', String(options.limit));
-    }
-    if (options.cursor) {
-      params.set('cursor', options.cursor);
-    }
-
-    const queryString = params.toString();
-    const url = `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}${queryString ? `?${queryString}` : ''}`;
-
-    const result = await this._storageRequest(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+    const result = await this.volcanoClient._callApi(listStorageObjects, {
+      path: { bucketName: this.bucketName },
+      query: {
+        cursor: options.cursor,
+        limit: options.limit,
+        prefix: prefix || undefined,
+      },
     });
 
     if (result.error) {
@@ -2268,14 +2185,11 @@ class StorageFileApi {
       return authError;
     }
 
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
-    );
+    const result = await this.volcanoClient._callApi(moveStorageObject, {
+      body: { from: fromPath, to: toPath },
+      path: { bucketName: this.bucketName },
+    });
+    return { data: result.ok ? result.data : null, error: result.error };
   }
 
   /**
@@ -2287,14 +2201,11 @@ class StorageFileApi {
       return authError;
     }
 
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
-    );
+    const result = await this.volcanoClient._callApi(copyStorageObject, {
+      body: { from: fromPath, to: toPath },
+      path: { bucketName: this.bucketName },
+    });
+    return { data: result.ok ? result.data : null, error: result.error };
   }
 
   /**
@@ -2302,7 +2213,7 @@ class StorageFileApi {
    */
   getPublicUrl(path) {
     try {
-      const parts = this.volcanoAuth.anonKey.split('.');
+      const parts = (this.volcanoClient.anonKey || '').split('.');
       if (parts.length !== 3) {
         return errorResult('Invalid anon key format');
       }
@@ -2315,7 +2226,7 @@ class StorageFileApi {
       }
 
       const encodedPath = this._encodePath(path);
-      const publicUrl = `${this.volcanoAuth.apiUrl}/public/${projectId}/${encodeURIComponent(this.bucketName)}/${encodedPath}`;
+      const publicUrl = `${this.volcanoClient.apiUrl}/public/${projectId}/${encodeURIComponent(this.bucketName)}/${encodedPath}`;
       return { data: { publicUrl }, error: null };
     } catch (error) {
       return errorResult(
@@ -2493,24 +2404,14 @@ class StorageFileApi {
   }
 }
 
-// ============================================================================
-// Realtime Import Note
-// ============================================================================
-
-// Realtime is available via separate import: import { VolcanoRealtime } from '@volcano.dev/sdk/realtime'
-// This improves tree-shaking - centrifuge (~5.5MB) is only loaded when realtime is used
-//
-// To use realtime, import directly: import { VolcanoRealtime } from '@volcano.dev/sdk/realtime'
-
-/**
- * Lazy-load the realtime module
- * @returns {Promise<{VolcanoRealtime: any, RealtimeChannel: any}>}
- */
-async function loadRealtime() {
-  const module = await import('./realtime.js');
+function createVolcanoClient(config = {}) {
+  const client = new VolcanoClientCore(config);
   return {
-    VolcanoRealtime: module.VolcanoRealtime,
-    RealtimeChannel: module.RealtimeChannel,
+    api: client.api,
+    auth: client.auth,
+    database: client.database.bind(client),
+    functions: client.functions,
+    storage: client.storage,
   };
 }
 
@@ -2518,42 +2419,4 @@ async function loadRealtime() {
 // Exports
 // ============================================================================
 
-// Browser global exports
-if (typeof window !== 'undefined') {
-  window.VolcanoAuth = VolcanoAuth;
-  window.QueryBuilder = QueryBuilder;
-  window.StorageFileApi = StorageFileApi;
-  window.isBrowser = isBrowser;
-  window.loadRealtime = loadRealtime;
-  window.databaseConnectionString = databaseConnectionString;
-}
-
-// CommonJS exports
-if (typeof module !== 'undefined' && module.exports !== undefined) {
-  module.exports = VolcanoAuth;
-  module.exports.VolcanoAuth = VolcanoAuth;
-  module.exports.default = VolcanoAuth;
-  module.exports.QueryBuilder = QueryBuilder;
-  module.exports.StorageFileApi = StorageFileApi;
-  module.exports.isBrowser = isBrowser;
-  module.exports.loadRealtime = loadRealtime;
-  module.exports.databaseConnectionString = databaseConnectionString;
-}
-
-// AMD exports
-if (typeof define === 'function' && define.amd) {
-  define([], () => {
-    return VolcanoAuth;
-  });
-}
-
-// ES Module exports (handled by rollup, but define for clarity)
-export {
-  databaseConnectionString,
-  isBrowser,
-  loadRealtime,
-  QueryBuilder,
-  StorageFileApi,
-  VolcanoAuth,
-};
-export default VolcanoAuth;
+export { createVolcanoClient, databaseConnectionString };

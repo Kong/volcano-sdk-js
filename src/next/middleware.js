@@ -26,6 +26,18 @@
  * ```
  */
 
+import { authGetUser, authRefresh, createApiClient } from '../api/index.ts';
+
+function toError(error, fallback) {
+  if (error instanceof Error) {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    return new Error(error.error || error.message || fallback);
+  }
+  return new Error(typeof error === 'string' ? error : fallback);
+}
+
 /**
  * Extract auth token from request headers or cookies
  * @param {Request} request - Next.js request object
@@ -54,13 +66,19 @@ export function getTokenFromRequest(request) {
  * Create a server-side Volcano client for middleware/API routes
  * @param {Object} config - Client configuration
  * @param {string} config.anonKey - Your project's anon key
- * @param {string} [config.apiUrl] - API URL (defaults to https://api.volcano.dev)
+ * @param {string} [config.baseUrl] - API URL (defaults to https://api.volcano.dev)
  * @param {string} [config.accessToken] - Optional pre-set access token
+ * @param {Function} [config.fetch] - Optional Fetch implementation
  * @returns {Object} A minimal client for server-side auth validation
  */
 export function createServerClient(config) {
-  const apiUrl = config.apiUrl || 'https://api.volcano.dev';
-  const anonKey = config.anonKey;
+  const api = createApiClient({
+    accessToken: config.accessToken,
+    anonKey: config.anonKey,
+    baseUrl: config.baseUrl,
+    fetch: config.fetch,
+    timeoutMs: config.timeoutMs,
+  });
 
   return {
     /**
@@ -73,29 +91,12 @@ export function createServerClient(config) {
         return { user: null, error: new Error('No access token provided') };
       }
 
-      try {
-        const response = await fetch(`${apiUrl}/auth/user`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'X-Anon-Key': anonKey,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          return {
-            user: null,
-            error: new Error(data.error || `Auth failed: ${response.status}`),
-          };
-        }
-
-        const data = await response.json().catch(() => ({}));
-        return { user: data.user || null, error: null };
-      } catch (err) {
-        return { user: null, error: err };
+      api.setCredentials({ accessToken });
+      const result = await authGetUser({ client: api });
+      if (result.error !== undefined) {
+        return { user: null, error: toError(result.error, 'Auth failed') };
       }
+      return { user: result.data?.user || null, error: null };
     },
 
     /**
@@ -112,34 +113,22 @@ export function createServerClient(config) {
         };
       }
 
-      try {
-        const response = await fetch(`${apiUrl}/auth/refresh`, {
-          method: 'POST',
-          headers: {
-            'X-Anon-Key': anonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          return {
-            accessToken: null,
-            refreshToken: null,
-            error: new Error(data.error || `Refresh failed: ${response.status}`),
-          };
-        }
-
-        const data = await response.json();
+      const result = await authRefresh({
+        body: { refresh_token: refreshToken },
+        client: api,
+      });
+      if (result.error !== undefined) {
         return {
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          error: null,
+          accessToken: null,
+          refreshToken: null,
+          error: toError(result.error, 'Refresh failed'),
         };
-      } catch (err) {
-        return { accessToken: null, refreshToken: null, error: err };
       }
+      return {
+        accessToken: result.data.access_token,
+        refreshToken: result.data.refresh_token,
+        error: null,
+      };
     },
   };
 }

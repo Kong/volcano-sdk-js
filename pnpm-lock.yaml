@@ -101,6 +101,9 @@ importers:
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
+      undici:
+        specifier: ^6.27.0
+        version: 6.27.0
 
   examples/nextjs-notes-app:
     dependencies:
@@ -6767,6 +6770,13 @@ packages:
         integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==,
       }
 
+  undici@6.27.0:
+    resolution:
+      {
+        integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==,
+      }
+    engines: { node: '>=18.17' }
+
   unicode-canonical-property-names-ecmascript@2.0.1:
     resolution:
       {
@@ -11774,6 +11784,8 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@7.16.0: {}
+
+  undici@6.27.0: {}
 
   unicode-canonical-property-names-ecmascript@2.0.1: {}
 

@@ -2,8 +2,8 @@ const { createServerClient, withAuth } = require('../src/next/middleware.js');
 
 describe('Next.js middleware helpers', () => {
   const config = {
-    apiUrl: 'https://api.test.com',
     anonKey: 'ak-test-anon-key',
+    baseUrl: 'https://api.test.com',
   };
 
   beforeEach(() => {
@@ -42,5 +42,28 @@ describe('Next.js middleware helpers', () => {
     const user = await withAuth(request, client);
 
     expect(user).toEqual({ id: 'user-456' });
+  });
+
+  it('refreshes through the generated auth operation', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: 'new-access-token',
+          refresh_token: 'new-refresh-token',
+        }),
+    });
+
+    const client = createServerClient(config);
+    const result = await client.refreshToken('refresh-token');
+
+    expect(result).toEqual({
+      accessToken: 'new-access-token',
+      error: null,
+      refreshToken: 'new-refresh-token',
+    });
+    const request = global.fetch.mock.calls[0][0];
+    expect(request.url).toBe('https://api.test.com/auth/refresh');
+    expect(request.headers.get('Authorization')).toBe('Bearer ak-test-anon-key');
   });
 });

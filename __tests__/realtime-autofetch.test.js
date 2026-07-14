@@ -14,14 +14,8 @@ const createMockVolcanoClient = (mockData = []) => {
     in: jest.fn().mockResolvedValue({ data: mockData, error: null }),
   };
 
-  const client = {
-    _currentDatabaseName: null,
-    database: jest.fn((name) => {
-      client._currentDatabaseName = name;
-      return client;
-    }),
-    from: jest.fn(() => query),
-  };
+  const client = { from: jest.fn(() => query) };
+  client.database = jest.fn(() => ({ from: client.from }));
 
   return { client, query };
 };
@@ -430,11 +424,8 @@ describe('Realtime Auto-Fetch', () => {
         select: jest.fn().mockReturnThis(),
         in: jest.fn().mockResolvedValue({ data: null, error: { message: 'Database error' } }),
       };
-      const mockClient = {
-        _currentDatabaseName: null,
-        database: jest.fn(() => mockClient),
-        from: jest.fn(() => query),
-      };
+      const mockClient = { from: jest.fn(() => query) };
+      mockClient.database = jest.fn(() => ({ from: mockClient.from }));
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('public:users', { type: 'postgres' });
