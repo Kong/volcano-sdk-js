@@ -222,7 +222,7 @@ async function getPublishedPosts(category, page = 1) {
 ### Single Insert
 
 ```javascript
-const { data, error } = await database.insert('posts', {
+const { data, error } = await database.from('posts').insert({
   title: 'My New Post',
   content: 'This is the content of my post.',
   status: 'draft',
@@ -245,7 +245,7 @@ If your table has a `user_id` column and RLS policies, the user ID is automatica
 
 ```javascript
 // Assuming posts table has user_id column with default value auth.uid()
-const { data } = await database.insert('posts', {
+const { data } = await database.from('posts').insert({
   title: 'My Post',
   content: 'Content here',
 });
@@ -264,7 +264,8 @@ Always use a filter to specify which rows to update:
 
 ```javascript
 const { data, error } = await database
-  .update('posts', {
+  .from('posts')
+  .update({
     title: 'Updated Title',
     status: 'published',
     updated_at: new Date().toISOString(),
@@ -290,7 +291,8 @@ const oneYearAgo = new Date();
 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
 const { data, error } = await database
-  .update('posts', {
+  .from('posts')
+  .update({
     status: 'archived',
   })
   .lt('created_at', oneYearAgo.toISOString())
@@ -304,7 +306,7 @@ console.log(`Archived ${data.length} posts`);
 ### Delete with Filter
 
 ```javascript
-const { data, error } = await database.delete('posts').eq('id', postId);
+const { data, error } = await database.from('posts').delete().eq('id', postId);
 
 if (error) {
   console.error('Delete failed:', error.message);
@@ -321,7 +323,8 @@ Many applications prefer soft deletes (marking records as deleted rather than re
 ```javascript
 // Soft delete
 const { data } = await database
-  .update('posts', {
+  .from('posts')
+  .update({
     deleted_at: new Date().toISOString(),
   })
   .eq('id', postId);

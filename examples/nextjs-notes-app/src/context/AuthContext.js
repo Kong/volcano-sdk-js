@@ -97,8 +97,8 @@ export function AuthProvider({ children }) {
     initAuth();
 
     // Listen for auth state changes (sign in, sign out, token refresh)
-    const unsubscribe = volcano.auth.onAuthStateChange((updatedUser) => {
-      setUser(updatedUser);
+    const unsubscribe = volcano.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
     });
 
     // Cleanup listener on unmount to prevent memory leaks

@@ -9,7 +9,126 @@ const jsonResponse = (status: number, body: unknown) =>
     status,
   });
 
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
 describe('createVolcanoClient generated API refresh', () => {
+  it('shares concurrent public refresh calls', async () => {
+    const refreshResponse = deferred<Response>();
+    const refreshStarted = deferred<void>();
+    const fetchMock = jest.fn(async () => {
+      refreshStarted.resolve();
+      return refreshResponse.promise;
+    });
+    const volcano = createVolcanoClient({
+      accessToken: 'old-access-token',
+      fetch: fetchMock,
+      refreshToken: 'refresh-token',
+    });
+
+    const first = volcano.auth.refreshSession();
+    const second = volcano.auth.refreshSession();
+    await refreshStarted.promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    refreshResponse.resolve(
+      jsonResponse(200, {
+        access_token: 'new-access-token',
+        expires_in: 3600,
+        refresh_token: 'new-refresh-token',
+        user: { id: 'user-id' },
+      }),
+    );
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.session?.access_token).toBe('new-access-token');
+    expect(secondResult.session?.access_token).toBe('new-access-token');
+  });
+
+  it('ignores a refresh response after sign-out completes', async () => {
+    const refreshResponse = deferred<Response>();
+    const refreshStarted = deferred<void>();
+    const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === '/auth/refresh') {
+        refreshStarted.resolve();
+        return refreshResponse.promise;
+      }
+      return jsonResponse(200, {});
+    });
+    const volcano = createVolcanoClient({
+      accessToken: 'old-access-token',
+      fetch: fetchMock,
+      refreshToken: 'refresh-token',
+    });
+    const events: string[] = [];
+    volcano.auth.onAuthStateChange((event) => events.push(event));
+
+    const pendingRefresh = volcano.auth.refreshSession();
+    await refreshStarted.promise;
+    await volcano.auth.signOut();
+    refreshResponse.resolve(
+      jsonResponse(200, {
+        access_token: 'stale-access-token',
+        expires_in: 3600,
+        refresh_token: 'stale-refresh-token',
+        user: { id: 'stale-user' },
+      }),
+    );
+
+    await expect(pendingRefresh).resolves.toEqual({ error: null, session: null });
+    expect(volcano.auth.user()).toBeNull();
+    expect(events).not.toContain('TOKEN_REFRESHED');
+  });
+
+  it('ignores a refresh response after a new sign-in completes', async () => {
+    const refreshResponse = deferred<Response>();
+    const refreshStarted = deferred<void>();
+    const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === '/auth/refresh') {
+        refreshStarted.resolve();
+        return refreshResponse.promise;
+      }
+      return jsonResponse(200, {
+        access_token: 'signed-in-access-token',
+        expires_in: 3600,
+        refresh_token: 'signed-in-refresh-token',
+        user: { id: 'signed-in-user' },
+      });
+    });
+    const volcano = createVolcanoClient({
+      accessToken: 'old-access-token',
+      anonKey: 'anon-key',
+      fetch: fetchMock,
+      refreshToken: 'refresh-token',
+    });
+    const events: string[] = [];
+    volcano.auth.onAuthStateChange((event) => events.push(event));
+
+    const pendingRefresh = volcano.auth.refreshSession();
+    await refreshStarted.promise;
+    await volcano.auth.signIn({ email: 'user@example.com', password: 'secret' });
+    refreshResponse.resolve(
+      jsonResponse(200, {
+        access_token: 'stale-access-token',
+        expires_in: 3600,
+        refresh_token: 'stale-refresh-token',
+        user: { id: 'stale-user' },
+      }),
+    );
+
+    const result = await pendingRefresh;
+    expect(result.session?.access_token).toBe('signed-in-access-token');
+    expect(volcano.auth.user()).toEqual({ id: 'signed-in-user' });
+    expect(events).not.toContain('TOKEN_REFRESHED');
+  });
+
   it('refreshes concurrent access-token 401s once and retries each request', async () => {
     let userRequests = 0;
     let refreshRequests = 0;

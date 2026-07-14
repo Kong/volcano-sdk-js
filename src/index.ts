@@ -781,11 +781,17 @@ class VolcanoClientCore {
   currentSession: Session | null = null;
   currentUser: User | null = null;
   refreshToken: string | null;
+  private _authGeneration = 0;
   private readonly _authCallbacks = new Set<AuthCallback>();
   private readonly _functionResolveState: FunctionResolveState;
   private readonly _initializationPromise: Promise<void>;
   private readonly _retryRequests = new WeakMap<Request, Request>();
-  private _refreshPromise: Promise<SessionResponse> | null = null;
+  private _refreshState: {
+    clearOnFailure: boolean;
+    generation: number;
+    promise: Promise<SessionResponse>;
+  } | null = null;
+  private _storageMutationPromise: Promise<unknown> = Promise.resolve();
   private _urlSessionConsumed = false;
 
   constructor(config: VolcanoClientConfig = {}) {
@@ -1009,12 +1015,24 @@ class VolcanoClientCore {
   }
 
   _refreshSessionSingleFlight(clearOnFailure = false): Promise<SessionResponse> {
-    if (!this._refreshPromise) {
-      this._refreshPromise = this._refreshSession(clearOnFailure).finally(() => {
-        this._refreshPromise = null;
+    const generation = this._authGeneration;
+    let state = this._refreshState;
+    if (!state || state.generation !== generation) {
+      state = {
+        clearOnFailure,
+        generation,
+        promise: Promise.resolve({ session: null, error: null }),
+      };
+      state.promise = this._refreshSession(() => state?.clearOnFailure === true).finally(() => {
+        if (this._refreshState === state) {
+          this._refreshState = null;
+        }
       });
+      this._refreshState = state;
+    } else if (clearOnFailure) {
+      state.clearOnFailure = true;
     }
-    return this._refreshPromise;
+    return state.promise;
   }
 
   async _refreshSessionForRequest(
@@ -1246,7 +1264,7 @@ class VolcanoClientCore {
       return { user: null, session: null, error: result.error };
     }
 
-    const session = await this._setSession(result.data, 'SIGNED_IN');
+    const { session } = await this._setSession(result.data, 'SIGNED_IN');
     return {
       user: result.data.user,
       session,
@@ -1313,12 +1331,14 @@ class VolcanoClientCore {
 
   async refreshSession(): Promise<SessionResponse> {
     await this._initializationPromise;
-    return this._refreshSession(true);
+    return this._refreshSessionSingleFlight(true);
   }
 
-  private async _refreshSession(clearOnFailure: boolean): Promise<SessionResponse> {
-    if (!this.refreshToken) {
-      if (clearOnFailure) {
+  private async _refreshSession(clearOnFailure: () => boolean): Promise<SessionResponse> {
+    const authGeneration = this._authGeneration;
+    const refreshToken = this.refreshToken;
+    if (!refreshToken) {
+      if (clearOnFailure()) {
         await this._clearSession('SIGNED_OUT');
       }
       return {
@@ -1330,21 +1350,32 @@ class VolcanoClientCore {
     try {
       const result = await this._callApi(
         authRefresh,
-        { body: { refresh_token: this.refreshToken } },
+        { body: { refresh_token: refreshToken } },
         'Session refresh failed',
       );
 
+      if (authGeneration !== this._authGeneration || refreshToken !== this.refreshToken) {
+        return { session: this.currentSession, error: null };
+      }
+
       if (!result.ok) {
-        if (clearOnFailure || this._isSessionExpired()) {
+        if (clearOnFailure() || this._isSessionExpired()) {
           await this._clearSession('SIGNED_OUT');
         }
         return { session: null, error: result.error };
       }
 
-      const session = await this._setSession(result.data, 'TOKEN_REFRESHED');
-      return { session, error: null };
+      const refreshed = await this._setSession(result.data, 'TOKEN_REFRESHED');
+      return {
+        session:
+          refreshed.generation === this._authGeneration ? refreshed.session : this.currentSession,
+        error: null,
+      };
     } catch (error) {
-      if (clearOnFailure || this._isSessionExpired()) {
+      if (authGeneration !== this._authGeneration || refreshToken !== this.refreshToken) {
+        return { session: this.currentSession, error: null };
+      }
+      if (clearOnFailure() || this._isSessionExpired()) {
         await this._clearSession('SIGNED_OUT');
       }
       return {
@@ -1356,7 +1387,7 @@ class VolcanoClientCore {
 
   /**
    * Register a callback for auth state changes.
-   * @param {Function} callback - Called with user object (or null) on auth state change
+   * @param {Function} callback - Called with the auth event and current session
    * @returns {Function} Unsubscribe function
    */
   onAuthStateChange(callback: AuthCallback): () => void {
@@ -1396,7 +1427,7 @@ class VolcanoClientCore {
       return { user: null, session: null, error: result.error };
     }
 
-    const session = await this._setSession(result.data, 'SIGNED_IN');
+    const { session } = await this._setSession(result.data, 'SIGNED_IN');
     return {
       user: result.data.user,
       session,
@@ -2034,21 +2065,24 @@ class VolcanoClientCore {
     };
   }
 
-  private _adoptSession(session: Session): void {
+  private _adoptSession(session: Session): number {
     assertBrowserSafeCredentials(session.access_token);
+    this._authGeneration += 1;
     this.currentSession = session;
     this.accessToken = session.access_token;
     this.refreshToken = session.refresh_token;
     this.currentUser = session.user;
     this.api.setCredentials({ accessToken: this.accessToken });
+    return this._authGeneration;
   }
 
-  private async _persistSession(): Promise<void> {
-    if (!this.persistSession || !this.currentSession) {
+  private async _persistSession(session: Session | null = this.currentSession): Promise<void> {
+    if (!this.persistSession || !session) {
       return;
     }
     try {
-      await this.storageAdapter.setItem(this.storageKey, JSON.stringify(this.currentSession));
+      const value = JSON.stringify(session);
+      await this._queueStorageMutation(() => this.storageAdapter.setItem(this.storageKey, value));
     } catch (error) {
       console.warn('[Volcano] Failed to persist the auth session:', error);
     }
@@ -2059,21 +2093,34 @@ class VolcanoClientCore {
       return;
     }
     try {
-      await this.storageAdapter.removeItem(this.storageKey);
+      await this._queueStorageMutation(() => this.storageAdapter.removeItem(this.storageKey));
     } catch (error) {
       console.warn('[Volcano] Failed to remove the persisted auth session:', error);
     }
   }
 
-  private async _setSession(data: AuthTokenResponse, event: AuthChangeEvent): Promise<Session> {
+  private _queueStorageMutation(mutation: () => Promise<void> | void): Promise<void> {
+    const pending = this._storageMutationPromise.then(mutation);
+    this._storageMutationPromise = pending.catch(() => null);
+    return pending;
+  }
+
+  private async _setSession(
+    data: AuthTokenResponse,
+    event: AuthChangeEvent,
+  ): Promise<{ generation: number; session: Session }> {
     const session = this._sessionFromTokenResponse(data);
-    this._adoptSession(session);
-    await this._persistSession();
-    this._notifyAuthCallbacks(event, session);
-    return session;
+    const generation = this._adoptSession(session);
+    await this._persistSession(session);
+    if (generation === this._authGeneration) {
+      this._notifyAuthCallbacks(event, session);
+    }
+    return { generation, session };
   }
 
   private async _clearSession(event: AuthChangeEvent): Promise<void> {
+    this._authGeneration += 1;
+    const generation = this._authGeneration;
     this.accessToken = null;
     this.refreshToken = null;
     this.currentSession = null;
@@ -2082,7 +2129,9 @@ class VolcanoClientCore {
 
     await this._removePersistedSession();
 
-    this._notifyAuthCallbacks(event, null);
+    if (generation === this._authGeneration) {
+      this._notifyAuthCallbacks(event, null);
+    }
   }
 
   private _notifyAuthCallbacks(event: AuthChangeEvent, session: Session | null): void {

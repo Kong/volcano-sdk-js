@@ -137,7 +137,7 @@ const { data } = await database
   .order('created_at', { ascending: false });
 
 // Create a note
-await database.insert('notes', {
+await database.from('notes').insert({
   title: 'My Note',
   content: 'Hello World!',
   user_id: user.id
@@ -145,12 +145,14 @@ await database.insert('notes', {
 
 // Update a note
 await database
-  .update('notes', { title: 'Updated' })
+  .from('notes')
+  .update({ title: 'Updated' })
   .eq('id', noteId);
 
 // Delete a note
 await database
-  .delete('notes')
+  .from('notes')
+  .delete()
   .eq('id', noteId);`}
           </code>
         </pre>

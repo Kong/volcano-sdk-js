@@ -153,7 +153,7 @@ Row-Level Security policies automatically filter results to only include data th
 ### 4. Insert Data
 
 ```javascript
-const { data, error } = await database.insert('posts', {
+const { data, error } = await database.from('posts').insert({
   title: 'My First Post',
   content: 'Hello, Volcano!',
   published: true,
@@ -189,7 +189,8 @@ This is especially useful for single-page applications where you want to keep us
 You can subscribe to authentication state changes to update your UI when users sign in or out:
 
 ```javascript
-const unsubscribe = volcano.auth.onAuthStateChange((user) => {
+const unsubscribe = volcano.auth.onAuthStateChange((_event, session) => {
+  const user = session?.user;
   if (user) {
     console.log('User signed in:', user.email);
     showDashboard();

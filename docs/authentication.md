@@ -162,7 +162,8 @@ The client also automatically adopts a session that is present in the page URL â
 React to authentication events in real-time:
 
 ```javascript
-const unsubscribe = volcano.auth.onAuthStateChange((user) => {
+const unsubscribe = volcano.auth.onAuthStateChange((_event, session) => {
+  const user = session?.user;
   if (user) {
     // User signed in or session restored
     updateUI({ isLoggedIn: true, user });
@@ -627,8 +628,8 @@ await volcano.auth.signUp({ email, password });
 Access tokens expire after a configured time (default: 1 hour). The SDK handles refresh automatically, but you should handle the case where refresh fails:
 
 ```javascript
-volcano.auth.onAuthStateChange((user) => {
-  if (!user) {
+volcano.auth.onAuthStateChange((_event, session) => {
+  if (!session) {
     // Session expired or user signed out
     redirectToLogin();
   }

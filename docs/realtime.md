@@ -218,7 +218,7 @@ channel.onPostgresChanges('INSERT', 'public', 'messages', (change) => {
 await channel.subscribe();
 
 // Send a message (through normal database insert)
-await database.insert('messages', {
+await database.from('messages').insert({
   content: 'Hello everyone!',
   channel_id: 'general',
 });

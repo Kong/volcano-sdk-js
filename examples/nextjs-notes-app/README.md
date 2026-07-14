@@ -18,9 +18,9 @@ A full-featured notes application demonstrating the **Volcano SDK** capabilities
 | Password Reset  | `volcano.auth.forgotPassword()`  | Send reset email             |
 | Session Restore | `volcano.auth.initialize()`      | Restore session on page load |
 | Query Data      | `database.from().select()`       | Fetch notes with filters     |
-| Insert Data     | `database.insert()`              | Create new notes             |
-| Update Data     | `database.update().eq()`         | Modify existing notes        |
-| Delete Data     | `database.delete().eq()`         | Remove notes                 |
+| Insert Data     | `database.from().insert()`       | Create new notes             |
+| Update Data     | `database.from().update().eq()`  | Modify existing notes        |
+| Delete Data     | `database.from().delete().eq()`  | Remove notes                 |
 
 ## Quick Start
 

@@ -378,8 +378,8 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('onAuthStateChange - receives callback', (done) => {
-      volcano.auth.onAuthStateChange((user) => {
-        expect(user).toBeDefined();
+      volcano.auth.onAuthStateChange((_event, session) => {
+        expect(session).toBeDefined();
         done();
       });
     });
@@ -2005,7 +2005,7 @@ describe('SDK E2E Integration Tests', () => {
     // ---- Real Database Operation Tests ----
 
     test('insert() - inserts single record', async () => {
-      const result = await dbVolcano.insert('sdk_test_products', {
+      const result = await dbVolcano.from('sdk_test_products').insert({
         name: 'Test Product 1',
         category: 'electronics',
         price: 99.99,
@@ -2022,7 +2022,7 @@ describe('SDK E2E Integration Tests', () => {
 
     test('insert() - inserts multiple records', async () => {
       // Insert more test data
-      await dbVolcano.insert('sdk_test_products', {
+      await dbVolcano.from('sdk_test_products').insert({
         name: 'Test Product 2',
         category: 'electronics',
         price: 149.99,
@@ -2030,7 +2030,7 @@ describe('SDK E2E Integration Tests', () => {
         is_active: true,
       });
 
-      await dbVolcano.insert('sdk_test_products', {
+      await dbVolcano.from('sdk_test_products').insert({
         name: 'Test Product 3',
         category: 'clothing',
         price: 29.99,
@@ -2038,7 +2038,7 @@ describe('SDK E2E Integration Tests', () => {
         is_active: true,
       });
 
-      await dbVolcano.insert('sdk_test_products', {
+      await dbVolcano.from('sdk_test_products').insert({
         name: 'Inactive Product',
         category: 'clothing',
         price: 19.99,
@@ -2046,7 +2046,7 @@ describe('SDK E2E Integration Tests', () => {
         is_active: false,
       });
 
-      await dbVolcano.insert('sdk_test_products', {
+      await dbVolcano.from('sdk_test_products').insert({
         name: 'Expensive Item',
         category: 'luxury',
         price: 999.99,
@@ -2276,7 +2276,8 @@ describe('SDK E2E Integration Tests', () => {
 
       // Update it
       const updateResult = await dbVolcano
-        .update('sdk_test_products', { quantity: 999 })
+        .from('sdk_test_products')
+        .update({ quantity: 999 })
         .eq('id', productId);
 
       expect(updateResult.error).toBeNull();
@@ -2293,7 +2294,8 @@ describe('SDK E2E Integration Tests', () => {
 
     test('update() - updates with multiple filters', async () => {
       const result = await dbVolcano
-        .update('sdk_test_products', { quantity: 50 })
+        .from('sdk_test_products')
+        .update({ quantity: 50 })
         .eq('category', 'clothing')
         .eq('is_active', true);
 
@@ -2303,7 +2305,7 @@ describe('SDK E2E Integration Tests', () => {
 
     test('delete() - deletes matching records', async () => {
       // Insert a record to delete
-      const insertResult = await dbVolcano.insert('sdk_test_products', {
+      const insertResult = await dbVolcano.from('sdk_test_products').insert({
         name: 'To Be Deleted',
         category: 'temporary',
         price: 0.01,
@@ -2313,7 +2315,10 @@ describe('SDK E2E Integration Tests', () => {
       expect(insertResult.error).toBeNull();
 
       // Delete it
-      const deleteResult = await dbVolcano.delete('sdk_test_products').eq('name', 'To Be Deleted');
+      const deleteResult = await dbVolcano
+        .from('sdk_test_products')
+        .delete()
+        .eq('name', 'To Be Deleted');
 
       expect(deleteResult.error).toBeNull();
 
@@ -2336,7 +2341,7 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('thenable - MutationBuilder works with await', async () => {
-      const { data, error } = await dbVolcano.insert('sdk_test_products', {
+      const { data, error } = await dbVolcano.from('sdk_test_products').insert({
         name: 'Thenable Test',
         category: 'test',
         price: 1.0,
@@ -2346,7 +2351,7 @@ describe('SDK E2E Integration Tests', () => {
       expect(data[0].name).toBe('Thenable Test');
 
       // Cleanup
-      await dbVolcano.delete('sdk_test_products').eq('name', 'Thenable Test');
+      await dbVolcano.from('sdk_test_products').delete().eq('name', 'Thenable Test');
       console.log('  [ok] MutationBuilder thenable/await works');
     });
   });

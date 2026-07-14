@@ -160,7 +160,7 @@ if (error) {
 ### Insert Errors
 
 ```javascript
-const { data, error } = await database.insert('posts', {
+const { data, error } = await database.from('posts').insert({
   title: 'My Post',
   content: 'Content here',
 });
@@ -190,7 +190,10 @@ if (error) {
 ### Update/Delete Errors
 
 ```javascript
-const { data, error } = await database.update('posts', { status: 'published' }).eq('id', postId);
+const { data, error } = await database
+  .from('posts')
+  .update({ status: 'published' })
+  .eq('id', postId);
 
 if (error) {
   if (error.message.includes('permission denied')) {
