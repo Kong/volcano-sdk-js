@@ -115,7 +115,13 @@ async function withTimeout(promise, timeoutMs, label) {
 // Integration tests run in the Node test environment, so there is no DOM. The
 // managed-auth redirect hand-off is browser-only (the SDK reads the session from
 // window.location.hash), so install a minimal window for the duration of a test.
+let previousBrowserEnv;
+
 function installBrowserEnv(initialHash) {
+  previousBrowserEnv = {
+    localStorage: global.localStorage,
+    window: global.window,
+  };
   let currentHash = initialHash || '';
   const store = {};
   const sessionStore = {};
@@ -135,6 +141,9 @@ function installBrowserEnv(initialHash) {
       }
     },
   });
+  const localStorage = makeStorage(store);
+  const sessionStorage = makeStorage(sessionStore);
+  global.localStorage = localStorage;
   global.window = {
     document: {},
     location: {
@@ -155,24 +164,32 @@ function installBrowserEnv(initialHash) {
         currentHash = hashIndex >= 0 ? String(url).slice(hashIndex) : '';
       },
     },
-    localStorage: makeStorage(store),
-    sessionStorage: makeStorage(sessionStore),
+    localStorage,
+    sessionStorage,
   };
   return {
     store,
     sessionStore,
     getHash: () => currentHash,
-    // Seed the RP nonce the way signInWithHostedAuth()/signInWithOAuth() would
-    // before redirecting.
-    seedAuthState: (nonce) => {
-      sessionStore.volcano_auth_state = String(nonce);
-    },
   };
 }
 
 function uninstallBrowserEnv() {
-  delete global.window;
+  if (previousBrowserEnv?.window === undefined) {
+    delete global.window;
+  } else {
+    global.window = previousBrowserEnv.window;
+  }
+  if (previousBrowserEnv?.localStorage === undefined) {
+    delete global.localStorage;
+  } else {
+    global.localStorage = previousBrowserEnv.localStorage;
+  }
+  previousBrowserEnv = undefined;
 }
+
+const authStorageKey = (projectId) => `volcano-${projectId}-auth-token`;
+const oauthStateKey = (projectId) => `${authStorageKey(projectId)}-oauth-state`;
 
 describe('SDK E2E Integration Tests', () => {
   // Test fixtures
@@ -477,7 +494,7 @@ describe('SDK E2E Integration Tests', () => {
         });
         const signup = await first.auth.signUp({ email, password, signInWhenAllowed: true });
         expect(signup.session.access_token).toBeTruthy();
-        expect(browser.store['volcano_access_token']).toBeTruthy();
+        expect(browser.store[authStorageKey(hosted.projectId)]).toBeTruthy();
 
         // Simulate a page reload: a brand-new client restores the session from storage.
         const reloaded = createVolcanoClient({
@@ -525,7 +542,7 @@ describe('SDK E2E Integration Tests', () => {
         const stateNonce = parsedHosted.searchParams.get('state');
         expect(stateNonce).toBeTruthy();
         // The SDK stored exactly this nonce for validation on return.
-        expect(browser.sessionStore.volcano_auth_state).toBe(stateNonce);
+        expect(browser.sessionStore[oauthStateKey(hosted.projectId)]).toBe(stateNonce);
 
         // 2) The hosted page is really served by the API and contains the logic
         //    that echoes ?state back into the post-auth fragment.
@@ -568,7 +585,7 @@ describe('SDK E2E Integration Tests', () => {
         expect(await getAccessToken(client)).toBe(session.access_token);
         expect(browser.getHash()).toBe('');
         // The one-time nonce was consumed.
-        expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
+        expect(browser.sessionStore[oauthStateKey(hosted.projectId)]).toBeUndefined();
 
         // 6) An authenticated operation works immediately, with no getUser() first.
         const updated = await client.auth.updateUser({ metadata: { bootstrapped: 'managed-e2e' } });
@@ -641,7 +658,7 @@ describe('SDK E2E Integration Tests', () => {
         const initiator = createVolcanoClient({ baseUrl: API_URL, anonKey: hosted.anonKey });
         const hostedUrl = initiator.auth.getHostedAuthUrl({ projectId: hosted.projectId });
         const realNonce = new URL(hostedUrl).searchParams.get('state');
-        expect(browser.sessionStore.volcano_auth_state).toBe(realNonce);
+        expect(browser.sessionStore[oauthStateKey(hosted.projectId)]).toBe(realNonce);
 
         // A real session is minted...
         const email = `managed-mismatch-${Date.now()}@example.com`;
@@ -670,7 +687,7 @@ describe('SDK E2E Integration Tests', () => {
         // Mismatched state ⇒ not adopted, tokens scrubbed, nonce consumed.
         expect(await getAccessToken(client)).toBeUndefined();
         expect(browser.getHash()).toBe('');
-        expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
+        expect(browser.sessionStore[oauthStateKey(hosted.projectId)]).toBeUndefined();
       } finally {
         uninstallBrowserEnv();
       }

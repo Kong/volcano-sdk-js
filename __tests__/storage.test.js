@@ -999,6 +999,53 @@ describe('Storage', () => {
       expect(error.message).toBe('upload failed');
     });
 
+    it('uses a fresh signal to abort a session after caller cancellation', async () => {
+      const caller = new AbortController();
+      let startPartUpload;
+      const partUploadStarted = new Promise((resolve) => {
+        startPartUpload = resolve;
+      });
+      let cleanupSignal;
+      const fetchMock = jest.fn((_input, options) => {
+        if (fetchMock.mock.calls.length === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({ session_id: 'sess-cancelled', total_parts: 1, part_size: 1024 }),
+          });
+        }
+        if (fetchMock.mock.calls.length === 2) {
+          startPartUpload();
+          return new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+              once: true,
+            });
+          });
+        }
+        cleanupSignal = options.signal;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      });
+      const client = createVolcanoClient({ ...config, fetch: fetchMock });
+
+      const pending = client.storage
+        .from('uploads')
+        .uploadResumable('file.bin', new Blob([new ArrayBuffer(1024)]), {
+          signal: caller.signal,
+        });
+      await partUploadStarted;
+      caller.abort(new DOMException('Cancelled by caller', 'AbortError'));
+      const result = await pending;
+
+      expect(result.error).toMatchObject({
+        message: 'Cancelled by caller',
+        name: 'VolcanoApiError',
+      });
+      expect(result.error.cause).toMatchObject({ name: 'AbortError' });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(cleanupSignal.aborted).toBe(false);
+      expect(fetchMock.mock.calls[2][1].method).toBe('DELETE');
+    });
+
     it('should return error when not authenticated', async () => {
       volcano = createVolcanoClient({ baseUrl: 'https://api.test.com' });
 

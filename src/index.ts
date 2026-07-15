@@ -3026,7 +3026,7 @@ class StorageFileApi implements StorageFileClient {
           options,
         );
         if (part.error) {
-          await this.abortUploadSession(path, sessionId, options);
+          await this.abortUploadSession(path, sessionId);
           return { data: null, error: part.error };
         }
         options.onProgress?.(end, totalSize);
