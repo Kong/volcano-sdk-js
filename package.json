@@ -63,8 +63,8 @@
   ],
   "scripts": {
     "build": "rollup -c rollup.config.mjs && node scripts/copy-types.mjs",
-    "generate:openapi": "openapi-ts",
-    "check:openapi": "node scripts/check-openapi.mjs",
+    "generate:openapi": "openapi-ts && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write",
+    "check:openapi": "node scripts/check-openapi.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false | prettier --parser typescript | diff - src/generated/openapi.d.ts",
     "dev": "rollup -c -w",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -139,6 +139,7 @@
     "globals": "^17.6.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
+    "openapi-typescript": "7.13.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",
