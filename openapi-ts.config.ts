@@ -7,7 +7,21 @@ export default defineConfig({
   output: {
     clean: true,
     path: outputPath,
-    postProcess: ['prettier'],
+    postProcess: [
+      {
+        command: 'prettier',
+        args: [
+          '--ignore-unknown',
+          '{{path}}',
+          '--write',
+          '--ignore-path',
+          './.prettierignore',
+          '--config',
+          './prettier.config.cjs',
+        ],
+        name: 'Prettier',
+      },
+    ],
   },
   plugins: [
     '@hey-api/typescript',
