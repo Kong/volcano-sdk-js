@@ -1,11 +1,22 @@
 import typescript from '@rollup/plugin-typescript';
 import { dts } from 'rollup-plugin-dts';
 
+const typescriptPlugin = () =>
+  typescript({
+    compilerOptions: {
+      declaration: false,
+      emitDeclarationOnly: false,
+      noEmit: false,
+    },
+    tsconfig: './tsconfig.json',
+  });
+
 export default [
   // Main SDK bundle
   {
     input: 'src/index.js',
     external: ['centrifuge', 'ws'],
+    plugins: [typescriptPlugin()],
     output: [
       {
         file: 'dist/index.js',
@@ -30,16 +41,7 @@ export default [
   // Generated OpenAPI client
   {
     input: 'src/api/index.ts',
-    plugins: [
-      typescript({
-        compilerOptions: {
-          declaration: false,
-          emitDeclarationOnly: false,
-          noEmit: false,
-        },
-        tsconfig: './tsconfig.json',
-      }),
-    ],
+    plugins: [typescriptPlugin()],
     output: [
       {
         file: 'dist/api/index.js',

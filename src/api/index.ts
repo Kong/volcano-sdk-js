@@ -45,7 +45,7 @@ const credentialForScheme = (credentials: ApiCredentials, auth: Auth): string | 
 
 const createTimeoutFetch = (fetchImplementation: typeof fetch, timeoutMs: number): typeof fetch => {
   return async (input, init) => {
-    const request = new Request(input, init);
+    const request = input instanceof Request ? input.clone() : new Request(input, init);
     const controller = new AbortController();
     const abortFromRequest = () => controller.abort(request.signal.reason);
 
