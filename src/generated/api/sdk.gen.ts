@@ -4713,11 +4713,13 @@ export const downloadStorageObject = <ThrowOnError extends boolean = false>(
  *
  * **Create Resumable Session (application/json):**
  * Create a session for chunked uploads. Best for large files or unreliable networks.
- * Requires: `Content-Type: application/json` with body `{"filename": "...", "content_type": "...", "total_size": ...}`
+ * Requires: `Content-Type: application/json` with body `{"content_type": "...", "total_size": ...}`.
+ * The object path is taken from the URL.
  *
  * **Complete Resumable Session:**
  * Complete a session after all parts are uploaded.
  * Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+ * No request body is required.
  *
  */
 export const manageStorageUploadSession = <ThrowOnError extends boolean = false>(

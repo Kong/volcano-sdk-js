@@ -157,6 +157,19 @@ export const createApiClient = (config: ApiClientConfig = {}): ApiClient => {
     throwOnError: false,
   }) as ApiClient;
 
+  client.interceptors.request.use((request, options) => {
+    if (options.parseAs !== 'auto' || request.method !== 'GET') {
+      return request;
+    }
+    const isPublicDownload = options.url === '/public/{projectId}/{bucketName}/{path}';
+    const isStorageDownload =
+      options.url === '/storage/{bucketName}/{path}' && !request.headers.has('X-Upload-Session');
+    if (isPublicDownload || isStorageDownload) {
+      options.parseAs = 'blob';
+    }
+    return request;
+  });
+
   client.setCredentials = (nextCredentials) => {
     const prospectiveCredentials = { ...credentials, ...nextCredentials };
     assertBrowserSafeCredentials(

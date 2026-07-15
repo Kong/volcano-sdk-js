@@ -3165,8 +3165,16 @@ paths:
                       value:
                         oneOf:
                           - type: string
+                            nullable: true
                           - type: number
                           - type: boolean
+                          - type: array
+                            description: Array of values for IN (...) queries
+                            items:
+                              oneOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
                   description: |
                     WHERE conditions for which rows to update. At least one filter
                     is required; a filterless update is rejected to avoid rewriting
@@ -3284,8 +3292,16 @@ paths:
                       value:
                         oneOf:
                           - type: string
+                            nullable: true
                           - type: number
                           - type: boolean
+                          - type: array
+                            description: Array of values for IN (...) queries
+                            items:
+                              oneOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
                   description: WHERE conditions (required for safety)
                   example:
                     - column: id
@@ -6877,11 +6893,13 @@ paths:
       description: |
         **Create Resumable Session (application/json):**
         Create a session for chunked uploads. Best for large files or unreliable networks.
-        Requires: `Content-Type: application/json` with body `{"filename": "...", "content_type": "...", "total_size": ...}`
+        Requires: `Content-Type: application/json` with body `{"content_type": "...", "total_size": ...}`.
+        The object path is taken from the URL.
 
         **Complete Resumable Session:**
         Complete a session after all parts are uploaded.
         Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+        No request body is required.
       operationId: manageStorageUploadSession
       security:
         - AnonKey: []
@@ -6910,7 +6928,7 @@ paths:
             enum:
               - 'true'
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -7061,15 +7079,19 @@ paths:
               schema:
                 type: string
           content:
+            '*/*':
+              schema:
+                oneOf:
+                  - type: string
+                    format: binary
+                  - $ref: '#/components/schemas/UploadSessionStatusResponse'
+        '206':
+          description: Partial content (range request)
+          content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadSessionStatusResponse'
-        '206':
-          description: Partial content (range request)
         '400':
           description: Invalid Range header format
         '403':
@@ -7206,12 +7228,17 @@ paths:
         '200':
           description: File content
           content:
-            '*/*':
+            application/octet-stream:
               schema:
                 type: string
                 format: binary
         '206':
           description: Partial content (range request)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         '404':
           description: Not found (file doesn't exist or is not public)
         '429':
@@ -8149,10 +8176,6 @@ components:
       type: object
       description: Request to create a resumable upload session
       properties:
-        object_path:
-          type: string
-          description: Target file path within the bucket
-          example: videos/large-file.mp4
         content_type:
           type: string
           description: MIME type of the file
@@ -8172,7 +8195,6 @@ components:
           maximum: 26214400
           example: 26214400
       required:
-        - object_path
         - content_type
         - total_size
     CreateUploadSessionResponse:

@@ -2834,12 +2834,12 @@ class StorageFileApi implements StorageFileClient {
   }
 
   getPublicUrl(path: string): ErrorResponse<{ publicUrl: string }> {
-    if ((this.volcanoClient.anonKey ?? '').split('.').length !== 3) {
-      return errorResult('Invalid anon key format');
-    }
-    const projectId = projectIdFromToken(this.volcanoClient.anonKey);
+    const projectId =
+      projectIdFromToken(this.volcanoClient.accessToken) ??
+      projectIdFromToken(this.volcanoClient.serviceRoleKey) ??
+      projectIdFromToken(this.volcanoClient.anonKey);
     if (!projectId) {
-      return errorResult('Project ID not found in anon key');
+      return errorResult('Project ID not found in storage credentials');
     }
     return {
       data: {
@@ -2886,7 +2886,6 @@ class StorageFileApi implements StorageFileClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        filename: path.split('/').pop() || path,
         content_type: options.contentType ?? 'application/octet-stream',
         total_size: options.totalSize,
         part_size: options.partSize,
@@ -2932,11 +2931,9 @@ class StorageFileApi implements StorageFileClient {
     return this._storageRequest<CompleteUploadSessionResponse>(this._buildUrl(path), {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'X-Upload-Session': sessionId,
         'X-Upload-Complete': 'true',
       },
-      body: JSON.stringify({}),
       signal: options.signal,
       timeoutMs: options.timeoutMs,
     });

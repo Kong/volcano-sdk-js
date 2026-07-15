@@ -566,10 +566,6 @@ export type CreateStoragePolicyRequest = {
  */
 export type CreateUploadSessionRequest = {
   /**
-   * Target file path within the bucket
-   */
-  object_path: string;
-  /**
    * MIME type of the file
    */
   content_type: string;
@@ -6095,7 +6091,7 @@ export type QueryDatabaseUpdateData = {
     filters: Array<{
       column: string;
       operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'is' | 'in';
-      value: string | number | boolean;
+      value: string | null | number | boolean | Array<string | number | boolean>;
     }>;
   };
   path: {
@@ -6168,7 +6164,7 @@ export type QueryDatabaseDeleteData = {
     filters: Array<{
       column: string;
       operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'is' | 'in';
-      value: string | number | boolean;
+      value: string | null | number | boolean | Array<string | number | boolean>;
     }>;
   };
   path: {
@@ -9675,18 +9671,18 @@ export type DownloadStorageObjectResponses = {
   /**
    * File content or session status
    */
-  200: UploadSessionStatusResponse;
+  200: Blob | File | UploadSessionStatusResponse;
   /**
    * Partial content (range request)
    */
-  206: unknown;
+  206: Blob | File;
 };
 
 export type DownloadStorageObjectResponse =
   DownloadStorageObjectResponses[keyof DownloadStorageObjectResponses];
 
 export type ManageStorageUploadSessionData = {
-  body: CreateUploadSessionRequest;
+  body?: CreateUploadSessionRequest;
   headers?: {
     /**
      * Upload session ID (for completing resumable uploads)
@@ -9891,7 +9887,7 @@ export type DownloadPublicFileResponses = {
   /**
    * Partial content (range request)
    */
-  206: unknown;
+  206: Blob | File;
 };
 
 export type DownloadPublicFileResponse =

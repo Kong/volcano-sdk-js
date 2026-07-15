@@ -4,6 +4,8 @@ import {
   authGetUser,
   authSignin,
   createApiClient,
+  downloadPublicFile,
+  downloadStorageObject,
   healthCheck,
   listProjects,
   listStorageObjects,
@@ -139,6 +141,49 @@ describe('createApiClient', () => {
     expect(result.data).toEqual({});
   });
 
+  it('parses public downloads as blobs even when the file MIME type is textual', async () => {
+    const fetchMock = jest.fn(
+      async () => new Response('plain text', { headers: { 'Content-Type': 'text/plain' } }),
+    );
+    const client = createApiClient({ fetch: fetchMock });
+
+    const result = await downloadPublicFile({
+      client,
+      path: { bucketName: 'documents', path: 'notes.txt', projectId: 'project-id' },
+    });
+
+    expect(result.data).toBeInstanceOf(Blob);
+    await expect((result.data as Blob).text()).resolves.toBe('plain text');
+  });
+
+  it('parses storage downloads as blobs and upload-session status as JSON', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('plain text', { headers: { 'Content-Type': 'text/plain' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"status":"uploading"}', {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    const client = createApiClient({ accessToken: 'access-token', fetch: fetchMock });
+
+    const download = await downloadStorageObject({
+      client,
+      path: { bucketName: 'documents', path: 'notes.txt' },
+    });
+    const status = await downloadStorageObject({
+      client,
+      headers: { 'X-Upload-Session': 'session-id' },
+      path: { bucketName: 'documents', path: 'notes.txt' },
+    });
+
+    expect(download.data).toBeInstanceOf(Blob);
+    await expect((download.data as Blob).text()).resolves.toBe('plain text');
+    expect(status.data).toEqual({ status: 'uploading' });
+  });
+
   it('normalizes the base URL and sends identifying and custom headers', async () => {
     const fetchMock = jest.fn(async () => successResponse());
     const client = createApiClient({
@@ -272,26 +317,31 @@ describe('createApiClient', () => {
   });
 
   it('preserves caller cancellation while consuming the response body', async () => {
-    const fetchMock = jest.fn(
-      async (request: Request) =>
-        new Response(
-          new ReadableStream({
-            start(controller) {
-              request.signal.addEventListener(
-                'abort',
-                () => controller.error(request.signal.reason),
-                { once: true },
-              );
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-    );
+    let markFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve;
+    });
+    const fetchMock = jest.fn(async (request: Request) => {
+      const response = new Response(
+        new ReadableStream({
+          start(controller) {
+            request.signal.addEventListener(
+              'abort',
+              () => controller.error(request.signal.reason),
+              { once: true },
+            );
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+      markFetchStarted();
+      return response;
+    });
     const client = createApiClient({ fetch: fetchMock });
     const controller = new AbortController();
 
     const pending = healthCheck({ client, signal: controller.signal });
-    await Promise.resolve();
+    await fetchStarted;
     controller.abort(new DOMException('Cancelled while reading', 'AbortError'));
     const result = await pending;
 

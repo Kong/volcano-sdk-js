@@ -531,14 +531,14 @@ describe('Storage', () => {
   });
 
   describe('getPublicUrl()', () => {
-    // Create a valid JWT-like anon key with project_id
-    const validAnonKey =
-      'ak-' +
+    const tokenForProject = (projectId, prefix = '') =>
+      prefix +
       btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })) +
       '.' +
-      btoa(JSON.stringify({ project_id: 'proj-123-456' })) +
+      btoa(JSON.stringify({ project_id: projectId })) +
       '.' +
       btoa('signature');
+    const validAnonKey = tokenForProject('proj-123-456', 'ak-');
 
     let volcanoWithValidKey;
 
@@ -591,7 +591,7 @@ describe('Storage', () => {
       expect(data.publicUrl).toBe('https://api.test.com/public/proj-123-456/my%20bucket/file.txt');
     });
 
-    it('should return error for invalid anon key format', () => {
+    it('should return error when no storage credential contains a project ID', () => {
       const volcanoInvalid = createVolcanoClient({
         anonKey: 'ak-invalid-not-jwt',
         baseUrl: 'https://api.test.com',
@@ -600,7 +600,20 @@ describe('Storage', () => {
       const { data, error } = volcanoInvalid.storage.from('bucket').getPublicUrl('file.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toContain('Invalid anon key format');
+      expect(error.message).toBe('Project ID not found in storage credentials');
+    });
+
+    it('should prefer the access-token project over the anon project', () => {
+      const accessClient = createVolcanoClient({
+        accessToken: tokenForProject('access-project'),
+        anonKey: tokenForProject('anon-project', 'ak-'),
+        baseUrl: 'https://api.test.com',
+      });
+
+      const { data, error } = accessClient.storage.from('files').getPublicUrl('file.txt');
+
+      expect(error).toBeNull();
+      expect(data.publicUrl).toBe('https://api.test.com/public/access-project/files/file.txt');
     });
 
     it('should extract project ID correctly from JWT payload', () => {
@@ -720,6 +733,10 @@ describe('Storage', () => {
       const headers = new Headers(fetch.mock.calls[0][1].headers);
       expect(headers.get('Content-Type')).toBe('application/json');
       expect(headers.get('Authorization')).toBe('Bearer test-access-token');
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+        content_type: 'video/mp4',
+        total_size: 100 * 1024 * 1024,
+      });
     });
 
     it('should return error when totalSize is not provided', async () => {
@@ -808,6 +825,8 @@ describe('Storage', () => {
       expect(fetch.mock.calls[0][1].method).toBe('POST');
       expect(headers.get('X-Upload-Session')).toBe('sess-123');
       expect(headers.get('X-Upload-Complete')).toBe('true');
+      expect(headers.get('Content-Type')).toBeNull();
+      expect(fetch.mock.calls[0][1].body).toBeUndefined();
     });
 
     it('should return error when not all parts uploaded', async () => {
