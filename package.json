@@ -28,16 +28,6 @@
         "default": "./dist/realtime.js"
       }
     },
-    "./api": {
-      "import": {
-        "types": "./dist/api/index.d.mts",
-        "default": "./dist/api/index.mjs"
-      },
-      "require": {
-        "types": "./dist/api/index.d.ts",
-        "default": "./dist/api/index.js"
-      }
-    },
     "./next/middleware": {
       "import": {
         "types": "./dist/next/middleware.esm.d.mts",
@@ -49,7 +39,6 @@
       }
     }
   },
-  "sideEffects": false,
   "engines": {
     "node": ">=20"
   },
@@ -143,7 +132,6 @@
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",
-    "rollup-plugin-dts": "^6.4.1",
     "typescript": "^6.0.2",
     "undici": "^6.27.0"
   }

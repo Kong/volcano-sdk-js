@@ -4,9 +4,8 @@ import {
   authGetUser,
   authSignin,
   createApiClient,
-  healthCheck,
-  listProjects,
   listStorageObjects,
+  searchProjectLogs,
 } from '../src/api';
 
 const successResponse = () => ({
@@ -46,7 +45,12 @@ describe('createApiClient', () => {
     [
       'UserToken',
       { userToken: 'user-token' },
-      (client: ReturnType<typeof createApiClient>) => listProjects({ client }),
+      (client: ReturnType<typeof createApiClient>) =>
+        searchProjectLogs({
+          body: { resource: { type: 'function' } },
+          client,
+          path: { id: 'project-id' },
+        }),
       'user-token',
     ],
   ])(
@@ -95,7 +99,10 @@ describe('createApiClient', () => {
     const fetchMock = jest.fn(async () => successResponse());
     const client = createApiClient({ fetch: fetchMock });
 
-    const result = await healthCheck({ client });
+    const result = await authSignin({
+      body: { email: 'user@example.com', password: 'password' },
+      client,
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.data).toEqual({});
@@ -113,7 +120,10 @@ describe('createApiClient', () => {
     );
     const client = createApiClient({ fetch: fetchMock, timeoutMs: 10 });
 
-    const request = healthCheck({ client });
+    const request = authSignin({
+      body: { email: 'user@example.com', password: 'password' },
+      client,
+    });
     await jest.advanceTimersByTimeAsync(10);
     const result = await request;
 

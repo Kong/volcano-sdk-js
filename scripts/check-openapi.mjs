@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const expectedDirectory = join(repositoryRoot, 'src/generated/api');
-const temporaryRoot = await mkdtemp(join(repositoryRoot, '.openapi-check-'));
+const temporaryRoot = await mkdtemp(join(tmpdir(), 'volcano-sdk-openapi-check-'));
 const actualDirectory = join(temporaryRoot, 'api');
 const generator = join(repositoryRoot, 'node_modules/@hey-api/openapi-ts/bin/run.js');
 

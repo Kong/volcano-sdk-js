@@ -1,7 +1,42 @@
 import { type Client, createClient } from '../generated/api/client';
 import type { Auth } from '../generated/api/core/auth.gen';
 
-export * from '../generated/api';
+export {
+  authCancelEmailChange,
+  authConfirmEmail,
+  authConfirmEmailChange,
+  authConvertAnonymous,
+  authDeleteAllMySessions,
+  authDeleteMySession,
+  authForgotPassword,
+  authGetMySessions,
+  authGetUser,
+  authLinkOAuthProvider,
+  authListOAuthProviders,
+  authLogout,
+  authRefresh,
+  authRequestEmailChange,
+  authResendConfirmation,
+  authResetPassword,
+  authSignin,
+  authSignup,
+  authSignupAnonymous,
+  authUnlinkOAuthProvider,
+  authUpdateUser,
+  callOAuthProviderApi,
+  copyStorageObject,
+  getOAuthProviderToken,
+  getProjectLogActivity,
+  listStorageObjects,
+  moveStorageObject,
+  queryDatabaseDelete,
+  queryDatabaseInsert,
+  queryDatabaseSelect,
+  queryDatabaseUpdate,
+  refreshOAuthProviderToken,
+  resolveFunctionForInvocation,
+  searchProjectLogs,
+} from '../generated/api/sdk.gen';
 
 export interface ApiCredentials {
   accessToken?: string;
