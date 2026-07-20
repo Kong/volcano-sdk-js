@@ -68,6 +68,7 @@ const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
+const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 // ============================================================================
 // Utility Functions
@@ -459,6 +460,143 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   return url.toString();
 }
 
+class ProjectLocksApi {
+  constructor(client) {
+    this.client = client;
+  }
+
+  async acquire(key, options = {}) {
+    const ttl = validateLockOptions(key, options);
+    const token = options.token || crypto.randomUUID();
+    const lease = { key, token, expiresAt: null };
+    let result;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
+        method: 'POST',
+        headers: { 'X-Volcano-Lock-Token': token },
+        body: JSON.stringify({ ttl_seconds: ttl }),
+      });
+      if (result.ok || result.status === 409 || (result.status !== null && result.status !== 503)) {
+        break;
+      }
+    }
+    if (result.ok) {
+      lease.expiresAt = result.data.expires_at;
+      return { acquired: true, lease, error: null };
+    }
+    if (result.status === 409 && result.data?.code === 'lock_held') {
+      return { acquired: false, lease: null, error: null };
+    }
+    return { acquired: false, lease, error: result.error };
+  }
+
+  async renew(key, lease, options = {}) {
+    const ttl = validateLockOptions(key, options);
+    validateLease(key, lease);
+    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
+      method: 'PATCH',
+      headers: { 'X-Volcano-Lock-Token': lease.token },
+      body: JSON.stringify({ ttl_seconds: ttl }),
+    });
+    if (!result.ok) {
+      return { lease, error: result.error };
+    }
+    lease.expiresAt = result.data.expires_at;
+    return { lease, error: null };
+  }
+
+  async release(key, lease) {
+    validateLockKey(key);
+    validateLease(key, lease);
+    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
+      method: 'DELETE',
+      headers: { 'X-Volcano-Lock-Token': lease.token },
+    });
+    return { error: result.ok ? null : result.error };
+  }
+
+  async withLock(key, options, callback) {
+    if (typeof callback !== 'function') {
+      throw new TypeError('callback must be a function');
+    }
+    const ttl = validateLockOptions(key, options);
+    const acquired = await this.acquire(key, { ttl });
+    if (!acquired.acquired || acquired.error) {
+      return { acquired: acquired.acquired, data: null, error: acquired.error };
+    }
+
+    const controller = new AbortController();
+    let stopped = false;
+    let renewalError = null;
+    let timer;
+    let wakeTimer;
+    const renewalLoop = (async () => {
+      while (!stopped) {
+        const baseDelay = (ttl * 1000) / 3;
+        const jitter = baseDelay * 0.1 * (secureRandomUnit() * 2 - 1);
+        await new Promise((resolve) => {
+          wakeTimer = resolve;
+          timer = setTimeout(resolve, Math.max(1, baseDelay + jitter));
+        });
+        wakeTimer = null;
+        if (stopped) {
+          break;
+        }
+        const renewed = await this.renew(key, acquired.lease, { ttl });
+        if (renewed.error) {
+          renewalError = renewed.error;
+          controller.abort(renewalError);
+          break;
+        }
+      }
+    })();
+
+    let data = null;
+    let callbackError = null;
+    let releaseError;
+    try {
+      data = await callback({ signal: controller.signal, lease: acquired.lease });
+    } catch (error) {
+      callbackError = error instanceof Error ? error : new Error(String(error));
+    } finally {
+      stopped = true;
+      clearTimeout(timer);
+      wakeTimer?.();
+      await renewalLoop;
+      const released = await this.release(key, acquired.lease);
+      releaseError = released.error;
+    }
+    return { acquired: true, data, error: renewalError || callbackError || releaseError };
+  }
+}
+
+function validateLockOptions(key, options) {
+  validateLockKey(key);
+  const ttl = options?.ttl;
+  if (!Number.isInteger(ttl) || ttl < 5 || ttl > MAX_LOCK_TTL_SECONDS) {
+    throw new RangeError('ttl must be an integer between 5 seconds and 90 days');
+  }
+  return ttl;
+}
+
+function validateLockKey(key) {
+  if (typeof key !== 'string' || !/^[a-z0-9][\w.:-]{0,127}$/i.test(key)) {
+    throw new TypeError('lock key must match ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+  }
+}
+
+function secureRandomUnit() {
+  const value = new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return value[0] / 0x1_0000_0000;
+}
+
+function validateLease(key, lease) {
+  if (!lease || lease.key !== key || typeof lease.token !== 'string' || lease.token === '') {
+    throw new TypeError('lease must belong to the requested lock and include its token');
+  }
+}
+
 // ============================================================================
 // VolcanoAuth Class
 // ============================================================================
@@ -564,6 +702,8 @@ class VolcanoAuth {
     this.storage = {
       from: this.storageBucket.bind(this),
     };
+
+    this.locks = new ProjectLocksApi(this);
   }
 
   // ========================================================================

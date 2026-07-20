@@ -649,6 +649,46 @@ export type UpdateBuilder<T = Record<string, JsonValue>> = MutationBuilder<T>;
 /** @deprecated Use MutationBuilder instead */
 export type DeleteBuilder<T = Record<string, JsonValue>> = MutationBuilder<T>;
 
+export interface ProjectLockLease {
+  key: string;
+  token: string;
+  expiresAt: string | null;
+}
+
+export interface ProjectLockOptions {
+  /** Lease duration in seconds, from 5 through 7,776,000 (90 days). */
+  ttl: number;
+  /** Reuse only to retry an ambiguous acquire with the same ownership token. */
+  token?: string;
+}
+
+export interface ProjectLockAcquireResult {
+  acquired: boolean;
+  lease: ProjectLockLease | null;
+  error: Error | null;
+}
+
+export interface ProjectLockResult<T = unknown> {
+  acquired: boolean;
+  data: T | null;
+  error: Error | null;
+}
+
+export interface ProjectLocks {
+  acquire(key: string, options: ProjectLockOptions): Promise<ProjectLockAcquireResult>;
+  renew(
+    key: string,
+    lease: ProjectLockLease,
+    options: ProjectLockOptions,
+  ): Promise<{ lease: ProjectLockLease; error: Error | null }>;
+  release(key: string, lease: ProjectLockLease): Promise<{ error: Error | null }>;
+  withLock<T>(
+    key: string,
+    options: ProjectLockOptions,
+    callback: (context: { signal: AbortSignal; lease: ProjectLockLease }) => Promise<T> | T,
+  ): Promise<ProjectLockResult<T>>;
+}
+
 export class VolcanoAuth {
   constructor(config: VolcanoAuthConfig);
 
@@ -660,6 +700,9 @@ export class VolcanoAuth {
 
   /** Storage methods */
   storage: Storage;
+
+  /** Service-role-only project lease methods */
+  locks: ProjectLocks;
 
   /** Set current database name for query builder (required before querying) */
   database(databaseName: string): VolcanoAuth;

@@ -6,6 +6,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ### Added
 
+- `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
+  service-role-only project leases. `withLock` renews automatically, aborts its
+  callback signal after ownership loss, and releases in `finally`.
 - `databaseConnectionString(baseConnectionString, { userId })` for connecting to
   a Volcano database from inside a function. The target database is identified by
   the globally-unique username already baked into the advertised `DATABASE_URL`,

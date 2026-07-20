@@ -39,6 +39,11 @@ const { data } = await volcano
 // File storage
 const { data: file } = await volcano.storage.from('uploads').upload('photo.jpg', imageFile);
 
+// Backend leader election (initialize accessToken with a service-role key)
+await volcano.locks.withLock('daily-rollup', { ttl: 30 }, async ({ signal }) => {
+  await runRollup({ signal });
+});
+
 // Realtime subscriptions
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
 
@@ -68,6 +73,7 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 | [Storage](./docs/storage.md)                 | File upload and management        |
 | [Realtime](./docs/realtime.md)               | Live subscriptions and presence   |
 | [Functions](./docs/functions.md)             | Serverless function invocation    |
+| [Project locks](./docs/locks.md)             | Renewable backend leases          |
 | [Next.js](./docs/nextjs.md)                  | Server components and middleware  |
 | [TypeScript](./docs/typescript.md)           | Type definitions                  |
 | [Error Handling](./docs/error-handling.md)   | Error patterns                    |
