@@ -658,33 +658,53 @@ export interface ProjectLockLease {
 export interface ProjectLockOptions {
   /** Lease duration in seconds, from 5 through 7,776,000 (90 days). */
   ttl: number;
+  /** Reuse only to retry the same ambiguous HTTP operation. */
+  requestId?: string;
+}
+
+export interface ProjectLockAcquireOptions extends ProjectLockOptions {
   /** Reuse only to retry an ambiguous acquire with the same ownership token. */
   token?: string;
+}
+
+export interface ProjectLockReleaseOptions {
+  /** Reuse only to retry the same ambiguous release operation. */
+  requestId?: string;
 }
 
 export interface ProjectLockAcquireResult {
   acquired: boolean;
   lease: ProjectLockLease | null;
-  error: Error | null;
+  error: ProjectLockError | null;
+}
+
+export interface ProjectLockError extends Error {
+  status?: number;
+  code?: string;
+  retryAfter?: number;
 }
 
 export interface ProjectLockResult<T = unknown> {
   acquired: boolean;
   data: T | null;
-  error: Error | null;
+  error: ProjectLockError | null;
 }
 
 export interface ProjectLocks {
-  acquire(key: string, options: ProjectLockOptions): Promise<ProjectLockAcquireResult>;
+  acquire(key: string, options: ProjectLockAcquireOptions): Promise<ProjectLockAcquireResult>;
   renew(
     key: string,
     lease: ProjectLockLease,
     options: ProjectLockOptions,
-  ): Promise<{ lease: ProjectLockLease; error: Error | null }>;
-  release(key: string, lease: ProjectLockLease): Promise<{ error: Error | null }>;
+  ): Promise<{ lease: ProjectLockLease; error: ProjectLockError | null }>;
+  release(
+    key: string,
+    lease: ProjectLockLease,
+    options?: ProjectLockReleaseOptions,
+  ): Promise<{ error: ProjectLockError | null }>;
   withLock<T>(
     key: string,
-    options: ProjectLockOptions,
+    options: ProjectLockAcquireOptions,
     callback: (context: { signal: AbortSignal; lease: ProjectLockLease }) => Promise<T> | T,
   ): Promise<ProjectLockResult<T>>;
 }

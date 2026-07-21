@@ -66,3 +66,6 @@ characters. TTL is 5 seconds through 90 days. An unreleased lease expires after
 its requested TTL. Renewals cannot move an acquisition's absolute 90-day
 deadline; acquire a new lease after that point. Keep the returned lease private
 because its token proves ownership.
+
+Rate-limit errors expose `status: 429`, `code: "lock_rate_limited"`, and
+`retryAfter` in seconds.

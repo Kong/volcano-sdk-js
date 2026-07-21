@@ -40,9 +40,10 @@ const { data } = await volcano
 const { data: file } = await volcano.storage.from('uploads').upload('photo.jpg', imageFile);
 
 // Backend leader election (initialize accessToken with a service-role key)
-await volcano.locks.withLock('daily-rollup', { ttl: 30 }, async ({ signal }) => {
+const lockResult = await volcano.locks.withLock('daily-rollup', { ttl: 30 }, async ({ signal }) => {
   await runRollup({ signal });
 });
+if (lockResult.error) throw lockResult.error;
 
 // Realtime subscriptions
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';

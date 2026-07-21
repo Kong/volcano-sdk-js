@@ -69,6 +69,7 @@ const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
+const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 
 // ============================================================================
 // Utility Functions
@@ -418,6 +419,19 @@ function errorResult(message, extra = {}) {
   return { data: null, error: new Error(message), ...extra };
 }
 
+function apiRequestError(response, data) {
+  const error = new Error(data?.error || 'Request failed');
+  error.status = response.status;
+  if (data?.code) {
+    error.code = data.code;
+  }
+  const retryAfter = Number.parseInt(getHeaderValue(response, 'retry-after') || '', 10);
+  if (Number.isFinite(retryAfter)) {
+    error.retryAfter = retryAfter;
+  }
+  return error;
+}
+
 const FULL_ACCESS_APP_NAME = 'volcano_full_access';
 const USER_ACCESS_APP_NAME = 'volcano_user_access';
 
@@ -468,12 +482,16 @@ class ProjectLocksApi {
   async acquire(key, options = {}) {
     const ttl = validateLockOptions(key, options);
     const token = options.token || crypto.randomUUID();
+    const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null };
     let result;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
         method: 'POST',
-        headers: { 'X-Volcano-Lock-Token': token },
+        headers: {
+          'X-Volcano-Lock-Token': token,
+          'X-Volcano-Request-Id': requestId,
+        },
         body: JSON.stringify({ ttl_seconds: ttl }),
       });
       if (result.ok || result.status === 409 || (result.status !== null && result.status !== 503)) {
@@ -495,7 +513,10 @@ class ProjectLocksApi {
     validateLease(key, lease);
     const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
       method: 'PATCH',
-      headers: { 'X-Volcano-Lock-Token': lease.token },
+      headers: {
+        'X-Volcano-Lock-Token': lease.token,
+        'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
+      },
       body: JSON.stringify({ ttl_seconds: ttl }),
     });
     if (!result.ok) {
@@ -505,12 +526,15 @@ class ProjectLocksApi {
     return { lease, error: null };
   }
 
-  async release(key, lease) {
+  async release(key, lease, options = {}) {
     validateLockKey(key);
     validateLease(key, lease);
     const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
       method: 'DELETE',
-      headers: { 'X-Volcano-Lock-Token': lease.token },
+      headers: {
+        'X-Volcano-Lock-Token': lease.token,
+        'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
+      },
     });
     return { error: result.ok ? null : result.error };
   }
@@ -520,7 +544,11 @@ class ProjectLocksApi {
       throw new TypeError('callback must be a function');
     }
     const ttl = validateLockOptions(key, options);
-    const acquired = await this.acquire(key, { ttl });
+    const acquired = await this.acquire(key, {
+      ttl,
+      token: options.token,
+      requestId: options.requestId,
+    });
     if (!acquired.acquired || acquired.error) {
       return { acquired: acquired.acquired, data: null, error: acquired.error };
     }
@@ -532,7 +560,7 @@ class ProjectLocksApi {
     let wakeTimer;
     const renewalLoop = (async () => {
       while (!stopped) {
-        const baseDelay = (ttl * 1000) / 3;
+        const baseDelay = lockRenewalDelay(ttl, acquired.lease);
         const jitter = baseDelay * 0.1 * (secureRandomUnit() * 2 - 1);
         await new Promise((resolve) => {
           wakeTimer = resolve;
@@ -589,6 +617,16 @@ function secureRandomUnit() {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] / 0x1_0000_0000;
+}
+
+function lockRenewalDelay(ttl, lease) {
+  const ttlDelay = (ttl * 1000) / 3;
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (!Number.isFinite(expiresAt)) {
+    return ttlDelay;
+  }
+  const remainingDelay = Math.max(1, (expiresAt - Date.now()) / 3);
+  return Math.min(ttlDelay, remainingDelay, MAX_LOCK_RENEWAL_DELAY_MS);
 }
 
 function validateLease(key, lease) {
@@ -768,7 +806,7 @@ class VolcanoAuth {
         return {
           ok: false,
           status: response.status,
-          error: new Error(data.error || 'Request failed'),
+          error: apiRequestError(response, data),
           data,
         };
       }
