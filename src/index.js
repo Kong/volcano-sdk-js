@@ -1496,7 +1496,11 @@ class VolcanoAuth {
               Authorization: `Bearer ${this.accessToken}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload),
+            // Wrap in { payload } to match the invoke API contract
+            // (FunctionInvocationRequest). Sending the raw payload leaves the
+            // server's req.Payload empty, so the function only receives
+            // __volcano_auth and never the caller's fields.
+            body: JSON.stringify({ payload }),
           },
           this.timeout,
         );

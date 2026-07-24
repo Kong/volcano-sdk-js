@@ -1874,7 +1874,7 @@ describe('VolcanoAuth', () => {
         'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action: 'getData' }),
+          body: JSON.stringify({ payload: { action: 'getData' } }),
         }),
       );
     });
@@ -1961,7 +1961,7 @@ describe('VolcanoAuth', () => {
         });
 
         const result = await localVolcano.functions.invoke('notes-summary', {
-          payload: { limit: 5 },
+          limit: 5,
         });
 
         expect(result.error).toBeNull();
@@ -2323,7 +2323,7 @@ describe('VolcanoAuth', () => {
         'https://22222222-2222-2222-2222-222222222222.functions.test.com/',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action: 'retry' }),
+          body: JSON.stringify({ payload: { action: 'retry' } }),
         }),
       );
     });
