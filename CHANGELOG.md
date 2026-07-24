@@ -4,6 +4,16 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+## [1.3.1] - 2026-07-24
+
+### Fixed
+
+- `functions.invoke(name, payload)` now sends the request body wrapped as
+  `{ payload }` to match the hosting invoke API contract
+  (`FunctionInvocationRequest`). Previously the raw payload was sent, leaving the
+  server's `req.Payload` empty, so invoked functions received only
+  `__volcano_auth` and never the caller's fields.
+
 ## [1.3.0] - 2026-07-13
 
 ### Added
