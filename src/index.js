@@ -2522,36 +2522,14 @@ async function loadRealtime() {
 // Exports
 // ============================================================================
 
-// Browser global exports
-if (typeof window !== 'undefined') {
-  window.VolcanoAuth = VolcanoAuth;
-  window.QueryBuilder = QueryBuilder;
-  window.StorageFileApi = StorageFileApi;
-  window.isBrowser = isBrowser;
-  window.loadRealtime = loadRealtime;
-  window.databaseConnectionString = databaseConnectionString;
-}
-
-// CommonJS exports
-if (typeof module !== 'undefined' && module.exports !== undefined) {
-  module.exports = VolcanoAuth;
-  module.exports.VolcanoAuth = VolcanoAuth;
-  module.exports.default = VolcanoAuth;
-  module.exports.QueryBuilder = QueryBuilder;
-  module.exports.StorageFileApi = StorageFileApi;
-  module.exports.isBrowser = isBrowser;
-  module.exports.loadRealtime = loadRealtime;
-  module.exports.databaseConnectionString = databaseConnectionString;
-}
-
-// AMD exports
-if (typeof define === 'function' && define.amd) {
-  define([], () => {
-    return VolcanoAuth;
-  });
-}
-
-// ES Module exports (handled by rollup, but define for clarity)
+// Exports. Author these as pure ES module declarations only; rollup emits the
+// ESM, CJS, and UMD builds (see rollup.config.mjs, all `exports: 'named'`).
+// Do NOT hand-write `module.exports = ...`, `window.* = ...`, or `define(...)`
+// here: rollup passes such statements through verbatim into the ES build too,
+// and a stray top-level `module.exports = VolcanoAuth` in dist/index.esm.mjs
+// overwrites the module.exports of any CJS bundle that inlines the SDK
+// (e.g. esbuild --bundle --format=cjs), producing "handler is not a function"
+// at runtime. See VOL-505.
 export {
   databaseConnectionString,
   isBrowser,

@@ -23,7 +23,7 @@ try {
   // dotenv not installed
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const { randomUUID } = require('node:crypto');
 

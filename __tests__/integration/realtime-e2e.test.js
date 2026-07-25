@@ -23,7 +23,7 @@ try {
   // dotenv not installed, use environment variables directly
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const WebSocket = require('ws');
 
