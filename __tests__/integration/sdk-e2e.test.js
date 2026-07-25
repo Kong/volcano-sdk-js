@@ -9,7 +9,7 @@
  * - For OAuth tests: mock OAuth server running
  */
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 
 // Configuration
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';

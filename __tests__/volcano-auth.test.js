@@ -1,4 +1,4 @@
-const VolcanoAuth = require('../src/index.js');
+const { VolcanoAuth } = require('../src/index.js');
 
 function base64UrlEncode(value) {
   return Buffer.from(value)

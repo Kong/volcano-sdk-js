@@ -4,6 +4,14 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- **Bundling the SDK into a function (esbuild `--bundle`) no longer fails at runtime with "handler is not a function" (VOL-505).** The entry source hand-rolled UMD/CommonJS/global exports (`module.exports = VolcanoAuth`, `window.* = ...`, AMD `define(...)`) alongside the real ES `export`s. Rollup passed those statements straight through into the ES build (`dist/index.esm.mjs`), so a stray top-level `module.exports = VolcanoAuth` survived there and, when a bundler inlined the SDK into a CommonJS output, overwrote that bundle's own `module.exports = { handler }`. The entry source is now pure ES modules; rollup generates the CJS/UMD builds (all `exports: 'named'`), and the ES builds are format-pure. A regression test (`__tests__/esm-purity.test.js`) fails if any entry source reintroduces a hand-rolled export.
+
+### Changed
+
+- **BREAKING (CommonJS default `require` only):** `require('@volcano.dev/sdk')` now returns the module namespace `{ VolcanoAuth, QueryBuilder, StorageFileApi, isBrowser, loadRealtime, databaseConnectionString, default: VolcanoAuth }` instead of the `VolcanoAuth` class itself. Migrate `const VolcanoAuth = require('@volcano.dev/sdk')` to `const { VolcanoAuth } = require('@volcano.dev/sdk')` (or `require('@volcano.dev/sdk').default`). Named and default imports — `import { VolcanoAuth } from '@volcano.dev/sdk'` and `import VolcanoAuth from '@volcano.dev/sdk'` — are unchanged. This makes the CommonJS runtime shape match the TypeScript declarations, which already described the namespace form.
+
 ## [1.3.1] - 2026-07-24
 
 ### Fixed

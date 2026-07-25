@@ -1,4 +1,4 @@
-const VolcanoAuth = require('../src/index.js');
+const { VolcanoAuth } = require('../src/index.js');
 
 describe('Storage', () => {
   const config = {

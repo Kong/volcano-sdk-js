@@ -1,4 +1,4 @@
-const VolcanoAuth = require('../src/index.js');
+const { VolcanoAuth } = require('../src/index.js');
 
 describe('QueryBuilder', () => {
   const config = {
