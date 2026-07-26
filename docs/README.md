@@ -1,4 +1,7 @@
-# Volcano SDK Documentation
+---
+title: 'Volcano SDK Documentation'
+description: "Welcome to the Volcano SDK documentation. This guide will help you integrate Volcano's backend services into your JavaScript and TypeScript applications."
+---
 
 Welcome to the Volcano SDK documentation. This guide will help you integrate Volcano's backend services into your JavaScript and TypeScript applications.
 
