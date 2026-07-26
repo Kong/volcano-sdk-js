@@ -179,6 +179,20 @@ describe('VolcanoRealtime', () => {
       });
       expect(delivered).toBeNull();
     });
+
+    test('only the exact 5-segment per-user form triggers the fallback (no over-match)', () => {
+      const realtime = mk();
+      const channel = realtime.channel('public:messages', { type: 'postgres' });
+      let delivered = null;
+      channel._handlePublication = (ctx) => { delivered = ctx; };
+      // A 6-segment channel is not the well-defined per-user format; it must not
+      // be truncated and misrouted to postgres:public:messages.
+      realtime._handleServerPublication({
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:messages:extra:11111111-1111-1111-1111-111111111111',
+        data: {},
+      });
+      expect(delivered).toBeNull();
+    });
   });
 
   describe('callbacks', () => {
