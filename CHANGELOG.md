@@ -4,6 +4,12 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+## [1.4.1] - 2026-07-26
+
+### Fixed
+
+- **Realtime `onPostgresChanges` callbacks now fire (VOL-522).** The hosting server publishes RLS-scoped Postgres changes to a per-user channel (`projectId:postgres:schema:table:userID`, so each subscriber only receives rows their RLS allows), but the SDK's server-publication router only stripped the project-id prefix and looked up `postgres:schema:table:userID` — which never matches the base `postgres:schema:table` channel the client subscribed to. Every change was silently dropped and `onPostgresChanges` never fired. The router now maps the per-user channel back to the base channel (dropping the trailing user-id segment when the exact channel isn't found). Also replaced a false-positive integration test that only asserted the subscription was created with one that asserts the change is actually delivered.
+
 ## [1.4.0] - 2026-07-25
 
 ### Fixed
