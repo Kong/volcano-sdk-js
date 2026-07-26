@@ -1,4 +1,7 @@
-# Authentication
+---
+title: "Authentication"
+description: "Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features."
+---
 
 Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features. This guide covers everything you need to implement user authentication in your application.
 
@@ -204,7 +207,7 @@ volcano.auth.signInWithHostedAuth(); // or { action: 'signup' }
 
 After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
 
-```
+```text
 https://your-app.com/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...&state=<nonce>
 ```
 

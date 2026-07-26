@@ -1,4 +1,7 @@
-# Storage
+---
+title: "Storage"
+description: "Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies."
+---
 
 Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies.
 
@@ -27,7 +30,7 @@ Buckets are created in the Volcano dashboard and referenced by name in the SDK.
 
 Within a bucket, files are identified by their path. Paths can include subdirectories:
 
-```
+```text
 avatars/user-123/profile.jpg
 documents/reports/2024/q1-summary.pdf
 uploads/images/photo-001.png

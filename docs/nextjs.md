@@ -1,4 +1,7 @@
-# Next.js Integration
+---
+title: "Next.js Integration"
+description: "This guide covers how to use the Volcano SDK effectively in Next.js applications, including App Router, Pages Router, Server Components, and Middleware."
+---
 
 This guide covers how to use the Volcano SDK effectively in Next.js applications, including App Router, Pages Router, Server Components, and Middleware.
 

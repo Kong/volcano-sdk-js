@@ -1,4 +1,7 @@
-# Error Handling
+---
+title: "Error Handling"
+description: "The Volcano SDK uses a consistent error handling pattern across all operations. Rather than throwing exceptions, methods return error objects that you can in…"
+---
 
 The Volcano SDK uses a consistent error handling pattern across all operations. Rather than throwing exceptions, methods return error objects that you can inspect and handle appropriately.
 

@@ -1,4 +1,7 @@
-# Functions
+---
+title: "Functions"
+description: "Volcano Functions are serverless functions that run your custom backend logic. They're perfect for operations that can't be done from the browser, like compl…"
+---
 
 Volcano Functions are serverless functions that run your custom backend logic. They're perfect for operations that can't be done from the browser, like complex database queries, third-party API integrations, or secure operations.
 
