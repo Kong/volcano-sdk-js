@@ -1016,11 +1016,13 @@ describe('Realtime Capabilities E2E Tests', () => {
         VALUES ('${userAlice.id}', 'Alice Test Note', 'This is Alice private note');
       `);
 
-      // Wait for change event (may or may not arrive depending on trigger setup)
-      await new Promise((r) => setTimeout(r, 2000));
+      // Wait for the change event to be delivered via the per-user postgres channel.
+      await waitFor(() => changes.length > 0, 5000);
 
-      // The test passes if we successfully subscribed and inserted
-      expect(channel._subscription).not.toBeNull();
+      // Alice must actually RECEIVE her own insert (VOL-522: the SDK previously
+      // dropped per-user postgres channel publications, so this never fired).
+      expect(changes.length).toBeGreaterThan(0);
+      expect(changes[0].eventType || changes[0].type).toBe('INSERT');
 
       channel.unsubscribe();
     });

@@ -410,7 +410,17 @@ class VolcanoRealtime {
     const sdkChannel = parts.slice(1).join(':');
 
     // Find the SDK channel and deliver the message
-    const channel = this._channels.get(sdkChannel);
+    let channel = this._channels.get(sdkChannel);
+
+    // Postgres changes are delivered on a per-user channel for RLS isolation:
+    // projectId:postgres:schema:table:userID. Map it back to the base channel
+    // the client subscribed to (postgres:schema:table) by dropping the trailing
+    // userID segment; otherwise the publication is silently dropped and
+    // onPostgresChanges never fires.
+    if (!channel && parts[1] === 'postgres' && parts.length >= 5) {
+      channel = this._channels.get(parts.slice(1, -1).join(':'));
+    }
+
     if (channel) {
       channel._handlePublication(ctx);
     }

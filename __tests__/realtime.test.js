@@ -140,6 +140,47 @@ describe('VolcanoRealtime', () => {
     });
   });
 
+  describe('_handleServerPublication (per-user postgres routing, VOL-522)', () => {
+    const mk = () => new VolcanoRealtime({ apiUrl: 'https://api.example.com', anonKey: 'project123.secret' });
+
+    test('routes a per-user postgres channel to the base channel', () => {
+      const realtime = mk();
+      const channel = realtime.channel('public:messages', { type: 'postgres' });
+      let delivered = null;
+      channel._handlePublication = (ctx) => { delivered = ctx; };
+      // Server delivers RLS-scoped changes on projectId:postgres:schema:table:userID
+      realtime._handleServerPublication({
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:messages:11111111-1111-1111-1111-111111111111',
+        data: { type: 'INSERT', schema: 'public', table: 'messages' },
+      });
+      expect(delivered).not.toBeNull();
+    });
+
+    test('still routes a base (non-user) postgres channel', () => {
+      const realtime = mk();
+      const channel = realtime.channel('public:messages', { type: 'postgres' });
+      let delivered = null;
+      channel._handlePublication = (ctx) => { delivered = ctx; };
+      realtime._handleServerPublication({
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:messages',
+        data: {},
+      });
+      expect(delivered).not.toBeNull();
+    });
+
+    test('does not route an unrelated postgres table to a different channel', () => {
+      const realtime = mk();
+      const channel = realtime.channel('public:messages', { type: 'postgres' });
+      let delivered = null;
+      channel._handlePublication = (ctx) => { delivered = ctx; };
+      realtime._handleServerPublication({
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:other:11111111-1111-1111-1111-111111111111',
+        data: {},
+      });
+      expect(delivered).toBeNull();
+    });
+  });
+
   describe('callbacks', () => {
     test('registers onConnect callback', () => {
       const realtime = new VolcanoRealtime({
