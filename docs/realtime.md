@@ -1,6 +1,6 @@
 ---
-title: "Realtime"
-description: "Volcano Realtime enables live data synchronization using WebSockets. Subscribe to database changes, track user presence, and broadcast messages between clients."
+title: 'Realtime'
+description: 'Volcano Realtime enables live data synchronization using WebSockets. Subscribe to database changes, track user presence, and broadcast messages between clients.'
 ---
 
 Volcano Realtime enables live data synchronization using WebSockets. Subscribe to database changes, track user presence, and broadcast messages between clients.

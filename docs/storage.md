@@ -1,6 +1,6 @@
 ---
-title: "Storage"
-description: "Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies."
+title: 'Storage'
+description: 'Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies.'
 ---
 
 Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies.

@@ -1,6 +1,6 @@
 ---
-title: "TypeScript"
-description: "The Volcano SDK includes comprehensive TypeScript definitions for type-safe development. This guide covers type usage, generics, and best practices."
+title: 'TypeScript'
+description: 'The Volcano SDK includes comprehensive TypeScript definitions for type-safe development. This guide covers type usage, generics, and best practices.'
 ---
 
 The Volcano SDK includes comprehensive TypeScript definitions for type-safe development. This guide covers type usage, generics, and best practices.

@@ -1,5 +1,5 @@
 ---
-title: "Functions"
+title: 'Functions'
 description: "Volcano Functions run serverless backend logic that can't happen in the browser, like complex database queries or third-party API calls."
 ---
 

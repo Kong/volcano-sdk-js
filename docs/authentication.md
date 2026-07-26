@@ -1,6 +1,6 @@
 ---
-title: "Authentication"
-description: "Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features."
+title: 'Authentication'
+description: 'Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features.'
 ---
 
 Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features. This guide covers everything you need to implement user authentication in your application.

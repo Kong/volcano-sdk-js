@@ -1,6 +1,6 @@
 ---
-title: "Getting Started"
-description: "This guide walks you through installing the Volcano SDK and making your first authenticated request."
+title: 'Getting Started'
+description: 'This guide walks you through installing the Volcano SDK and making your first authenticated request.'
 ---
 
 This guide walks you through installing the Volcano SDK and making your first authenticated request.
