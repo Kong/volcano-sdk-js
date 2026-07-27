@@ -4,6 +4,10 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **`VolcanoSystemError` — platform-layer invocation failures are now typed.** `functions.invoke` surfaces a failure that never reached your function code (a failed/provisioning deploy, gateway error, or transport failure such as a timeout/offline) as a `VolcanoSystemError` instead of a plain `Error`. Detect it with `VolcanoSystemError.is(error)` (or `error.isSystemError === true`) and read `error.status` (the blocked HTTP status, or `null` for transport failures). A running function's own non-2xx response is unchanged — it still comes back as `data` with `error` null. The class is exported from `@volcano.dev/sdk` in all build formats. Additive and backward compatible: it extends `Error` with the same message, and its extra fields are non-enumerable so `JSON.stringify(error)` is unchanged.
+
 ## [1.4.1] - 2026-07-26
 
 ### Fixed

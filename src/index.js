@@ -207,6 +207,50 @@ function getHeaderValue(response, headerName) {
 }
 
 /**
+ * Error raised when a function *invocation* fails at the platform layer rather
+ * than inside the function's own code — the call reached (or tried to reach)
+ * the invocation gateway but was never served: the deploy is failed/provisioning,
+ * the gateway is unavailable (a non-2xx response with no `x-volcano-version`
+ * header), or the network call itself failed (timeout/DNS/offline).
+ *
+ * Detect it with `VolcanoSystemError.is(error)` (or `error?.isSystemError ===
+ * true`). Prefer either over `error instanceof VolcanoSystemError`, which can be
+ * `false` when an app bundles more than one copy of the SDK (class identities
+ * differ). `.status` is the blocked HTTP status, or `null` for transport
+ * failures.
+ *
+ * NOT a system error, and therefore a plain `Error` (or not an error at all):
+ * a running function's own non-2xx response (surfaced as `data` with `error`
+ * null), and pre-flight / name-resolution failures — invalid function name,
+ * no active session, misconfigured `apiUrl`, function-not-found — which stay
+ * plain `Error`s since they are caller/config issues, not platform outages.
+ */
+class VolcanoSystemError extends Error {
+  constructor(message, options = {}) {
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
+    // Non-enumerable (like native Error's own props) so `JSON.stringify(err)`
+    // stays `{}` and consumer log/redaction/snapshot pipelines don't suddenly
+    // see new keys. Still read normally: `err.isSystemError`, `err.status`.
+    Object.defineProperty(this, 'isSystemError', { value: true });
+    Object.defineProperty(this, 'status', { value: options.status ?? null });
+  }
+
+  /**
+   * Type guard: true when `err` is a platform-layer invocation failure. Prefer
+   * this over `instanceof` — it duck-types on the `isSystemError` brand, so it
+   * holds across duplicate SDK copies in a bundle.
+   * @param {unknown} err
+   * @returns {boolean}
+   */
+  static is(err) {
+    return Boolean(err) && err.isSystemError === true;
+  }
+}
+// `name` on the prototype (non-enumerable, inherited) matches native Error and
+// keeps it out of JSON.stringify output.
+VolcanoSystemError.prototype.name = 'VolcanoSystemError';
+
+/**
  * Decode a base64url string to UTF-8 (JWT-safe, Node/browser compatible)
  * @param {string} value
  * @returns {string}
@@ -1517,6 +1561,17 @@ class VolcanoAuth {
         const headers = responseHeadersToObject(response);
         const version = versionHeader || null;
 
+        // A non-2xx response with no version header never reached a running
+        // function — the platform blocked it (failed/provisioning deploy,
+        // gateway down, etc.). Surface it as a system error, distinct from a
+        // function's own error response (which comes back as `data`).
+        //
+        // This split is load-bearing on a gateway invariant: `x-volcano-version`
+        // must be set ONLY by the function runtime after dispatch (never by the
+        // gateway pre-dispatch), and must be CORS-exposed
+        // (`Access-Control-Expose-Headers: x-volcano-version`) on the invoke
+        // domain — otherwise a browser can't read it and a healthy function's
+        // own 4xx would be misread as a system error.
         if (!response.ok && !versionHeader) {
           const message =
             data && typeof data === 'object' && data.error
@@ -1527,18 +1582,24 @@ class VolcanoAuth {
             status: response.status,
             headers,
             version,
-            error: new Error(message),
+            error: new VolcanoSystemError(message, { status: response.status }),
           };
         }
 
         return { data, status: response.status, headers, version, error: null };
       } catch (error) {
+        // Transport failures (network down, timeout, DNS) are also platform-level.
         return {
           data: null,
           status: null,
           headers: {},
           version: null,
-          error: error instanceof Error ? error : new Error('Request failed'),
+          error:
+            error instanceof VolcanoSystemError
+              ? error
+              : new VolcanoSystemError(error instanceof Error ? error.message : 'Request failed', {
+                  cause: error,
+                }),
         };
       }
     };
@@ -1546,8 +1607,9 @@ class VolcanoAuth {
     let result = await invokeOnce(invokeUrl, true);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing.
-    if (!result.ok && result.status === 404) {
+    // On 404, invalidate and resolve once more before failing. (invokeOnce
+    // returns no `ok` field, so gate on status alone.)
+    if (result.status === 404) {
       this._clearFunctionResolveCache(functionName.trim());
       try {
         resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
@@ -2537,5 +2599,6 @@ export {
   QueryBuilder,
   StorageFileApi,
   VolcanoAuth,
+  VolcanoSystemError,
 };
 export default VolcanoAuth;

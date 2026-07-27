@@ -268,7 +268,9 @@ const { data, error } = await volcano.functions.invoke('process-payment', {
 });
 
 if (error) {
-  // Network error or function threw
+  // Platform-layer failure — the invocation never reached your function
+  // (deploy down/failed, gateway error, or a network failure). These are a
+  // `VolcanoSystemError`; detect with `error.isSystemError === true`.
   console.error('Function error:', error.message);
   showErrorToast('Payment failed. Please try again.');
   return;

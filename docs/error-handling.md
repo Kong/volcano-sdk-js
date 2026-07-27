@@ -256,18 +256,34 @@ const { data, error } = await volcano.functions.invoke('process-payment', {
 });
 
 if (error) {
+  // Platform-layer failures are a VolcanoSystemError (error.isSystemError ===
+  // true): the call never reached your function — deploy down/failed, gateway
+  // error, rate limit, timeout, or network failure. error.status is the HTTP
+  // status (null for transport failures).
+  if (error.isSystemError) {
+    switch (true) {
+      case error.status === 429:
+        showError('Too many requests. Please wait a moment.');
+        break;
+      case error.status === null:
+        // Transport failure (timeout, DNS, offline) — no HTTP status.
+        showError('Network problem. Please check your connection and try again.');
+        break;
+      default:
+        // Failed/provisioning deploy or gateway error (e.g. 400/503).
+        showError('The service is temporarily unavailable. Please try again shortly.');
+    }
+    console.error('Platform error:', error.status, error.message);
+    return;
+  }
+
+  // Pre-flight / caller errors stay plain Error (message is case-sensitive).
   switch (true) {
     case error.message.includes('No active session'):
       showError('Please sign in to continue.');
       break;
-    case error.message.includes('Function not found'):
+    case error.message.includes('function not found'):
       console.error('Developer error: Invalid function name');
-      break;
-    case error.message.includes('timeout'):
-      showError('Request timed out. Please try again.');
-      break;
-    case error.message.includes('rate limit'):
-      showError('Too many requests. Please wait a moment.');
       break;
     default:
       showError('Operation failed. Please try again.');
@@ -276,7 +292,7 @@ if (error) {
   return;
 }
 
-// Function may return its own error in the data
+// A running function's own error comes back in the response body, not `error`.
 if (data && data.error) {
   showError(data.error);
   return;

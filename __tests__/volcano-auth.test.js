@@ -1889,6 +1889,99 @@ describe('VolcanoAuth', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
+    it('should surface a platform-blocked invocation as a VolcanoSystemError', async () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      // Resolve succeeds...
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      // ...but the invocation is blocked by the platform: 400 with an error body
+      // and NO x-volcano-version header (request never reached a running version).
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        headers: {
+          get: (name) => {
+            if (name?.toLowerCase() === 'content-type') return 'application/json';
+            return null;
+          },
+          forEach: (callback) => {
+            callback('application/json', 'content-type');
+          },
+        },
+        json: () => Promise.resolve({ error: 'function cannot be invoked (status: failed)' }),
+      });
+
+      const { data, status, error } = await volcano.functions.invoke('my-function', {
+        action: 'getData',
+      });
+
+      expect(data).toBeNull();
+      expect(status).toBe(400);
+      expect(error).toBeInstanceOf(VolcanoSystemError);
+      expect(VolcanoSystemError.is(error)).toBe(true);
+      expect(error.isSystemError).toBe(true);
+      expect(error.status).toBe(400);
+      expect(error.message).toBe('function cannot be invoked (status: failed)');
+      // Extra fields are non-enumerable → serialization shape matches a plain
+      // Error (additive, no surprise for consumer log/redaction pipelines).
+      expect(Object.keys(error)).toEqual([]);
+      expect(JSON.stringify(error)).toBe('{}');
+      expect(error.name).toBe('VolcanoSystemError');
+    });
+
+    it('VolcanoSystemError.is() only matches system errors', () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      expect(VolcanoSystemError.is(new VolcanoSystemError('x', { status: 503 }))).toBe(true);
+      expect(VolcanoSystemError.is(new Error('plain'))).toBe(false);
+      expect(VolcanoSystemError.is(null)).toBe(false);
+      expect(VolcanoSystemError.is(undefined)).toBe(false);
+      expect(VolcanoSystemError.is('boom')).toBe(false);
+      // Duck-typed brand → holds across a duplicate class identity.
+      expect(VolcanoSystemError.is({ isSystemError: true })).toBe(true);
+    });
+
+    it('should surface a transport failure as a VolcanoSystemError with null status and cause', async () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      // Resolve succeeds...
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      // ...but the invocation fetch rejects (network down / DNS / offline).
+      const networkError = new Error('network down');
+      global.fetch.mockRejectedValueOnce(networkError);
+
+      const { data, status, error } = await volcano.functions.invoke('my-function', {
+        action: 'getData',
+      });
+
+      expect(data).toBeNull();
+      expect(status).toBeNull();
+      expect(error).toBeInstanceOf(VolcanoSystemError);
+      expect(error.isSystemError).toBe(true);
+      expect(error.status).toBeNull();
+      expect(error.message).toBe('network down');
+      expect(error.cause).toBe(networkError);
+    });
+
     it('should reject invoke when apiUrl does not follow api.<domain> pattern', async () => {
       const customVolcano = new VolcanoAuth({
         apiUrl: 'https://edge.example.com',
