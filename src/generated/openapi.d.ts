@@ -15,9 +15,10 @@ export interface paths {
     put?: never;
     /**
      * Start a git provider connection
-     * @description Starts a platform-user git provider connection flow and returns the
-     *     provider authorization URL. The response also sets a short-lived
-     *     HttpOnly callback binding cookie used to finish the flow.
+     * @description Starts a first-party dashboard user's git provider connection flow and
+     *     returns the provider authorization URL. The response also sets a
+     *     short-lived HttpOnly callback binding cookie tied to the authenticated
+     *     user through the signed provider state.
      */
     post: operations['startGitConnect'];
     delete?: never;
@@ -55,6 +56,50 @@ export interface paths {
     post?: never;
     /** Delete a git provider connection */
     delete: operations['deleteGitConnection'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/user/git/connections/{connectionId}/installations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List GitHub App installations accessible to a connection
+     * @description Live proxy to GitHub: lists the platform GitHub App installations the
+     *     connection's stored user token can access. Nothing is persisted by
+     *     this call.
+     */
+    get: operations['listGitInstallations'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/user/git/connections/{connectionId}/installations/{installationId}/repositories': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List repos accessible to a connection through an installation
+     * @description Live proxy to GitHub: lists the repos the connection's stored user
+     *     token can access through installationId. Nothing is persisted by this
+     *     call.
+     */
+    get: operations['listGitInstallationRepositories'];
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -271,6 +316,35 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/projects/{id}/git-connection': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a project's repo connection */
+    get: operations['getProjectGitConnection'];
+    /**
+     * Connect or update a project's repo connection
+     * @description Full replace, following Vercel's model: many projects may point at the
+     *     same repo, so this only binds the project — it never creates or
+     *     deletes git-provider state. Used for both the initial connect and
+     *     later edits (repo change, root directory, production branch).
+     *     Resolves the repository_id or repo_full_name selector against the repos
+     *     accessible through installation_id via connection_id's stored GitHub
+     *     user token, then persists repository metadata only from that validated
+     *     GitHub response.
+     */
+    put: operations['connectProjectGit'];
+    post?: never;
+    /** Disconnect a project's repo connection */
+    delete: operations['disconnectProjectGit'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/projects/{id}/databases/{databaseName}/queries': {
     parameters: {
       query?: never;
@@ -348,7 +422,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List all functions in a project */
+    /**
+     * List all functions in a project
+     * @description Supports two mutually exclusive pagination modes. Offset mode uses `page`
+     *     and `limit` and returns `next` (URL). Cursor mode uses `cursor` and
+     *     `limit`, supports `search` (case-insensitive name match), and returns
+     *     `next_cursor`/`prev_cursor`. Sending both `page` and `cursor` (or `page`
+     *     and `search`) returns 400.
+     */
     get: operations['listFunctions'];
     put?: never;
     /**
@@ -364,9 +445,14 @@ export interface paths {
      *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
      *     Uploaded source archives cannot contain symlink entries. Safe symlinks created during
      *     the cloud build are materialized before publish.
-     *     Volcano builds and deploys the function asynchronously after upload. New functions and existing
-     *     function code updates return a Function resource with `status: provisioning` while the Step
-     *     Functions workflow is running, then transition to `active` or `failed`.
+     *     Volcano builds and deploys the function asynchronously after upload. A deployment that starts
+     *     immediately returns a Function resource with `status: provisioning`, then transitions to
+     *     `active` or `failed`. If another deployment is running, the response preserves the resource's
+     *     current status and exposes the queued deployment through `pending_deployment_id`.
+     *     Existing function traffic continues to use the last known-good runtime during an update. A failed
+     *     update keeps that runtime available and records the attempted deployment as failed.
+     *     Only one deployment runs for a given function. A newer request supersedes any queued request
+     *     and starts after the running deployment. Different functions and projects deploy concurrently.
      *     If a function with the same name already exists in the project, this operation updates that
      *     function's runtime, handler, and source bundle and returns `200 OK`.
      *     Each project can contain up to 5,000 functions. Creating a new function over this cap returns 403.
@@ -391,8 +477,10 @@ export interface paths {
     post?: never;
     /**
      * Delete a function
-     * @description Starts asynchronous function deletion. The function remains visible with `status: deleting`
-     *     until cleanup finishes, then it returns 404 and no longer appears in function lists.
+     * @description Schedules asynchronous function deletion. If another deployment is running, the function
+     *     preserves its current status and exposes the queued deletion through `pending_deployment_id`.
+     *     Its status changes to `deleting` when cleanup starts. After cleanup, it returns 404 and no
+     *     longer appears in function lists.
      */
     delete: operations['deleteFunction'];
     options?: never;
@@ -550,12 +638,13 @@ export interface paths {
     /**
      * Stream project logs
      * @description Live-tail project logs as Server-Sent Events. The request body uses the
-     *     resource selector plus `levels`, `regions`, `start_time`, and `limit`,
+     *     resource selector plus `q`, `start_time`, and `limit`,
      *     including runtime logs and function/frontend deployment logs selected
      *     with `resource.deployments`. Deployment logs are not supported for
      *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-     *     from a FREE-plan project owner returns 403. Do not send `q`, `cursor`, or
-     *     `end_time`; use `/logs/search` for text search and range backfills.
+     *     from a FREE-plan project owner returns 403. The `q` field uses the same
+     *     syntax as search and activity requests. Do not send `cursor` or
+     *     `end_time`; use `/logs/search` for range backfills.
      *     Explicit historical `start_time` values are limited to the plan's
      *     retention window (FREE: 1 day, PRO: 30 days). Resume with
      *     `Last-Event-ID` or the `last_event_id` query parameter. The cursor is
@@ -692,23 +781,39 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List all frontends in a project */
+    /**
+     * List all frontends in a project
+     * @description Supports two mutually exclusive pagination modes. Offset mode uses `page`
+     *     and `limit` and returns `next` (URL). Cursor mode uses `cursor` and
+     *     `limit`, supports `search` (case-insensitive name match), and returns
+     *     `next_cursor`. Sending both `page` and `cursor` (or `page` and `search`)
+     *     returns 400.
+     */
     get: operations['listFrontends'];
     put?: never;
     /**
      * Create a new frontend deployment
      * @description Creates and deploys a frontend for the project.
      *     If a frontend with the same name already exists in the project, this operation updates that
-     *     frontend using the uploaded archive and starts a new deployment. Create, update, and redeploy
-     *     responses return `status: provisioning` while the frontend workflow is running, then transition
-     *     to `active` or `failed`.
+     *     frontend using the uploaded archive and starts a new deployment. A deployment that starts
+     *     immediately returns `status: provisioning`, then transitions to `active`, `degraded`, or
+     *     `failed`. If another deployment is running, the response preserves the frontend's current status
+     *     and exposes the queued deployment through `pending_deployment_id`.
+     *     Existing frontend traffic continues to use an available runtime while the new deployment builds
+     *     and provisions. Each deployment publishes its own static assets before the runtimes switch to its
+     *     build, and the live build's assets keep serving until the new deployment is live, so a page loaded
+     *     mid-deployment resolves its assets whichever build served it. A failed redeploy puts the runtimes
+     *     back on the build they were running, leaves the frontend `active` on the previous deployment, and
+     *     records the attempted deployment as failed. `degraded` means the runtime remains available but
+     *     edge synchronization requires recovery; Volcano retries the edge step without rebuilding. Only one deployment may run for a
+     *     given frontend, while independent frontends and projects can deploy concurrently.
      *     For monorepos, provide `app_root` as a relative path from the uploaded archive root
      *     to the Next.js app that should be built. Omit it for single-app archives.
      *     Supported frontend environments are Next.js 15.x and 16.x with Node.js
      *     22.x or 24.x. The Node.js runtime is inferred from
      *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
      *     The selected Node.js family must also satisfy the installed Next.js package's
-     *     `engines.node` constraint. Volcano tests Next 15.5.20 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.10 (`>=20.9.0`).
+     *     `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.12 (`>=20.9.0`).
      *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
      *     does not apply its own source archive size limit. After the final Lambda container images are
      *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -735,8 +840,10 @@ export interface paths {
     post?: never;
     /**
      * Delete a frontend
-     * @description Starts asynchronous frontend deletion. The frontend remains visible with `status: deleting`
-     *     until cleanup finishes, then it returns 404 and no longer appears in frontend lists.
+     * @description Schedules asynchronous frontend deletion. If another deployment is running, the frontend
+     *     preserves its current status and exposes the queued deletion through `pending_deployment_id`.
+     *     Its status changes to `deleting` when cleanup starts. After cleanup, it returns 404 and no
+     *     longer appears in frontend lists.
      */
     delete: operations['deleteFrontend'];
     options?: never;
@@ -755,8 +862,13 @@ export interface paths {
     put?: never;
     /**
      * Redeploy frontend using latest uploaded artifact
-     * @description Starts a new frontend workflow using the latest stored artifact. The frontend remains visible
-     *     with `status: provisioning` while the workflow runs, then transitions to `active` or `failed`.
+     * @description Starts a new frontend workflow using the latest stored artifact. A deployment that starts
+     *     immediately returns `status: provisioning`, then transitions to `active`, `degraded`, or
+     *     `failed`. An overlapping deployment preserves the frontend's current status, is exposed through
+     *     `pending_deployment_id`, and supersedes any older queued deployment. The previous runtime and its
+     *     published static assets remain available during provisioning, and a failed redeploy restores the
+     *     regional runtimes to that build and keeps it serving while the attempted deployment is recorded as
+     *     failed.
      */
     post: operations['redeployFrontend'];
     delete?: never;
@@ -866,7 +978,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List all databases for a project */
+    /**
+     * List all databases for a project
+     * @description Supports two mutually exclusive pagination modes. Offset mode uses `page`
+     *     and `limit`. Cursor mode uses `cursor` and `limit`, supports `search`
+     *     (case-insensitive name match), and returns `next_cursor`/`prev_cursor`.
+     *     The optional `status` filter applies in both modes and is bound to the
+     *     cursor. Sending both `page` and `cursor` (or `page` and `search`) returns 400.
+     */
     get: operations['listDatabases'];
     put?: never;
     /**
@@ -1684,6 +1803,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/projects/{id}/auth/insights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get auth user insights
+     * @description Returns current auth-user totals, rolling 30-day active users, and
+     *     zero-filled signup and successful sign-in counts for an inclusive UTC
+     *     date range. Weeks start on Monday. Sign-in counts and active-user
+     *     activity begin when collection is deployed. Historical signup counts
+     *     are backfilled from users present at deployment. Token refreshes affect
+     *     active users but not the sign-in series.
+     */
+    get: operations['getAuthInsights'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/projects/{id}/auth/users': {
     parameters: {
       query?: never;
@@ -2459,7 +2603,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List anon keys */
+    /**
+     * List anon keys
+     * @description Supports two mutually exclusive pagination modes. Offset mode uses `page`
+     *     and `limit` and is the default when neither `cursor` nor `search` is
+     *     supplied (first page, default `limit`). Cursor mode uses `cursor` and
+     *     `limit`, supports `search` (case-insensitive name match), and returns
+     *     `next_cursor`. Sending both `page` and `cursor` (or `page` and `search`)
+     *     returns 400.
+     */
     get: operations['listAnonKeys'];
     put?: never;
     /** Create anon key */
@@ -2617,7 +2769,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List all storage buckets in a project */
+    /**
+     * List all storage buckets in a project
+     * @description With no pagination params, returns the full bucket list as a bare array
+     *     (legacy). Supplying `cursor`, `ending_before`, `search`, or `limit`
+     *     switches to keyset (cursor) pagination and returns a paginated envelope
+     *     with `next_cursor`/`prev_cursor` and a filtered `total`.
+     */
     get: operations['listStorageBuckets'];
     put?: never;
     /** Create a new storage bucket */
@@ -3100,6 +3258,21 @@ export interface components {
        */
       cors_max_age?: number;
       /**
+       * @description Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+       * @default false
+       */
+      require_email_confirmation?: boolean;
+      /**
+       * @description Email confirmation token expiry in seconds.
+       * @default 86400
+       */
+      email_confirmation_timeout?: number;
+      /**
+       * @description Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+       * @default false
+       */
+      auto_link_verified_oauth?: boolean;
+      /**
        * @description Enable transactional email sending (confirmation, reset, change notifications). Must be true when require_email_confirmation is true.
        * @default false
        */
@@ -3111,10 +3284,10 @@ export interface components {
       smtp_port?: number;
       smtp_username?: string;
       /**
-       * Format: password
-       * @description SMTP password. Stored encrypted at rest (AES-256-GCM); returned decrypted only to the authenticated project owner.
+       * @description Whether an SMTP password is configured. The password itself is never returned.
+       * @default false
        */
-      smtp_password?: string;
+      smtp_password_configured?: boolean;
       /** @default true */
       smtp_use_tls?: boolean;
       email_confirmation_subject?: string;
@@ -3140,6 +3313,52 @@ export interface components {
        * @example https://app.acme.com/device
        */
       device_verification_url?: string;
+    };
+    /** @enum {string} */
+    AuthInsightsInterval: 'day' | 'week' | 'month';
+    AuthInsightsResponse: {
+      /** Format: uuid */
+      project_id: string;
+      /** Format: date-time */
+      observed_at: string;
+      window: components['schemas']['AuthInsightsWindow'];
+      summary: components['schemas']['AuthInsightsSummary'];
+      series: components['schemas']['AuthInsightsSeriesPoint'][];
+    };
+    AuthInsightsSeriesPoint: {
+      /** Format: date */
+      bucket_start: string;
+      /**
+       * Format: int64
+       * @description Accounts created during the bucket.
+       */
+      signups: number;
+      /**
+       * Format: int64
+       * @description Successful session creations during the bucket.
+       */
+      signins: number;
+      /** @description Whether the requested window or observation time clips this bucket. */
+      is_partial: boolean;
+    };
+    AuthInsightsSummary: {
+      /**
+       * Format: int64
+       * @description Current auth-user count, matching the auth-user list total.
+       */
+      total_users: number;
+      /**
+       * Format: int64
+       * @description Users with a successful session creation or refresh in the trailing 30 days since activity collection was deployed.
+       */
+      active_users_30d: number;
+    };
+    AuthInsightsWindow: {
+      /** Format: date */
+      from: string;
+      /** Format: date */
+      to: string;
+      interval: components['schemas']['AuthInsightsInterval'];
     };
     AuthHostedPage: {
       /** Format: uuid */
@@ -3629,7 +3848,6 @@ export interface components {
        *     - `volcano_full_access` — Full admin access (DDL, migrations)
        *     - `volcano_user_access:{user_id}` — User impersonation (RLS enforced)
        *     - `volcano_user_access` — Anonymous access (anon role, RLS enforced)
-       * @example postgres://volcano_client_11111111-1111-1111-1111-111111111111:vpg_secret@database.volcano.dev:5432/my_app_db?sslmode=require&application_name=volcano_full_access
        */
       connection_string?: string;
       /**
@@ -3742,6 +3960,8 @@ export interface components {
     };
     Error: {
       error: string;
+      /** @description Stable machine-readable error code when a specific recovery path is available. */
+      code?: string;
     };
     GitConnection: {
       /** Format: uuid */
@@ -3763,6 +3983,70 @@ export interface components {
     GitConnectionsResponse: {
       connections: components['schemas']['GitConnection'][];
     };
+    GitInstallation: {
+      /** Format: int64 */
+      id: number;
+      account_login: string;
+      account_type: string;
+      repository_selection: string;
+    };
+    GitInstallationsResponse: {
+      installations: components['schemas']['GitInstallation'][];
+    };
+    GitRepository: {
+      /**
+       * Format: int64
+       * @description Stable GitHub repository id (repository.id), unchanged by renames.
+       */
+      id: number;
+      full_name: string;
+      default_branch: string;
+      private: boolean;
+    };
+    GitRepositoriesResponse: {
+      repositories: components['schemas']['GitRepository'][];
+    };
+    ProjectGitConnection: {
+      /** Format: int64 */
+      repo_installation_id: number;
+      /**
+       * Format: int64
+       * @description Stable GitHub repository id (repository.id), the authoritative binding.
+       */
+      repo_id: number;
+      repo_full_name: string;
+      root_directory: string;
+      /** @description The repository's GitHub default branch, cached at connect time and used as the deployment target. */
+      production_branch: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    ConnectProjectGitRequest: {
+      /**
+       * Format: uuid
+       * @description The caller's user_git_connections row (see /user/git/connections).
+       */
+      connection_id: string;
+      /** Format: int64 */
+      installation_id: number;
+      /**
+       * Format: int64
+       * @description Stable GitHub repository id (repository.id), the preferred selector. Either repository_id or repo_full_name is required; when both are given they must identify the same live repository.
+       */
+      repository_id?: number;
+      /**
+       * @deprecated
+       * @description Deprecated selector kept for a compatibility window; prefer repository_id. Either repository_id or repo_full_name is required.
+       */
+      repo_full_name?: string;
+      /** @description Monorepo subdirectory the project builds from. Omit for the repo root. */
+      root_directory?: string;
+      /**
+       * @deprecated
+       * @description Deprecated. The deployment branch always follows the repository's GitHub default branch; when given it must equal that default branch. New callers omit it.
+       */
+      production_branch?: string;
+    };
     Frontend: {
       /** Format: uuid */
       id: string;
@@ -3773,8 +4057,17 @@ export interface components {
       framework: 'nextjs';
       /** @description Optional relative POSIX path from the uploaded archive root to the Next.js app that is deployed. */
       app_root?: string;
-      /** @enum {string} */
-      status: 'provisioning' | 'active' | 'failed' | 'deleting';
+      /**
+       * @description Frontend lifecycle status. `degraded` means the regional runtime remains
+       *     available but edge synchronization exhausted its immediate retries; Volcano
+       *     retries edge recovery without rebuilding the frontend, and stops once a new
+       *     deployment is queued or the retry budget runs out, leaving the frontend
+       *     `degraded` until the next redeploy. A redeploy that fails over a serving
+       *     frontend stays `active` on the previous deployment, so `failed` means no
+       *     deployment is serving.
+       * @enum {string}
+       */
+      status: 'provisioning' | 'active' | 'degraded' | 'failed' | 'deleting';
       /**
        * Format: date-time
        * @description Timestamp when the current provisioning phase started
@@ -3786,6 +4079,11 @@ export interface components {
        * @description Identifier of the latest frontend deployment operation
        */
       current_deployment_id?: string;
+      /**
+       * Format: uuid
+       * @description Newest queued deployment that will run after the current operation
+       */
+      pending_deployment_id?: string;
       site_url?: string;
       /** @description Active custom domain hostname when configured */
       custom_domain?: string;
@@ -3852,12 +4150,24 @@ export interface components {
       project_id: string;
       /** @enum {string} */
       operation: 'deploy' | 'redeploy' | 'delete';
-      /** @enum {string} */
-      status: 'provisioning' | 'active' | 'failed' | 'deleting' | 'deleted';
+      /**
+       * @description Deployment lifecycle status. A `degraded` redeploy remains available while
+       *     edge-only recovery is retried. A `failed` redeploy is recorded here while the
+       *     frontend keeps serving its previous deployment.
+       * @enum {string}
+       */
+      status:
+        | 'queued'
+        | 'provisioning'
+        | 'active'
+        | 'degraded'
+        | 'failed'
+        | 'superseded'
+        | 'deleting'
+        | 'deleted';
       artifact_bucket?: string;
       artifact_key?: string;
       artifact_version?: string;
-      cloudwatch_log_group?: string;
       site_url?: string;
       cloudformation_stack_id?: string;
       cloudformation_stack_url?: string;
@@ -3971,6 +4281,11 @@ export interface components {
        */
       current_deployment_id?: string;
       /**
+       * Format: uuid
+       * @description Newest queued deployment that will run after the current operation
+       */
+      pending_deployment_id?: string;
+      /**
        * Format: date-time
        * @description Most recent successful invocation timestamp
        */
@@ -3992,14 +4307,17 @@ export interface components {
       /** @enum {string} */
       operation: 'deploy' | 'update' | 'delete';
       /** @enum {string} */
-      status: 'provisioning' | 'active' | 'failed' | 'deleting' | 'deleted';
+      status:
+        | 'queued'
+        | 'provisioning'
+        | 'active'
+        | 'failed'
+        | 'superseded'
+        | 'deleting'
+        | 'deleted';
       artifact_bucket?: string;
       artifact_key?: string;
       artifact_version?: string;
-      compile_log_group?: string;
-      compile_log_stream?: string;
-      publish_log_group?: string;
-      publish_log_stream?: string;
       /**
        * Format: int64
        * @description Total CodeBuild build duration recorded for this deployment, in seconds.
@@ -4075,12 +4393,8 @@ export interface components {
     /** @description Activity request for bucketed log counts. */
     LogActivityRequest: {
       resource: components['schemas']['LogRequestResource'];
-      /** @description Optional free-text search query for log messages. */
+      /** @description Optional activity query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`. */
       q?: string;
-      /** @description Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied. */
-      levels?: components['schemas']['LiveLogLevel'][];
-      /** @description Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, aggregate all deployed regions. */
-      regions?: string[];
       /**
        * Format: date-time
        * @description Start time.
@@ -4103,12 +4417,8 @@ export interface components {
     /** @description Search request for project logs. */
     LogSearchRequest: {
       resource: components['schemas']['LogRequestResource'];
-      /** @description Optional free-text search query for log messages. */
+      /** @description Optional log query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`. */
       q?: string;
-      /** @description Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied. */
-      levels?: components['schemas']['LiveLogLevel'][];
-      /** @description Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, search all deployed regions. */
-      regions?: string[];
       /**
        * Format: date-time
        * @description Start time.
@@ -4127,13 +4437,11 @@ export interface components {
       /** @description Opaque pagination cursor from the previous response's `next_cursor`. */
       cursor?: string;
     };
-    /** @description Stream request for live project logs. Text search, pagination cursors, and fixed end times are not supported. */
+    /** @description Stream request for live project logs. Pagination cursors and fixed end times are not supported. */
     LogStreamRequest: {
       resource: components['schemas']['LogRequestResource'];
-      /** @description Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied. */
-      levels?: components['schemas']['LiveLogLevel'][];
-      /** @description Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, stream all deployed regions. */
-      regions?: string[];
+      /** @description Optional log query using the same syntax as search and activity requests. */
+      q?: string;
       /**
        * Format: date-time
        * @description Start time.
@@ -4231,6 +4539,10 @@ export interface components {
       limit: number;
       total: number;
       has_more: boolean;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     /** @enum {string} */
     HostedAuthPageType: 'login' | 'reset-password';
@@ -4250,7 +4562,7 @@ export interface components {
     };
     /** @enum {string} */
     HostedRenderablePageType: 'reset-password';
-    /** @description Normalized historical log event returned by paginated log APIs. */
+    /** @description Historical log event returned by log APIs. */
     LogEvent: {
       /** @description Opaque stable log event ID for pagination, deduplication, and display. */
       id?: string;
@@ -4260,20 +4572,24 @@ export interface components {
        */
       timestamp: string;
       level?: components['schemas']['LiveLogLevel'];
-      /** @description Display log message. */
-      message: string;
+      /** @description Application log value. JSON arguments retain their JSON type. Strings containing a serialized JSON object or array are normalized to that object or array; all other strings remain strings. */
+      body:
+        | (
+            | string
+            | {
+                [key: string]: unknown;
+              }
+            | unknown[]
+            | number
+            | boolean
+          )
+        | null;
       /** @description Region where this log event originated. */
       region?: string;
       resource?: components['schemas']['LogResource'];
       deployment?: components['schemas']['LogDeployment'];
       /** @description Function invocation ID associated with this log event, when available. */
       invocation_id?: string;
-      /** @description Original log line/message after platform sanitization. */
-      raw_message?: string;
-      /** @description Parsed JSON fields and other indexed metadata, when available. */
-      metadata?: {
-        [key: string]: unknown;
-      } | null;
     };
     /**
      * @description Canonical lowercase function runtime log level.
@@ -4366,6 +4682,10 @@ export interface components {
       has_more: boolean;
       /** @description URL path to next page (only present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PaginatedFrontendDeployments: {
       data: components['schemas']['FrontendDeployment'][];
@@ -4390,8 +4710,12 @@ export interface components {
       total: number;
       /** @description Whether there are more pages available */
       has_more: boolean;
-      /** @description URL path to next page (only present if has_more is true) */
+      /** @description URL path to next page (offset pagination only; present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PaginatedFunctionDeployments: {
       data: components['schemas']['FunctionDeployment'][];
@@ -4418,6 +4742,10 @@ export interface components {
       has_more: boolean;
       /** @description URL path to next page (only present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PaginatedProjectCustomDomains: {
       data: components['schemas']['ProjectFrontendCustomDomain'][];
@@ -4483,8 +4811,26 @@ export interface components {
       total: number;
       /** @description Whether there are more pages available */
       has_more: boolean;
-      /** @description URL path to next page (only present if has_more is true) */
+      /** @description URL path to next page (offset pagination only; present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
+    };
+    /** @description Cursor-paginated storage buckets (returned only when cursor pagination is requested). */
+    PaginatedStorageBuckets: {
+      data: components['schemas']['StorageBucket'][];
+      /** @description Number of items per page */
+      limit: number;
+      /** @description Total number of items matching the query */
+      total?: number;
+      /** @description Whether a next page exists */
+      has_more: boolean;
+      /** @description Opaque cursor for the next page (present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PaginatedVariables: {
       data: components['schemas']['Variable'][];
@@ -4498,6 +4844,10 @@ export interface components {
       has_more: boolean;
       /** @description URL path to next page (only present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PlatformExchangeResponse: {
       token: string;
@@ -5027,7 +5377,15 @@ export interface components {
       /** @enum {string} */
       operation: 'deploy' | 'redeploy' | 'update' | 'delete';
       /** @enum {string} */
-      status: 'provisioning' | 'active' | 'failed' | 'deleting' | 'deleted';
+      status:
+        | 'queued'
+        | 'provisioning'
+        | 'active'
+        | 'degraded'
+        | 'failed'
+        | 'superseded'
+        | 'deleting'
+        | 'deleted';
       artifact_version?: string;
       error_message?: string;
       /** Format: date-time */
@@ -5452,7 +5810,7 @@ export interface components {
       smtp_username?: string;
       /**
        * Format: password
-       * @description SMTP password (sensitive). Encrypted at rest (AES-256-GCM) when stored.
+       * @description Replacement SMTP password. Omit this field to preserve the configured password. The value is encrypted at rest and never returned.
        */
       smtp_password?: string;
       smtp_use_tls?: boolean;
@@ -5827,6 +6185,21 @@ export interface components {
   parameters: {
     /** @description Storage bucket name */
     BucketName: string;
+    /**
+     * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+     *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+     *     combining them returns 400. When supplied, the request's `search` and
+     *     `limit` must match the values bound to the cursor or the request returns 400.
+     */
+    Cursor: string;
+    /**
+     * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+     *     — pages backward (the page immediately preceding this cursor). Mutually
+     *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+     *     and `limit` must match the values bound to the cursor or the request
+     *     returns 400.
+     */
+    EndingBefore: string;
     /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
     DatabaseName: string;
     /** @description Frontend deployment ID */
@@ -5837,10 +6210,23 @@ export interface components {
     FunctionId: string;
     /** @description Number of items per page (max 100) */
     Limit: number;
+    /**
+     * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+     *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+     *     skip this many rows within. Used for numbered jump-to-page: from the
+     *     current page, seek to its next/prev cursor and offset the remaining
+     *     pages. Only honored on the cursor pagination path; ignored otherwise.
+     */
+    Offset: number;
     /** @description Page number (1-indexed) */
     Page: number;
     /** @description Project ID */
     ProjectId: string;
+    /**
+     * @description Case-insensitive substring match on the resource `name`. Only honored on
+     *     the cursor pagination path.
+     */
+    Search: string;
     /** @description Function scheduler ID */
     SchedulerId: string;
     /** @description Variable name */
@@ -6007,6 +6393,144 @@ export interface operations {
         };
       };
       /** @description Failed to delete connection */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  listGitInstallations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Connection ID to browse installations for. */
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installations accessible to the connection */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GitInstallationsResponse'];
+        };
+      };
+      /** @description Malformed connection ID */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Connection not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to list installations */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  listGitInstallationRepositories: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Connection ID to browse repositories for. */
+        connectionId: string;
+        /** @description GitHub App installation ID. */
+        installationId: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Repositories accessible through the installation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GitRepositoriesResponse'];
+        };
+      };
+      /** @description Malformed connection or installation ID */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Connection not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to list repositories */
       500: {
         headers: {
           [name: string]: unknown;
@@ -6270,7 +6794,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Conflict (project name already exists) */
+      /** @description Conflict (project name already exists or a resource deployment blocks a region change) */
       409: {
         headers: {
           [name: string]: unknown;
@@ -6763,6 +7287,206 @@ export interface operations {
       };
     };
   };
+  getProjectGitConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The project's current repo connection */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectGitConnection'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not owned by the caller */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not found, or has no repo connection */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to get project git connection */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  connectProjectGit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConnectProjectGitRequest'];
+      };
+    };
+    responses: {
+      /** @description The project's repo connection */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectGitConnection'];
+        };
+      };
+      /** @description Malformed request body */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /**
+       * @description Project not owned by the caller, or the selected repository is not
+       *     accessible through installation_id
+       */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project or connection not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to connect project git */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Git provider integration is not configured */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  disconnectProjectGit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Connection removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not owned by the caller */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not found, or has no repo connection */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to disconnect project git */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   getProjectDatabaseQueries: {
     parameters: {
       query?: {
@@ -6971,6 +7695,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -7057,7 +7809,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Existing function updated and update workflow started */
+      /** @description Existing function updated; its deployment was started or queued */
       200: {
         headers: {
           [name: string]: unknown;
@@ -7086,6 +7838,15 @@ export interface operations {
       };
       /** @description Function limit exceeded for the project */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Function deletion is queued or running */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -7152,7 +7913,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Function deletion started */
+      /** @description Function deletion started or queued */
       202: {
         headers: {
           [name: string]: unknown;
@@ -7648,6 +8409,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -7861,6 +8650,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -7962,7 +8779,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Existing frontend updated and redeployment workflow started */
+      /** @description Existing frontend updated; its deployment was started or queued */
       200: {
         headers: {
           [name: string]: unknown;
@@ -8016,7 +8833,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Conflict - frontend deployment already in progress */
+      /** @description Conflict - frontend deletion is queued or running */
       409: {
         headers: {
           [name: string]: unknown;
@@ -8129,7 +8946,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Frontend deletion started */
+      /** @description Frontend deletion started or queued */
       202: {
         headers: {
           [name: string]: unknown;
@@ -8206,7 +9023,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Frontend redeploy started */
+      /** @description Frontend redeploy started or queued */
       200: {
         headers: {
           [name: string]: unknown;
@@ -8251,7 +9068,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Conflict - frontend deployment already in progress */
+      /** @description Conflict - frontend deletion is queued or running */
       409: {
         headers: {
           [name: string]: unknown;
@@ -8674,6 +9491,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -8747,6 +9592,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -8897,15 +9770,9 @@ export interface operations {
              * @example volcano_client_11111111-1111-1111-1111-111111111111
              */
             role_name?: string;
-            /**
-             * @description New Volcano-managed client password. Always starts with `vpg_`.
-             * @example vpg_qv3Y4GQwHcklV4G76ZcKhZW-rmZLQktEORHnGqU0Bpk
-             */
+            /** @description New Volcano-managed client password. Always starts with `vpg_`. */
             new_password?: string;
-            /**
-             * @description Updated pgproxy connection string using Volcano-managed credentials.
-             * @example postgresql://volcano_client_11111111-1111-1111-1111-111111111111:vpg_qv3Y4GQwHcklV4G76ZcKhZW-rmZLQktEORHnGqU0Bpk@database.volcano.dev:5432/mydb?sslmode=require&application_name=volcano_full_access
-             */
+            /** @description Updated pgproxy connection string using Volcano-managed credentials. */
             connection_string?: string;
           };
         };
@@ -10734,6 +11601,104 @@ export interface operations {
       };
     };
   };
+  getAuthInsights: {
+    parameters: {
+      query?: {
+        /** @description Inclusive UTC start date. Defaults to 29 days before `to`. */
+        from?: string;
+        /** @description Inclusive UTC end date. Defaults to today. */
+        to?: string;
+        /** @description Chart bucket size. Defaults to `day`. */
+        interval?: components['schemas']['AuthInsightsInterval'];
+      };
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Auth insights retrieved */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          /**
+           * @example {
+           *       "project_id": "4f165080-a931-4e03-b3bd-41c45c3f0058",
+           *       "observed_at": "2026-07-20T18:00:00Z",
+           *       "window": {
+           *         "from": "2026-06-21",
+           *         "to": "2026-07-20",
+           *         "interval": "day"
+           *       },
+           *       "summary": {
+           *         "total_users": 1234,
+           *         "active_users_30d": 418
+           *       },
+           *       "series": [
+           *         {
+           *           "bucket_start": "2026-07-20",
+           *           "signups": 12,
+           *           "signins": 97,
+           *           "is_partial": true
+           *         }
+           *       ]
+           *     }
+           */
+          'application/json': components['schemas']['AuthInsightsResponse'];
+        };
+      };
+      /** @description Invalid date range or interval */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   listAuthUsers: {
     parameters: {
       query?: {
@@ -12410,7 +13375,40 @@ export interface operations {
   };
   listAnonKeys: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Page number (1-indexed) */
+        page?: components['parameters']['Page'];
+        /** @description Number of items per page (max 100) */
+        limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
+      };
       header?: never;
       path: {
         /** @description Project ID */
@@ -12428,6 +13426,14 @@ export interface operations {
         content: {
           'application/json': {
             data?: components['schemas']['AnonKey'][];
+            /** @description Total number of items matching the query (so the UI can render numbered pages). */
+            total?: number;
+            /** @description Whether a next page exists. */
+            has_more?: boolean;
+            /** @description Opaque cursor for the next page (cursor pagination only) */
+            next_cursor?: string;
+            /** @description Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`. */
+            prev_cursor?: string;
           };
         };
       };
@@ -12672,6 +13678,34 @@ export interface operations {
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -12830,7 +13864,38 @@ export interface operations {
   };
   listStorageBuckets: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Number of items per page (max 100) */
+        limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
+      };
       header?: never;
       path: {
         /** @description Project ID */
@@ -12840,13 +13905,18 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description List of storage buckets */
+      /**
+       * @description Either the full bucket list (bare array, legacy) or a paginated
+       *     envelope when cursor pagination is requested.
+       */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['StorageBucket'][];
+          'application/json':
+            | components['schemas']['StorageBucket'][]
+            | components['schemas']['PaginatedStorageBuckets'];
         };
       };
     };
@@ -13056,6 +14126,34 @@ export interface operations {
         page?: number;
         /** @description Items per page */
         limit?: number;
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. Only honored on
+         *     the cursor pagination path.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -13078,6 +14176,10 @@ export interface operations {
             limit?: number;
             total?: number;
             has_more?: boolean;
+            /** @description Opaque cursor for the next page (cursor pagination only) */
+            next_cursor?: string;
+            /** @description Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`. */
+            prev_cursor?: string;
           };
         };
       };
