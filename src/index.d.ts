@@ -358,8 +358,39 @@ export interface Functions {
     status: number | null;
     headers: Record<string, string>;
     version: string | null;
+    /**
+     * A platform-layer invocation failure (the deploy is failed/provisioning,
+     * the gateway is down, or the network call failed) is a
+     * {@link VolcanoSystemError} — detect it via `error.isSystemError`. A
+     * function's own non-2xx response is not an error here; it comes back as
+     * `data` with `error` null. (Union stays `Error` because
+     * `VolcanoSystemError extends Error`; narrow at runtime, not by type.)
+     */
     error: Error | null;
   }>;
+}
+
+/**
+ * Error raised when a function invocation fails at the platform layer rather
+ * than inside the invoked function's own code. Detect with
+ * `VolcanoSystemError.is(error)` (or `error?.isSystemError === true`) — prefer
+ * either over `instanceof`, which can be `false` across duplicate SDK copies in
+ * a bundle. Not raised for pre-flight / name-resolution failures (bad name, no
+ * session, misconfigured apiUrl, function-not-found), which stay plain `Error`s.
+ */
+export class VolcanoSystemError extends Error {
+  readonly name: 'VolcanoSystemError';
+  readonly isSystemError: true;
+  /** HTTP status of the blocked invocation, or null for transport failures. */
+  readonly status: number | null;
+  /** Underlying error for transport failures (network/timeout); undefined otherwise. */
+  readonly cause?: unknown;
+  constructor(message: string, options?: { status?: number | null; cause?: unknown });
+  /**
+   * Type guard for platform-layer invocation failures. Prefer over `instanceof`
+   * (holds across duplicate SDK copies in a bundle).
+   */
+  static is(err: unknown): err is VolcanoSystemError;
 }
 
 // ============================================================================
