@@ -425,9 +425,11 @@ export interface LogSearchEvent {
   id: string;
   timestamp: string;
   level?: LogLevel;
-  message: string;
-  raw_message?: string;
-  metadata?: Record<string, JsonValue> | null;
+  /**
+   * Application log value. JSON arguments keep their JSON type, so a structured
+   * log arrives as an object or array rather than a serialized string.
+   */
+  body: JsonValue;
   region?: string;
   resource: LogResource;
   deployment?: LogDeployment;

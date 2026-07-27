@@ -51,7 +51,13 @@ type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {
   id: string;
   timestamp: string;
-  message: string;
+  body: string;
   resource: OpenAPIComponents['schemas']['LogResource'];
 };
 type _LogSearchEventIsUsable = Assert<LogSearchEventShape extends LogSearchEvent ? true : false>;
+type LogSearchEventStructuredShape = Omit<LogSearchEventShape, 'body'> & {
+  body: { attempt: number };
+};
+type _LogSearchEventBodyKeepsJsonTypes = Assert<
+  LogSearchEventStructuredShape extends LogSearchEvent ? true : false
+>;

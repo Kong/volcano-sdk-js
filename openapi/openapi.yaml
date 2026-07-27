@@ -72,12 +72,14 @@ paths:
         - Git Connections
       summary: Start a git provider connection
       description: |
-        Starts a platform-user git provider connection flow and returns the
-        provider authorization URL. The response also sets a short-lived
-        HttpOnly callback binding cookie used to finish the flow.
+        Starts a first-party dashboard user's git provider connection flow and
+        returns the provider authorization URL. The response also sets a
+        short-lived HttpOnly callback binding cookie tied to the authenticated
+        user through the signed provider state.
       operationId: startGitConnect
       security:
         - UserToken: []
+        - AuthUserAccessToken: []
       parameters:
         - name: provider
           in: query
@@ -133,6 +135,7 @@ paths:
       operationId: listGitConnections
       security:
         - UserToken: []
+        - AuthUserAccessToken: []
       responses:
         '200':
           description: Stored git provider connections
@@ -166,6 +169,7 @@ paths:
       operationId: deleteGitConnection
       security:
         - UserToken: []
+        - AuthUserAccessToken: []
       parameters:
         - name: connectionId
           in: path
@@ -197,6 +201,129 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Failed to delete connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /user/git/connections/{connectionId}/installations:
+    get:
+      tags:
+        - Git Connections
+      summary: List GitHub App installations accessible to a connection
+      description: |
+        Live proxy to GitHub: lists the platform GitHub App installations the
+        connection's stored user token can access. Nothing is persisted by
+        this call.
+      operationId: listGitInstallations
+      security:
+        - UserToken: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          description: Connection ID to browse installations for.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Installations accessible to the connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitInstallationsResponse'
+        '400':
+          description: Malformed connection ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to list installations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /user/git/connections/{connectionId}/installations/{installationId}/repositories:
+    get:
+      tags:
+        - Git Connections
+      summary: List repos accessible to a connection through an installation
+      description: |
+        Live proxy to GitHub: lists the repos the connection's stored user
+        token can access through installationId. Nothing is persisted by this
+        call.
+      operationId: listGitInstallationRepositories
+      security:
+        - UserToken: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          description: Connection ID to browse repositories for.
+          schema:
+            type: string
+            format: uuid
+        - name: installationId
+          in: path
+          required: true
+          description: GitHub App installation ID.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Repositories accessible through the installation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitRepositoriesResponse'
+        '400':
+          description: Malformed connection or installation ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to list repositories
           content:
             application/json:
               schema:
@@ -385,7 +512,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict (project name already exists)
+          description: Conflict (project name already exists or a resource deployment blocks a region change)
           content:
             application/json:
               schema:
@@ -837,6 +964,155 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectConfigValidationErrorResponse'
+  /projects/{id}/git-connection:
+    get:
+      tags:
+        - Projects
+        - Git Connections
+      summary: Get a project's repo connection
+      operationId: getProjectGitConnection
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The project's current repo connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGitConnection'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Project not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found, or has no repo connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to get project git connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Projects
+        - Git Connections
+      summary: Connect or update a project's repo connection
+      description: |
+        Full replace, following Vercel's model: many projects may point at the
+        same repo, so this only binds the project — it never creates or
+        deletes git-provider state. Used for both the initial connect and
+        later edits (repo change, root directory, production branch).
+        Resolves the repository_id or repo_full_name selector against the repos
+        accessible through installation_id via connection_id's stored GitHub
+        user token, then persists repository metadata only from that validated
+        GitHub response.
+      operationId: connectProjectGit
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectProjectGitRequest'
+      responses:
+        '200':
+          description: The project's repo connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGitConnection'
+        '400':
+          description: Malformed request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: |
+            Project not owned by the caller, or the selected repository is not
+            accessible through installation_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project or connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to connect project git
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Git provider integration is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Projects
+        - Git Connections
+      summary: Disconnect a project's repo connection
+      operationId: disconnectProjectGit
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '204':
+          description: Connection removed
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Project not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found, or has no repo connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to disconnect project git
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/databases/{databaseName}/queries:
     get:
       tags:
@@ -1000,6 +1276,12 @@ paths:
       tags:
         - Functions
       summary: List all functions in a project
+      description: |
+        Supports two mutually exclusive pagination modes. Offset mode uses `page`
+        and `limit` and returns `next` (URL). Cursor mode uses `cursor` and
+        `limit`, supports `search` (case-insensitive name match), and returns
+        `next_cursor`/`prev_cursor`. Sending both `page` and `cursor` (or `page`
+        and `search`) returns 400.
       operationId: listFunctions
       security:
         - UserToken: []
@@ -1007,6 +1289,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -1036,9 +1322,14 @@ paths:
         built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
         Uploaded source archives cannot contain symlink entries. Safe symlinks created during
         the cloud build are materialized before publish.
-        Volcano builds and deploys the function asynchronously after upload. New functions and existing
-        function code updates return a Function resource with `status: provisioning` while the Step
-        Functions workflow is running, then transition to `active` or `failed`.
+        Volcano builds and deploys the function asynchronously after upload. A deployment that starts
+        immediately returns a Function resource with `status: provisioning`, then transitions to
+        `active` or `failed`. If another deployment is running, the response preserves the resource's
+        current status and exposes the queued deployment through `pending_deployment_id`.
+        Existing function traffic continues to use the last known-good runtime during an update. A failed
+        update keeps that runtime available and records the attempted deployment as failed.
+        Only one deployment runs for a given function. A newer request supersedes any queued request
+        and starts after the running deployment. Different functions and projects deploy concurrently.
         If a function with the same name already exists in the project, this operation updates that
         function's runtime, handler, and source bundle and returns `200 OK`.
         Each project can contain up to 5,000 functions. Creating a new function over this cap returns 403.
@@ -1099,7 +1390,7 @@ paths:
                   example: handler
       responses:
         '200':
-          description: Existing function updated and update workflow started
+          description: Existing function updated; its deployment was started or queued
           content:
             application/json:
               schema:
@@ -1118,6 +1409,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Function limit exceeded for the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Function deletion is queued or running
           content:
             application/json:
               schema:
@@ -1201,8 +1498,10 @@ paths:
         - Functions
       summary: Delete a function
       description: |
-        Starts asynchronous function deletion. The function remains visible with `status: deleting`
-        until cleanup finishes, then it returns 404 and no longer appears in function lists.
+        Schedules asynchronous function deletion. If another deployment is running, the function
+        preserves its current status and exposes the queued deletion through `pending_deployment_id`.
+        Its status changes to `deleting` when cleanup starts. After cleanup, it returns 404 and no
+        longer appears in function lists.
       operationId: deleteFunction
       security:
         - UserToken: []
@@ -1211,7 +1510,7 @@ paths:
         - $ref: '#/components/parameters/FunctionId'
       responses:
         '202':
-          description: Function deletion started
+          description: Function deletion started or queued
         '404':
           description: Function not found
           content:
@@ -1541,12 +1840,13 @@ paths:
       summary: Stream project logs
       description: |
         Live-tail project logs as Server-Sent Events. The request body uses the
-        resource selector plus `levels`, `regions`, `start_time`, and `limit`,
+        resource selector plus `q`, `start_time`, and `limit`,
         including runtime logs and function/frontend deployment logs selected
         with `resource.deployments`. Deployment logs are not supported for
         databases. Database logs are a PRO-plan feature; `resource.type=database`
-        from a FREE-plan project owner returns 403. Do not send `q`, `cursor`, or
-        `end_time`; use `/logs/search` for text search and range backfills.
+        from a FREE-plan project owner returns 403. The `q` field uses the same
+        syntax as search and activity requests. Do not send `cursor` or
+        `end_time`; use `/logs/search` for range backfills.
         Explicit historical `start_time` values are limited to the plan's
         retention window (FREE: 1 day, PRO: 30 days). Resume with
         `Last-Event-ID` or the `last_event_id` query parameter. The cursor is
@@ -1701,6 +2001,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Project schedulers
@@ -1844,6 +2148,12 @@ paths:
       tags:
         - Frontends
       summary: List all frontends in a project
+      description: |
+        Supports two mutually exclusive pagination modes. Offset mode uses `page`
+        and `limit` and returns `next` (URL). Cursor mode uses `cursor` and
+        `limit`, supports `search` (case-insensitive name match), and returns
+        `next_cursor`. Sending both `page` and `cursor` (or `page` and `search`)
+        returns 400.
       operationId: listFrontends
       security:
         - UserToken: []
@@ -1851,6 +2161,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -1895,16 +2209,25 @@ paths:
       description: |
         Creates and deploys a frontend for the project.
         If a frontend with the same name already exists in the project, this operation updates that
-        frontend using the uploaded archive and starts a new deployment. Create, update, and redeploy
-        responses return `status: provisioning` while the frontend workflow is running, then transition
-        to `active` or `failed`.
+        frontend using the uploaded archive and starts a new deployment. A deployment that starts
+        immediately returns `status: provisioning`, then transitions to `active`, `degraded`, or
+        `failed`. If another deployment is running, the response preserves the frontend's current status
+        and exposes the queued deployment through `pending_deployment_id`.
+        Existing frontend traffic continues to use an available runtime while the new deployment builds
+        and provisions. Each deployment publishes its own static assets before the runtimes switch to its
+        build, and the live build's assets keep serving until the new deployment is live, so a page loaded
+        mid-deployment resolves its assets whichever build served it. A failed redeploy puts the runtimes
+        back on the build they were running, leaves the frontend `active` on the previous deployment, and
+        records the attempted deployment as failed. `degraded` means the runtime remains available but
+        edge synchronization requires recovery; Volcano retries the edge step without rebuilding. Only one deployment may run for a
+        given frontend, while independent frontends and projects can deploy concurrently.
         For monorepos, provide `app_root` as a relative path from the uploaded archive root
         to the Next.js app that should be built. Omit it for single-app archives.
         Supported frontend environments are Next.js 15.x and 16.x with Node.js
         22.x or 24.x. The Node.js runtime is inferred from
         `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
         The selected Node.js family must also satisfy the installed Next.js package's
-        `engines.node` constraint. Volcano tests Next 15.5.20 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.10 (`>=20.9.0`).
+        `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.12 (`>=20.9.0`).
         Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
         does not apply its own source archive size limit. After the final Lambda container images are
         built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1947,7 +2270,7 @@ paths:
                   description: ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
       responses:
         '200':
-          description: Existing frontend updated and redeployment workflow started
+          description: Existing frontend updated; its deployment was started or queued
           content:
             application/json:
               schema:
@@ -1983,7 +2306,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict - frontend deployment already in progress
+          description: Conflict - frontend deletion is queued or running
           content:
             application/json:
               schema:
@@ -2053,8 +2376,10 @@ paths:
         - Frontends
       summary: Delete a frontend
       description: |
-        Starts asynchronous frontend deletion. The frontend remains visible with `status: deleting`
-        until cleanup finishes, then it returns 404 and no longer appears in frontend lists.
+        Schedules asynchronous frontend deletion. If another deployment is running, the frontend
+        preserves its current status and exposes the queued deletion through `pending_deployment_id`.
+        Its status changes to `deleting` when cleanup starts. After cleanup, it returns 404 and no
+        longer appears in frontend lists.
       operationId: deleteFrontend
       security:
         - UserToken: []
@@ -2063,7 +2388,7 @@ paths:
         - $ref: '#/components/parameters/FrontendId'
       responses:
         '202':
-          description: Frontend deletion started
+          description: Frontend deletion started or queued
         '400':
           description: Bad request - invalid identifier
           content:
@@ -2106,8 +2431,13 @@ paths:
         - Frontends
       summary: Redeploy frontend using latest uploaded artifact
       description: |
-        Starts a new frontend workflow using the latest stored artifact. The frontend remains visible
-        with `status: provisioning` while the workflow runs, then transitions to `active` or `failed`.
+        Starts a new frontend workflow using the latest stored artifact. A deployment that starts
+        immediately returns `status: provisioning`, then transitions to `active`, `degraded`, or
+        `failed`. An overlapping deployment preserves the frontend's current status, is exposed through
+        `pending_deployment_id`, and supersedes any older queued deployment. The previous runtime and its
+        published static assets remain available during provisioning, and a failed redeploy restores the
+        regional runtimes to that build and keeps it serving while the attempted deployment is recorded as
+        failed.
       operationId: redeployFrontend
       security:
         - UserToken: []
@@ -2116,7 +2446,7 @@ paths:
         - $ref: '#/components/parameters/FrontendId'
       responses:
         '200':
-          description: Frontend redeploy started
+          description: Frontend redeploy started or queued
           content:
             application/json:
               schema:
@@ -2146,7 +2476,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict - frontend deployment already in progress
+          description: Conflict - frontend deletion is queued or running
           content:
             application/json:
               schema:
@@ -2460,6 +2790,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -2509,6 +2843,12 @@ paths:
       tags:
         - Databases
       summary: List all databases for a project
+      description: |
+        Supports two mutually exclusive pagination modes. Offset mode uses `page`
+        and `limit`. Cursor mode uses `cursor` and `limit`, supports `search`
+        (case-insensitive name match), and returns `next_cursor`/`prev_cursor`.
+        The optional `status` filter applies in both modes and is bound to the
+        cursor. Sending both `page` and `cursor` (or `page` and `search`) returns 400.
       operationId: listDatabases
       security:
         - UserToken: []
@@ -2516,6 +2856,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -2643,11 +2987,9 @@ paths:
                   new_password:
                     type: string
                     description: New Volcano-managed client password. Always starts with `vpg_`.
-                    example: vpg_qv3Y4GQwHcklV4G76ZcKhZW-rmZLQktEORHnGqU0Bpk
                   connection_string:
                     type: string
                     description: Updated pgproxy connection string using Volcano-managed credentials.
-                    example: postgresql://volcano_client_11111111-1111-1111-1111-111111111111:vpg_qv3Y4GQwHcklV4G76ZcKhZW-rmZLQktEORHnGqU0Bpk@database.volcano.dev:5432/mydb?sslmode=require&application_name=volcano_full_access
   /projects/{id}/databases/{databaseName}/type:
     patch:
       tags:
@@ -4388,6 +4730,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /projects/{id}/auth/insights:
+    get:
+      tags:
+        - Auth Admin
+      summary: Get auth user insights
+      description: |
+        Returns current auth-user totals, rolling 30-day active users, and
+        zero-filled signup and successful sign-in counts for an inclusive UTC
+        date range. Weeks start on Monday. Sign-in counts and active-user
+        activity begin when collection is deployed. Historical signup counts
+        are backfilled from users present at deployment. Token refreshes affect
+        active users but not the sign-in series.
+      operationId: getAuthInsights
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: from
+          in: query
+          description: Inclusive UTC start date. Defaults to 29 days before `to`.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Inclusive UTC end date. Defaults to today.
+          schema:
+            type: string
+            format: date
+        - name: interval
+          in: query
+          description: Chart bucket size. Defaults to `day`.
+          schema:
+            $ref: '#/components/schemas/AuthInsightsInterval'
+      responses:
+        '200':
+          description: Auth insights retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthInsightsResponse'
+              example:
+                project_id: 4f165080-a931-4e03-b3bd-41c45c3f0058
+                observed_at: '2026-07-20T18:00:00Z'
+                window:
+                  from: '2026-06-21'
+                  to: '2026-07-20'
+                  interval: day
+                summary:
+                  total_users: 1234
+                  active_users_30d: 418
+                series:
+                  - bucket_start: '2026-07-20'
+                    signups: 12
+                    signins: 97
+                    is_partial: true
+        '400':
+          description: Invalid date range or interval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/auth/users:
     get:
       tags:
@@ -6043,11 +6471,24 @@ paths:
       tags:
         - Anon Keys
       summary: List anon keys
+      description: |
+        Supports two mutually exclusive pagination modes. Offset mode uses `page`
+        and `limit` and is the default when neither `cursor` nor `search` is
+        supplied (first page, default `limit`). Cursor mode uses `cursor` and
+        `limit`, supports `search` (case-insensitive name match), and returns
+        `next_cursor`. Sending both `page` and `cursor` (or `page` and `search`)
+        returns 400.
       operationId: listAnonKeys
       security:
         - UserToken: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: List of anon keys
@@ -6060,6 +6501,18 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/AnonKey'
+                  total:
+                    type: integer
+                    description: Total number of items matching the query (so the UI can render numbered pages).
+                  has_more:
+                    type: boolean
+                    description: Whether a next page exists.
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page (cursor pagination only)
+                  prev_cursor:
+                    type: string
+                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
     post:
       tags:
         - Anon Keys
@@ -6262,6 +6715,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Paginated list of service keys
@@ -6407,20 +6864,34 @@ paths:
       tags:
         - Storage Buckets
       summary: List all storage buckets in a project
+      description: |
+        With no pagination params, returns the full bucket list as a bare array
+        (legacy). Supplying `cursor`, `ending_before`, `search`, or `limit`
+        switches to keyset (cursor) pagination and returns a paginated envelope
+        with `next_cursor`/`prev_cursor` and a filtered `total`.
       operationId: listStorageBuckets
       security:
         - UserToken: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
-          description: List of storage buckets
+          description: |
+            Either the full bucket list (bare array, legacy) or a paginated
+            envelope when cursor pagination is requested.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/StorageBucket'
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/StorageBucket'
+                  - $ref: '#/components/schemas/PaginatedStorageBuckets'
     post:
       tags:
         - Storage Buckets
@@ -6598,6 +7069,10 @@ paths:
             default: 50
             minimum: 1
             maximum: 100
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Paginated list of storage objects
@@ -6618,6 +7093,12 @@ paths:
                     type: integer
                   has_more:
                     type: boolean
+                  next_cursor:
+                    type: string
+                    description: Opaque cursor for the next page (cursor pagination only)
+                  prev_cursor:
+                    type: string
+                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
   /projects/{id}/storage/stats:
     get:
       tags:
@@ -7246,6 +7727,29 @@ components:
         minLength: 1
         maxLength: 64
       description: Storage bucket name
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque keyset pagination cursor from a previous response's `next_cursor`
+        — pages forward. Mutually exclusive with `page` and `ending_before`;
+        combining them returns 400. When supplied, the request's `search` and
+        `limit` must match the values bound to the cursor or the request returns 400.
+    EndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque keyset pagination cursor from a previous response's `prev_cursor`
+        — pages backward (the page immediately preceding this cursor). Mutually
+        exclusive with `page` and `cursor`; combining them returns 400. `search`
+        and `limit` must match the values bound to the cursor or the request
+        returns 400.
     DatabaseName:
       name: databaseName
       in: path
@@ -7289,6 +7793,20 @@ components:
         maximum: 100
         default: 10
       description: Number of items per page (max 100)
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: |
+        Bounded row offset past the keyset anchor named by `cursor` (forward) or
+        `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+        skip this many rows within. Used for numbered jump-to-page: from the
+        current page, seek to its next/prev cursor and offset the remaining
+        pages. Only honored on the cursor pagination path; ignored otherwise.
     Page:
       name: page
       in: query
@@ -7306,6 +7824,16 @@ components:
         type: string
         format: uuid
       description: Project ID
+    Search:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 256
+      description: |
+        Case-insensitive substring match on the resource `name`. Only honored on
+        the cursor pagination path.
     SchedulerId:
       name: schedulerId
       in: path
@@ -7481,6 +8009,18 @@ components:
           type: integer
           description: CORS preflight cache duration (seconds)
           default: 86400
+        require_email_confirmation:
+          type: boolean
+          description: Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+          default: false
+        email_confirmation_timeout:
+          type: integer
+          description: Email confirmation token expiry in seconds.
+          default: 86400
+        auto_link_verified_oauth:
+          type: boolean
+          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+          default: false
         email_enabled:
           type: boolean
           description: Enable transactional email sending (confirmation, reset, change notifications). Must be true when require_email_confirmation is true.
@@ -7496,10 +8036,10 @@ components:
           default: 587
         smtp_username:
           type: string
-        smtp_password:
-          type: string
-          format: password
-          description: SMTP password. Stored encrypted at rest (AES-256-GCM); returned decrypted only to the authenticated project owner.
+        smtp_password_configured:
+          type: boolean
+          description: Whether an SMTP password is configured. The password itself is never returned.
+          default: false
         smtp_use_tls:
           type: boolean
           default: true
@@ -7533,6 +8073,94 @@ components:
             the built-in managed device page. Lets a CLI surface the project's
             own RFC 8628 approval page. Empty falls back to the managed page.
           example: https://app.acme.com/device
+    AuthInsightsInterval:
+      type: string
+      enum:
+        - day
+        - week
+        - month
+    AuthInsightsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        observed_at:
+          type: string
+          format: date-time
+        window:
+          $ref: '#/components/schemas/AuthInsightsWindow'
+        summary:
+          $ref: '#/components/schemas/AuthInsightsSummary'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthInsightsSeriesPoint'
+      required:
+        - project_id
+        - observed_at
+        - window
+        - summary
+        - series
+    AuthInsightsSeriesPoint:
+      type: object
+      additionalProperties: false
+      properties:
+        bucket_start:
+          type: string
+          format: date
+        signups:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accounts created during the bucket.
+        signins:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Successful session creations during the bucket.
+        is_partial:
+          type: boolean
+          description: Whether the requested window or observation time clips this bucket.
+      required:
+        - bucket_start
+        - signups
+        - signins
+        - is_partial
+    AuthInsightsSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        total_users:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Current auth-user count, matching the auth-user list total.
+        active_users_30d:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Users with a successful session creation or refresh in the trailing 30 days since activity collection was deployed.
+      required:
+        - total_users
+        - active_users_30d
+    AuthInsightsWindow:
+      type: object
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        interval:
+          $ref: '#/components/schemas/AuthInsightsInterval'
+      required:
+        - from
+        - to
+        - interval
     AuthHostedPage:
       type: object
       properties:
@@ -7989,6 +8617,7 @@ components:
       properties:
         name:
           type: string
+          maxLength: 200
         enabled:
           type: boolean
           default: true
@@ -8216,7 +8845,6 @@ components:
             - `volcano_full_access` — Full admin access (DDL, migrations)
             - `volcano_user_access:{user_id}` — User impersonation (RLS enforced)
             - `volcano_user_access` — Anonymous access (anon role, RLS enforced)
-          example: postgres://volcano_client_11111111-1111-1111-1111-111111111111:vpg_secret@database.volcano.dev:5432/my_app_db?sslmode=require&application_name=volcano_full_access
         region:
           type: string
           description: AWS region where database is hosted
@@ -8376,6 +9004,9 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          description: Stable machine-readable error code when a specific recovery path is available.
       required:
         - error
     GitConnection:
@@ -8426,6 +9057,114 @@ components:
             $ref: '#/components/schemas/GitConnection'
       required:
         - connections
+    GitInstallation:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        account_login:
+          type: string
+        account_type:
+          type: string
+        repository_selection:
+          type: string
+      required:
+        - id
+        - account_login
+        - account_type
+        - repository_selection
+    GitInstallationsResponse:
+      type: object
+      properties:
+        installations:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitInstallation'
+      required:
+        - installations
+    GitRepository:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Stable GitHub repository id (repository.id), unchanged by renames.
+        full_name:
+          type: string
+        default_branch:
+          type: string
+        private:
+          type: boolean
+      required:
+        - id
+        - full_name
+        - default_branch
+        - private
+    GitRepositoriesResponse:
+      type: object
+      properties:
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitRepository'
+      required:
+        - repositories
+    ProjectGitConnection:
+      type: object
+      properties:
+        repo_installation_id:
+          type: integer
+          format: int64
+        repo_id:
+          type: integer
+          format: int64
+          description: Stable GitHub repository id (repository.id), the authoritative binding.
+        repo_full_name:
+          type: string
+        root_directory:
+          type: string
+        production_branch:
+          type: string
+          description: The repository's GitHub default branch, cached at connect time and used as the deployment target.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - repo_installation_id
+        - repo_id
+        - repo_full_name
+        - root_directory
+        - production_branch
+        - updated_at
+    ConnectProjectGitRequest:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          format: uuid
+          description: The caller's user_git_connections row (see /user/git/connections).
+        installation_id:
+          type: integer
+          format: int64
+        repository_id:
+          type: integer
+          format: int64
+          description: Stable GitHub repository id (repository.id), the preferred selector. Either repository_id or repo_full_name is required; when both are given they must identify the same live repository.
+        repo_full_name:
+          type: string
+          deprecated: true
+          description: Deprecated selector kept for a compatibility window; prefer repository_id. Either repository_id or repo_full_name is required.
+        root_directory:
+          type: string
+          description: Monorepo subdirectory the project builds from. Omit for the repo root.
+        production_branch:
+          type: string
+          deprecated: true
+          description: Deprecated. The deployment branch always follows the repository's GitHub default branch; when given it must equal that default branch. New callers omit it.
+      required:
+        - connection_id
+        - installation_id
     Frontend:
       type: object
       properties:
@@ -8449,9 +9188,18 @@ components:
           description: Optional relative POSIX path from the uploaded archive root to the Next.js app that is deployed.
         status:
           type: string
+          description: |
+            Frontend lifecycle status. `degraded` means the regional runtime remains
+            available but edge synchronization exhausted its immediate retries; Volcano
+            retries edge recovery without rebuilding the frontend, and stops once a new
+            deployment is queued or the retry budget runs out, leaving the frontend
+            `degraded` until the next redeploy. A redeploy that fails over a serving
+            frontend stays `active` on the previous deployment, so `failed` means no
+            deployment is serving.
           enum:
             - provisioning
             - active
+            - degraded
             - failed
             - deleting
         provisioning_started_at:
@@ -8466,6 +9214,10 @@ components:
           type: string
           format: uuid
           description: Identifier of the latest frontend deployment operation
+        pending_deployment_id:
+          type: string
+          format: uuid
+          description: Newest queued deployment that will run after the current operation
         site_url:
           type: string
         custom_domain:
@@ -8589,10 +9341,17 @@ components:
             - delete
         status:
           type: string
+          description: |
+            Deployment lifecycle status. A `degraded` redeploy remains available while
+            edge-only recovery is retried. A `failed` redeploy is recorded here while the
+            frontend keeps serving its previous deployment.
           enum:
+            - queued
             - provisioning
             - active
+            - degraded
             - failed
+            - superseded
             - deleting
             - deleted
         artifact_bucket:
@@ -8600,8 +9359,6 @@ components:
         artifact_key:
           type: string
         artifact_version:
-          type: string
-        cloudwatch_log_group:
           type: string
         site_url:
           type: string
@@ -8785,6 +9542,10 @@ components:
           type: string
           format: uuid
           description: Identifier of the latest function deployment operation
+        pending_deployment_id:
+          type: string
+          format: uuid
+          description: Newest queued deployment that will run after the current operation
         last_invoked_at:
           type: string
           format: date-time
@@ -8828,9 +9589,11 @@ components:
         status:
           type: string
           enum:
+            - queued
             - provisioning
             - active
             - failed
+            - superseded
             - deleting
             - deleted
         artifact_bucket:
@@ -8838,14 +9601,6 @@ components:
         artifact_key:
           type: string
         artifact_version:
-          type: string
-        compile_log_group:
-          type: string
-        compile_log_stream:
-          type: string
-        publish_log_group:
-          type: string
-        publish_log_stream:
           type: string
         codebuild_duration_seconds:
           type: integer
@@ -8953,18 +9708,8 @@ components:
           $ref: '#/components/schemas/LogRequestResource'
         q:
           type: string
-          description: Optional free-text search query for log messages.
-        levels:
-          type: array
-          description: Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied.
-          items:
-            $ref: '#/components/schemas/LiveLogLevel'
-        regions:
-          type: array
-          maxItems: 25
-          description: Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, aggregate all deployed regions.
-          items:
-            type: string
+          maxLength: 512
+          description: Optional activity query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
         start_time:
           type: string
           format: date-time
@@ -9003,18 +9748,8 @@ components:
           $ref: '#/components/schemas/LogRequestResource'
         q:
           type: string
-          description: Optional free-text search query for log messages.
-        levels:
-          type: array
-          description: Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied.
-          items:
-            $ref: '#/components/schemas/LiveLogLevel'
-        regions:
-          type: array
-          maxItems: 25
-          description: Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, search all deployed regions.
-          items:
-            type: string
+          maxLength: 512
+          description: Optional log query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
         start_time:
           type: string
           format: date-time
@@ -9036,22 +9771,15 @@ components:
         - resource
     LogStreamRequest:
       type: object
-      description: Stream request for live project logs. Text search, pagination cursors, and fixed end times are not supported.
+      description: Stream request for live project logs. Pagination cursors and fixed end times are not supported.
       additionalProperties: false
       properties:
         resource:
           $ref: '#/components/schemas/LogRequestResource'
-        levels:
-          type: array
-          description: Canonical lowercase log levels to filter by. If omitted, empty, or all levels are selected, no level filter is applied.
-          items:
-            $ref: '#/components/schemas/LiveLogLevel'
-        regions:
-          type: array
-          maxItems: 25
-          description: Regions to filter by, for example `["us-east-1", "eu-west-1"]`. If omitted or empty, stream all deployed regions.
-          items:
-            type: string
+        q:
+          type: string
+          maxLength: 512
+          description: Optional log query using the same syntax as search and activity requests.
         start_time:
           type: string
           format: date-time
@@ -9212,6 +9940,12 @@ components:
           type: integer
         has_more:
           type: boolean
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -9257,7 +9991,7 @@ components:
         - reset-password
     LogEvent:
       type: object
-      description: Normalized historical log event returned by paginated log APIs.
+      description: Historical log event returned by log APIs.
       properties:
         id:
           type: string
@@ -9268,9 +10002,18 @@ components:
           description: Event timestamp.
         level:
           $ref: '#/components/schemas/LiveLogLevel'
-        message:
-          type: string
-          description: Display log message.
+        body:
+          description: Application log value. JSON arguments retain their JSON type. Strings containing a serialized JSON object or array are normalized to that object or array; all other strings remain strings.
+          nullable: true
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: number
+              format: double
+            - type: boolean
         region:
           type: string
           description: Region where this log event originated.
@@ -9281,17 +10024,9 @@ components:
         invocation_id:
           type: string
           description: Function invocation ID associated with this log event, when available.
-        raw_message:
-          type: string
-          description: Original log line/message after platform sanitization.
-        metadata:
-          type: object
-          nullable: true
-          additionalProperties: true
-          description: Parsed JSON fields and other indexed metadata, when available.
       required:
         - timestamp
-        - message
+        - body
     LiveLogLevel:
       type: string
       enum:
@@ -9439,6 +10174,12 @@ components:
         next:
           type: string
           description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -9494,7 +10235,13 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (only present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -9551,6 +10298,12 @@ components:
         next:
           type: string
           description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -9677,12 +10430,45 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (only present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
         - limit
         - total
+        - has_more
+    PaginatedStorageBuckets:
+      type: object
+      description: Cursor-paginated storage buckets (returned only when cursor pagination is requested).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageBucket'
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items matching the query
+        has_more:
+          type: boolean
+          description: Whether a next page exists
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - limit
         - has_more
     PaginatedVariables:
       type: object
@@ -9706,6 +10492,12 @@ components:
         next:
           type: string
           description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -10409,6 +11201,7 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
         cron:
           type: string
           description: 5-field UTC cron expression
@@ -10785,9 +11578,12 @@ components:
         status:
           type: string
           enum:
+            - queued
             - provisioning
             - active
+            - degraded
             - failed
+            - superseded
             - deleting
             - deleted
         artifact_version:
@@ -11399,7 +12195,9 @@ components:
         smtp_password:
           type: string
           format: password
-          description: SMTP password (sensitive). Encrypted at rest (AES-256-GCM) when stored.
+          writeOnly: true
+          minLength: 1
+          description: Replacement SMTP password. Omit this field to preserve the configured password. The value is encrypted at rest and never returned.
         smtp_use_tls:
           type: boolean
         email_confirmation_subject:
@@ -11482,6 +12280,7 @@ components:
       properties:
         name:
           type: string
+          maxLength: 200
         enabled:
           type: boolean
         schedule:
