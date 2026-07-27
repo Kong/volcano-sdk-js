@@ -86,4 +86,4 @@ Realtime support is included with the SDK and is available from
 
 ## License
 
-Apache License 2.0 - see [LICENSE](../LICENSE) for details.
+Apache License 2.0 - see [LICENSE](https://github.com/Kong/volcano-sdk-js/blob/main/LICENSE) for details.
