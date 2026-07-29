@@ -12,6 +12,8 @@ All notable changes to the Volcano SDK will be documented in this file.
   The SDK validates the flow state and exchanges the code before authenticated
   operations proceed, so access and refresh tokens no longer appear in callback
   URLs.
+- Because callback code exchange is asynchronous, await `initialize()` or an auth
+  operation before reading synchronous session accessors after a redirect.
 
 ## [1.5.0] - 2026-07-27
 

@@ -794,6 +794,38 @@ describe('VolcanoAuth', () => {
       });
     });
 
+    it('keeps the exchanged session in memory when browser storage is unavailable', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      localStorage.setItem.mockImplementationOnce(() => {
+        throw new DOMException('Storage is unavailable', 'SecurityError');
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'oauth-access',
+              refresh_token: 'oauth-refresh',
+              expires_in: 3600,
+              user: { id: 'oauth-user', email: 'oauth@example.com' },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
+      expect(result.error).toBeNull();
+      expect(v.accessToken).toBe('oauth-access');
+      expect(v.refreshToken).toBe('oauth-refresh');
+    });
+
     it('matches callback URLs after equivalent browser query serialization', async () => {
       const storedRedirectURL = `${window.location.origin}/auth/callback?return_to=hello%20world`;
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');

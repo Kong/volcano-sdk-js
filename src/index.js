@@ -544,8 +544,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    // API calls keep a terminal callback error available until initialize() or
-    // refreshSession() reports and consumes it.
+    // Keep a terminal callback error available until an auth operation reports it.
     this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
 
@@ -2030,20 +2029,32 @@ class VolcanoAuth {
 
   _getStorageItem(key) {
     if (isBrowser()) {
-      return window.localStorage.getItem(key);
+      try {
+        return window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
     }
     return null;
   }
 
   _setStorageItem(key, value) {
     if (isBrowser()) {
-      window.localStorage.setItem(key, value);
+      try {
+        window.localStorage.setItem(key, value);
+      } catch {
+        // Keep the in-memory session when browser storage is unavailable.
+      }
     }
   }
 
   _removeStorageItem(key) {
     if (isBrowser()) {
-      window.localStorage.removeItem(key);
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // The in-memory session is already cleared.
+      }
     }
   }
 
