@@ -844,6 +844,28 @@ describe('VolcanoAuth', () => {
       expect(window.location.search).toBe('');
     });
 
+    it('reports a settled callback error after another API call awaited the exchange', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'invalid authorization code' }),
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const apiResult = await v.auth.getUser();
+      const initializeResult = await v.initialize();
+
+      expect(apiResult.error).toEqual(
+        expect.objectContaining({ message: 'invalid authorization code' }),
+      );
+      expect(initializeResult.error).toEqual(
+        expect.objectContaining({ message: 'invalid authorization code' }),
+      );
+      expect(v._oauthExchangeError).toBeNull();
+    });
+
     it('leaves unrelated code and state query parameters untouched', async () => {
       window.history.replaceState(null, '', '/checkout?code=promo&state=selected');
 

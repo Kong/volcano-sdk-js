@@ -544,6 +544,8 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
+    // API calls keep a terminal callback error available until initialize() or
+    // refreshSession() reports and consumes it.
     this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
 
@@ -691,12 +693,15 @@ class VolcanoAuth {
   }
 
   async _authFetchUrl(url, options = {}) {
-    const { _retried, _retryFailure, ...fetchOptions } = options;
+    return this._authFetchUrlAttempt(url, options, false, null);
+  }
+
+  async _authFetchUrlAttempt(url, fetchOptions, retried, retryFailure) {
     if (!this.accessToken) {
-      if (_retried && _retryFailure) {
-        return _retryFailure;
+      if (retried && retryFailure) {
+        return retryFailure;
       }
-      const message = _retried ? 'Session expired' : 'No active session';
+      const message = retried ? 'Session expired' : 'No active session';
       return { ok: false, status: null, error: new Error(message), data: null };
     }
 
@@ -718,22 +723,18 @@ class VolcanoAuth {
 
       if (!response.ok) {
         // Try token refresh on 401
-        if (response.status === 401 && !_retried) {
-          const retryFailure = {
+        if (response.status === 401 && !retried) {
+          const firstFailure = {
             ok: false,
             status: response.status,
             error: new Error('Session expired'),
             data,
           };
           if (!this.refreshToken) {
-            return retryFailure;
+            return firstFailure;
           }
           await this.refreshSession();
-          return this._authFetchUrl(url, {
-            ...fetchOptions,
-            _retried: true,
-            _retryFailure: retryFailure,
-          });
+          return this._authFetchUrlAttempt(url, fetchOptions, true, firstFailure);
         }
         return {
           ok: false,
@@ -2047,7 +2048,8 @@ class VolcanoAuth {
       this.accessToken ||
       this.refreshToken ||
       this._hasSessionInUrl() ||
-      this._oauthExchangePromise
+      this._oauthExchangePromise ||
+      this._oauthExchangeError
     ) {
       await this._completeOAuthExchange();
       if (this._oauthExchangeError) {
