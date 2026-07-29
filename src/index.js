@@ -48,6 +48,7 @@ const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
 // sessionStorage key holding the one-time RP nonce that binds a managed/OAuth
 // redirect session to the flow this client initiated (login-CSRF defense).
 const STORAGE_KEY_AUTH_STATE = 'volcano_auth_state';
+const STORAGE_KEY_AUTH_REDIRECT = 'volcano_auth_redirect_url';
 
 // Fragment params produced by the managed hosted-auth / OAuth redirect hand-off.
 // Used to decide when the URL fragment is safe to strip after adopting a session:
@@ -427,6 +428,7 @@ function resolveFunctionInvocationBase(apiUrl) {
  * @returns {Promise<Response>}
  */
 async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
+  await volcanoAuth._completeOAuthExchange();
   const doFetch = () =>
     fetchWithTimeout(
       url,
@@ -540,6 +542,8 @@ class VolcanoAuth {
     // is still null. Remember the adoption so the first getUser()/initialize()
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
+    this._oauthExchangePromise = null;
+    this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
 
     // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
@@ -555,6 +559,9 @@ class VolcanoAuth {
       // like a signIn() result or a localStorage-restored session. A fresh
       // redirect token takes precedence over any stale stored session.
       this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
+    }
+    if (!config.accessToken && this._hasOAuthCodeInUrl()) {
+      this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
     }
 
     // Sub-objects for organization
@@ -669,8 +676,14 @@ class VolcanoAuth {
    * @private
    */
   async _authFetch(path, options = {}) {
+    await this._completeOAuthExchange();
     if (!this.accessToken) {
-      return { ok: false, status: null, error: new Error('No active session'), data: null };
+      return {
+        ok: false,
+        status: null,
+        error: this._oauthExchangeError || new Error('No active session'),
+        data: null,
+      };
     }
 
     return this._authFetchUrl(`${this.apiUrl}${path}`, options);
@@ -1226,21 +1239,23 @@ class VolcanoAuth {
         'OAuth sign-in is only available in browser environment. Use server-side auth flow for SSR.',
       );
     }
-    // Bind the returned session to this flow: generate a one-time nonce, store it,
-    // and carry it in the redirect_url query as vh_state. The OAuth callback echoes
-    // it into the post-auth fragment as `state`, which _consumeSessionFromUrl
-    // validates against the stored nonce (login-CSRF / session-fixation defense).
+    // Bind the returned authorization code to this flow with a one-time nonce.
     const nonce = this._generateAuthStateNonce();
-    this._storeAuthState(nonce);
 
     const redirectBase = this._resolveOAuthRedirectTarget(options.redirectTo);
-    const redirectURL = new URL(redirectBase);
-    redirectURL.searchParams.set('vh_state', nonce);
+    const redirectURL = new URL(redirectBase).toString();
+    this._storeAuthState(nonce, redirectURL);
+    // Keep the nonce in the legacy location during the backend rollout. New
+    // servers remove this reserved transport parameter before exact redirect
+    // matching; older servers echo it in their token-fragment response.
+    const transportRedirectURL = new URL(redirectURL);
+    transportRedirectURL.searchParams.set('vh_state', nonce);
 
     const oauthUrl =
       `${this.apiUrl}/auth/oauth/${provider}/authorize` +
       `?anon_key=${encodeURIComponent(this.anonKey)}` +
-      `&redirect_url=${encodeURIComponent(redirectURL.toString())}`;
+      `&redirect_url=${encodeURIComponent(transportRedirectURL.toString())}` +
+      `&client_state=${encodeURIComponent(nonce)}`;
     try {
       if (window.location && typeof window.location.assign === 'function') {
         window.location.assign(oauthUrl);
@@ -1483,6 +1498,7 @@ class VolcanoAuth {
         error: new Error('functionName must be a non-empty string'),
       };
     }
+    await this._completeOAuthExchange();
     if (!this.accessToken) {
       return {
         data: null,
@@ -1671,6 +1687,86 @@ class VolcanoAuth {
   // Managed Auth Redirect (hosted login/signup hand-off)
   // ========================================================================
 
+  _hasOAuthCodeInUrl() {
+    if (!isBrowser()) {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      return Boolean(params.get('code') && params.get('state'));
+    } catch {
+      return false;
+    }
+  }
+
+  async _consumeOAuthCodeFromUrl() {
+    let callbackURL;
+    try {
+      callbackURL = new URL(window.location.href);
+    } catch {
+      return false;
+    }
+    const code = callbackURL.searchParams.get('code') || '';
+    const urlState = callbackURL.searchParams.get('state') || '';
+    if (!code || !urlState) {
+      return false;
+    }
+
+    const expectedState = this._takeAuthState();
+    const storedRedirectURL = this._takeAuthRedirectURL();
+    this._stripOAuthQueryFromUrl(callbackURL);
+    if (!expectedState || urlState !== expectedState) {
+      this._oauthExchangeError = new Error('OAuth callback state did not match');
+      return false;
+    }
+
+    callbackURL.searchParams.delete('code');
+    callbackURL.searchParams.delete('state');
+    const redirectURL =
+      storedRedirectURL || `${callbackURL.origin}${callbackURL.pathname}${callbackURL.search}`;
+    const result = await this._anonFetch('/auth/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ code, redirect_url: redirectURL }),
+    });
+    if (!result.ok) {
+      this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
+      return false;
+    }
+    this._setSession(result.data);
+    return true;
+  }
+
+  async _completeOAuthExchange() {
+    if (!this._oauthExchangePromise) {
+      return;
+    }
+    const promise = this._oauthExchangePromise;
+    try {
+      await promise;
+    } catch (error) {
+      this._oauthExchangeError =
+        error instanceof Error ? error : new Error('OAuth code exchange failed');
+    } finally {
+      if (this._oauthExchangePromise === promise) {
+        this._oauthExchangePromise = null;
+      }
+    }
+  }
+
+  _stripOAuthQueryFromUrl(callbackURL) {
+    try {
+      callbackURL.searchParams.delete('code');
+      callbackURL.searchParams.delete('state');
+      callbackURL.searchParams.delete('error');
+      callbackURL.searchParams.delete('error_description');
+      const cleanURL =
+        (callbackURL.pathname || '/') + callbackURL.search + (callbackURL.hash || '');
+      window.history.replaceState(window.history.state, '', cleanURL);
+    } catch {
+      // best-effort; leaving a one-time code in place is non-fatal
+    }
+  }
+
   /**
    * Returns true when the current browser URL fragment carries a managed-auth
    * session hand-off (i.e. an access_token from a hosted login/signup redirect).
@@ -1801,12 +1897,17 @@ class VolcanoAuth {
 
   // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
   // survives the navigation away to the hosted page and back to this origin.
-  _storeAuthState(nonce) {
+  _storeAuthState(nonce, redirectURL = '') {
     if (!isBrowser()) {
       return;
     }
     try {
       window.sessionStorage.setItem(STORAGE_KEY_AUTH_STATE, nonce);
+      if (redirectURL) {
+        window.sessionStorage.setItem(STORAGE_KEY_AUTH_REDIRECT, redirectURL);
+      } else {
+        window.sessionStorage.removeItem(STORAGE_KEY_AUTH_REDIRECT);
+      }
     } catch {
       // sessionStorage may be unavailable (privacy mode); the redirect will then
       // be rejected on return, which fails safe.
@@ -1822,6 +1923,19 @@ class VolcanoAuth {
       const nonce = window.sessionStorage.getItem(STORAGE_KEY_AUTH_STATE);
       window.sessionStorage.removeItem(STORAGE_KEY_AUTH_STATE);
       return nonce;
+    } catch {
+      return null;
+    }
+  }
+
+  _takeAuthRedirectURL() {
+    if (!isBrowser()) {
+      return null;
+    }
+    try {
+      const redirectURL = window.sessionStorage.getItem(STORAGE_KEY_AUTH_REDIRECT);
+      window.sessionStorage.removeItem(STORAGE_KEY_AUTH_REDIRECT);
+      return redirectURL;
     } catch {
       return null;
     }
@@ -1857,7 +1971,16 @@ class VolcanoAuth {
   async initialize() {
     // getUser() also adopts a managed-auth session from the URL fragment when
     // present, so trigger it if there is a stored session or a redirect hand-off.
-    if (this.accessToken || this.refreshToken || this._hasSessionInUrl()) {
+    if (
+      this.accessToken ||
+      this.refreshToken ||
+      this._hasSessionInUrl() ||
+      this._oauthExchangePromise
+    ) {
+      await this._completeOAuthExchange();
+      if (!this.accessToken && this._oauthExchangeError) {
+        return { user: null, error: this._oauthExchangeError };
+      }
       const { user, error } = await this.getUser();
       return { user, error };
     }
@@ -1990,6 +2113,7 @@ class QueryBuilder {
   }
 
   async execute() {
+    await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
       return errorResult('No active session. Please sign in first.', { count: 0 });
     }
@@ -2066,6 +2190,7 @@ class MutationBuilder {
   }
 
   async execute() {
+    await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
       return errorResult('No active session. Please sign in first.');
     }
@@ -2191,6 +2316,7 @@ class StorageFileApi {
    * Upload a file to the bucket
    */
   async upload(path, fileBody, options = {}) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return authError;
@@ -2232,6 +2358,7 @@ class StorageFileApi {
    * Download a file from the bucket
    */
   async download(path, options = {}) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return authError;
@@ -2253,6 +2380,7 @@ class StorageFileApi {
    * List files in the bucket
    */
   async list(prefix = '', options = {}) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return { ...authError, nextCursor: null };
@@ -2292,6 +2420,7 @@ class StorageFileApi {
    * Delete one or more files from the bucket
    */
   async remove(paths) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return authError;
@@ -2329,6 +2458,7 @@ class StorageFileApi {
    * Move/rename a file within the bucket
    */
   async move(fromPath, toPath) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return authError;
@@ -2348,6 +2478,7 @@ class StorageFileApi {
    * Copy a file within the bucket
    */
   async copy(fromPath, toPath) {
+    await this.volcanoAuth._completeOAuthExchange();
     const authError = this._checkAuth();
     if (authError) {
       return authError;

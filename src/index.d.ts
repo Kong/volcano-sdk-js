@@ -221,19 +221,14 @@ export interface Auth {
   /**
    * Get current user data.
    *
-   * In the browser the client transparently adopts a session handed off by the
-   * managed hosted auth pages: after a successful managed login/signup the user
-   * is redirected with the tokens in the URL fragment
-   * (`#access_token=...&refresh_token=...`). That session is detected and stored
-   * (and the tokens removed from the URL) at client construction — so the client
-   * is authenticated before any call, consistent with a signIn() result or a
-   * localStorage-restored session. getUser() also re-checks the URL as a
-   * fallback, so callers never need a separate "consume redirect" step.
+   * In the browser the client transparently completes OAuth callbacks by
+   * exchanging the returned one-time `code`, then removes it from the URL.
+   * Managed email/password hosted auth hand-offs that use a token fragment are
+   * also detected, stored, and scrubbed automatically.
    *
    * The redirect must be initiated via signInWithHostedAuth()/signInWithOAuth()
    * (or getHostedAuthUrl()): those store a one-time nonce that the returned
-   * `state` is validated against, so an unsolicited/attacker-crafted
-   * `#access_token=...` link is rejected rather than silently adopted.
+   * `state` is validated against.
    */
   getUser(): Promise<UserResponse>;
   /** Update current user */
@@ -293,8 +288,9 @@ export interface Auth {
   /**
    * Start OAuth flow (redirects browser). Throws if provider is invalid.
    * Stores a one-time nonce and carries it through the OAuth callback so the
-   * returned session is bound to this flow (login-CSRF defense). `redirectTo`
-   * overrides the post-auth return URL (defaults to the current page).
+   * returned authorization code is bound to this flow (login-CSRF defense).
+   * The SDK exchanges that code without placing session tokens in the browser
+   * URL. `redirectTo` overrides the return URL (defaults to the current page).
    */
   signInWithOAuth(provider: OAuthProviderName, options?: { redirectTo?: string }): string;
   /** Sign in with Google */

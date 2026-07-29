@@ -732,7 +732,7 @@ describe('VolcanoAuth', () => {
       expect(new URL(url).pathname).toBe('/projects/proj-xyz/auth/hosted');
     });
 
-    it('signInWithOAuth stores a nonce and carries it in redirect_url as vh_state', () => {
+    it('signInWithOAuth stores a nonce and sends an exact redirect_url separately', () => {
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
       const oauthUrl = v.auth.signInWithOAuth('google');
@@ -740,11 +740,72 @@ describe('VolcanoAuth', () => {
 
       expect(parsed.pathname).toBe('/auth/oauth/google/authorize');
       expect(parsed.searchParams.get('anon_key')).toBe('ak-test-key');
-      const redirectUrl = parsed.searchParams.get('redirect_url');
-      expect(redirectUrl).toBeTruthy();
-      const nonceInRedirect = new URL(redirectUrl).searchParams.get('vh_state');
-      expect(nonceInRedirect).toBeTruthy();
-      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonceInRedirect);
+      const transportRedirectUrl = parsed.searchParams.get('redirect_url');
+      expect(transportRedirectUrl).toBeTruthy();
+      const nonce = parsed.searchParams.get('client_state');
+      expect(nonce).toBeTruthy();
+      expect(new URL(transportRedirectUrl).searchParams.get('vh_state')).toBe(nonce);
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonce);
+      const storedRedirectUrl = window.sessionStorage.getItem('volcano_auth_redirect_url');
+      expect(storedRedirectUrl).toBeTruthy();
+      expect(new URL(storedRedirectUrl).searchParams.get('vh_state')).toBeNull();
+    });
+  });
+
+  describe('Authentication - OAuth authorization code exchange', () => {
+    afterEach(() => {
+      window.history.replaceState(null, '', '/');
+      window.sessionStorage.clear();
+    });
+
+    it('exchanges a matching one-time callback code and strips it from the URL', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'oauth-access',
+              refresh_token: 'oauth-refresh',
+              expires_in: 3600,
+              user: { id: 'oauth-user', email: 'oauth@example.com' },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
+      expect(v.accessToken).toBe('oauth-access');
+      expect(window.location.search).toBe('');
+      expect(global.fetch.mock.calls[0][0]).toBe('https://api.test.com/auth/oauth/exchange');
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+        code: 'one-time-code',
+        redirect_url: 'https://localhost/auth/callback',
+      });
+    });
+
+    it('rejects a callback whose state does not match without exchanging it', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'expected');
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=attacker');
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.user).toBeNull();
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: 'OAuth callback state did not match',
+        }),
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('');
     });
   });
 
@@ -1298,17 +1359,18 @@ describe('VolcanoAuth', () => {
   });
 
   describe('OAuth', () => {
-    it('should redirect to OAuth provider with anon_key and an RP-nonce redirect_url', () => {
+    it('should redirect to OAuth provider with anon_key and separate client state', () => {
       const url = volcano.auth.signInWithOAuth('google');
       const parsed = new URL(url);
       expect(parsed.origin + parsed.pathname).toBe(
         'https://api.test.com/auth/oauth/google/authorize',
       );
       expect(parsed.searchParams.get('anon_key')).toBe('ak-test-anon-key');
-      // The redirect_url carries the one-time nonce as vh_state.
       const redirectUrl = parsed.searchParams.get('redirect_url');
       expect(redirectUrl).toBeTruthy();
-      expect(new URL(redirectUrl).searchParams.get('vh_state')).toBeTruthy();
+      expect(new URL(redirectUrl).searchParams.get('vh_state')).toBe(
+        parsed.searchParams.get('client_state'),
+      );
     });
 
     it('should have convenience methods for all providers', () => {

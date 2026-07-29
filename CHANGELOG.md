@@ -4,6 +4,15 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+## [1.6.0] - 2026-07-28
+
+### Changed
+
+- OAuth browser callbacks now carry a short-lived, single-use authorization code.
+  The SDK validates the flow state and exchanges the code before authenticated
+  operations proceed, so access and refresh tokens no longer appear in callback
+  URLs.
+
 ## [1.5.0] - 2026-07-27
 
 ### Added
