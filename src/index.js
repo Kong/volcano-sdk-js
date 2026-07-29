@@ -455,12 +455,13 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
 
 /**
  * Create an error result object
- * @param {string} message - Error message
+ * @param {string|Error} message - Error message or existing error
  * @param {Object} [extra] - Extra fields to include
  * @returns {Object}
  */
 function errorResult(message, extra = {}) {
-  return { data: null, error: new Error(message), ...extra };
+  const error = message instanceof Error ? message : new Error(message);
+  return { data: null, error, ...extra };
 }
 
 const FULL_ACCESS_APP_NAME = 'volcano_full_access';
@@ -1034,6 +1035,10 @@ class VolcanoAuth {
   }
 
   async refreshSession() {
+    await this._completeOAuthExchange();
+    if (this._oauthExchangeError) {
+      return { session: null, error: this._oauthExchangeError };
+    }
     if (!this.refreshToken) {
       return { session: null, error: new Error('No refresh token') };
     }
@@ -1256,7 +1261,8 @@ class VolcanoAuth {
       `${this.apiUrl}/auth/oauth/${provider}/authorize` +
       `?anon_key=${encodeURIComponent(this.anonKey)}` +
       `&redirect_url=${encodeURIComponent(transportRedirectURL.toString())}` +
-      `&client_state=${encodeURIComponent(nonce)}`;
+      `&client_state=${encodeURIComponent(nonce)}` +
+      `&response_mode=code`;
     try {
       if (window.location && typeof window.location.assign === 'function') {
         window.location.assign(oauthUrl);
@@ -1701,13 +1707,9 @@ class VolcanoAuth {
       if (!params.get('state') || (!params.get('code') && !params.get('error'))) {
         return false;
       }
-      callbackURL.searchParams.delete('code');
-      callbackURL.searchParams.delete('state');
-      callbackURL.searchParams.delete('error');
-      callbackURL.searchParams.delete('error_description');
-      callbackURL.hash = '';
       const expectedURL = new URL(storedRedirectURL);
-      expectedURL.hash = '';
+      this._removeOAuthResponseParams(callbackURL);
+      this._removeOAuthResponseParams(expectedURL);
       return callbackURL.toString() === expectedURL.toString();
     } catch {
       return false;
@@ -1775,15 +1777,22 @@ class VolcanoAuth {
 
   _stripOAuthQueryFromUrl(callbackURL) {
     try {
-      callbackURL.searchParams.delete('code');
-      callbackURL.searchParams.delete('state');
-      callbackURL.searchParams.delete('error');
-      callbackURL.searchParams.delete('error_description');
+      this._removeOAuthResponseParams(callbackURL, false);
       const cleanURL =
         (callbackURL.pathname || '/') + callbackURL.search + (callbackURL.hash || '');
       window.history.replaceState(window.history.state, '', cleanURL);
     } catch {
       // best-effort; leaving a one-time code in place is non-fatal
+    }
+  }
+
+  _removeOAuthResponseParams(callbackURL, clearHash = true) {
+    callbackURL.searchParams.delete('code');
+    callbackURL.searchParams.delete('state');
+    callbackURL.searchParams.delete('error');
+    callbackURL.searchParams.delete('error_description');
+    if (clearHash) {
+      callbackURL.hash = '';
     }
   }
 
@@ -2021,7 +2030,9 @@ class VolcanoAuth {
     ) {
       await this._completeOAuthExchange();
       if (this._oauthExchangeError) {
-        return { user: null, error: this._oauthExchangeError };
+        const error = this._oauthExchangeError;
+        this._oauthExchangeError = null;
+        return { user: null, error };
       }
       const { user, error } = await this.getUser();
       return { user, error };
@@ -2157,7 +2168,10 @@ class QueryBuilder {
   async execute() {
     await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
-      return errorResult('No active session. Please sign in first.', { count: 0 });
+      return errorResult(
+        this.volcanoAuth._oauthExchangeError || 'No active session. Please sign in first.',
+        { count: 0 },
+      );
     }
 
     if (!this.databaseName) {
@@ -2234,7 +2248,9 @@ class MutationBuilder {
   async execute() {
     await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
-      return errorResult('No active session. Please sign in first.');
+      return errorResult(
+        this.volcanoAuth._oauthExchangeError || 'No active session. Please sign in first.',
+      );
     }
 
     if (!this.databaseName) {
@@ -2301,7 +2317,9 @@ class StorageFileApi {
   async _checkAuth() {
     await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
-      return errorResult('No active session. Please sign in first.');
+      return errorResult(
+        this.volcanoAuth._oauthExchangeError || 'No active session. Please sign in first.',
+      );
     }
     return null;
   }

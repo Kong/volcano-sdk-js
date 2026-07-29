@@ -284,7 +284,7 @@ These methods redirect the user to the provider's login page. After successful a
 
 ### Handle OAuth Callback
 
-After the OAuth redirect, the user returns with a short-lived, single-use `code` and the flow's `state` nonce. The SDK validates the nonce, removes both values from the URL, and exchanges the code for a session before `initialize()`, `getUser()`, or another authenticated operation proceeds. Access and refresh tokens are never placed in the OAuth callback URL.
+The SDK requests the platform's authorization-code callback mode. After the OAuth redirect, the user returns with a short-lived, single-use `code` and the flow's `state` nonce. The SDK validates the nonce, removes both values from the URL, and exchanges the code for a session before `initialize()`, `getUser()`, or another authenticated operation proceeds. In this mode, access and refresh tokens are never placed in the OAuth callback URL. Platform deployments retain the established session-fragment response for older clients that do not request authorization-code mode.
 
 By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override:
 
