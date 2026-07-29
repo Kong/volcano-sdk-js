@@ -692,66 +692,76 @@ class VolcanoAuth {
     return this._authFetchUrl(`${this.apiUrl}${path}`, options);
   }
 
-  async _authFetchUrl(url, options = {}) {
-    return this._authFetchUrlAttempt(url, options, false, null);
-  }
+  async _authFetchUrl(url, fetchOptions = {}) {
+    let retryFailure = null;
 
-  async _authFetchUrlAttempt(url, fetchOptions, retried, retryFailure) {
-    if (!this.accessToken) {
-      if (retried && retryFailure) {
-        return retryFailure;
-      }
-      const message = retried ? 'Session expired' : 'No active session';
-      return { ok: false, status: null, error: new Error(message), data: null };
-    }
-
-    try {
-      const response = await fetchWithTimeout(
-        url,
-        {
-          ...fetchOptions,
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-            ...fetchOptions.headers,
-          },
-        },
-        this.timeout,
-      );
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        // Try token refresh on 401
-        if (response.status === 401 && !retried) {
-          const firstFailure = {
-            ok: false,
-            status: response.status,
-            error: new Error('Session expired'),
-            data,
-          };
-          if (!this.refreshToken) {
-            return firstFailure;
-          }
-          await this.refreshSession();
-          return this._authFetchUrlAttempt(url, fetchOptions, true, firstFailure);
+    for (;;) {
+      if (!this.accessToken) {
+        if (retryFailure) {
+          return retryFailure;
         }
         return {
           ok: false,
-          status: response.status,
-          error: new Error(data.error || 'Request failed'),
-          data,
+          status: null,
+          error: new Error('No active session'),
+          data: null,
         };
       }
 
-      return { ok: true, status: response.status, data, error: null };
-    } catch (error) {
-      return {
-        ok: false,
-        status: null,
-        error: error instanceof Error ? error : new Error('Request failed'),
-        data: null,
-      };
+      try {
+        const response = await fetchWithTimeout(
+          url,
+          {
+            ...fetchOptions,
+            headers: {
+              Authorization: `Bearer ${this.accessToken}`,
+              'Content-Type': 'application/json',
+              ...fetchOptions.headers,
+            },
+          },
+          this.timeout,
+        );
+
+        const data = await safeJsonParse(response);
+
+        if (!response.ok) {
+          // Try token refresh once on 401. retryFailure is lexical state, so
+          // callers cannot bypass the retry boundary through request options.
+          if (response.status === 401 && !retryFailure) {
+            retryFailure = {
+              ok: false,
+              status: response.status,
+              error: new Error('Session expired'),
+              data,
+            };
+            if (!this.refreshToken) {
+              return retryFailure;
+            }
+            await this.refreshSession();
+            continue;
+          }
+          return {
+            ok: false,
+            status: response.status,
+            error: new Error(data.error || 'Request failed'),
+            data,
+          };
+        }
+
+        return {
+          ok: true,
+          status: response.status,
+          data,
+          error: null,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          status: null,
+          error: error instanceof Error ? error : new Error('Request failed'),
+          data: null,
+        };
+      }
     }
   }
 
