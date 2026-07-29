@@ -753,6 +753,8 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - OAuth authorization code exchange', () => {
+    const callbackRedirectURL = () => `${window.location.origin}/auth/callback`;
+
     afterEach(() => {
       window.history.replaceState(null, '', '/');
       window.sessionStorage.clear();
@@ -760,7 +762,7 @@ describe('VolcanoAuth', () => {
 
     it('exchanges a matching one-time callback code and strips it from the URL', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
-      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
       global.fetch
         .mockResolvedValueOnce({
@@ -787,12 +789,13 @@ describe('VolcanoAuth', () => {
       expect(global.fetch.mock.calls[0][0]).toBe('https://api.test.com/auth/oauth/exchange');
       expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
         code: 'one-time-code',
-        redirect_url: 'https://localhost/auth/callback',
+        redirect_url: callbackRedirectURL(),
       });
     });
 
     it('rejects a callback whose state does not match without exchanging it', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'expected');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=attacker');
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -819,9 +822,23 @@ describe('VolcanoAuth', () => {
       expect(window.location.search).toBe('?code=promo&state=selected');
     });
 
+    it('leaves another integration callback untouched when a stale nonce exists', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'abandoned-volcano-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/stripe/callback?code=stripe-code&state=stripe-state');
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result).toEqual({ user: null, error: null });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('?code=stripe-code&state=stripe-state');
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe('abandoned-volcano-nonce');
+    });
+
     it('surfaces a provider-denied callback and clears its one-time context', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
-      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(
         null,
         '',
@@ -845,7 +862,7 @@ describe('VolcanoAuth', () => {
 
     it('clears a previous exchange error when a later sign-in succeeds', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
-      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
       global.fetch
         .mockResolvedValueOnce({
@@ -877,9 +894,68 @@ describe('VolcanoAuth', () => {
       expect(v._oauthExchangeError).toBeNull();
     });
 
+    it('surfaces a failed fresh exchange instead of hiding it behind a stored session', async () => {
+      window.localStorage.setItem('volcano_access_token', 'stored-access');
+      window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
+      global.fetch.mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({ error: 'invalid authorization code' }),
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.user).toBeNull();
+      expect(result.error).toEqual(
+        expect.objectContaining({ message: 'invalid authorization code' }),
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for an in-flight exchange before signing out', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      let resolveExchange;
+      global.fetch
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveExchange = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const signOut = v.auth.signOut();
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      resolveExchange({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com' },
+          }),
+      });
+
+      await expect(signOut).resolves.toEqual({ error: null });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(v.accessToken).toBeNull();
+      expect(v.refreshToken).toBeNull();
+      expect(v._oauthExchangeError).toBeNull();
+    });
+
     it('waits for code exchange before checking storage authentication', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
-      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
       let resolveExchange;
       global.fetch

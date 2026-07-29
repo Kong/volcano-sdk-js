@@ -982,6 +982,7 @@ class VolcanoAuth {
   }
 
   async signOut() {
+    await this._completeOAuthExchange();
     if (this.refreshToken) {
       try {
         await this._anonFetch('/auth/logout', {
@@ -1662,6 +1663,7 @@ class VolcanoAuth {
   }
 
   _clearSession() {
+    this._oauthExchangeError = null;
     this.accessToken = null;
     this.refreshToken = null;
     this.currentUser = null;
@@ -1689,12 +1691,24 @@ class VolcanoAuth {
   // ========================================================================
 
   _hasOAuthCallbackInUrl() {
-    if (!isBrowser() || !this._peekAuthState()) {
+    const storedRedirectURL = this._peekAuthRedirectURL();
+    if (!isBrowser() || !this._peekAuthState() || !storedRedirectURL) {
       return false;
     }
     try {
-      const params = new URLSearchParams(window.location.search || '');
-      return Boolean(params.get('state') && (params.get('code') || params.get('error')));
+      const callbackURL = new URL(window.location.href);
+      const params = callbackURL.searchParams;
+      if (!params.get('state') || (!params.get('code') && !params.get('error'))) {
+        return false;
+      }
+      callbackURL.searchParams.delete('code');
+      callbackURL.searchParams.delete('state');
+      callbackURL.searchParams.delete('error');
+      callbackURL.searchParams.delete('error_description');
+      callbackURL.hash = '';
+      const expectedURL = new URL(storedRedirectURL);
+      expectedURL.hash = '';
+      return callbackURL.toString() === expectedURL.toString();
     } catch {
       return false;
     }
@@ -1958,6 +1972,17 @@ class VolcanoAuth {
     }
   }
 
+  _peekAuthRedirectURL() {
+    if (!isBrowser()) {
+      return null;
+    }
+    try {
+      return window.sessionStorage.getItem(STORAGE_KEY_AUTH_REDIRECT);
+    } catch {
+      return null;
+    }
+  }
+
   // ========================================================================
   // Storage Helpers (Browser/Node.js compatible)
   // ========================================================================
@@ -1995,7 +2020,7 @@ class VolcanoAuth {
       this._oauthExchangePromise
     ) {
       await this._completeOAuthExchange();
-      if (!this.accessToken && this._oauthExchangeError) {
+      if (this._oauthExchangeError) {
         return { user: null, error: this._oauthExchangeError };
       }
       const { user, error } = await this.getUser();
@@ -2273,7 +2298,8 @@ class StorageFileApi {
    * Check if user is authenticated
    * @private
    */
-  _checkAuth() {
+  async _checkAuth() {
+    await this.volcanoAuth._completeOAuthExchange();
     if (!this.volcanoAuth.accessToken) {
       return errorResult('No active session. Please sign in first.');
     }
@@ -2333,8 +2359,7 @@ class StorageFileApi {
    * Upload a file to the bucket
    */
   async upload(path, fileBody, options = {}) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2375,8 +2400,7 @@ class StorageFileApi {
    * Download a file from the bucket
    */
   async download(path, options = {}) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2397,8 +2421,7 @@ class StorageFileApi {
    * List files in the bucket
    */
   async list(prefix = '', options = {}) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { ...authError, nextCursor: null };
     }
@@ -2437,8 +2460,7 @@ class StorageFileApi {
    * Delete one or more files from the bucket
    */
   async remove(paths) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2475,8 +2497,7 @@ class StorageFileApi {
    * Move/rename a file within the bucket
    */
   async move(fromPath, toPath) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2495,8 +2516,7 @@ class StorageFileApi {
    * Copy a file within the bucket
    */
   async copy(fromPath, toPath) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2542,8 +2562,7 @@ class StorageFileApi {
    * Update the visibility (public/private) of a file
    */
   async updateVisibility(path, isPublic) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2560,8 +2579,7 @@ class StorageFileApi {
   // ========================================================================
 
   async createUploadSession(path, options) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2583,8 +2601,7 @@ class StorageFileApi {
   }
 
   async uploadPart(path, sessionId, partNumber, partData) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2601,8 +2618,7 @@ class StorageFileApi {
   }
 
   async completeUploadSession(path, sessionId) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2619,8 +2635,7 @@ class StorageFileApi {
   }
 
   async getUploadSession(path, sessionId) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
@@ -2632,8 +2647,7 @@ class StorageFileApi {
   }
 
   async abortUploadSession(path, sessionId) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return { error: authError.error };
     }
@@ -2650,8 +2664,7 @@ class StorageFileApi {
    * Upload a large file using resumable upload with automatic chunking
    */
   async uploadResumable(path, fileBody, options = {}) {
-    await this.volcanoAuth._completeOAuthExchange();
-    const authError = this._checkAuth();
+    const authError = await this._checkAuth();
     if (authError) {
       return authError;
     }
