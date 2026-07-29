@@ -1195,12 +1195,14 @@ describe('VolcanoAuth', () => {
     });
 
     it('should return error when no refresh token', async () => {
+      volcano.accessToken = 'valid-access';
       volcano.refreshToken = null;
 
       const result = await volcano.auth.refreshSession();
 
       expect(result.session).toBeNull();
       expect(result.error.message).toBe('No refresh token');
+      expect(volcano.accessToken).toBe('valid-access');
     });
 
     it('should clear session on refresh failure', async () => {
@@ -2714,6 +2716,7 @@ describe('VolcanoAuth', () => {
       expect(data).toBeNull();
       expect(error).toBeDefined();
       expect(error.message).toBe('Session expired');
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch).toHaveBeenCalledWith(
         'https://api.test.com/functions/resolve?name=my-function',

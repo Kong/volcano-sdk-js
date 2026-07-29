@@ -691,8 +691,12 @@ class VolcanoAuth {
   }
 
   async _authFetchUrl(url, options = {}) {
+    const { _retried, _retryFailure, ...fetchOptions } = options;
     if (!this.accessToken) {
-      const message = options._retried ? 'Session expired' : 'No active session';
+      if (_retried && _retryFailure) {
+        return _retryFailure;
+      }
+      const message = _retried ? 'Session expired' : 'No active session';
       return { ok: false, status: null, error: new Error(message), data: null };
     }
 
@@ -700,11 +704,11 @@ class VolcanoAuth {
       const response = await fetchWithTimeout(
         url,
         {
-          ...options,
+          ...fetchOptions,
           headers: {
             Authorization: `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json',
-            ...options.headers,
+            ...fetchOptions.headers,
           },
         },
         this.timeout,
@@ -714,9 +718,22 @@ class VolcanoAuth {
 
       if (!response.ok) {
         // Try token refresh on 401
-        if (response.status === 401 && !options._retried) {
+        if (response.status === 401 && !_retried) {
+          const retryFailure = {
+            ok: false,
+            status: response.status,
+            error: new Error('Session expired'),
+            data,
+          };
+          if (!this.refreshToken) {
+            return retryFailure;
+          }
           await this.refreshSession();
-          return this._authFetchUrl(url, { ...options, _retried: true });
+          return this._authFetchUrl(url, {
+            ...fetchOptions,
+            _retried: true,
+            _retryFailure: retryFailure,
+          });
         }
         return {
           ok: false,
@@ -1036,12 +1053,11 @@ class VolcanoAuth {
     await this._completeOAuthExchange();
     if (this._oauthExchangeError && !this.refreshToken) {
       const error = this._oauthExchangeError;
-      this._clearSession();
+      this._oauthExchangeError = null;
       return { session: null, error };
     }
     this._oauthExchangeError = null;
     if (!this.refreshToken) {
-      this._clearSession();
       return { session: null, error: new Error('No refresh token') };
     }
 
