@@ -26,6 +26,20 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.6.0] - 2026-07-28
+
+### Changed
+
+- OAuth browser callbacks now carry a short-lived, single-use authorization code.
+  The SDK validates the flow state and exchanges the code before authenticated
+  operations proceed, so access and refresh tokens no longer appear in callback
+  URLs.
+- Because callback code exchange is asynchronous, await `initialize()` or an auth
+  operation before reading synchronous session accessors after a redirect.
+- OAuth `redirectTo` URLs containing reserved response parameters (`code`, `state`,
+  `error`, `error_description`, `error_uri`, `iss`, or `vh_state`) are now rejected
+  to prevent callback-response ambiguity.
+
 ## [1.5.0] - 2026-07-27
 
 ### Added

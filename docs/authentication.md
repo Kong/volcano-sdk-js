@@ -158,7 +158,7 @@ if (user) {
 }
 ```
 
-The client also automatically adopts a session that is present in the page URL — for example after the user is redirected back from Volcano's hosted auth pages (or an OAuth provider). This happens when the client is created, so the user is authenticated before you call anything. See [Hosted Auth Pages (Managed Login)](#hosted-auth-pages-managed-login).
+The client also completes browser redirect hand-offs automatically. Managed email/password pages can return a session fragment, while OAuth providers return a short-lived authorization code that the SDK exchanges before an authenticated call proceeds.
 
 ### Listen for Auth State Changes
 
@@ -284,7 +284,9 @@ These methods redirect the user to the provider's login page. After successful a
 
 ### Handle OAuth Callback
 
-After the OAuth redirect, the user returns to your app with the session in the URL fragment. `signInWithOAuth()` stored a one-time nonce before redirecting and the callback echoes it back as `state`, so the SDK validates it and adopts the session automatically when the client is created (and again on `initialize()`/`getUser()`) — you don't parse the URL yourself. By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override. As with hosted auth, a session whose `state` doesn't match the stored nonce is rejected:
+The SDK requests the platform's authorization-code callback mode. After the OAuth redirect, the user returns with a short-lived, single-use `code` and the flow's `state` nonce. The SDK validates the nonce, removes both values from the URL, and exchanges the code for a session before `initialize()`, `getUser()`, or another authenticated operation proceeds. In this mode, access and refresh tokens are never placed in the OAuth callback URL. Platform deployments retain the established session-fragment response for older clients that do not request authorization-code mode.
+
+By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override:
 
 ```javascript
 // On your callback page or app initialization
@@ -295,7 +297,7 @@ if (user) {
 }
 ```
 
-This is the same hand-off described in [Hosted Auth Pages (Managed Login)](#hosted-auth-pages-managed-login).
+The callback URL must exactly match one of the project's registered redirect URLs, including its query string. Callback URLs cannot use the reserved OAuth response query parameters `code`, `state`, `error`, `error_description`, `error_uri`, `iss`, or `vh_state`.
 
 ### Link OAuth Provider to Existing Account
 
