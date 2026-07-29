@@ -286,7 +286,8 @@ export interface Auth {
 
   // OAuth methods
   /**
-   * Start OAuth flow (redirects browser). Throws if provider is invalid.
+   * Start OAuth flow (redirects browser). Throws if the provider is invalid or
+   * `redirectTo` contains a reserved OAuth response query parameter.
    * Stores a one-time nonce and carries it through the OAuth callback so the
    * returned authorization code is bound to this flow (login-CSRF defense).
    * The SDK exchanges that code without placing session tokens in the browser
