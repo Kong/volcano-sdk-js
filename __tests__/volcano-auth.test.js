@@ -807,6 +807,110 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).not.toHaveBeenCalled();
       expect(window.location.search).toBe('');
     });
+
+    it('leaves unrelated code and state query parameters untouched', async () => {
+      window.history.replaceState(null, '', '/checkout?code=promo&state=selected');
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result).toEqual({ user: null, error: null });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('?code=promo&state=selected');
+    });
+
+    it('surfaces a provider-denied callback and clears its one-time context', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.history.replaceState(
+        null,
+        '',
+        '/auth/callback?error=access_denied&error_description=Sign-in%20cancelled&state=oauth-nonce',
+      );
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.user).toBeNull();
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: 'Sign-in cancelled',
+        }),
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('');
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBeNull();
+      expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBeNull();
+    });
+
+    it('clears a previous exchange error when a later sign-in succeeds', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          json: () => Promise.resolve({ error: 'invalid authorization code' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'signed-in-access',
+              refresh_token: 'signed-in-refresh',
+              user: { id: 'signed-in-user', email: 'signed-in@example.com' },
+            }),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const failed = await v.initialize();
+      expect(failed.error).toEqual(
+        expect.objectContaining({ message: 'invalid authorization code' }),
+      );
+
+      const signedIn = await v.auth.signIn({
+        email: 'signed-in@example.com',
+        password: 'valid-password',
+      });
+
+      expect(signedIn.error).toBeNull();
+      expect(v._oauthExchangeError).toBeNull();
+    });
+
+    it('waits for code exchange before checking storage authentication', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', 'https://localhost/auth/callback');
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      let resolveExchange;
+      global.fetch
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveExchange = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ object: { path: 'avatar.png', is_public: true } }),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const visibility = v.storage.from('avatars').updateVisibility('avatar.png', true);
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      resolveExchange({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com' },
+          }),
+      });
+
+      await expect(visibility).resolves.toEqual(expect.objectContaining({ error: null }));
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('Authentication - updateUser', () => {
