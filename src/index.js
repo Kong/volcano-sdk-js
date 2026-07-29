@@ -553,7 +553,8 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    // Keep a terminal callback error available until an auth operation reports it.
+    // Keep a terminal callback error until initialize()/refreshSession() consumes
+    // it or a new session is set or cleared.
     this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
 

@@ -14,6 +14,9 @@ All notable changes to the Volcano SDK will be documented in this file.
   URLs.
 - Because callback code exchange is asynchronous, await `initialize()` or an auth
   operation before reading synchronous session accessors after a redirect.
+- OAuth `redirectTo` URLs containing reserved response parameters (`code`, `state`,
+  `error`, `error_description`, `error_uri`, `iss`, or `vh_state`) are now rejected
+  to prevent callback-response ambiguity.
 
 ## [1.5.0] - 2026-07-27
 
