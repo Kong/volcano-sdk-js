@@ -751,6 +751,19 @@ describe('VolcanoAuth', () => {
       expect(storedRedirectUrl).toBeTruthy();
       expect(new URL(storedRedirectUrl).searchParams.get('vh_state')).toBeNull();
     });
+
+    it.each(['code', 'state', 'error', 'error_description', 'error_uri', 'iss', 'vh_state'])(
+      'rejects a redirectTo containing the reserved %s query parameter',
+      (key) => {
+        const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+
+        expect(() =>
+          v.auth.signInWithOAuth('google', {
+            redirectTo: `https://app.test/auth/callback?${key}=app-value`,
+          }),
+        ).toThrow(`OAuth redirectTo must not contain the reserved "${key}" query parameter`);
+      },
+    );
   });
 
   describe('Authentication - OAuth authorization code exchange', () => {
@@ -856,6 +869,37 @@ describe('VolcanoAuth', () => {
       expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
       expect(JSON.parse(global.fetch.mock.calls[0][1].body).redirect_url).toBe(storedRedirectURL);
       expect(window.location.search).toBe('?return_to=hello+world');
+    });
+
+    it('accepts and scrubs optional provider response metadata', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(
+        null,
+        '',
+        '/auth/callback?code=one-time-code&state=oauth-nonce&iss=https%3A%2F%2Fissuer.test',
+      );
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'oauth-access',
+              refresh_token: 'oauth-refresh',
+              user: { id: 'oauth-user', email: 'oauth@example.com' },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+        });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.initialize();
+
+      expect(result.error).toBeNull();
+      expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
+      expect(window.location.search).toBe('');
     });
 
     it('rejects a callback whose state does not match without exchanging it', async () => {
@@ -1163,6 +1207,24 @@ describe('VolcanoAuth', () => {
 
       await expect(visibility).resolves.toEqual(expect.objectContaining({ error: null }));
       expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves a failed code exchange error for function invocation', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'invalid authorization code' }),
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.functions.invoke('my-function');
+
+      expect(result.error).toEqual(
+        expect.objectContaining({ message: 'invalid authorization code' }),
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 

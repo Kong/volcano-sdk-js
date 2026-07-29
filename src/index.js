@@ -64,6 +64,15 @@ const AUTH_HASH_KEYS = new Set([
   'error',
   'error_description',
 ]);
+const OAUTH_RESPONSE_QUERY_KEYS = new Set([
+  'code',
+  'state',
+  'error',
+  'error_description',
+  'error_uri',
+  'iss',
+  'vh_state',
+]);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
@@ -1277,7 +1286,13 @@ class VolcanoAuth {
     const nonce = this._generateAuthStateNonce();
 
     const redirectBase = this._resolveOAuthRedirectTarget(options.redirectTo);
-    const redirectURL = new URL(redirectBase).toString();
+    const redirectTarget = new URL(redirectBase);
+    for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
+      if (redirectTarget.searchParams.has(key)) {
+        throw new Error(`OAuth redirectTo must not contain the reserved "${key}" query parameter`);
+      }
+    }
+    const redirectURL = redirectTarget.toString();
     this._storeAuthState(nonce, redirectURL);
     // Keep the nonce in the legacy location during the backend rollout. New
     // servers remove this reserved transport parameter before exact redirect
@@ -1540,7 +1555,7 @@ class VolcanoAuth {
         status: null,
         headers: {},
         version: null,
-        error: new Error('No active session'),
+        error: this._oauthExchangeError || new Error('No active session'),
       };
     }
     if (!this.functionInvocationBase) {
@@ -1817,10 +1832,9 @@ class VolcanoAuth {
   }
 
   _removeOAuthResponseParams(callbackURL, clearHash = true) {
-    callbackURL.searchParams.delete('code');
-    callbackURL.searchParams.delete('state');
-    callbackURL.searchParams.delete('error');
-    callbackURL.searchParams.delete('error_description');
+    for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
+      callbackURL.searchParams.delete(key);
+    }
     if (clearHash) {
       callbackURL.hash = '';
     }

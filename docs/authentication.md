@@ -297,7 +297,7 @@ if (user) {
 }
 ```
 
-The callback URL must exactly match one of the project's registered redirect URLs, including its query string.
+The callback URL must exactly match one of the project's registered redirect URLs, including its query string. Callback URLs cannot use the reserved OAuth response query parameters `code`, `state`, `error`, `error_description`, `error_uri`, `iss`, or `vh_state`.
 
 ### Link OAuth Provider to Existing Account
 
