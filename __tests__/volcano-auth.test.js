@@ -1,4 +1,4 @@
-const VolcanoAuth = require('../src/index.js');
+const { VolcanoAuth } = require('../src/index.js');
 
 function base64UrlEncode(value) {
   return Buffer.from(value)
@@ -173,12 +173,11 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - signUp', () => {
-    it('should sign up a new user successfully', async () => {
+    it('should acknowledge a session-less signup without issuing a session', async () => {
+      // Session-less signup (VOL-309): the server returns an acknowledgement only.
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
-        access_token: 'access-token-123',
-        refresh_token: 'refresh-token-123',
-        expires_in: 3600,
+        confirmation_required: true,
+        message: 'If the account was created, a confirmation email has been sent.',
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -191,13 +190,15 @@ describe('VolcanoAuth', () => {
         password: 'password123',
       });
 
-      expect(result.user).toEqual(mockResponse.user);
-      expect(result.session.access_token).toBe('access-token-123');
-      expect(localStorage.setItem).toHaveBeenCalledWith('volcano_access_token', 'access-token-123');
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'volcano_refresh_token',
-        'refresh-token-123',
-      );
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      expect(result.confirmationRequired).toBe(true);
+      expect(result.message).toBe(mockResponse.message);
+      expect(result.error).toBeNull();
+      // No session is issued, so neither token key is persisted (any value, incl. undefined/null).
+      const persistedKeys = localStorage.setItem.mock.calls.map(([key]) => key);
+      expect(persistedKeys).not.toContain('volcano_access_token');
+      expect(persistedKeys).not.toContain('volcano_refresh_token');
     });
 
     it('should return error on signup failure', async () => {
@@ -219,10 +220,8 @@ describe('VolcanoAuth', () => {
 
     it('should include error:null on successful signup', async () => {
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
-        access_token: 'access-token-123',
-        refresh_token: 'refresh-token-123',
-        expires_in: 3600,
+        confirmation_required: false,
+        message: 'If the account was created, you can now sign in.',
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -236,8 +235,86 @@ describe('VolcanoAuth', () => {
       });
 
       expect(result.error).toBeNull();
-      expect(result.user).toBeDefined();
-      expect(result.session).toBeDefined();
+      expect(result.confirmationRequired).toBe(false);
+      expect(result.message).toBe(mockResponse.message);
+    });
+
+    it('signs in after signup when confirmation is not required and signInWhenAllowed is set', async () => {
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ confirmation_required: false, message: 'ok' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-123', email: 'test@example.com' },
+              access_token: 'access-token-123',
+              refresh_token: 'refresh-token-123',
+              expires_in: 3600,
+            }),
+        });
+
+      const result = await volcano.auth.signUp({
+        email: 'test@example.com',
+        password: 'password123',
+        signInWhenAllowed: true,
+      });
+
+      // A follow-up signin was issued, establishing and persisting a session.
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(result.confirmationRequired).toBe(false);
+      expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com' });
+      expect(result.session.access_token).toBe('access-token-123');
+      expect(result.error).toBeNull();
+      expect(localStorage.setItem).toHaveBeenCalledWith('volcano_access_token', 'access-token-123');
+    });
+
+    it('does not sign in when confirmation is required, even with signInWhenAllowed', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ confirmation_required: true, message: 'check your email' }),
+      });
+
+      const result = await volcano.auth.signUp({
+        email: 'test@example.com',
+        password: 'password123',
+        signInWhenAllowed: true,
+      });
+
+      // Only the signup request is made; no session is established.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(result.confirmationRequired).toBe(true);
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      const persistedKeys = localStorage.setItem.mock.calls.map(([key]) => key);
+      expect(persistedKeys).not.toContain('volcano_access_token');
+      expect(persistedKeys).not.toContain('volcano_refresh_token');
+    });
+
+    it('surfaces the sign-in error when the follow-up sign-in fails', async () => {
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ confirmation_required: false, message: 'ok' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          json: () => Promise.resolve({ error: 'rate limit exceeded' }),
+        });
+
+      const result = await volcano.auth.signUp({
+        email: 'test@example.com',
+        password: 'password123',
+        signInWhenAllowed: true,
+      });
+
+      expect(result.confirmationRequired).toBe(false);
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      expect(result.error).toBeDefined();
+      expect(result.error.message).toBe('rate limit exceeded');
     });
   });
 
@@ -1631,6 +1708,119 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Logs', () => {
+    it('should expose log methods', () => {
+      expect(volcano.logs).toBeDefined();
+      expect(typeof volcano.logs.search).toBe('function');
+      expect(typeof volcano.logs.activity).toBe('function');
+    });
+
+    it('should search project logs with date-time windows', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      const request = {
+        resource: { type: 'function', ids: ['fn-1'] },
+        q: 'build failed',
+        levels: ['error'],
+        regions: ['us-east-1'],
+        start_time: '2024-01-01T00:00:00.000Z',
+        end_time: '2024-01-02T00:00:00.000Z',
+        limit: 50,
+      };
+      const response = {
+        data: [
+          {
+            id: 'log-1',
+            timestamp: '2024-01-01T00:00:01.000Z',
+            message: 'build failed',
+            resource: { type: 'function', id: 'fn-1' },
+          },
+        ],
+        limit: 50,
+        has_more: false,
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(response),
+      });
+
+      const result = await volcano.logs.search('project-1', request);
+
+      expect(result.error).toBeNull();
+      expect(result.data).toEqual(response);
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/projects/project-1/logs/search',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('should fetch project log activity with date-time windows', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      const request = {
+        resource: { type: 'frontend', ids: ['frontend-1'] },
+        levels: ['warn'],
+        start_time: '2024-01-01T00:00:00.000Z',
+        end_time: '2024-01-01T01:00:00.000Z',
+        bucket_count: 12,
+      };
+      const response = {
+        data: [
+          {
+            start_time: '2024-01-01T00:00:00.000Z',
+            end_time: '2024-01-01T00:05:00.000Z',
+            counts: {
+              levels: { warn: 2 },
+              regions: { 'us-east-1': 2 },
+              resource_ids: { 'frontend-1': 2 },
+            },
+            total: 2,
+          },
+        ],
+        total: 2,
+      };
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(response),
+      });
+
+      const result = await volcano.logs.activity('project-1', request);
+
+      expect(result.error).toBeNull();
+      expect(result.data).toEqual(response);
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/projects/project-1/logs/activity',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('should return an error when searching logs without a session', async () => {
+      const result = await volcano.logs.search('project-1', {
+        resource: { type: 'function' },
+      });
+
+      expect(result.data).toBeNull();
+      expect(result.error.message).toBe('No active session');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Functions', () => {
     it('should invoke function successfully', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
@@ -1684,7 +1874,7 @@ describe('VolcanoAuth', () => {
         'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action: 'getData' }),
+          body: JSON.stringify({ payload: { action: 'getData' } }),
         }),
       );
     });
@@ -1697,6 +1887,99 @@ describe('VolcanoAuth', () => {
       expect(error).toBeDefined();
       expect(error.message).toContain('DNS-safe');
       expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('should surface a platform-blocked invocation as a VolcanoSystemError', async () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      // Resolve succeeds...
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      // ...but the invocation is blocked by the platform: 400 with an error body
+      // and NO x-volcano-version header (request never reached a running version).
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        headers: {
+          get: (name) => {
+            if (name?.toLowerCase() === 'content-type') return 'application/json';
+            return null;
+          },
+          forEach: (callback) => {
+            callback('application/json', 'content-type');
+          },
+        },
+        json: () => Promise.resolve({ error: 'function cannot be invoked (status: failed)' }),
+      });
+
+      const { data, status, error } = await volcano.functions.invoke('my-function', {
+        action: 'getData',
+      });
+
+      expect(data).toBeNull();
+      expect(status).toBe(400);
+      expect(error).toBeInstanceOf(VolcanoSystemError);
+      expect(VolcanoSystemError.is(error)).toBe(true);
+      expect(error.isSystemError).toBe(true);
+      expect(error.status).toBe(400);
+      expect(error.message).toBe('function cannot be invoked (status: failed)');
+      // Extra fields are non-enumerable → serialization shape matches a plain
+      // Error (additive, no surprise for consumer log/redaction pipelines).
+      expect(Object.keys(error)).toEqual([]);
+      expect(JSON.stringify(error)).toBe('{}');
+      expect(error.name).toBe('VolcanoSystemError');
+    });
+
+    it('VolcanoSystemError.is() only matches system errors', () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      expect(VolcanoSystemError.is(new VolcanoSystemError('x', { status: 503 }))).toBe(true);
+      expect(VolcanoSystemError.is(new Error('plain'))).toBe(false);
+      expect(VolcanoSystemError.is(null)).toBe(false);
+      expect(VolcanoSystemError.is(undefined)).toBe(false);
+      expect(VolcanoSystemError.is('boom')).toBe(false);
+      // Duck-typed brand → holds across a duplicate class identity.
+      expect(VolcanoSystemError.is({ isSystemError: true })).toBe(true);
+    });
+
+    it('should surface a transport failure as a VolcanoSystemError with null status and cause', async () => {
+      const { VolcanoSystemError } = require('../src/index.js');
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      // Resolve succeeds...
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      // ...but the invocation fetch rejects (network down / DNS / offline).
+      const networkError = new Error('network down');
+      global.fetch.mockRejectedValueOnce(networkError);
+
+      const { data, status, error } = await volcano.functions.invoke('my-function', {
+        action: 'getData',
+      });
+
+      expect(data).toBeNull();
+      expect(status).toBeNull();
+      expect(error).toBeInstanceOf(VolcanoSystemError);
+      expect(error.isSystemError).toBe(true);
+      expect(error.status).toBeNull();
+      expect(error.message).toBe('network down');
+      expect(error.cause).toBe(networkError);
     });
 
     it('should reject invoke when apiUrl does not follow api.<domain> pattern', async () => {
@@ -1771,7 +2054,7 @@ describe('VolcanoAuth', () => {
         });
 
         const result = await localVolcano.functions.invoke('notes-summary', {
-          payload: { limit: 5 },
+          limit: 5,
         });
 
         expect(result.error).toBeNull();
@@ -2133,7 +2416,7 @@ describe('VolcanoAuth', () => {
         'https://22222222-2222-2222-2222-222222222222.functions.test.com/',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action: 'retry' }),
+          body: JSON.stringify({ payload: { action: 'retry' } }),
         }),
       );
     });

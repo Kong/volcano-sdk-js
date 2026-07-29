@@ -9,6 +9,63 @@ All notable changes to the Volcano SDK will be documented in this file.
 - `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
   service-role-only project leases. `withLock` renews automatically, aborts its
   callback signal after ownership loss, and releases in `finally`.
+- `lease.fencingToken` on every acquire and renew. It rises when the lock changes
+  hands and holds steady across renewals, so a guarded resource can reject a
+  write from a holder that already lost the lock — something a lease alone cannot
+  prevent.
+- `volcano.locks.get(key)` reports whether a lock is held, when its lease expires,
+  and the holder's fencing token, without needing the lock token.
+  `volcano.locks.forceRelease(key)` drops the lease whatever token holds it, for
+  recovering a lock whose holder died. Force release breaks mutual exclusion on
+  its own, so pair it with a fencing-token check on the protected resource.
+
+### Changed
+
+- Errors from failed API responses now carry `status`, the server's `code` when
+  it sends one, and `retryAfter` parsed from the `Retry-After` header. The
+  message is unchanged, so existing handling still works. Locks rely on this to
+  distinguish contention from a rate limit, and every other method benefits.
+
+## [1.5.0] - 2026-07-27
+
+### Added
+
+- **`VolcanoSystemError` — platform-layer invocation failures are now typed.** `functions.invoke` surfaces a failure that never reached your function code (a failed/provisioning deploy, gateway error, or transport failure such as a timeout/offline) as a `VolcanoSystemError` instead of a plain `Error`. Detect it with `VolcanoSystemError.is(error)` (or `error.isSystemError === true`) and read `error.status` (the blocked HTTP status, or `null` for transport failures). A running function's own non-2xx response is unchanged — it still comes back as `data` with `error` null. The class is exported from `@volcano.dev/sdk` in all build formats. Additive and backward compatible: it extends `Error` with the same message, and its extra fields are non-enumerable so `JSON.stringify(error)` is unchanged.
+
+## [1.4.1] - 2026-07-26
+
+### Fixed
+
+- **Realtime `onPostgresChanges` callbacks now fire (VOL-522).** The hosting server publishes RLS-scoped Postgres changes to a per-user channel (`projectId:postgres:schema:table:userID`, so each subscriber only receives rows their RLS allows), but the SDK's server-publication router only stripped the project-id prefix and looked up `postgres:schema:table:userID` — which never matches the base `postgres:schema:table` channel the client subscribed to. Every change was silently dropped and `onPostgresChanges` never fired. The router now maps the per-user channel back to the base channel (dropping the trailing user-id segment when the exact channel isn't found). Also replaced a false-positive integration test that only asserted the subscription was created with one that asserts the change is actually delivered.
+
+## [1.4.0] - 2026-07-25
+
+### Fixed
+
+- **Bundling the SDK into a function (esbuild `--bundle`) no longer fails at runtime with "handler is not a function" (VOL-505).** The entry source hand-rolled UMD/CommonJS/global exports (`module.exports = VolcanoAuth`, `window.* = ...`, AMD `define(...)`) alongside the real ES `export`s. Rollup passed those statements straight through into the ES build (`dist/index.esm.mjs`), so a stray top-level `module.exports = VolcanoAuth` survived there and, when a bundler inlined the SDK into a CommonJS output, overwrote that bundle's own `module.exports = { handler }`. The entry source is now pure ES modules; rollup generates the CJS/UMD builds (all `exports: 'named'`), and the ES builds are format-pure. A regression test (`__tests__/esm-purity.test.js`) fails if any entry source reintroduces a hand-rolled export.
+
+### Changed
+
+- **Changed (CommonJS default `require` shape):** `require('@volcano.dev/sdk')` now returns the module namespace `{ VolcanoAuth, QueryBuilder, StorageFileApi, isBrowser, loadRealtime, databaseConnectionString, default: VolcanoAuth }` instead of the `VolcanoAuth` class itself. Migrate `const VolcanoAuth = require('@volcano.dev/sdk')` to `const { VolcanoAuth } = require('@volcano.dev/sdk')` (or `require('@volcano.dev/sdk').default`). Named and default imports — `import { VolcanoAuth } from '@volcano.dev/sdk'` and `import VolcanoAuth from '@volcano.dev/sdk'` — are unchanged. This makes the CommonJS runtime shape match the TypeScript declarations, which already described the namespace form.
+- The browser/UMD global and the documented CDN `<script>` + `new VolcanoAuth()` path are **unchanged**: the UMD build (`dist/index.js`) restores the class-shaped `window.VolcanoAuth` (and the other named globals) via a `footer` scoped to that output, so the ES build stays pure while the browser global keeps working exactly as before.
+
+## [1.3.1] - 2026-07-24
+
+### Fixed
+
+- `functions.invoke(name, payload)` now sends the request body wrapped as
+  `{ payload }` to match the hosting invoke API contract
+  (`FunctionInvocationRequest`). Previously the raw payload was sent, leaving the
+  server's `req.Payload` empty, so invoked functions received only
+  `__volcano_auth` and never the caller's fields.
+
+## [1.3.0] - 2026-07-13
+
+### Added
+
+- `auth.signUp({ signInWhenAllowed: true })` opt-in: when the project does not
+  require email confirmation, the SDK runs the follow-up `signIn` for you so the
+  response carries a live `user`/`session`. Off by default.
 - `databaseConnectionString(baseConnectionString, { userId })` for connecting to
   a Volcano database from inside a function. The target database is identified by
   the globally-unique username already baked into the advertised `DATABASE_URL`,
@@ -40,6 +97,11 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ### Changed
 
+- **Session-less signup (VOL-309).** `auth.signUp()` now returns
+  `{ user: null, session: null, confirmationRequired, message, error }` and no
+  longer issues or persists a session by default — obtain a session via a separate
+  `signIn` (or the new `signInWhenAllowed` option). The response is uniform for a
+  new and an already-registered email, so it cannot be used to enumerate accounts.
 - Require Node.js 20 or newer for package installation and repository tooling.
 - Prepare package metadata and license files for public npm and GitHub distribution.
 - Bundle realtime runtime dependencies (`centrifuge` and `ws`) with the SDK package.

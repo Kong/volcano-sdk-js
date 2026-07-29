@@ -1,3 +1,24 @@
+// UMD (browser <script>) only. rollup's named UMD sets the global
+// `VolcanoAuth` to the export namespace ({ VolcanoAuth, QueryBuilder, ... });
+// restore the documented `new VolcanoAuth()` CDN ergonomic by making the
+// global the class itself, with the other named exports kept as their own
+// globals — matching the old hand-rolled browser block. Scoped to this one
+// output via `footer` so the ES build (dist/index.esm.mjs) stays a pure,
+// side-effect-free module and can't clobber a CJS bundle that inlines it
+// (VOL-505). No-op under CommonJS require (the UMD CJS branch never assigns
+// the global), so it never affects `require('@volcano.dev/sdk')`.
+const umdBrowserGlobalFooter = `;(function () {
+  var g = typeof globalThis !== 'undefined' ? globalThis : (typeof self !== 'undefined' ? self : null);
+  if (!g || !g.VolcanoAuth || !g.VolcanoAuth.VolcanoAuth) return;
+  var ns = g.VolcanoAuth;
+  g.VolcanoAuth = ns.VolcanoAuth;
+  g.QueryBuilder = ns.QueryBuilder;
+  g.StorageFileApi = ns.StorageFileApi;
+  g.isBrowser = ns.isBrowser;
+  g.loadRealtime = ns.loadRealtime;
+  g.databaseConnectionString = ns.databaseConnectionString;
+})();`;
+
 export default [
   // Main SDK bundle
   {
@@ -10,6 +31,7 @@ export default [
         name: 'VolcanoAuth',
         exports: 'named',
         inlineDynamicImports: true,
+        footer: umdBrowserGlobalFooter,
       },
       {
         file: 'dist/index.esm.mjs',

@@ -1,4 +1,7 @@
-# Database
+---
+title: 'Database'
+description: 'Volcano lets you query your PostgreSQL database directly from the browser using a fluent query builder.'
+---
 
 Volcano lets you query your PostgreSQL database directly from the browser using a fluent query builder. Combined with Row-Level Security (RLS), this provides a secure and powerful way to build data-driven applications without writing backend code.
 

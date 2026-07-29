@@ -4,6 +4,8 @@ import { dirname, extname } from 'node:path';
 const declarationFiles = [
   ['src/index.d.ts', 'dist/index.d.ts'],
   ['src/index.d.ts', 'dist/index.esm.d.mts', toEsmDeclaration],
+  ['src/generated/openapi.d.ts', 'dist/generated/openapi.d.ts'],
+  ['src/generated/openapi.d.ts', 'dist/generated/openapi.esm.d.mts', toEsmDeclaration],
   ['src/realtime.d.ts', 'dist/realtime.d.ts'],
   ['src/realtime.d.ts', 'dist/realtime.esm.d.mts', toEsmDeclaration],
   ['src/next/middleware.d.ts', 'dist/next/middleware.d.ts'],

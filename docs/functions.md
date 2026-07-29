@@ -1,4 +1,7 @@
-# Functions
+---
+title: 'Functions'
+description: "Volcano Functions run serverless backend logic that can't happen in the browser, like complex database queries or third-party API calls."
+---
 
 Volcano Functions are serverless functions that run your custom backend logic. They're perfect for operations that can't be done from the browser, like complex database queries, third-party API integrations, or secure operations.
 
@@ -265,7 +268,9 @@ const { data, error } = await volcano.functions.invoke('process-payment', {
 });
 
 if (error) {
-  // Network error or function threw
+  // Platform-layer failure — the invocation never reached your function
+  // (deploy down/failed, gateway error, or a network failure). These are a
+  // `VolcanoSystemError`; detect with `error.isSystemError === true`.
   console.error('Function error:', error.message);
   showErrorToast('Payment failed. Please try again.');
   return;

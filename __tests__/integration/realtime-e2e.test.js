@@ -23,7 +23,7 @@ try {
   // dotenv not installed, use environment variables directly
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const WebSocket = require('ws');
 
@@ -212,6 +212,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     const signUpResult = await volcano.auth.signUp({
       email,
       password,
+      signInWhenAllowed: true,
     });
 
     if (signUpResult.error) {

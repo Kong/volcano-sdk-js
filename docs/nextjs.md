@@ -1,4 +1,7 @@
-# Next.js Integration
+---
+title: 'Next.js Integration'
+description: 'This guide covers how to use the Volcano SDK effectively in Next.js applications, including App Router, Pages Router, Server Components, and Middleware.'
+---
 
 This guide covers how to use the Volcano SDK effectively in Next.js applications, including App Router, Pages Router, Server Components, and Middleware.
 
@@ -111,7 +114,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string) => {
     const volcano = getVolcano();
-    const { error } = await volcano.auth.signUp({ email, password });
+    // Sign up is session-less; sign in immediately when the project allows it so
+    // the provider's `user` is populated. When confirmation is required this is a
+    // no-op and the user must confirm their email before signing in.
+    const { error } = await volcano.auth.signUp({ email, password, signInWhenAllowed: true });
     if (error) throw error;
   }, []);
 

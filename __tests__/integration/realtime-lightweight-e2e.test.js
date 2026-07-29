@@ -317,7 +317,7 @@ describe('Realtime Lightweight E2E (Unit Mock)', () => {
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
 const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 
 // Helper to make management API calls
 async function mgmtFetch(path, options = {}) {
@@ -509,6 +509,7 @@ describe('Realtime Lightweight E2E (Live Server)', () => {
     const signUpResult = await volcano.auth.signUp({
       email,
       password,
+      signInWhenAllowed: true,
     });
 
     if (signUpResult.error) {

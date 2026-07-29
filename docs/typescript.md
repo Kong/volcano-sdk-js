@@ -1,4 +1,7 @@
-# TypeScript
+---
+title: 'TypeScript'
+description: 'The Volcano SDK includes comprehensive TypeScript definitions for type-safe development. This guide covers type usage, generics, and best practices.'
+---
 
 The Volcano SDK includes comprehensive TypeScript definitions for type-safe development. This guide covers type usage, generics, and best practices.
 
@@ -367,6 +370,20 @@ if (data) {
 }
 ```
 
+A platform-layer invocation failure is a `VolcanoSystemError` (exported from
+`@volcano.dev/sdk`). Narrow with the `VolcanoSystemError.is()` type guard — it
+gives full type narrowing without a cast and holds across duplicate SDK copies
+in a bundle:
+
+```typescript
+import { VolcanoSystemError } from '@volcano.dev/sdk';
+
+if (error && VolcanoSystemError.is(error)) {
+  // deploy down/failed, gateway error, or network failure — infra, retryable
+  console.error(error.status, error.message); // `status` is typed here
+}
+```
+
 ## OAuth Types
 
 ```typescript
@@ -490,7 +507,7 @@ Type for user metadata:
 type UserMetadata = Record<string, JsonValue>;
 
 // Usage
-const { user } = await volcano.auth.signUp({
+await volcano.auth.signUp({
   email: 'user@example.com',
   password: 'password',
   metadata: {

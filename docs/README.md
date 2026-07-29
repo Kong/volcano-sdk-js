@@ -1,4 +1,7 @@
-# Volcano SDK Documentation
+---
+title: 'Volcano SDK Documentation'
+description: "Welcome to the Volcano SDK documentation. This guide will help you integrate Volcano's backend services into your JavaScript and TypeScript applications."
+---
 
 Welcome to the Volcano SDK documentation. This guide will help you integrate Volcano's backend services into your JavaScript and TypeScript applications.
 
@@ -24,6 +27,7 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 | [Storage](./storage.md)                 | Upload, download, and manage files                            |
 | [Realtime](./realtime.md)               | WebSocket subscriptions, presence, and broadcast              |
 | [Functions](./functions.md)             | Invoke serverless functions                                   |
+| [Project locks](./locks.md)             | Leases that keep one holder at a time on backend work         |
 | [Next.js Integration](./nextjs.md)      | Server components, middleware, and SSR considerations         |
 | [TypeScript](./typescript.md)           | Type definitions and best practices                           |
 | [Error Handling](./error-handling.md)   | Error patterns and troubleshooting                            |
@@ -83,4 +87,4 @@ Realtime support is included with the SDK and is available from
 
 ## License
 
-Apache License 2.0 - see [LICENSE](../LICENSE) for details.
+Apache License 2.0 - see [LICENSE](https://github.com/Kong/volcano-sdk-js/blob/main/LICENSE) for details.

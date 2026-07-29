@@ -29,7 +29,7 @@ try {
   // dotenv not installed
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
@@ -356,6 +356,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     const aliceSignUp = await volcano.auth.signUp({
       email: `alice-rt-${timestamp}@example.com`,
       password,
+      signInWhenAllowed: true,
     });
     if (aliceSignUp.error) throw new Error(`Failed to create Alice: ${aliceSignUp.error.message}`);
     userAlice = aliceSignUp.user;
@@ -365,6 +366,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     const bobSignUp = await volcano.auth.signUp({
       email: `bob-rt-${timestamp}@example.com`,
       password,
+      signInWhenAllowed: true,
     });
     if (bobSignUp.error) throw new Error(`Failed to create Bob: ${bobSignUp.error.message}`);
     userBob = bobSignUp.user;
@@ -1014,11 +1016,13 @@ describe('Realtime Capabilities E2E Tests', () => {
         VALUES ('${userAlice.id}', 'Alice Test Note', 'This is Alice private note');
       `);
 
-      // Wait for change event (may or may not arrive depending on trigger setup)
-      await new Promise((r) => setTimeout(r, 2000));
+      // Wait for the change event to be delivered via the per-user postgres channel.
+      await waitFor(() => changes.length > 0, 5000);
 
-      // The test passes if we successfully subscribed and inserted
-      expect(channel._subscription).not.toBeNull();
+      // Alice must actually RECEIVE her own insert (VOL-522: the SDK previously
+      // dropped per-user postgres channel publications, so this never fired).
+      expect(changes.length).toBeGreaterThan(0);
+      expect(changes[0].eventType || changes[0].type).toBe('INSERT');
 
       channel.unsubscribe();
     });
@@ -1283,6 +1287,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const signUpResult = await otherVolcano.auth.signUp({
         email: `isolation-test-${timestamp}@example.com`,
         password: 'TestPassword123!',
+        signInWhenAllowed: true,
       });
 
       if (signUpResult.error) {

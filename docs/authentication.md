@@ -1,4 +1,7 @@
-# Authentication
+---
+title: 'Authentication'
+description: 'Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features.'
+---
 
 Volcano provides a complete authentication system with multiple sign-in methods, session management, and security features. This guide covers everything you need to implement user authentication in your application.
 
@@ -20,7 +23,7 @@ All authentication methods work with the same session system and integrate seaml
 Create a new user account with email and password:
 
 ```javascript
-const { user, session, error } = await volcano.auth.signUp({
+const { confirmationRequired, message, error } = await volcano.auth.signUp({
   email: 'alice@example.com',
   password: 'secure-password-123',
   metadata: {
@@ -41,11 +44,27 @@ if (error) {
   return;
 }
 
-console.log('Welcome,', user.email);
-console.log('User ID:', user.id);
+// Sign up is session-less: it returns no user and no session, and the response is
+// deliberately identical whether or not the email was already registered. The
+// account is created; obtain a session with a separate `signIn`.
+if (confirmationRequired) {
+  console.log(message ?? 'Check your email to confirm your account, then sign in.');
+} else {
+  await volcano.auth.signIn({ email: 'alice@example.com', password: 'secure-password-123' });
+}
 ```
 
-The `metadata` field is optional and lets you store additional user information like display names, profile pictures, or preferences. This data is stored securely and accessible via `user.user_metadata`.
+The `metadata` field is optional and lets you store additional user information like display names, profile pictures, or preferences. This data is stored securely and accessible via `user.user_metadata` once the user is signed in.
+
+If your project does not require email confirmation and you want the user signed in immediately, pass `signInWhenAllowed: true`. When confirmation is not required, the SDK then performs the follow-up `signIn` for you and the response carries a live `user`/`session`:
+
+```javascript
+const { user, session, error } = await volcano.auth.signUp({
+  email: 'alice@example.com',
+  password: 'secure-password-123',
+  signInWhenAllowed: true,
+});
+```
 
 ### Sign In
 
@@ -188,7 +207,7 @@ volcano.auth.signInWithHostedAuth(); // or { action: 'signup' }
 
 After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
 
-```
+```text
 https://your-app.com/callback#access_token=...&refresh_token=...&token_type=bearer&expires_in=...&state=<nonce>
 ```
 

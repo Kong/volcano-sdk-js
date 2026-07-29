@@ -2,6 +2,12 @@
  * Volcano Auth SDK Type Definitions
  */
 
+export type {
+  components as OpenAPIComponents,
+  operations as OpenAPIOperations,
+  paths as OpenAPIPaths,
+} from './generated/openapi';
+
 export interface VolcanoAuthConfig {
   /**
    * Your Volcano API base URL.
@@ -60,6 +66,16 @@ export interface SignUpOptions {
   email: string;
   password: string;
   metadata?: UserMetadata;
+  /**
+   * Opt-in: when the project does not require email confirmation
+   * (`confirmationRequired === false`), perform a follow-up {@link VolcanoAuth.signIn}
+   * with the same credentials so the returned {@link SignUpResponse} carries a live
+   * `user`/`session`. Defaults to `false`, matching the server's session-less signup
+   * contract. When confirmation is required this flag has no effect. If the follow-up
+   * sign-in fails, `error` is populated and `user`/`session` remain `null` (the
+   * account is still created).
+   */
+  signInWhenAllowed?: boolean;
 }
 
 export interface SignInOptions {
@@ -116,6 +132,21 @@ export interface OAuthAPIParams {
 export interface AuthResponse {
   user: User | null;
   session: Session | null;
+  error: Error | null;
+}
+
+/**
+ * Session-less signup response (VOL-309). The server returns a uniform
+ * acknowledgement with no user and no session tokens, so `user`/`session` are
+ * always null on success; obtain a session via a separate {@link VolcanoAuth.signIn}.
+ * `message` is the server's acknowledgement and `confirmationRequired` reflects
+ * the project's auth config.
+ */
+export interface SignUpResponse {
+  user: User | null;
+  session: Session | null;
+  confirmationRequired: boolean;
+  message: string | null;
   error: Error | null;
 }
 
@@ -182,7 +213,7 @@ export type AuthStateCallback = (user: User | null) => void;
 
 export interface Auth {
   /** Sign up a new user */
-  signUp(options: SignUpOptions): Promise<AuthResponse>;
+  signUp(options: SignUpOptions): Promise<SignUpResponse>;
   /** Sign in existing user */
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Sign out current user */
@@ -327,8 +358,151 @@ export interface Functions {
     status: number | null;
     headers: Record<string, string>;
     version: string | null;
+    /**
+     * A platform-layer invocation failure (the deploy is failed/provisioning,
+     * the gateway is down, or the network call failed) is a
+     * {@link VolcanoSystemError} — detect it via `error.isSystemError`. A
+     * function's own non-2xx response is not an error here; it comes back as
+     * `data` with `error` null. (Union stays `Error` because
+     * `VolcanoSystemError extends Error`; narrow at runtime, not by type.)
+     */
     error: Error | null;
   }>;
+}
+
+/**
+ * Error raised when a function invocation fails at the platform layer rather
+ * than inside the invoked function's own code. Detect with
+ * `VolcanoSystemError.is(error)` (or `error?.isSystemError === true`) — prefer
+ * either over `instanceof`, which can be `false` across duplicate SDK copies in
+ * a bundle. Not raised for pre-flight / name-resolution failures (bad name, no
+ * session, misconfigured apiUrl, function-not-found), which stay plain `Error`s.
+ */
+export class VolcanoSystemError extends Error {
+  readonly name: 'VolcanoSystemError';
+  readonly isSystemError: true;
+  /** HTTP status of the blocked invocation, or null for transport failures. */
+  readonly status: number | null;
+  /** Underlying error for transport failures (network/timeout); undefined otherwise. */
+  readonly cause?: unknown;
+  constructor(message: string, options?: { status?: number | null; cause?: unknown });
+  /**
+   * Type guard for platform-layer invocation failures. Prefer over `instanceof`
+   * (holds across duplicate SDK copies in a bundle).
+   */
+  static is(err: unknown): err is VolcanoSystemError;
+}
+
+// ============================================================================
+// Logs Types
+// ============================================================================
+
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type LogResourceType = 'function' | 'frontend' | 'database';
+
+export interface LogDeploymentSelector {
+  ids?: string[];
+}
+
+export type LogRequestResource =
+  | {
+      type: 'function';
+      ids?: string[];
+      deployments?: LogDeploymentSelector;
+    }
+  | {
+      type: 'frontend';
+      ids?: string[];
+      deployments?: LogDeploymentSelector;
+    }
+  | {
+      type: 'database';
+      ids?: string[];
+    };
+
+export interface LogSearchRequest {
+  resource: LogRequestResource;
+  q?: string;
+  levels?: LogLevel[];
+  regions?: string[];
+  start_time?: string;
+  end_time?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface LogActivityRequest {
+  resource: LogRequestResource;
+  q?: string;
+  levels?: LogLevel[];
+  regions?: string[];
+  start_time?: string;
+  end_time?: string;
+  bucket_count?: number;
+}
+
+export interface LogResource {
+  type: LogResourceType;
+  id: string;
+  name?: string;
+}
+
+export interface LogDeployment {
+  id: string;
+  stage?: string;
+}
+
+export interface LogSearchEvent {
+  id: string;
+  timestamp: string;
+  level?: LogLevel;
+  /**
+   * Application log value. JSON arguments keep their JSON type, so a structured
+   * log arrives as an object or array rather than a serialized string.
+   */
+  body: JsonValue;
+  region?: string;
+  resource: LogResource;
+  deployment?: LogDeployment;
+  invocation_id?: string;
+}
+
+export interface LogSearchResponse {
+  data: LogSearchEvent[];
+  limit: number;
+  has_more: boolean;
+  next_cursor?: string;
+}
+
+export interface LogActivityBucket {
+  start_time: string;
+  end_time: string;
+  counts: {
+    levels: Record<string, number>;
+    regions: Record<string, number>;
+    resource_ids: Record<string, number>;
+  };
+  total: number;
+}
+
+export interface LogActivityResponse {
+  data: LogActivityBucket[];
+  total: number;
+}
+
+export interface LogsResponse<T> {
+  data: T | null;
+  error: Error | null;
+}
+
+export interface Logs {
+  /** Search project logs. Time fields must be ISO 8601/RFC3339 date-time strings. */
+  search(projectId: string, request: LogSearchRequest): Promise<LogsResponse<LogSearchResponse>>;
+  /** Fetch bucketed project log activity. Time fields must be ISO 8601/RFC3339 date-time strings. */
+  activity(
+    projectId: string,
+    request: LogActivityRequest,
+  ): Promise<LogsResponse<LogActivityResponse>>;
 }
 
 // ============================================================================
@@ -653,13 +827,26 @@ export interface ProjectLockLease {
   key: string;
   token: string;
   expiresAt: string | null;
+  /**
+   * Rises whenever the lock changes hands and stays put across renewals. Pass it
+   * to the resource you are protecting and reject writes carrying a lower token
+   * than the highest already seen.
+   */
+  fencingToken: number | null;
 }
 
-export interface ProjectLockOptions {
+export interface ProjectLockRequestOptions {
+  /**
+   * UUID recorded alongside the server's log line for this call. Reusing one
+   * marks a retry as the same logical operation; it never deduplicates, so the
+   * retry still spends the project's request budget.
+   */
+  requestId?: string;
+}
+
+export interface ProjectLockOptions extends ProjectLockRequestOptions {
   /** Lease duration in seconds, from 5 through 7,776,000 (90 days). */
   ttl: number;
-  /** Reuse only to retry the same ambiguous HTTP operation. */
-  requestId?: string;
 }
 
 export interface ProjectLockAcquireOptions extends ProjectLockOptions {
@@ -667,9 +854,11 @@ export interface ProjectLockAcquireOptions extends ProjectLockOptions {
   token?: string;
 }
 
-export interface ProjectLockReleaseOptions {
-  /** Reuse only to retry the same ambiguous release operation. */
-  requestId?: string;
+export interface ProjectLockState {
+  /** False means an acquire would succeed now. */
+  held: boolean;
+  expiresAt: string | null;
+  fencingToken: number | null;
 }
 
 export interface ProjectLockAcquireResult {
@@ -700,7 +889,16 @@ export interface ProjectLocks {
   release(
     key: string,
     lease: ProjectLockLease,
-    options?: ProjectLockReleaseOptions,
+    options?: ProjectLockRequestOptions,
+  ): Promise<{ error: ProjectLockError | null }>;
+  get(
+    key: string,
+    options?: ProjectLockRequestOptions,
+  ): Promise<{ state: ProjectLockState | null; error: ProjectLockError | null }>;
+  /** Drops the lease whatever token holds it. Safe only behind a fencing token. */
+  forceRelease(
+    key: string,
+    options?: ProjectLockRequestOptions,
   ): Promise<{ error: ProjectLockError | null }>;
   withLock<T>(
     key: string,
@@ -717,6 +915,9 @@ export class VolcanoAuth {
 
   /** Function invocation methods */
   functions: Functions;
+
+  /** Project log methods */
+  logs: Logs;
 
   /** Storage methods */
   storage: Storage;

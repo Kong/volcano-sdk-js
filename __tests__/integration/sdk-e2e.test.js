@@ -9,7 +9,7 @@
  * - For OAuth tests: mock OAuth server running
  */
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 
 // Configuration
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
@@ -297,6 +297,7 @@ describe('SDK E2E Integration Tests', () => {
         email: testEmail,
         password: testPassword,
         metadata: { source: 'sdk-e2e-test' },
+        signInWhenAllowed: true,
       });
 
       expect(result.user).toBeDefined();
@@ -440,6 +441,7 @@ describe('SDK E2E Integration Tests', () => {
         email,
         password,
         metadata: { name: 'Standard Bootstrap' },
+        signInWhenAllowed: true,
       });
       expect(signup.session).toBeDefined();
       expect(signup.session.access_token).toBeTruthy();
@@ -466,7 +468,7 @@ describe('SDK E2E Integration Tests', () => {
           projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
-        const signup = await first.auth.signUp({ email, password });
+        const signup = await first.auth.signUp({ email, password, signInWhenAllowed: true });
         expect(signup.session.access_token).toBeTruthy();
         expect(browser.store['volcano_access_token']).toBeTruthy();
 
@@ -958,6 +960,7 @@ describe('SDK E2E Integration Tests', () => {
       await freshVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
 
       // Sign out so we can test resend
@@ -1002,6 +1005,7 @@ describe('SDK E2E Integration Tests', () => {
       await freshVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
       await freshVolcano.auth.signOut();
 
@@ -1046,6 +1050,7 @@ describe('SDK E2E Integration Tests', () => {
       await emailChangeVolcano.auth.signUp({
         email: `email-change-${Date.now()}@example.com`,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
     });
 
@@ -1094,6 +1099,7 @@ describe('SDK E2E Integration Tests', () => {
       const result = await sessionVolcano.auth.signUp({
         email,
         password: 'SessionP@ss123!',
+        signInWhenAllowed: true,
       });
 
       expect(result.user).toBeDefined();
@@ -1228,13 +1234,21 @@ describe('SDK E2E Integration Tests', () => {
 
       // Sign up Alice and create multiple sessions
       const aliceEmail = `alice-isolation-${Date.now()}@example.com`;
-      await aliceVolcano.auth.signUp({ email: aliceEmail, password: 'AliceP@ss123!' });
+      await aliceVolcano.auth.signUp({
+        email: aliceEmail,
+        password: 'AliceP@ss123!',
+        signInWhenAllowed: true,
+      });
       await aliceVolcano.auth.signIn({ email: aliceEmail, password: 'AliceP@ss123!' });
       await aliceVolcano.auth.signIn({ email: aliceEmail, password: 'AliceP@ss123!' });
 
       // Sign up Bob
       const bobEmail = `bob-isolation-${Date.now()}@example.com`;
-      await bobVolcano.auth.signUp({ email: bobEmail, password: 'BobP@ss123!' });
+      await bobVolcano.auth.signUp({
+        email: bobEmail,
+        password: 'BobP@ss123!',
+        signInWhenAllowed: true,
+      });
 
       // Get each user's sessions
       const aliceSessions = await aliceVolcano.auth.getSessions();
@@ -1269,7 +1283,11 @@ describe('SDK E2E Integration Tests', () => {
 
       // Create victim with a session
       const victimEmail = `victim-${Date.now()}@example.com`;
-      await victimVolcano.auth.signUp({ email: victimEmail, password: 'VictimP@ss123!' });
+      await victimVolcano.auth.signUp({
+        email: victimEmail,
+        password: 'VictimP@ss123!',
+        signInWhenAllowed: true,
+      });
 
       // Get victim's session ID
       const victimSessions = await victimVolcano.auth.getSessions();
@@ -1278,7 +1296,11 @@ describe('SDK E2E Integration Tests', () => {
 
       // Create attacker
       const attackerEmail = `attacker-${Date.now()}@example.com`;
-      await attackerVolcano.auth.signUp({ email: attackerEmail, password: 'AttackP@ss123!' });
+      await attackerVolcano.auth.signUp({
+        email: attackerEmail,
+        password: 'AttackP@ss123!',
+        signInWhenAllowed: true,
+      });
 
       // Attacker tries to delete victim's session
       const deleteResult = await attackerVolcano.auth.deleteSession(victimSessionId);
@@ -1306,6 +1328,7 @@ describe('SDK E2E Integration Tests', () => {
       await testVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
 
       // Verify tokens are set
@@ -1350,6 +1373,7 @@ describe('SDK E2E Integration Tests', () => {
       const signUpResult = await testVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
 
       // Verify tokens are set
@@ -1424,6 +1448,7 @@ describe('SDK E2E Integration Tests', () => {
       await oauthVolcano.auth.signUp({
         email: `oauth-test-${Date.now()}@example.com`,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
     });
 
@@ -1536,6 +1561,7 @@ describe('SDK E2E Integration Tests', () => {
       await funcVolcano.auth.signUp({
         email: testEmail,
         password: testPassword,
+        signInWhenAllowed: true,
       });
 
       expect(funcVolcano.accessToken).toBeDefined();
@@ -1558,6 +1584,7 @@ describe('SDK E2E Integration Tests', () => {
       await cacheVolcano.auth.signUp({
         email: `invoke-cache-miss-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
       });
 
       const missingName = `missing-${Date.now()}`;
@@ -1596,6 +1623,7 @@ describe('SDK E2E Integration Tests', () => {
       await instanceA.auth.signUp({
         email: `invoke-shared-a-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
       });
 
       const instanceB = new VolcanoAuth({
@@ -1688,6 +1716,7 @@ describe('SDK E2E Integration Tests', () => {
       await sdkA.auth.signUp({
         email: `invoke-project-a-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
       });
 
       const sdkB = new VolcanoAuth({
@@ -1698,6 +1727,7 @@ describe('SDK E2E Integration Tests', () => {
       await sdkB.auth.signUp({
         email: `invoke-project-b-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
       });
 
       let resolveCalls = 0;
@@ -1747,6 +1777,7 @@ describe('SDK E2E Integration Tests', () => {
       await retryVolcano.auth.signUp({
         email: `invoke-retry-${Date.now()}@example.com`,
         password: 'SecureP@ssw0rd123!',
+        signInWhenAllowed: true,
       });
 
       let resolveCalls = 0;
@@ -1839,6 +1870,7 @@ describe('SDK E2E Integration Tests', () => {
       await dbVolcano.auth.signUp({
         email: `db-user-${Date.now()}@example.com`,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
 
       dbVolcano.database(database.name);
@@ -1971,6 +2003,7 @@ describe('SDK E2E Integration Tests', () => {
       await freshVolcano.auth.signUp({
         email: `db-test-${Date.now()}@example.com`,
         password: 'TestP@ss123!',
+        signInWhenAllowed: true,
       });
 
       // No database set

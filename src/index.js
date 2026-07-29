@@ -70,6 +70,10 @@ const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
+// Both codes mean the lock is unavailable right now rather than that the request
+// failed: another live holder, or this caller's own lapsed lease still inside
+// the takeover grace window.
+const LOCK_CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
 
 // ============================================================================
 // Utility Functions
@@ -207,6 +211,50 @@ function getHeaderValue(response, headerName) {
   }
   return null;
 }
+
+/**
+ * Error raised when a function *invocation* fails at the platform layer rather
+ * than inside the function's own code — the call reached (or tried to reach)
+ * the invocation gateway but was never served: the deploy is failed/provisioning,
+ * the gateway is unavailable (a non-2xx response with no `x-volcano-version`
+ * header), or the network call itself failed (timeout/DNS/offline).
+ *
+ * Detect it with `VolcanoSystemError.is(error)` (or `error?.isSystemError ===
+ * true`). Prefer either over `error instanceof VolcanoSystemError`, which can be
+ * `false` when an app bundles more than one copy of the SDK (class identities
+ * differ). `.status` is the blocked HTTP status, or `null` for transport
+ * failures.
+ *
+ * NOT a system error, and therefore a plain `Error` (or not an error at all):
+ * a running function's own non-2xx response (surfaced as `data` with `error`
+ * null), and pre-flight / name-resolution failures — invalid function name,
+ * no active session, misconfigured `apiUrl`, function-not-found — which stay
+ * plain `Error`s since they are caller/config issues, not platform outages.
+ */
+class VolcanoSystemError extends Error {
+  constructor(message, options = {}) {
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
+    // Non-enumerable (like native Error's own props) so `JSON.stringify(err)`
+    // stays `{}` and consumer log/redaction/snapshot pipelines don't suddenly
+    // see new keys. Still read normally: `err.isSystemError`, `err.status`.
+    Object.defineProperty(this, 'isSystemError', { value: true });
+    Object.defineProperty(this, 'status', { value: options.status ?? null });
+  }
+
+  /**
+   * Type guard: true when `err` is a platform-layer invocation failure. Prefer
+   * this over `instanceof` — it duck-types on the `isSystemError` brand, so it
+   * holds across duplicate SDK copies in a bundle.
+   * @param {unknown} err
+   * @returns {boolean}
+   */
+  static is(err) {
+    return Boolean(err) && err.isSystemError === true;
+  }
+}
+// `name` on the prototype (non-enumerable, inherited) matches native Error and
+// keeps it out of JSON.stringify output.
+VolcanoSystemError.prototype.name = 'VolcanoSystemError';
 
 /**
  * Decode a base64url string to UTF-8 (JWT-safe, Node/browser compatible)
@@ -483,7 +531,7 @@ class ProjectLocksApi {
     const ttl = validateLockOptions(key, options);
     const token = options.token || crypto.randomUUID();
     const requestId = options.requestId || crypto.randomUUID();
-    const lease = { key, token, expiresAt: null };
+    const lease = { key, token, expiresAt: null, fencingToken: null };
     let result;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
@@ -500,9 +548,10 @@ class ProjectLocksApi {
     }
     if (result.ok) {
       lease.expiresAt = result.data.expires_at;
+      lease.fencingToken = result.data.fencing_token ?? null;
       return { acquired: true, lease, error: null };
     }
-    if (result.status === 409 && result.data?.code === 'lock_held') {
+    if (result.status === 409 && LOCK_CONTENTION_CODES.has(result.data?.code)) {
       return { acquired: false, lease: null, error: null };
     }
     return { acquired: false, lease, error: result.error };
@@ -523,6 +572,7 @@ class ProjectLocksApi {
       return { lease, error: result.error };
     }
     lease.expiresAt = result.data.expires_at;
+    lease.fencingToken = result.data.fencing_token ?? lease.fencingToken;
     return { lease, error: null };
   }
 
@@ -535,6 +585,34 @@ class ProjectLocksApi {
         'X-Volcano-Lock-Token': lease.token,
         'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
       },
+    });
+    return { error: result.ok ? null : result.error };
+  }
+
+  async get(key, options = {}) {
+    validateLockKey(key);
+    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}`, {
+      method: 'GET',
+      headers: { 'X-Volcano-Request-Id': options.requestId || crypto.randomUUID() },
+    });
+    if (!result.ok) {
+      return { state: null, error: result.error };
+    }
+    return {
+      state: {
+        held: result.data.held === true,
+        expiresAt: result.data.expires_at ?? null,
+        fencingToken: result.data.fencing_token ?? null,
+      },
+      error: null,
+    };
+  }
+
+  async forceRelease(key, options = {}) {
+    validateLockKey(key);
+    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: { 'X-Volcano-Request-Id': options.requestId || crypto.randomUUID() },
     });
     return { error: result.ok ? null : result.error };
   }
@@ -737,11 +815,48 @@ class VolcanoAuth {
       invoke: this.invokeFunction.bind(this),
     };
 
+    this.logs = {
+      search: this.searchLogs.bind(this),
+      activity: this.getLogActivity.bind(this),
+    };
+
     this.storage = {
       from: this.storageBucket.bind(this),
     };
 
     this.locks = new ProjectLocksApi(this);
+  }
+
+  // ========================================================================
+  // Logs Methods
+  // ========================================================================
+
+  async _postProjectLogRequest(projectId, endpoint, request) {
+    if (typeof projectId !== 'string' || projectId.trim() === '') {
+      return { data: null, error: new Error('projectId must be a non-empty string') };
+    }
+
+    const result = await this._authFetch(
+      `/projects/${encodeURIComponent(projectId)}/logs/${endpoint}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(request || {}),
+      },
+    );
+
+    if (!result.ok) {
+      return { data: null, error: result.error };
+    }
+
+    return { data: result.data, error: null };
+  }
+
+  searchLogs(projectId, request) {
+    return this._postProjectLogRequest(projectId, 'search', request);
+  }
+
+  getLogActivity(projectId, request) {
+    return this._postProjectLogRequest(projectId, 'activity', request);
   }
 
   // ========================================================================
@@ -995,24 +1110,50 @@ class VolcanoAuth {
   // Authentication Methods
   // ========================================================================
 
-  async signUp({ email, password, metadata = {} }) {
+  async signUp({ email, password, metadata = {}, signInWhenAllowed = false }) {
     const result = await this._anonFetch('/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ email, password, user_metadata: metadata }),
     });
 
     if (!result.ok) {
-      return { user: null, session: null, error: result.error };
+      return {
+        user: null,
+        session: null,
+        confirmationRequired: false,
+        message: null,
+        error: result.error,
+      };
     }
 
-    this._setSession(result.data);
+    // Session-less signup (VOL-309): the server returns a uniform acknowledgement
+    // with no user object and no session tokens — identical for a new account and
+    // an already-registered email, so it cannot be used to enumerate addresses.
+    const confirmationRequired = Boolean(result.data?.confirmation_required);
+    const message = result.data?.message ?? null;
+
+    // Opt-in convenience: when the project does not require email confirmation the
+    // account is usable immediately, so establish a session with a follow-up signIn
+    // using the same credentials. Off by default so signUp mirrors the server's
+    // session-less contract unless the caller asks for auto sign-in. If the follow-up
+    // signIn fails, its error is surfaced while the account still exists server-side.
+    if (signInWhenAllowed && !confirmationRequired) {
+      const signInResult = await this.signIn({ email, password });
+      return {
+        user: signInResult.user,
+        session: signInResult.session,
+        confirmationRequired,
+        message,
+        error: signInResult.error,
+      };
+    }
+
+    // Default path: caller obtains a session via a separate signIn.
     return {
-      user: result.data.user,
-      session: {
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-        expires_in: result.data.expires_in,
-      },
+      user: null,
+      session: null,
+      confirmationRequired,
+      message,
       error: null,
     };
   }
@@ -1611,7 +1752,11 @@ class VolcanoAuth {
               Authorization: `Bearer ${this.accessToken}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload),
+            // Wrap in { payload } to match the invoke API contract
+            // (FunctionInvocationRequest). Sending the raw payload leaves the
+            // server's req.Payload empty, so the function only receives
+            // __volcano_auth and never the caller's fields.
+            body: JSON.stringify({ payload }),
           },
           this.timeout,
         );
@@ -1628,6 +1773,17 @@ class VolcanoAuth {
         const headers = responseHeadersToObject(response);
         const version = versionHeader || null;
 
+        // A non-2xx response with no version header never reached a running
+        // function — the platform blocked it (failed/provisioning deploy,
+        // gateway down, etc.). Surface it as a system error, distinct from a
+        // function's own error response (which comes back as `data`).
+        //
+        // This split is load-bearing on a gateway invariant: `x-volcano-version`
+        // must be set ONLY by the function runtime after dispatch (never by the
+        // gateway pre-dispatch), and must be CORS-exposed
+        // (`Access-Control-Expose-Headers: x-volcano-version`) on the invoke
+        // domain — otherwise a browser can't read it and a healthy function's
+        // own 4xx would be misread as a system error.
         if (!response.ok && !versionHeader) {
           const message =
             data && typeof data === 'object' && data.error
@@ -1638,18 +1794,24 @@ class VolcanoAuth {
             status: response.status,
             headers,
             version,
-            error: new Error(message),
+            error: new VolcanoSystemError(message, { status: response.status }),
           };
         }
 
         return { data, status: response.status, headers, version, error: null };
       } catch (error) {
+        // Transport failures (network down, timeout, DNS) are also platform-level.
         return {
           data: null,
           status: null,
           headers: {},
           version: null,
-          error: error instanceof Error ? error : new Error('Request failed'),
+          error:
+            error instanceof VolcanoSystemError
+              ? error
+              : new VolcanoSystemError(error instanceof Error ? error.message : 'Request failed', {
+                  cause: error,
+                }),
         };
       }
     };
@@ -1657,8 +1819,9 @@ class VolcanoAuth {
     let result = await invokeOnce(invokeUrl, true);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing.
-    if (!result.ok && result.status === 404) {
+    // On 404, invalidate and resolve once more before failing. (invokeOnce
+    // returns no `ok` field, so gate on status alone.)
+    if (result.status === 404) {
       this._clearFunctionResolveCache(functionName.trim());
       try {
         resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
@@ -2633,36 +2796,14 @@ async function loadRealtime() {
 // Exports
 // ============================================================================
 
-// Browser global exports
-if (typeof window !== 'undefined') {
-  window.VolcanoAuth = VolcanoAuth;
-  window.QueryBuilder = QueryBuilder;
-  window.StorageFileApi = StorageFileApi;
-  window.isBrowser = isBrowser;
-  window.loadRealtime = loadRealtime;
-  window.databaseConnectionString = databaseConnectionString;
-}
-
-// CommonJS exports
-if (typeof module !== 'undefined' && module.exports !== undefined) {
-  module.exports = VolcanoAuth;
-  module.exports.VolcanoAuth = VolcanoAuth;
-  module.exports.default = VolcanoAuth;
-  module.exports.QueryBuilder = QueryBuilder;
-  module.exports.StorageFileApi = StorageFileApi;
-  module.exports.isBrowser = isBrowser;
-  module.exports.loadRealtime = loadRealtime;
-  module.exports.databaseConnectionString = databaseConnectionString;
-}
-
-// AMD exports
-if (typeof define === 'function' && define.amd) {
-  define([], () => {
-    return VolcanoAuth;
-  });
-}
-
-// ES Module exports (handled by rollup, but define for clarity)
+// Exports. Author these as pure ES module declarations only; rollup emits the
+// ESM, CJS, and UMD builds (see rollup.config.mjs, all `exports: 'named'`).
+// Do NOT hand-write `module.exports = ...`, `window.* = ...`, or `define(...)`
+// here: rollup passes such statements through verbatim into the ES build too,
+// and a stray top-level `module.exports = VolcanoAuth` in dist/index.esm.mjs
+// overwrites the module.exports of any CJS bundle that inlines the SDK
+// (e.g. esbuild --bundle --format=cjs), producing "handler is not a function"
+// at runtime. See VOL-505.
 export {
   databaseConnectionString,
   isBrowser,
@@ -2670,5 +2811,6 @@ export {
   QueryBuilder,
   StorageFileApi,
   VolcanoAuth,
+  VolcanoSystemError,
 };
 export default VolcanoAuth;

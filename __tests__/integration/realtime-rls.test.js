@@ -23,7 +23,7 @@ try {
   // dotenv not installed
 }
 
-const VolcanoAuth = require('../../src/index.js');
+const { VolcanoAuth } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 const { randomUUID } = require('node:crypto');
 
@@ -277,13 +277,21 @@ describe('Realtime RLS Isolation Tests', () => {
     const bobEmail = `bob-${Date.now()}@example.com`;
     const password = 'TestPassword123!';
 
-    const aliceSignUp = await volcano.auth.signUp({ email: aliceEmail, password });
+    const aliceSignUp = await volcano.auth.signUp({
+      email: aliceEmail,
+      password,
+      signInWhenAllowed: true,
+    });
     if (aliceSignUp.error) throw new Error(`Failed to create Alice: ${aliceSignUp.error.message}`);
     userAlice = aliceSignUp.user;
     sessionAlice = aliceSignUp.session;
     console.log(`[ok] Created auth user Alice: ${userAlice.email}`);
 
-    const bobSignUp = await volcano.auth.signUp({ email: bobEmail, password });
+    const bobSignUp = await volcano.auth.signUp({
+      email: bobEmail,
+      password,
+      signInWhenAllowed: true,
+    });
     if (bobSignUp.error) throw new Error(`Failed to create Bob: ${bobSignUp.error.message}`);
     userBob = bobSignUp.user;
     sessionBob = bobSignUp.session;
