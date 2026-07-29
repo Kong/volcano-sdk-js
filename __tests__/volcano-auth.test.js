@@ -960,6 +960,37 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
+    it('refreshes a valid stored session after an OAuth provider denial', async () => {
+      window.localStorage.setItem('volcano_access_token', 'stored-access');
+      window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?error=access_denied&state=oauth-nonce');
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'refreshed-access',
+            refresh_token: 'refreshed-refresh',
+            expires_in: 3600,
+          }),
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const result = await v.auth.refreshSession();
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          session: expect.objectContaining({ access_token: 'refreshed-access' }),
+          error: null,
+        }),
+      );
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+        refresh_token: 'stored-refresh',
+      });
+      expect(v._oauthExchangeError).toBeNull();
+    });
+
     it('waits for code exchange before refreshing the resulting session', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());

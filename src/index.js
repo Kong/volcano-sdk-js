@@ -692,7 +692,8 @@ class VolcanoAuth {
 
   async _authFetchUrl(url, options = {}) {
     if (!this.accessToken) {
-      return { ok: false, status: null, error: new Error('No active session'), data: null };
+      const message = options._retried ? 'Session expired' : 'No active session';
+      return { ok: false, status: null, error: new Error(message), data: null };
     }
 
     try {
@@ -714,11 +715,8 @@ class VolcanoAuth {
       if (!response.ok) {
         // Try token refresh on 401
         if (response.status === 401 && !options._retried) {
-          const refreshed = await this.refreshSession();
-          if (!refreshed.error) {
-            return this._authFetchUrl(url, { ...options, _retried: true });
-          }
-          return { ok: false, status: response.status, error: new Error('Session expired'), data };
+          await this.refreshSession();
+          return this._authFetchUrl(url, { ...options, _retried: true });
         }
         return {
           ok: false,
@@ -1036,10 +1034,14 @@ class VolcanoAuth {
 
   async refreshSession() {
     await this._completeOAuthExchange();
-    if (this._oauthExchangeError) {
-      return { session: null, error: this._oauthExchangeError };
+    if (this._oauthExchangeError && !this.refreshToken) {
+      const error = this._oauthExchangeError;
+      this._clearSession();
+      return { session: null, error };
     }
+    this._oauthExchangeError = null;
     if (!this.refreshToken) {
+      this._clearSession();
       return { session: null, error: new Error('No refresh token') };
     }
 
@@ -1708,6 +1710,8 @@ class VolcanoAuth {
         return false;
       }
       const expectedURL = new URL(storedRedirectURL);
+      // Mutating both URLSearchParams instances normalizes equivalent browser
+      // query serialization, such as `%20` and `+`, before exact comparison.
       this._removeOAuthResponseParams(callbackURL);
       this._removeOAuthResponseParams(expectedURL);
       return callbackURL.toString() === expectedURL.toString();
@@ -1850,6 +1854,7 @@ class VolcanoAuth {
     // it back as `state`. Reject (and scrub) any fragment whose `state` does not
     // match the stored nonce — e.g. an attacker-crafted #access_token link.
     const expectedNonce = this._takeAuthState();
+    this._takeAuthRedirectURL();
     const urlState = params.get('state') || '';
     if (!expectedNonce || urlState === '' || urlState !== expectedNonce) {
       // Unsolicited or mismatched session: do not authenticate. Scrub the tokens
