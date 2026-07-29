@@ -1298,7 +1298,8 @@ class VolcanoAuth {
     // servers remove this reserved transport parameter before exact redirect
     // matching; older servers echo it in their token-fragment response.
     const transportRedirectURL = new URL(redirectURL);
-    transportRedirectURL.searchParams.set('vh_state', nonce);
+    const separator = transportRedirectURL.search ? '&' : '?';
+    transportRedirectURL.search = `${transportRedirectURL.search}${separator}vh_state=${encodeURIComponent(nonce)}`;
 
     const oauthUrl =
       `${this.apiUrl}/auth/oauth/${provider}/authorize` +

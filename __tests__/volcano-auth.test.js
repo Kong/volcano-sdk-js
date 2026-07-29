@@ -752,6 +752,18 @@ describe('VolcanoAuth', () => {
       expect(new URL(storedRedirectUrl).searchParams.get('vh_state')).toBeNull();
     });
 
+    it('preserves the registered redirect query encoding when adding transport state', () => {
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const redirectTo = 'https://app.test/auth/callback?z=hello%20world&a=%21';
+
+      const oauthUrl = v.auth.signInWithOAuth('google', { redirectTo });
+      const parsed = new URL(oauthUrl);
+      const nonce = parsed.searchParams.get('client_state');
+
+      expect(parsed.searchParams.get('redirect_url')).toBe(`${redirectTo}&vh_state=${nonce}`);
+      expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBe(redirectTo);
+    });
+
     it.each(['code', 'state', 'error', 'error_description', 'error_uri', 'iss', 'vh_state'])(
       'rejects a redirectTo containing the reserved %s query parameter',
       (key) => {
