@@ -557,7 +557,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const volcano = getVolcano();
 
-    // The SDK handles the OAuth tokens from the URL
+    // The SDK validates state, exchanges the one-time code, and cleans the URL
     volcano.initialize().then(({ user }) => {
       if (user) {
         router.push('/dashboard');
