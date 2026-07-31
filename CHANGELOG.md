@@ -4,6 +4,28 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
+  service-role-only project leases. `withLock` renews automatically, aborts its
+  callback signal after ownership loss, and releases in `finally`.
+- `lease.fencingToken` on every acquire and renew. It rises when the lock changes
+  hands and holds steady across renewals, so a guarded resource can reject a
+  write from a holder that already lost the lock — something a lease alone cannot
+  prevent.
+- `volcano.locks.get(key)` reports whether a lock is held, when its lease expires,
+  and the holder's fencing token, without needing the lock token.
+  `volcano.locks.forceRelease(key)` drops the lease whatever token holds it, for
+  recovering a lock whose holder died. Force release breaks mutual exclusion on
+  its own, so pair it with a fencing-token check on the protected resource.
+
+### Changed
+
+- Errors from failed API responses now carry `status`, the server's `code` when
+  it sends one, and `retryAfter` parsed from the `Retry-After` header. The
+  message is unchanged, so existing handling still works. Locks rely on this to
+  distinguish contention from a rate limit, and every other method benefits.
+
 ## [1.6.0] - 2026-07-28
 
 ### Changed

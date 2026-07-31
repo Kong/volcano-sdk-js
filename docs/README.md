@@ -27,6 +27,7 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 | [Storage](./storage.md)                 | Upload, download, and manage files                            |
 | [Realtime](./realtime.md)               | WebSocket subscriptions, presence, and broadcast              |
 | [Functions](./functions.md)             | Invoke serverless functions                                   |
+| [Project locks](./locks.md)             | Leases that keep one holder at a time on backend work         |
 | [Next.js Integration](./nextjs.md)      | Server components, middleware, and SSR considerations         |
 | [TypeScript](./typescript.md)           | Type definitions and best practices                           |
 | [Error Handling](./error-handling.md)   | Error patterns and troubleshooting                            |
