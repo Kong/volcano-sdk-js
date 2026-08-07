@@ -133,7 +133,17 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List all projects for authenticated user */
+    /**
+     * List all projects for authenticated user
+     * @description Returns projects that are not deleting or deleted, newest first.
+     *     Supports two mutually exclusive pagination modes. Offset mode uses
+     *     `page` and `limit`. Cursor mode uses `cursor` or `ending_before` with
+     *     `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
+     *     `offset` past the cursor anchor. Supplying `limit` without `page`
+     *     selects cursor mode. `search` applies a case-insensitive project-name
+     *     filter in either mode. Sending `page` with `cursor` or `ending_before`,
+     *     or sending both cursor directions, returns 400.
+     */
     get: operations['listProjects'];
     put?: never;
     /**
@@ -161,8 +171,10 @@ export interface paths {
     post?: never;
     /**
      * Delete a project
-     * @description Starts asynchronous project deletion. The project remains visible with `status: deleting`
-     *     until cleanup finishes, then it returns 404 and no longer appears in project lists.
+     * @description Starts asynchronous project deletion. The project remains available from
+     *     `GET /projects/{id}` with `status: deleting` until cleanup finishes, but is
+     *     removed from project lists as soon as deletion starts. After cleanup it
+     *     returns 404.
      */
     delete: operations['deleteProject'];
     options?: never;
@@ -345,6 +357,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/projects/{id}/git-deploy-settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get a project's Git auto-deploy settings */
+    get: operations['getProjectGitDeploySettings'];
+    /**
+     * Update a project's Git auto-deploy settings
+     * @description Full replace of the project's Git auto-deploy settings: what a push to
+     *     the connected repo's production branch deploys. All settings are
+     *     default-off. The frontend need not exist when the settings are saved;
+     *     frontend_name is resolved at deploy time. Independent of the repo
+     *     binding (see connectProjectGit).
+     */
+    put: operations['updateProjectGitDeploySettings'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/projects/{id}/databases/{databaseName}/queries': {
     parameters: {
       query?: never;
@@ -384,6 +421,31 @@ export interface paths {
      *     fetches.
      */
     get: operations['listProjectDeployments'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/projects/{id}/deployments/summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Summarize deployments in a project
+     * @description Summarizes deployment attempts for one comparable resource pipeline.
+     *     Success rate uses conclusive outcomes only: active and deleted attempts
+     *     are successful; failed and degraded attempts are failures; in-progress
+     *     and superseded attempts are excluded. Median build duration includes
+     *     completed, non-superseded attempts with recorded CodeBuild work,
+     *     including failed builds.
+     */
+    get: operations['summarizeProjectDeployments'];
     put?: never;
     post?: never;
     delete?: never;
@@ -455,7 +517,7 @@ export interface paths {
      *     and starts after the running deployment. Different functions and projects deploy concurrently.
      *     If a function with the same name already exists in the project, this operation updates that
      *     function's runtime, handler, and source bundle and returns `200 OK`.
-     *     Each project can contain up to 5,000 functions. Creating a new function over this cap returns 403.
+     *     Each project can contain up to 10,000 functions. Creating a new function over this cap returns 403.
      */
     post: operations['createFunction'];
     delete?: never;
@@ -813,12 +875,12 @@ export interface paths {
      *     22.x or 24.x. The Node.js runtime is inferred from
      *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
      *     The selected Node.js family must also satisfy the installed Next.js package's
-     *     `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.12 (`>=20.9.0`).
+     *     `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.0 (`>=20.9.0`).
      *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
      *     does not apply its own source archive size limit. After the final Lambda container images are
      *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
      *     This operation is limited by plan-based frontend deployment quotas (`FREE_FRONTEND_DEPLOYMENTS`, `PRO_FRONTEND_DEPLOYMENTS`).
-     *     Each project can contain up to 5,000 frontends regardless of plan.
+     *     Each project can contain up to 10,000 frontends regardless of plan.
      */
     post: operations['createFrontend'];
     delete?: never;
@@ -1358,6 +1420,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/auth/password-policy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get the effective password policy
+     * @description Returns the backend-enforced password bounds and compromised-password
+     *     screening status for the project identified by the anon key. A valid
+     *     anon key is required, but no route-specific auth permission is needed.
+     */
+    get: operations['authGetPasswordPolicy'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/auth/signup': {
     parameters: {
       query?: never;
@@ -1400,7 +1484,12 @@ export interface paths {
     put?: never;
     /**
      * Sign in an auth user
-     * @description Authenticate with email and password. Requires anon key. Project is identified via the anon key.
+     * @description Authenticate with email and password. Requires an anon key.
+     *
+     *     Set `session_mode` to `cookie` to request HttpOnly refresh-token
+     *     storage. Cookie mode is honored only for an exact, credentialed CORS
+     *     origin on the same schemeful site as this API. Otherwise the response
+     *     retains the refresh token in its body.
      */
     post: operations['authSignin'];
     delete?: never;
@@ -1420,7 +1509,13 @@ export interface paths {
     put?: never;
     /**
      * Refresh access token
-     * @description Get a new access token using refresh token. Requires anon key. Project is identified via the anon key.
+     * @description Get a new access token using a refresh token. Requires an anon key.
+     *
+     *     Send `refresh_token` in the body for the default flow. An eligible
+     *     cookie-mode browser request may instead send `session_mode: cookie`
+     *     with an empty token or omit the request body; the API reads and resets
+     *     the project's HttpOnly cookie and omits `refresh_token` from the
+     *     response.
      */
     post: operations['authRefresh'];
     delete?: never;
@@ -1440,7 +1535,11 @@ export interface paths {
     put?: never;
     /**
      * Logout (revoke refresh token)
-     * @description Invalidate a refresh token. Requires anon key. Project is identified via the anon key.
+     * @description Invalidate a refresh token. Requires an anon key.
+     *
+     *     Send `refresh_token` for the default flow. An eligible cookie-mode
+     *     browser request may instead send `session_mode: cookie` with an empty
+     *     token; logout remains idempotent when the cookie is missing or expired.
      */
     post: operations['authLogout'];
     delete?: never;
@@ -2350,6 +2449,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/auth/oauth/exchange': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Exchange OAuth authorization code
+     * @description Atomically consumes a short-lived callback code and returns the user's
+     *     session. The request must use the same project anon key and exact
+     *     redirect_url that initiated the flow.
+     */
+    post: operations['authOAuthExchange'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/auth/device/authorize': {
     parameters: {
       query?: never;
@@ -2942,6 +3063,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/locks/{key}/lease': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Acquire a project lock
+     * @description Acquires a project-scoped lease using the project embedded in the service-role key.
+     *     The caller must hold the `locks.manage` permission. Repeating the request with the
+     *     same lock token is idempotent and resets that lease to the requested TTL. A different
+     *     live owner receives `409 lock_held`; a caller whose own lease already lapsed receives
+     *     `409 lock_ownership_lost`.
+     */
+    post: operations['acquireProjectLock'];
+    /**
+     * Release a project lock
+     * @description Releases a lease only when the supplied lock token still owns it.
+     */
+    delete: operations['releaseProjectLock'];
+    options?: never;
+    head?: never;
+    /**
+     * Renew a project lock
+     * @description Renews a lease owned by the supplied lock token. The request must arrive
+     *     more than one second before `expires_at`; this safety margin prevents
+     *     clock skew between regional API instances from resurrecting an expired
+     *     lease.
+     */
+    patch: operations['renewProjectLock'];
+    trace?: never;
+  };
+  '/locks/{key}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read a project lock
+     * @description Reports whether the lock is currently held, when its lease expires, and the
+     *     holder's fencing token. `held` follows takeover eligibility rather than raw
+     *     expiry, so `held: false` means an acquire would succeed now. No lock token is
+     *     required, making this usable for monitoring and recovery.
+     */
+    get: operations['getProjectLock'];
+    put?: never;
+    post?: never;
+    /**
+     * Force release a project lock
+     * @description Drops the lease whatever token holds it, for recovering a lock whose holder
+     *     died without releasing. Use `DELETE /locks/{key}/lease` for normal release.
+     *
+     *     This breaks mutual exclusion by itself: the previous holder keeps working
+     *     until its own renewal fails. Guard the protected resource with the lease's
+     *     `fencing_token`, which the next acquisition raises, so a write from the
+     *     displaced holder can be rejected. Succeeds when the lock is already absent.
+     */
+    delete: operations['forceReleaseProjectLock'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/storage/{bucketName}/move': {
     parameters: {
       query?: never;
@@ -3054,6 +3243,7 @@ export interface paths {
     /**
      * Update file visibility (public/private)
      * @description Change whether a file is publicly accessible. Only the file owner or a service key can change visibility.
+     *     If the bucket defines UPDATE policies, the owner must also satisfy one of them.
      *
      *     - Public files can be downloaded with just an anon key (no user authentication required)
      *     - Private files (default) require authentication and must pass policy checks
@@ -3178,8 +3368,12 @@ export interface components {
        * @default 0
        */
       max_session_duration?: number;
-      /** @default 6 */
+      /**
+       * @description Configured minimum password length in Unicode characters.
+       * @default 15
+       */
       min_password_length?: number;
+      readonly password_policy: components['schemas']['AuthPasswordPolicy'];
       /** @default false */
       require_uppercase?: boolean;
       /** @default false */
@@ -3445,6 +3639,25 @@ export interface components {
     AuthMethodsResponse: {
       methods: components['schemas']['AuthMethodSummary'][];
     };
+    /** @description Effective backend-enforced password policy. */
+    AuthPasswordPolicy: {
+      /** @description Effective minimum password length in Unicode characters. */
+      effective_min_length: number;
+      /** @description Lowest minimum password length accepted by the auth configuration endpoint. */
+      min_configurable_length: number;
+      /** @description Maximum password length in Unicode characters. */
+      max_length: number;
+      /** @description Whether passwords must contain an ASCII uppercase letter (A-Z). */
+      require_uppercase: boolean;
+      /** @description Whether passwords must contain an ASCII lowercase letter (a-z). */
+      require_lowercase: boolean;
+      /** @description Whether passwords must contain an ASCII digit (0-9). */
+      require_numbers: boolean;
+      /** @description Whether passwords must contain one of the backend-supported special characters. */
+      require_special_chars: boolean;
+      /** @description Whether common and known-compromised passwords are rejected by the backend. */
+      compromised_passwords_rejected: boolean;
+    };
     /** @description An authentication session for a user */
     AuthSession: {
       /**
@@ -3525,8 +3738,11 @@ export interface components {
       token_type: string;
       /** @description Access token lifetime in seconds */
       expires_in: number;
-      /** @description Long-lived token for getting new access tokens */
-      refresh_token: string;
+      /**
+       * @description Long-lived token for getting new access tokens. Omitted when the
+       *     request uses eligible HttpOnly cookie session storage.
+       */
+      refresh_token?: string;
       user: components['schemas']['AuthUser'];
     };
     AuthUser: {
@@ -3873,6 +4089,15 @@ export interface components {
         | 'volcano-db-xl'
         | 'volcano-db-2xl';
       /**
+       * Format: int64
+       * @description Latest observed on-disk size from `pg_database_size`, in bytes. This
+       *     point-in-time gauge may be absent until the database has been sampled.
+       *     Summing the latest samples for every database in a project produces
+       *     the project's "Database Storage (Bytes)" usage gauge. Populated on
+       *     database list responses; single-database responses omit it.
+       */
+      storage_bytes?: number;
+      /**
        * Format: date-time
        * @description Most recent request timestamp for this database
        */
@@ -4021,6 +4246,71 @@ export interface components {
       /** Format: date-time */
       updated_at: string;
     };
+    /** @description A project's GitHub auto-deploy settings: what a push to the connected repo's production branch deploys. All settings are default-off. */
+    ProjectGitDeploySettings: {
+      /** @description Whether a production-branch push triggers a deployment. */
+      auto_deploy_enabled: boolean;
+      /** @description Whether the repo's functions are deployed on push. */
+      deploy_functions: boolean;
+      /** @description Name of the frontend to build and deploy on push. Omitted when no frontend is deployed. Resolved at deploy time; need not exist yet. */
+      frontend_name?: string;
+      /** @description App root (subdirectory) the frontend builds from. Omitted for the repo root. */
+      frontend_app_root?: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    /** @description Full replace of a project's Git auto-deploy settings. */
+    UpdateProjectGitDeploySettingsRequest: {
+      auto_deploy_enabled: boolean;
+      deploy_functions: boolean;
+      /** @description Frontend to deploy on push. Omit or empty to deploy no frontend. */
+      frontend_name?: string;
+      /** @description App root the frontend builds from. Requires frontend_name; omit for the repo root. */
+      frontend_app_root?: string;
+    };
+    ProjectLockLeaseRequest: {
+      /**
+       * @description Lease duration in seconds, from 5 seconds through 90 days, measured
+       *     from when the request is served. Renew before it elapses. A renewal
+       *     sets the new expiry outright, so a shorter TTL shortens the lease.
+       *     Renewals cannot extend an acquisition beyond its absolute 90-day
+       *     deadline.
+       */
+      ttl_seconds: number;
+    };
+    ProjectLockLease: {
+      /**
+       * Format: date-time
+       * @description Advisory lease expiry timestamp in UTC.
+       */
+      expires_at: string;
+      /**
+       * Format: int64
+       * @description Monotonically increasing token for this acquisition. It rises whenever the
+       *     lock changes hands and stays the same across renewals of one lease. Pass it
+       *     to the resource you are protecting and reject any write carrying a token
+       *     lower than the highest already seen; that is what stops a displaced holder
+       *     from writing after its lease lapsed.
+       */
+      fencing_token: number;
+    };
+    ProjectLockState: {
+      /**
+       * @description Whether the lock is unavailable right now. False means an acquire would
+       *     succeed. It remains true during the brief grace window after expiry.
+       */
+      held: boolean;
+      /**
+       * Format: date-time
+       * @description Advisory lease expiry timestamp in UTC. Present only when held.
+       */
+      expires_at?: string;
+      /**
+       * Format: int64
+       * @description Current holder's fencing token. Present only when held.
+       */
+      fencing_token?: number;
+    };
     ConnectProjectGitRequest: {
       /**
        * Format: uuid
@@ -4165,6 +4455,13 @@ export interface components {
         | 'superseded'
         | 'deleting'
         | 'deleted';
+      /**
+       * @description What initiated this deployment.
+       * @enum {string}
+       */
+      deploy_source: 'git' | 'cli' | 'web' | 'api' | 'system' | 'unknown';
+      /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
+      initiated_by?: string;
       artifact_bucket?: string;
       artifact_key?: string;
       artifact_version?: string;
@@ -4180,6 +4477,7 @@ export interface components {
       codebuild_build_count?: number;
       /** Format: date-time */
       codebuild_duration_recorded_at?: string;
+      progress?: components['schemas']['DeploymentProgress'];
       error_message?: string;
       /** Format: date-time */
       created_at: string;
@@ -4315,6 +4613,13 @@ export interface components {
         | 'superseded'
         | 'deleting'
         | 'deleted';
+      /**
+       * @description What initiated this deployment.
+       * @enum {string}
+       */
+      deploy_source: 'git' | 'cli' | 'web' | 'api' | 'system' | 'unknown';
+      /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
+      initiated_by?: string;
       artifact_bucket?: string;
       artifact_key?: string;
       artifact_version?: string;
@@ -4327,6 +4632,7 @@ export interface components {
       codebuild_build_count?: number;
       /** Format: date-time */
       codebuild_duration_recorded_at?: string;
+      progress?: components['schemas']['DeploymentProgress'];
       error_message?: string;
       /** Format: date-time */
       completed_at?: string;
@@ -4528,6 +4834,11 @@ export interface components {
       /** Format: date-time */
       last_completed_at?: string;
       last_error?: string;
+      /**
+       * Format: int64
+       * @description Total number of times this scheduler has executed. 0 for a scheduler that has never run.
+       */
+      run_count?: number;
       /** Format: date-time */
       created_at?: string;
       /** Format: date-time */
@@ -4604,7 +4915,8 @@ export interface components {
        *     "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
        *     reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
        *     is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-       *     not a cumulative counter.
+       *     not a cumulative counter. It is the sum of the latest `pg_database_size` samples
+       *     exposed as `storage_bytes` by the project's database list.
        */
       metric: string;
       /**
@@ -4770,8 +5082,12 @@ export interface components {
       total: number;
       /** @description Whether there are more pages available */
       has_more: boolean;
-      /** @description URL path to next page (only present if has_more is true) */
+      /** @description URL path to next page (offset pagination only; present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
     };
     PaginatedProjects: {
       data: components['schemas']['Project'][];
@@ -4783,8 +5099,12 @@ export interface components {
       total: number;
       /** @description Whether there are more pages available */
       has_more: boolean;
-      /** @description URL path to next page (only present if has_more is true) */
+      /** @description URL path to next page (offset pagination only; present if has_more is true) */
       next?: string;
+      /** @description Opaque cursor for the next page (cursor pagination only; present if has_more is true) */
+      next_cursor?: string;
+      /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
+      prev_cursor?: string;
       /**
        * @description Latest project variable propagation status.
        * @enum {string}
@@ -5386,10 +5706,16 @@ export interface components {
         | 'superseded'
         | 'deleting'
         | 'deleted';
+      /**
+       * @description What initiated this deployment.
+       * @enum {string}
+       */
+      deploy_source: 'git' | 'cli' | 'web' | 'api' | 'system' | 'unknown';
       artifact_version?: string;
       error_message?: string;
       /** Format: date-time */
       completed_at?: string;
+      progress?: components['schemas']['DeploymentProgress'];
       /** Format: date-time */
       created_at: string;
       /** Format: date-time */
@@ -5402,6 +5728,27 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    /** @description Aggregate deployment statistics for one resource pipeline. */
+    ProjectDeploymentSummary: {
+      /** @description All deployment attempts matching the filters. */
+      deployment_count: number;
+      /** @description Attempts that reached active or deleted. */
+      successful_count: number;
+      /** @description Attempts that reached failed or degraded. */
+      failed_count: number;
+      /** @description Superseded attempts, excluded from success rate and duration. */
+      canceled_count: number;
+      /**
+       * Format: double
+       * @description Successful attempts divided by successful plus failed attempts.
+       */
+      success_rate: number | null;
+      /**
+       * Format: double
+       * @description Median CodeBuild duration across eligible completed attempts.
+       */
+      median_build_duration_seconds: number | null;
     };
     /** @description Aggregated usage metrics for a project. */
     ProjectUsageResponse: {
@@ -5547,7 +5894,7 @@ export interface components {
       /**
        * @description Operations this key may perform. ["*"] grants full admin access
        *     (default for keys created without an explicit scope). Scoped keys
-       *     list specific permissions, e.g. ["functions.invoke"].
+       *     list specific permissions, e.g. ["functions.invoke", "locks.manage"].
        * @example [
        *       "*"
        *     ]
@@ -6018,6 +6365,11 @@ export interface components {
        * @description Timestamp when the current variable propagation phase started.
        */
       provisioning_started_at?: string;
+      /**
+       * @description What initiated the latest variable propagation sync, when one has run.
+       * @enum {string}
+       */
+      deploy_source?: 'git' | 'cli' | 'web' | 'api' | 'system' | 'unknown';
       /** Format: date-time */
       created_at: string;
       /** Format: date-time */
@@ -6051,6 +6403,40 @@ export interface components {
       min_exec_time_seconds: number;
       /** Format: int64 */
       rows_processed: number;
+    };
+    /** @description Timing and outcome for one normalized deployment pipeline phase. */
+    DeploymentPhase: {
+      /** @enum {string} */
+      name: 'queue' | 'checkout' | 'build' | 'image' | 'provisioning' | 'rollout' | 'verification';
+      /** @enum {string} */
+      status: 'pending' | 'in_progress' | 'succeeded' | 'failed' | 'skipped';
+      /** Format: date-time */
+      started_at?: string;
+      /** Format: date-time */
+      completed_at?: string;
+      /** Format: int64 */
+      duration_seconds?: number;
+    };
+    /** @description Normalized live progress derived from the deployment workflow and build phases. */
+    DeploymentProgress: {
+      /** @enum {string} */
+      current_phase?:
+        | 'queue'
+        | 'checkout'
+        | 'build'
+        | 'image'
+        | 'provisioning'
+        | 'rollout'
+        | 'verification';
+      /** Format: date-time */
+      started_at: string;
+      /** Format: date-time */
+      completed_at?: string;
+      /** Format: int64 */
+      elapsed_seconds: number;
+      phases: components['schemas']['DeploymentPhase'][];
+      /** Format: date-time */
+      updated_at: string;
     };
     /** @description Deployment log selector for deployable resources. */
     LogDeploymentRequestSelector: {
@@ -6210,6 +6596,15 @@ export interface components {
     FunctionId: string;
     /** @description Number of items per page (max 100) */
     Limit: number;
+    /** @description Project-local lock name. */
+    LockKey: string;
+    /** @description Opaque UUID generated once by the caller and retained for the lease lifetime. */
+    LockToken: string;
+    /**
+     * @description UUID correlating this request across client and server logs. Repeat safety comes from
+     *     the lock token, so a retry under a reused request ID still counts against the quota.
+     */
+    LockRequestId: string;
     /**
      * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
      *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
@@ -6218,13 +6613,19 @@ export interface components {
      *     pages. Only honored on the cursor pagination path; ignored otherwise.
      */
     Offset: number;
-    /** @description Page number (1-indexed) */
+    /**
+     * @description Page number (1-indexed) for offset pagination. Declares no schema
+     *     default so the request validator does not inject one: handlers that omit
+     *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+     *     endpoints (e.g. the project deployments feed) can detect its absence to
+     *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+     */
     Page: number;
     /** @description Project ID */
     ProjectId: string;
     /**
-     * @description Case-insensitive substring match on the resource `name`. Only honored on
-     *     the cursor pagination path.
+     * @description Case-insensitive substring match on the resource `name`. See the
+     *     endpoint description for supported pagination modes.
      */
     Search: string;
     /** @description Function scheduler ID */
@@ -6616,10 +7017,44 @@ export interface operations {
   listProjects: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path?: never;
@@ -6634,6 +7069,15 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedProjects'];
+        };
+      };
+      /** @description Invalid or conflicting pagination parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
         };
       };
     };
@@ -7487,6 +7931,137 @@ export interface operations {
       };
     };
   };
+  getProjectGitDeploySettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The project's current Git auto-deploy settings */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectGitDeploySettings'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not owned by the caller */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to get project git deploy settings */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  updateProjectGitDeploySettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateProjectGitDeploySettingsRequest'];
+      };
+    };
+    responses: {
+      /** @description The project's updated Git auto-deploy settings */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectGitDeploySettings'];
+        };
+      };
+      /** @description Malformed request body, or frontend_app_root without frontend_name */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not owned by the caller */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Failed to update project git deploy settings */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   getProjectDatabaseQueries: {
     parameters: {
       query?: {
@@ -7563,10 +8138,51 @@ export interface operations {
   listProjectDeployments: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
+         */
+        search?: components['parameters']['Search'];
+        /** @description Restrict results to attempts created at or after this timestamp. */
+        created_after?: string;
+        /**
+         * @description Restrict the feed to a single resource type. Omit to return both
+         *     Function and Frontend deployments.
+         */
+        resource_type?: 'function' | 'frontend';
       };
       header?: never;
       path: {
@@ -7624,13 +8240,113 @@ export interface operations {
       };
     };
   };
+  summarizeProjectDeployments: {
+    parameters: {
+      query: {
+        /** @description Restrict the summary to resource names containing this value. */
+        search?: string;
+        /** @description Restrict the summary to one comparable deployment pipeline. */
+        resource_type: 'function' | 'frontend';
+        /** @description Restrict results to attempts created at or after this timestamp. */
+        created_after?: string;
+      };
+      header?: never;
+      path: {
+        /** @description Project ID */
+        id: components['parameters']['ProjectId'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectDeploymentSummary'];
+        };
+      };
+      /** @description Bad request - invalid identifier or filter */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Unauthorized - invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Forbidden - project ownership required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   listProjectCustomDomains: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -7691,7 +8407,13 @@ export interface operations {
   listFunctions: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -7719,8 +8441,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -8405,7 +9127,13 @@ export interface operations {
   listProjectSchedulers: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -8433,8 +9161,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -8607,7 +9335,13 @@ export interface operations {
   listFunctionDeployments: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -8646,7 +9380,13 @@ export interface operations {
   listFrontends: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -8674,8 +9414,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -9111,13 +9851,16 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Frontend custom domain status */
+      /**
+       * @description Frontend custom domain status, or null when the frontend has no
+       *     custom domain configured (the common empty state).
+       */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['FrontendCustomDomainResponse'];
+          'application/json': components['schemas']['FrontendCustomDomainResponse'] | null;
         };
       };
       /** @description Bad request - invalid identifier */
@@ -9147,7 +9890,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Frontend or custom domain not found */
+      /** @description Frontend not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -9339,7 +10082,13 @@ export interface operations {
   listFrontendDeployments: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -9487,7 +10236,13 @@ export interface operations {
   listVariables: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -9515,8 +10270,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -9588,7 +10343,13 @@ export interface operations {
   listDatabases: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -9616,8 +10377,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -10650,6 +11411,44 @@ export interface operations {
       };
     };
   };
+  authGetPasswordPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Effective password policy */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthPasswordPolicy'];
+        };
+      };
+      /** @description Invalid, missing, or revoked anon key */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project or auth configuration not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
   authSignup: {
     parameters: {
       query?: never;
@@ -10662,6 +11461,10 @@ export interface operations {
         'application/json': {
           /** Format: email */
           email: string;
+          /**
+           * @description Password validated after NFC normalization against the
+           *     policy returned by GET /auth/password-policy.
+           */
           password: string;
           user_metadata?: {
             [key: string]: unknown;
@@ -10710,6 +11513,15 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Compromised-password screening is temporarily unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
     };
   };
   authSignin: {
@@ -10724,6 +11536,8 @@ export interface operations {
         'application/json': {
           email: string;
           password: string;
+          /** @enum {string} */
+          session_mode?: 'cookie';
         };
       };
     };
@@ -10777,10 +11591,12 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
         'application/json': {
-          refresh_token: string;
+          refresh_token?: string;
+          /** @enum {string} */
+          session_mode?: 'cookie';
         };
       };
     };
@@ -10821,10 +11637,12 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
         'application/json': {
-          refresh_token: string;
+          refresh_token?: string;
+          /** @enum {string} */
+          session_mode?: 'cookie';
         };
       };
     };
@@ -10898,6 +11716,10 @@ export interface operations {
         'application/json': {
           /** @description Recovery token from forgot-password */
           token: string;
+          /**
+           * @description Password validated after NFC normalization against the
+           *     policy returned by GET /auth/password-policy.
+           */
           new_password: string;
         };
       };
@@ -10927,6 +11749,15 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Compromised-password screening is temporarily unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
       };
     };
   };
@@ -11067,6 +11898,10 @@ export interface operations {
         'application/json': {
           /** Format: email */
           email: string;
+          /**
+           * @description Password validated after NFC normalization against the
+           *     policy returned by GET /auth/password-policy.
+           */
           password: string;
           user_metadata?: {
             [key: string]: unknown;
@@ -11099,6 +11934,15 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Compromised-password screening is temporarily unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
       };
     };
   };
@@ -11406,7 +12250,16 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': {
+          /**
+           * @description Password validated after NFC normalization against the
+           *     policy returned by GET /auth/password-policy.
+           */
           password?: string;
+          /**
+           * @description Metadata keys to merge into the current user metadata.
+           *     Omitted keys remain unchanged; set a key to null to remove it.
+           *     Merging is shallow; nested objects replace the stored value for that top-level key.
+           */
           user_metadata?: {
             [key: string]: unknown;
           };
@@ -11436,6 +12289,15 @@ export interface operations {
       };
       /** @description Not authenticated - access token missing or invalid */
       401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Compromised-password screening is temporarily unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };
@@ -11702,10 +12564,44 @@ export interface operations {
   listAuthUsers: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+         *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+         *     combining them returns 400. When supplied, the request's `search` and
+         *     `limit` must match the values bound to the cursor or the request returns 400.
+         */
+        cursor?: components['parameters']['Cursor'];
+        /**
+         * @description Opaque keyset pagination cursor from a previous response's `prev_cursor`
+         *     — pages backward (the page immediately preceding this cursor). Mutually
+         *     exclusive with `page` and `cursor`; combining them returns 400. `search`
+         *     and `limit` must match the values bound to the cursor or the request
+         *     returns 400.
+         */
+        ending_before?: components['parameters']['EndingBefore'];
+        /**
+         * @description Bounded row offset past the keyset anchor named by `cursor` (forward) or
+         *     `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+         *     skip this many rows within. Used for numbered jump-to-page: from the
+         *     current page, seek to its next/prev cursor and offset the remaining
+         *     pages. Only honored on the cursor pagination path; ignored otherwise.
+         */
+        offset?: components['parameters']['Offset'];
+        /**
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
+         */
+        search?: components['parameters']['Search'];
       };
       header?: never;
       path: {
@@ -12832,13 +13728,25 @@ export interface operations {
         /** @description Project anon key (required - identifies the project) */
         anon_key: string;
         /**
-         * @description URL to redirect to after the OAuth flow (optional). The session
-         *     tokens are appended to this URL's fragment on success. If the URL
-         *     carries a `vh_state` query parameter (the client SDK's one-time
-         *     nonce), it is moved into the fragment as `state` so the SDK can bind
-         *     the returned session to the flow it initiated (login-CSRF defense).
+         * @description URL to redirect to after the OAuth flow (optional). Must exactly
+         *     match an entry in the project's `allowed_redirect_urls`, including
+         *     its query string, or be the project's own managed hosted-auth page
+         *     URL.
          */
         redirect_url?: string;
+        /**
+         * @description Optional application nonce. It is stored with the server-generated
+         *     provider state and echoed to redirect_url as `state`.
+         */
+        client_state?: string;
+        /**
+         * @description Set to `code` to receive a short-lived authorization code at
+         *     redirect_url, then use POST /auth/oauth/exchange to obtain the
+         *     session. `redirect_url` is required in this mode. When omitted, the
+         *     established session-fragment response is retained for compatibility
+         *     with existing clients.
+         */
+        response_mode?: 'code';
       };
       header?: never;
       path: {
@@ -12855,7 +13763,10 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description OAuth provider is disabled for this project */
+      /**
+       * @description OAuth provider is disabled for this project, or `redirect_url` is
+       *     not registered in `allowed_redirect_urls`
+       */
       400: {
         headers: {
           [name: string]: unknown;
@@ -12886,7 +13797,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Existing user signed in */
+      /** @description Existing user signed in (when redirect_url was omitted) */
       200: {
         headers: {
           [name: string]: unknown;
@@ -12895,7 +13806,7 @@ export interface operations {
           'application/json': components['schemas']['AuthTokenResponse'];
         };
       };
-      /** @description New user created and signed in */
+      /** @description New user created and signed in (when redirect_url was omitted) */
       201: {
         headers: {
           [name: string]: unknown;
@@ -12904,8 +13815,80 @@ export interface operations {
           'application/json': components['schemas']['AuthTokenResponse'];
         };
       };
+      /**
+       * @description Redirect to the exact registered redirect_url. Flows that requested
+       *     response_mode=code receive a short-lived, single-use `code` and
+       *     optional application `state`; compatibility flows receive the
+       *     established session fragment.
+       */
+      303: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /**
+       * @description Missing/invalid code or state, the state parameter expired, or the
+       *     flow's stored redirect_url is no longer registered in
+       *     allowed_redirect_urls (re-checked at callback time)
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description Email already exists (requires linking) */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  authOAuthExchange: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          code: string;
+          /** Format: uri */
+          redirect_url: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Authorization code consumed and session created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthTokenResponse'];
+        };
+      };
+      /** @description Invalid, expired, consumed, or redirect-mismatched code */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Missing or invalid project anon key */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Too many exchange attempts from this client */
+      429: {
         headers: {
           [name: string]: unknown;
         };
@@ -13104,7 +14087,22 @@ export interface operations {
   };
   authLinkOAuthProvider: {
     parameters: {
-      query?: never;
+      query?: {
+        /**
+         * @description URL to redirect to after linking completes (optional). Same
+         *     allowed_redirect_urls requirement as GET /auth/oauth/{provider}/authorize.
+         */
+        redirect_url?: string;
+        /** @description Optional application nonce echoed to redirect_url as `state`. */
+        client_state?: string;
+        /**
+         * @description Set to `code` to receive a short-lived authorization code at
+         *     redirect_url. `redirect_url` is required in this mode. When
+         *     omitted, the established session-fragment response is retained for
+         *     compatibility with existing clients.
+         */
+        response_mode?: 'code';
+      };
       header?: never;
       path: {
         provider: 'google' | 'github' | 'microsoft' | 'apple';
@@ -13122,6 +14120,15 @@ export interface operations {
           'application/json': {
             authorization_url?: string;
           };
+        };
+      };
+      /** @description redirect_url is not registered in allowed_redirect_urls */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
         };
       };
       /** @description Not authenticated */
@@ -13376,7 +14383,13 @@ export interface operations {
   listAnonKeys: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -13404,8 +14417,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -13674,7 +14687,13 @@ export interface operations {
   listServiceKeys: {
     parameters: {
       query?: {
-        /** @description Page number (1-indexed) */
+        /**
+         * @description Page number (1-indexed) for offset pagination. Declares no schema
+         *     default so the request validator does not inject one: handlers that omit
+         *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+         *     endpoints (e.g. the project deployments feed) can detect its absence to
+         *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+         */
         page?: components['parameters']['Page'];
         /** @description Number of items per page (max 100) */
         limit?: components['parameters']['Limit'];
@@ -13702,8 +14721,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -13750,16 +14769,12 @@ export interface operations {
            * @description Optional least-privilege scope for the key. When omitted, empty, or
            *     containing only blank strings, the key is granted full access (["*"])
            *     for backward compatibility. Provide an explicit list (e.g.
-           *     ["functions.invoke", "storage.download"]) to restrict the key; "*"
-           *     grants everything. Scope enforcement currently applies to function
-           *     invocation and storage object operations; other service-key routes
-           *     are not yet gated by scope.
+           *     ["functions.invoke", "locks.manage"]) to restrict the key; "*"
+           *     grants everything. Scope enforcement applies to function invocation,
+           *     storage object operations, and project locks.
            * @example [
            *       "functions.invoke",
-           *       "storage.upload",
-           *       "storage.download",
-           *       "storage.list",
-           *       "storage.delete"
+           *       "locks.manage"
            *     ]
            */
           permissions?: string[];
@@ -13891,8 +14906,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -14150,8 +15165,8 @@ export interface operations {
          */
         offset?: components['parameters']['Offset'];
         /**
-         * @description Case-insensitive substring match on the resource `name`. Only honored on
-         *     the cursor pagination path.
+         * @description Case-insensitive substring match on the resource `name`. See the
+         *     endpoint description for supported pagination modes.
          */
         search?: components['parameters']['Search'];
       };
@@ -14362,6 +15377,426 @@ export interface operations {
         content?: never;
       };
       429: components['responses']['BandwidthCapExceeded'];
+    };
+  };
+  acquireProjectLock: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Opaque UUID generated once by the caller and retained for the lease lifetime. */
+        'X-Volcano-Lock-Token': components['parameters']['LockToken'];
+        /**
+         * @description UUID correlating this request across client and server logs. Repeat safety comes from
+         *     the lock token, so a retry under a reused request ID still counts against the quota.
+         */
+        'X-Volcano-Request-Id': components['parameters']['LockRequestId'];
+      };
+      path: {
+        /** @description Project-local lock name. */
+        key: components['parameters']['LockKey'];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProjectLockLeaseRequest'];
+      };
+    };
+    responses: {
+      /** @description Lease acquired */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectLockLease'];
+        };
+      };
+      /** @description Invalid lock key, token, or TTL */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Missing or invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description A non-service credential was supplied or the service key lacks `locks.manage` */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /**
+       * @description The lock is held by another live lease (`lock_held`), or the caller's own lease
+       *     lapsed and is not yet reclaimable (`lock_ownership_lost`).
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project lock request limit exceeded */
+      429: {
+        headers: {
+          /** @description Seconds until the current fixed-minute window ends. */
+          'Retry-After'?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Lock service unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  releaseProjectLock: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Opaque UUID generated once by the caller and retained for the lease lifetime. */
+        'X-Volcano-Lock-Token': components['parameters']['LockToken'];
+        /**
+         * @description UUID correlating this request across client and server logs. Repeat safety comes from
+         *     the lock token, so a retry under a reused request ID still counts against the quota.
+         */
+        'X-Volcano-Request-Id': components['parameters']['LockRequestId'];
+      };
+      path: {
+        /** @description Project-local lock name. */
+        key: components['parameters']['LockKey'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Lease released */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid lock key or token */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Missing or invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description A non-service credential was supplied or the service key lacks `locks.manage` */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description The lease is owned by another token */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project lock request limit exceeded */
+      429: {
+        headers: {
+          /** @description Seconds until the current fixed-minute window ends. */
+          'Retry-After'?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Lock service unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  renewProjectLock: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Opaque UUID generated once by the caller and retained for the lease lifetime. */
+        'X-Volcano-Lock-Token': components['parameters']['LockToken'];
+        /**
+         * @description UUID correlating this request across client and server logs. Repeat safety comes from
+         *     the lock token, so a retry under a reused request ID still counts against the quota.
+         */
+        'X-Volcano-Request-Id': components['parameters']['LockRequestId'];
+      };
+      path: {
+        /** @description Project-local lock name. */
+        key: components['parameters']['LockKey'];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProjectLockLeaseRequest'];
+      };
+    };
+    responses: {
+      /** @description Lease renewed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectLockLease'];
+        };
+      };
+      /** @description Invalid lock key, token, or TTL */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Missing or invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description A non-service credential was supplied or the service key lacks `locks.manage` */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description The lease expired or is owned by another token */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project lock request limit exceeded */
+      429: {
+        headers: {
+          /** @description Seconds until the current fixed-minute window ends. */
+          'Retry-After'?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Lock service unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  getProjectLock: {
+    parameters: {
+      query?: never;
+      header: {
+        /**
+         * @description UUID correlating this request across client and server logs. Repeat safety comes from
+         *     the lock token, so a retry under a reused request ID still counts against the quota.
+         */
+        'X-Volcano-Request-Id': components['parameters']['LockRequestId'];
+      };
+      path: {
+        /** @description Project-local lock name. */
+        key: components['parameters']['LockKey'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current lock state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ProjectLockState'];
+        };
+      };
+      /** @description Invalid lock key */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Missing or invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description A non-service credential was supplied or the service key lacks `locks.manage` */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project lock request limit exceeded */
+      429: {
+        headers: {
+          /** @description Seconds until the current fixed-minute window ends. */
+          'Retry-After'?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Lock service unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+    };
+  };
+  forceReleaseProjectLock: {
+    parameters: {
+      query?: never;
+      header: {
+        /**
+         * @description UUID correlating this request across client and server logs. Repeat safety comes from
+         *     the lock token, so a retry under a reused request ID still counts against the quota.
+         */
+        'X-Volcano-Request-Id': components['parameters']['LockRequestId'];
+      };
+      path: {
+        /** @description Project-local lock name. */
+        key: components['parameters']['LockKey'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Lock released */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid lock key */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Missing or invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description A non-service credential was supplied or the service key lacks `locks.manage` */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Project lock request limit exceeded */
+      429: {
+        headers: {
+          /** @description Seconds until the current fixed-minute window ends. */
+          'Retry-After'?: number;
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description Lock service unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
     };
   };
   moveStorageObject: {
@@ -14708,7 +16143,7 @@ export interface operations {
           'application/json': components['schemas']['StorageObject'];
         };
       };
-      /** @description Only file owner or service key can change visibility */
+      /** @description Not the file owner or denied by the bucket's UPDATE policies */
       403: {
         headers: {
           [name: string]: unknown;

@@ -55,6 +55,8 @@ tags:
     description: Storage statistics and cross-bucket object listing (platform admin)
   - name: Storage Objects
     description: File upload, download, and management (SDK-facing)
+  - name: Locks
+    description: Project-scoped leases for backend coordination (service-role keys only)
   - name: Realtime
     description: WebSocket realtime configuration and monitoring
   - name: System
@@ -400,12 +402,25 @@ paths:
       tags:
         - Projects
       summary: List all projects for authenticated user
+      description: |
+        Returns projects that are not deleting or deleted, newest first.
+        Supports two mutually exclusive pagination modes. Offset mode uses
+        `page` and `limit`. Cursor mode uses `cursor` or `ending_before` with
+        `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
+        `offset` past the cursor anchor. Supplying `limit` without `page`
+        selects cursor mode. `search` applies a case-insensitive project-name
+        filter in either mode. Sending `page` with `cursor` or `ending_before`,
+        or sending both cursor directions, returns 400.
       operationId: listProjects
       security:
         - UserToken: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -413,6 +428,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedProjects'
+        '400':
+          description: Invalid or conflicting pagination parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
         - Projects
@@ -522,8 +543,10 @@ paths:
         - Projects
       summary: Delete a project
       description: |
-        Starts asynchronous project deletion. The project remains visible with `status: deleting`
-        until cleanup finishes, then it returns 404 and no longer appears in project lists.
+        Starts asynchronous project deletion. The project remains available from
+        `GET /projects/{id}` with `status: deleting` until cleanup finishes, but is
+        removed from project lists as soon as deletion starts. After cleanup it
+        returns 404.
       operationId: deleteProject
       security:
         - UserToken: []
@@ -1113,6 +1136,107 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /projects/{id}/git-deploy-settings:
+    get:
+      tags:
+        - Projects
+        - Git Connections
+      summary: Get a project's Git auto-deploy settings
+      operationId: getProjectGitDeploySettings
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: The project's current Git auto-deploy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGitDeploySettings'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Project not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to get project git deploy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Projects
+        - Git Connections
+      summary: Update a project's Git auto-deploy settings
+      description: |
+        Full replace of the project's Git auto-deploy settings: what a push to
+        the connected repo's production branch deploys. All settings are
+        default-off. The frontend need not exist when the settings are saved;
+        frontend_name is resolved at deploy time. Independent of the repo
+        binding (see connectProjectGit).
+      operationId: updateProjectGitDeploySettings
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectGitDeploySettingsRequest'
+      responses:
+        '200':
+          description: The project's updated Git auto-deploy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGitDeploySettings'
+        '400':
+          description: Malformed request body, or frontend_app_root without frontend_name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Project not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to update project git deploy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/databases/{databaseName}/queries:
     get:
       tags:
@@ -1192,6 +1316,28 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
+        - name: created_after
+          in: query
+          required: false
+          description: Restrict results to attempts created at or after this timestamp.
+          schema:
+            type: string
+            format: date-time
+        - name: resource_type
+          in: query
+          required: false
+          description: |
+            Restrict the feed to a single resource type. Omit to return both
+            Function and Frontend deployments.
+          schema:
+            type: string
+            enum:
+              - function
+              - frontend
       responses:
         '200':
           description: Successful response
@@ -1201,6 +1347,76 @@ paths:
                 $ref: '#/components/schemas/PaginatedProjectDeployments'
         '400':
           description: Bad request - invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/deployments/summary:
+    get:
+      tags:
+        - Projects
+      summary: Summarize deployments in a project
+      description: |
+        Summarizes deployment attempts for one comparable resource pipeline.
+        Success rate uses conclusive outcomes only: active and deleted attempts
+        are successful; failed and degraded attempts are failures; in-progress
+        and superseded attempts are excluded. Median build duration includes
+        completed, non-superseded attempts with recorded CodeBuild work,
+        including failed builds.
+      operationId: summarizeProjectDeployments
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: search
+          in: query
+          required: false
+          description: Restrict the summary to resource names containing this value.
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          required: true
+          description: Restrict the summary to one comparable deployment pipeline.
+          schema:
+            type: string
+            enum:
+              - function
+              - frontend
+        - name: created_after
+          in: query
+          required: false
+          description: Restrict results to attempts created at or after this timestamp.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDeploymentSummary'
+        '400':
+          description: Bad request - invalid identifier or filter
           content:
             application/json:
               schema:
@@ -1240,6 +1456,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -1332,7 +1552,7 @@ paths:
         and starts after the running deployment. Different functions and projects deploy concurrently.
         If a function with the same name already exists in the project, this operation updates that
         function's runtime, handler, and source bundle and returns `200 OK`.
-        Each project can contain up to 5,000 functions. Creating a new function over this cap returns 403.
+        Each project can contain up to 10,000 functions. Creating a new function over this cap returns 403.
       operationId: createFunction
       security:
         - UserToken: []
@@ -2227,12 +2447,12 @@ paths:
         22.x or 24.x. The Node.js runtime is inferred from
         `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
         The selected Node.js family must also satisfy the installed Next.js package's
-        `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.2.12 (`>=20.9.0`).
+        `engines.node` constraint. Volcano tests Next 15.5.22 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.0 (`>=20.9.0`).
         Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
         does not apply its own source archive size limit. After the final Lambda container images are
         built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
         This operation is limited by plan-based frontend deployment quotas (`FREE_FRONTEND_DEPLOYMENTS`, `PRO_FRONTEND_DEPLOYMENTS`).
-        Each project can contain up to 5,000 frontends regardless of plan.
+        Each project can contain up to 10,000 frontends regardless of plan.
       operationId: createFrontend
       security:
         - UserToken: []
@@ -2506,11 +2726,15 @@ paths:
         - $ref: '#/components/parameters/FrontendId'
       responses:
         '200':
-          description: Frontend custom domain status
+          description: |
+            Frontend custom domain status, or null when the frontend has no
+            custom domain configured (the common empty state).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FrontendCustomDomainResponse'
+                nullable: true
+                allOf:
+                  - $ref: '#/components/schemas/FrontendCustomDomainResponse'
         '400':
           description: Bad request - invalid identifier
           content:
@@ -2530,7 +2754,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: Frontend or custom domain not found
+          description: Frontend not found
           content:
             application/json:
               schema:
@@ -3858,6 +4082,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /auth/password-policy:
+    get:
+      tags:
+        - Authentication
+      summary: Get the effective password policy
+      description: |
+        Returns the backend-enforced password bounds and compromised-password
+        screening status for the project identified by the anon key. A valid
+        anon key is required, but no route-specific auth permission is needed.
+      operationId: authGetPasswordPolicy
+      security:
+        - AnonKey: []
+      responses:
+        '200':
+          description: Effective password policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthPasswordPolicy'
+        '401':
+          description: Invalid, missing, or revoked anon key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project or auth configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/signup:
     post:
       tags:
@@ -3894,7 +4149,9 @@ paths:
                   format: email
                 password:
                   type: string
-                  minLength: 6
+                  description: |
+                    Password validated after NFC normalization against the
+                    policy returned by GET /auth/password-policy.
                 user_metadata:
                   type: object
                   additionalProperties: true
@@ -3917,12 +4174,24 @@ paths:
             Forbidden - Signups disabled or anon key lacks signup permission
         '429':
           description: Rate limit exceeded
+        '503':
+          description: Compromised-password screening is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/signin:
     post:
       tags:
         - Authentication
       summary: Sign in an auth user
-      description: Authenticate with email and password. Requires anon key. Project is identified via the anon key.
+      description: |
+        Authenticate with email and password. Requires an anon key.
+
+        Set `session_mode` to `cookie` to request HttpOnly refresh-token
+        storage. Cookie mode is honored only for an exact, credentialed CORS
+        origin on the same schemeful site as this API. Otherwise the response
+        retains the refresh token in its body.
       operationId: authSignin
       security:
         - AnonKey: []
@@ -3940,6 +4209,10 @@ paths:
                   type: string
                 password:
                   type: string
+                session_mode:
+                  type: string
+                  enum:
+                    - cookie
       responses:
         '200':
           description: Signin successful
@@ -3963,21 +4236,30 @@ paths:
       tags:
         - Authentication
       summary: Refresh access token
-      description: Get a new access token using refresh token. Requires anon key. Project is identified via the anon key.
+      description: |
+        Get a new access token using a refresh token. Requires an anon key.
+
+        Send `refresh_token` in the body for the default flow. An eligible
+        cookie-mode browser request may instead send `session_mode: cookie`
+        with an empty token or omit the request body; the API reads and resets
+        the project's HttpOnly cookie and omits `refresh_token` from the
+        response.
       operationId: authRefresh
       security:
         - AnonKey: []
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required:
-                - refresh_token
               properties:
                 refresh_token:
                   type: string
+                session_mode:
+                  type: string
+                  enum:
+                    - cookie
       responses:
         '200':
           description: Token refreshed
@@ -4002,21 +4284,28 @@ paths:
       tags:
         - Authentication
       summary: Logout (revoke refresh token)
-      description: Invalidate a refresh token. Requires anon key. Project is identified via the anon key.
+      description: |
+        Invalidate a refresh token. Requires an anon key.
+
+        Send `refresh_token` for the default flow. An eligible cookie-mode
+        browser request may instead send `session_mode: cookie` with an empty
+        token; logout remains idempotent when the cookie is missing or expired.
       operationId: authLogout
       security:
         - AnonKey: []
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required:
-                - refresh_token
               properties:
                 refresh_token:
                   type: string
+                session_mode:
+                  type: string
+                  enum:
+                    - cookie
       responses:
         '204':
           description: Logged out successfully
@@ -4093,7 +4382,9 @@ paths:
                   description: Recovery token from forgot-password
                 new_password:
                   type: string
-                  minLength: 6
+                  description: |
+                    Password validated after NFC normalization against the
+                    policy returned by GET /auth/password-policy.
       responses:
         '200':
           description: Password reset successful
@@ -4108,6 +4399,12 @@ paths:
           description: Password doesn't meet requirements
         '401':
           description: Invalid or expired token
+        '503':
+          description: Compromised-password screening is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/confirm:
     post:
       tags:
@@ -4264,7 +4561,9 @@ paths:
                   format: email
                 password:
                   type: string
-                  minLength: 6
+                  description: |
+                    Password validated after NFC normalization against the
+                    policy returned by GET /auth/password-policy.
                 user_metadata:
                   type: object
                   additionalProperties: true
@@ -4282,6 +4581,12 @@ paths:
           description: Not an anonymous user
         '409':
           description: Email already in use
+        '503':
+          description: Compromised-password screening is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/user/change-email:
     post:
       tags:
@@ -4567,10 +4872,16 @@ paths:
               properties:
                 password:
                   type: string
-                  minLength: 6
+                  description: |
+                    Password validated after NFC normalization against the
+                    policy returned by GET /auth/password-policy.
                 user_metadata:
                   type: object
                   additionalProperties: true
+                  description: |
+                    Metadata keys to merge into the current user metadata.
+                    Omitted keys remain unchanged; set a key to null to remove it.
+                    Merging is shallow; nested objects replace the stored value for that top-level key.
       responses:
         '200':
           description: Profile updated
@@ -4589,6 +4900,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Not authenticated - access token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Compromised-password screening is temporarily unavailable
           content:
             application/json:
               schema:
@@ -4829,6 +5146,10 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/EndingBefore'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Search'
       responses:
         '200':
           description: Successful response
@@ -5903,16 +6224,37 @@ paths:
           schema:
             type: string
           description: |
-            URL to redirect to after the OAuth flow (optional). The session
-            tokens are appended to this URL's fragment on success. If the URL
-            carries a `vh_state` query parameter (the client SDK's one-time
-            nonce), it is moved into the fragment as `state` so the SDK can bind
-            the returned session to the flow it initiated (login-CSRF defense).
+            URL to redirect to after the OAuth flow (optional). Must exactly
+            match an entry in the project's `allowed_redirect_urls`, including
+            its query string, or be the project's own managed hosted-auth page
+            URL.
+        - name: client_state
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+          description: |
+            Optional application nonce. It is stored with the server-generated
+            provider state and echoed to redirect_url as `state`.
+        - name: response_mode
+          in: query
+          schema:
+            type: string
+            enum:
+              - code
+          description: |
+            Set to `code` to receive a short-lived authorization code at
+            redirect_url, then use POST /auth/oauth/exchange to obtain the
+            session. `redirect_url` is required in this mode. When omitted, the
+            established session-fragment response is retained for compatibility
+            with existing clients.
       responses:
         '307':
           description: Redirect to OAuth provider
         '400':
-          description: OAuth provider is disabled for this project
+          description: |
+            OAuth provider is disabled for this project, or `redirect_url` is
+            not registered in `allowed_redirect_urls`
         '404':
           description: OAuth provider not configured
   /auth/oauth/{provider}/callback:
@@ -5951,19 +6293,70 @@ paths:
             type: string
       responses:
         '200':
-          description: Existing user signed in
+          description: Existing user signed in (when redirect_url was omitted)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthTokenResponse'
         '201':
-          description: New user created and signed in
+          description: New user created and signed in (when redirect_url was omitted)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthTokenResponse'
+        '303':
+          description: |
+            Redirect to the exact registered redirect_url. Flows that requested
+            response_mode=code receive a short-lived, single-use `code` and
+            optional application `state`; compatibility flows receive the
+            established session fragment.
+        '400':
+          description: |
+            Missing/invalid code or state, the state parameter expired, or the
+            flow's stored redirect_url is no longer registered in
+            allowed_redirect_urls (re-checked at callback time)
         '409':
           description: Email already exists (requires linking)
+  /auth/oauth/exchange:
+    post:
+      tags:
+        - OAuth Authentication
+      summary: Exchange OAuth authorization code
+      description: |
+        Atomically consumes a short-lived callback code and returns the user's
+        session. The request must use the same project anon key and exact
+        redirect_url that initiated the flow.
+      operationId: authOAuthExchange
+      security:
+        - AnonKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - redirect_url
+              properties:
+                code:
+                  type: string
+                redirect_url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Authorization code consumed and session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Invalid, expired, consumed, or redirect-mismatched code
+        '401':
+          description: Missing or invalid project anon key
+        '429':
+          description: Too many exchange attempts from this client
   /auth/device/authorize:
     post:
       tags:
@@ -6202,6 +6595,31 @@ paths:
               - github
               - microsoft
               - apple
+        - name: redirect_url
+          in: query
+          schema:
+            type: string
+          description: |
+            URL to redirect to after linking completes (optional). Same
+            allowed_redirect_urls requirement as GET /auth/oauth/{provider}/authorize.
+        - name: client_state
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+          description: |
+            Optional application nonce echoed to redirect_url as `state`.
+        - name: response_mode
+          in: query
+          schema:
+            type: string
+            enum:
+              - code
+          description: |
+            Set to `code` to receive a short-lived authorization code at
+            redirect_url. `redirect_url` is required in this mode. When
+            omitted, the established session-fragment response is retained for
+            compatibility with existing clients.
       responses:
         '200':
           description: Authorization URL generated
@@ -6212,6 +6630,12 @@ paths:
                 properties:
                   authorization_url:
                     type: string
+        '400':
+          description: redirect_url is not registered in allowed_redirect_urls
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Not authenticated
           content:
@@ -6766,16 +7190,12 @@ paths:
                     Optional least-privilege scope for the key. When omitted, empty, or
                     containing only blank strings, the key is granted full access (["*"])
                     for backward compatibility. Provide an explicit list (e.g.
-                    ["functions.invoke", "storage.download"]) to restrict the key; "*"
-                    grants everything. Scope enforcement currently applies to function
-                    invocation and storage object operations; other service-key routes
-                    are not yet gated by scope.
+                    ["functions.invoke", "locks.manage"]) to restrict the key; "*"
+                    grants everything. Scope enforcement applies to function invocation,
+                    storage object operations, and project locks.
                   example:
                     - functions.invoke
-                    - storage.upload
-                    - storage.download
-                    - storage.list
-                    - storage.delete
+                    - locks.manage
       responses:
         '201':
           description: Service key created - save the key_value immediately!
@@ -7246,6 +7666,320 @@ paths:
           description: Access denied by storage policy
         '429':
           $ref: '#/components/responses/BandwidthCapExceeded'
+  /locks/{key}/lease:
+    post:
+      tags:
+        - Locks
+      summary: Acquire a project lock
+      description: |
+        Acquires a project-scoped lease using the project embedded in the service-role key.
+        The caller must hold the `locks.manage` permission. Repeating the request with the
+        same lock token is idempotent and resets that lease to the requested TTL. A different
+        live owner receives `409 lock_held`; a caller whose own lease already lapsed receives
+        `409 lock_ownership_lost`.
+      operationId: acquireProjectLock
+      security:
+        - ServiceRoleKey: []
+      parameters:
+        - $ref: '#/components/parameters/LockKey'
+        - $ref: '#/components/parameters/LockToken'
+        - $ref: '#/components/parameters/LockRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectLockLeaseRequest'
+      responses:
+        '201':
+          description: Lease acquired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectLockLease'
+        '400':
+          description: Invalid lock key, token, or TTL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: |
+            The lock is held by another live lease (`lock_held`), or the caller's own lease
+            lapsed and is not yet reclaimable (`lock_ownership_lost`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Project lock request limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds until the current fixed-minute window ends.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Lock service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+        - Locks
+      summary: Renew a project lock
+      description: |
+        Renews a lease owned by the supplied lock token. The request must arrive
+        more than one second before `expires_at`; this safety margin prevents
+        clock skew between regional API instances from resurrecting an expired
+        lease.
+      operationId: renewProjectLock
+      security:
+        - ServiceRoleKey: []
+      parameters:
+        - $ref: '#/components/parameters/LockKey'
+        - $ref: '#/components/parameters/LockToken'
+        - $ref: '#/components/parameters/LockRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectLockLeaseRequest'
+      responses:
+        '200':
+          description: Lease renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectLockLease'
+        '400':
+          description: Invalid lock key, token, or TTL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The lease expired or is owned by another token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Project lock request limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds until the current fixed-minute window ends.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Lock service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Locks
+      summary: Release a project lock
+      description: Releases a lease only when the supplied lock token still owns it.
+      operationId: releaseProjectLock
+      security:
+        - ServiceRoleKey: []
+      parameters:
+        - $ref: '#/components/parameters/LockKey'
+        - $ref: '#/components/parameters/LockToken'
+        - $ref: '#/components/parameters/LockRequestId'
+      responses:
+        '204':
+          description: Lease released
+        '400':
+          description: Invalid lock key or token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The lease is owned by another token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Project lock request limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds until the current fixed-minute window ends.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Lock service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /locks/{key}:
+    get:
+      tags:
+        - Locks
+      summary: Read a project lock
+      description: |
+        Reports whether the lock is currently held, when its lease expires, and the
+        holder's fencing token. `held` follows takeover eligibility rather than raw
+        expiry, so `held: false` means an acquire would succeed now. No lock token is
+        required, making this usable for monitoring and recovery.
+      operationId: getProjectLock
+      security:
+        - ServiceRoleKey: []
+      parameters:
+        - $ref: '#/components/parameters/LockKey'
+        - $ref: '#/components/parameters/LockRequestId'
+      responses:
+        '200':
+          description: Current lock state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectLockState'
+        '400':
+          description: Invalid lock key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Project lock request limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds until the current fixed-minute window ends.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Lock service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Locks
+      summary: Force release a project lock
+      description: |
+        Drops the lease whatever token holds it, for recovering a lock whose holder
+        died without releasing. Use `DELETE /locks/{key}/lease` for normal release.
+
+        This breaks mutual exclusion by itself: the previous holder keeps working
+        until its own renewal fails. Guard the protected resource with the lease's
+        `fencing_token`, which the next acquisition raises, so a write from the
+        displaced holder can be rejected. Succeeds when the lock is already absent.
+      operationId: forceReleaseProjectLock
+      security:
+        - ServiceRoleKey: []
+      parameters:
+        - $ref: '#/components/parameters/LockKey'
+        - $ref: '#/components/parameters/LockRequestId'
+      responses:
+        '204':
+          description: Lock released
+        '400':
+          description: Invalid lock key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Project lock request limit exceeded
+          headers:
+            Retry-After:
+              description: Seconds until the current fixed-minute window ends.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Lock service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /storage/{bucketName}/move:
     post:
       tags:
@@ -7572,6 +8306,7 @@ paths:
       summary: Update file visibility (public/private)
       description: |
         Change whether a file is publicly accessible. Only the file owner or a service key can change visibility.
+        If the bucket defines UPDATE policies, the owner must also satisfy one of them.
 
         - Public files can be downloaded with just an anon key (no user authentication required)
         - Private files (default) require authentication and must pass policy checks
@@ -7602,7 +8337,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StorageObject'
         '403':
-          description: Only file owner or service key can change visibility
+          description: Not the file owner or denied by the bucket's UPDATE policies
         '404':
           description: Object not found
   /public/{projectId}/{bucketName}/{path}:
@@ -7793,6 +8528,34 @@ components:
         maximum: 100
         default: 10
       description: Number of items per page (max 100)
+    LockKey:
+      name: key
+      in: path
+      required: true
+      description: Project-local lock name.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+    LockToken:
+      name: X-Volcano-Lock-Token
+      in: header
+      required: true
+      description: Opaque UUID generated once by the caller and retained for the lease lifetime.
+      schema:
+        type: string
+        format: uuid
+    LockRequestId:
+      name: X-Volcano-Request-Id
+      in: header
+      required: true
+      description: |
+        UUID correlating this request across client and server logs. Repeat safety comes from
+        the lock token, so a retry under a reused request ID still counts against the quota.
+      schema:
+        type: string
+        format: uuid
     Offset:
       name: offset
       in: query
@@ -7814,8 +8577,12 @@ components:
       schema:
         type: integer
         minimum: 1
-        default: 1
-      description: Page number (1-indexed)
+      description: |
+        Page number (1-indexed) for offset pagination. Declares no schema
+        default so the request validator does not inject one: handlers that omit
+        `page` see it unset (nil) and default to 1 in code, while cursor-first
+        endpoints (e.g. the project deployments feed) can detect its absence to
+        stay in keyset/search mode. Supplying `page` selects offset pagination.
     ProjectId:
       name: id
       in: path
@@ -7832,8 +8599,8 @@ components:
         type: string
         maxLength: 256
       description: |
-        Case-insensitive substring match on the resource `name`. Only honored on
-        the cursor pagination path.
+        Case-insensitive substring match on the resource `name`. See the
+        endpoint description for supported pagination modes.
     SchedulerId:
       name: schedulerId
       in: path
@@ -7938,7 +8705,13 @@ components:
           default: 0
         min_password_length:
           type: integer
-          default: 6
+          minimum: 15
+          maximum: 128
+          default: 15
+          description: Configured minimum password length in Unicode characters.
+        password_policy:
+          readOnly: true
+          $ref: '#/components/schemas/AuthPasswordPolicy'
         require_uppercase:
           type: boolean
           default: false
@@ -8073,6 +8846,8 @@ components:
             the built-in managed device page. Lets a CLI surface the project's
             own RFC 8628 approval page. Empty falls back to the managed page.
           example: https://app.acme.com/device
+      required:
+        - password_policy
     AuthInsightsInterval:
       type: string
       enum:
@@ -8287,6 +9062,50 @@ components:
             $ref: '#/components/schemas/AuthMethodSummary'
       required:
         - methods
+    AuthPasswordPolicy:
+      type: object
+      additionalProperties: false
+      description: Effective backend-enforced password policy.
+      properties:
+        effective_min_length:
+          type: integer
+          minimum: 15
+          maximum: 128
+          description: Effective minimum password length in Unicode characters.
+        min_configurable_length:
+          type: integer
+          minimum: 15
+          maximum: 15
+          description: Lowest minimum password length accepted by the auth configuration endpoint.
+        max_length:
+          type: integer
+          minimum: 128
+          maximum: 128
+          description: Maximum password length in Unicode characters.
+        require_uppercase:
+          type: boolean
+          description: Whether passwords must contain an ASCII uppercase letter (A-Z).
+        require_lowercase:
+          type: boolean
+          description: Whether passwords must contain an ASCII lowercase letter (a-z).
+        require_numbers:
+          type: boolean
+          description: Whether passwords must contain an ASCII digit (0-9).
+        require_special_chars:
+          type: boolean
+          description: Whether passwords must contain one of the backend-supported special characters.
+        compromised_passwords_rejected:
+          type: boolean
+          description: Whether common and known-compromised passwords are rejected by the backend.
+      required:
+        - effective_min_length
+        - min_configurable_length
+        - max_length
+        - require_uppercase
+        - require_lowercase
+        - require_numbers
+        - require_special_chars
+        - compromised_passwords_rejected
     AuthSession:
       type: object
       description: An authentication session for a user
@@ -8385,14 +9204,16 @@ components:
           description: Access token lifetime in seconds
         refresh_token:
           type: string
-          description: Long-lived token for getting new access tokens
+          x-go-type-skip-optional-pointer: true
+          description: |
+            Long-lived token for getting new access tokens. Omitted when the
+            request uses eligible HttpOnly cookie session storage.
         user:
           $ref: '#/components/schemas/AuthUser'
       required:
         - access_token
         - token_type
         - expires_in
-        - refresh_token
         - user
     AuthUser:
       type: object
@@ -8865,6 +9686,16 @@ components:
             - volcano-db-xl
             - volcano-db-2xl
           example: volcano-db-xs
+        storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Latest observed on-disk size from `pg_database_size`, in bytes. This
+            point-in-time gauge may be absent until the database has been sampled.
+            Summing the latest samples for every database in a project produces
+            the project's "Database Storage (Bytes)" usage gauge. Populated on
+            database list responses; single-database responses omit it.
         last_invoked_at:
           type: string
           format: date-time
@@ -9137,6 +9968,101 @@ components:
         - root_directory
         - production_branch
         - updated_at
+    ProjectGitDeploySettings:
+      type: object
+      description: 'A project''s GitHub auto-deploy settings: what a push to the connected repo''s production branch deploys. All settings are default-off.'
+      properties:
+        auto_deploy_enabled:
+          type: boolean
+          description: Whether a production-branch push triggers a deployment.
+        deploy_functions:
+          type: boolean
+          description: Whether the repo's functions are deployed on push.
+        frontend_name:
+          type: string
+          description: Name of the frontend to build and deploy on push. Omitted when no frontend is deployed. Resolved at deploy time; need not exist yet.
+        frontend_app_root:
+          type: string
+          description: App root (subdirectory) the frontend builds from. Omitted for the repo root.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - auto_deploy_enabled
+        - deploy_functions
+        - updated_at
+    UpdateProjectGitDeploySettingsRequest:
+      type: object
+      description: Full replace of a project's Git auto-deploy settings.
+      properties:
+        auto_deploy_enabled:
+          type: boolean
+        deploy_functions:
+          type: boolean
+        frontend_name:
+          type: string
+          description: Frontend to deploy on push. Omit or empty to deploy no frontend.
+        frontend_app_root:
+          type: string
+          description: App root the frontend builds from. Requires frontend_name; omit for the repo root.
+      required:
+        - auto_deploy_enabled
+        - deploy_functions
+    ProjectLockLeaseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        ttl_seconds:
+          type: integer
+          minimum: 5
+          maximum: 7776000
+          description: |
+            Lease duration in seconds, from 5 seconds through 90 days, measured
+            from when the request is served. Renew before it elapses. A renewal
+            sets the new expiry outright, so a shorter TTL shortens the lease.
+            Renewals cannot extend an acquisition beyond its absolute 90-day
+            deadline.
+      required:
+        - ttl_seconds
+    ProjectLockLease:
+      type: object
+      additionalProperties: false
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          description: Advisory lease expiry timestamp in UTC.
+        fencing_token:
+          type: integer
+          format: int64
+          description: |
+            Monotonically increasing token for this acquisition. It rises whenever the
+            lock changes hands and stays the same across renewals of one lease. Pass it
+            to the resource you are protecting and reject any write carrying a token
+            lower than the highest already seen; that is what stops a displaced holder
+            from writing after its lease lapsed.
+      required:
+        - expires_at
+        - fencing_token
+    ProjectLockState:
+      type: object
+      additionalProperties: false
+      properties:
+        held:
+          type: boolean
+          description: |
+            Whether the lock is unavailable right now. False means an acquire would
+            succeed. It remains true during the brief grace window after expiry.
+        expires_at:
+          type: string
+          format: date-time
+          description: Advisory lease expiry timestamp in UTC. Present only when held.
+        fencing_token:
+          type: integer
+          format: int64
+          description: Current holder's fencing token. Present only when held.
+      required:
+        - held
     ConnectProjectGitRequest:
       type: object
       properties:
@@ -9354,6 +10280,19 @@ components:
             - superseded
             - deleting
             - deleted
+        deploy_source:
+          type: string
+          enum:
+            - git
+            - cli
+            - web
+            - api
+            - system
+            - unknown
+          description: What initiated this deployment.
+        initiated_by:
+          type: string
+          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
         artifact_bucket:
           type: string
         artifact_key:
@@ -9376,6 +10315,8 @@ components:
         codebuild_duration_recorded_at:
           type: string
           format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
         error_message:
           type: string
         created_at:
@@ -9390,6 +10331,7 @@ components:
         - project_id
         - operation
         - status
+        - deploy_source
         - created_at
         - updated_at
     FrontendDomainRoutingRecord:
@@ -9596,6 +10538,19 @@ components:
             - superseded
             - deleting
             - deleted
+        deploy_source:
+          type: string
+          enum:
+            - git
+            - cli
+            - web
+            - api
+            - system
+            - unknown
+          description: What initiated this deployment.
+        initiated_by:
+          type: string
+          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
         artifact_bucket:
           type: string
         artifact_key:
@@ -9612,6 +10567,8 @@ components:
         codebuild_duration_recorded_at:
           type: string
           format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
         error_message:
           type: string
         completed_at:
@@ -9629,6 +10586,7 @@ components:
         - project_id
         - operation
         - status
+        - deploy_source
         - created_at
         - updated_at
     FunctionInvocationRequest:
@@ -9919,6 +10877,10 @@ components:
           format: date-time
         last_error:
           type: string
+        run_count:
+          type: integer
+          format: int64
+          description: Total number of times this scheduler has executed. 0 for a scheduler that has never run.
         created_at:
           type: string
           format: date-time
@@ -10049,7 +11011,8 @@ components:
             "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
             reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
             is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-            not a cumulative counter.
+            not a cumulative counter. It is the sum of the latest `pg_database_size` samples
+            exposed as `storage_bytes` by the project's database list.
         total:
           type: integer
           format: int64
@@ -10359,7 +11322,13 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (only present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -10387,7 +11356,13 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (only present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
         status:
           type: string
           enum:
@@ -10826,6 +11801,8 @@ components:
       properties:
         min_length:
           type: integer
+          minimum: 15
+          maximum: 128
         require_uppercase:
           type: boolean
         require_lowercase:
@@ -11586,6 +12563,16 @@ components:
             - superseded
             - deleting
             - deleted
+        deploy_source:
+          type: string
+          enum:
+            - git
+            - cli
+            - web
+            - api
+            - system
+            - unknown
+          description: What initiated this deployment.
         artifact_version:
           type: string
         error_message:
@@ -11593,6 +12580,8 @@ components:
         completed_at:
           type: string
           format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
         created_at:
           type: string
           format: date-time
@@ -11605,6 +12594,7 @@ components:
         - resource
         - operation
         - status
+        - deploy_source
         - created_at
         - updated_at
     ProjectDeploymentResource:
@@ -11625,6 +12615,42 @@ components:
         - type
         - id
         - name
+    ProjectDeploymentSummary:
+      type: object
+      description: Aggregate deployment statistics for one resource pipeline.
+      properties:
+        deployment_count:
+          type: integer
+          description: All deployment attempts matching the filters.
+        successful_count:
+          type: integer
+          description: Attempts that reached active or deleted.
+        failed_count:
+          type: integer
+          description: Attempts that reached failed or degraded.
+        canceled_count:
+          type: integer
+          description: Superseded attempts, excluded from success rate and duration.
+        success_rate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: Successful attempts divided by successful plus failed attempts.
+        median_build_duration_seconds:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+          description: Median CodeBuild duration across eligible completed attempts.
+      required:
+        - deployment_count
+        - successful_count
+        - failed_count
+        - canceled_count
+        - success_rate
+        - median_build_duration_seconds
     ProjectUsageResponse:
       type: object
       description: Aggregated usage metrics for a project.
@@ -11791,7 +12817,7 @@ components:
           description: |
             Operations this key may perform. ["*"] grants full admin access
             (default for keys created without an explicit scope). Scoped keys
-            list specific permissions, e.g. ["functions.invoke"].
+            list specific permissions, e.g. ["functions.invoke", "locks.manage"].
           example:
             - '*'
         created_at:
@@ -12138,6 +13164,8 @@ components:
           type: integer
         min_password_length:
           type: integer
+          minimum: 15
+          maximum: 128
         require_uppercase:
           type: boolean
         require_lowercase:
@@ -12480,6 +13508,16 @@ components:
           type: string
           format: date-time
           description: Timestamp when the current variable propagation phase started.
+        deploy_source:
+          type: string
+          enum:
+            - git
+            - cli
+            - web
+            - api
+            - system
+            - unknown
+          description: What initiated the latest variable propagation sync, when one has run.
         created_at:
           type: string
           format: date-time
@@ -12549,6 +13587,79 @@ components:
         - mean_exec_time_seconds
         - min_exec_time_seconds
         - rows_processed
+    DeploymentPhase:
+      type: object
+      description: Timing and outcome for one normalized deployment pipeline phase.
+      properties:
+        name:
+          type: string
+          enum:
+            - queue
+            - checkout
+            - build
+            - image
+            - provisioning
+            - rollout
+            - verification
+        status:
+          type: string
+          enum:
+            - pending
+            - in_progress
+            - succeeded
+            - failed
+            - skipped
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - name
+        - status
+    DeploymentProgress:
+      type: object
+      description: Normalized live progress derived from the deployment workflow and build phases.
+      properties:
+        current_phase:
+          type: string
+          enum:
+            - queue
+            - checkout
+            - build
+            - image
+            - provisioning
+            - rollout
+            - verification
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        elapsed_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        phases:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/DeploymentPhase'
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - started_at
+        - elapsed_seconds
+        - phases
+        - updated_at
     LogDeploymentRequestSelector:
       type: object
       description: Deployment log selector for deployable resources.
