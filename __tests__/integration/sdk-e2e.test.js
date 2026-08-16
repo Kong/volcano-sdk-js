@@ -214,6 +214,14 @@ describe('SDK E2E Integration Tests', () => {
     platformToken = tokenResponse.token;
     console.log('[ok] Created platform token');
 
+    // FREE's MaxProjects cap is 1 (hosting's internal/planconfig, VOL-860); this
+    // suite creates more than one project per platform user, so promote to PRO.
+    await mgmtFetch(`/users/${platformUser.id}/plan`, {
+      method: 'POST',
+      body: JSON.stringify({ plan: 'PRO' }),
+    });
+    console.log('[ok] Promoted platform user to PRO');
+
     // Create project with unique name
     project = await platformFetch('/projects', platformToken, {
       method: 'POST',
