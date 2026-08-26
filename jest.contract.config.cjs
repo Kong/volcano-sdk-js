@@ -1,6 +1,6 @@
 module.exports = {
-  testEnvironment: 'node',
-  testMatch: ['**/__tests__/contract/sdk-contract.test.js'],
+  testEnvironment: '<rootDir>/__tests__/node-environment.cjs',
+  testMatch: ['**/__tests__/contract/**/*.test.js'],
   testTimeout: 30000,
   reporters: [
     'default',

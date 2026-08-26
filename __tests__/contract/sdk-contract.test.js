@@ -121,10 +121,7 @@ autoBindSteps(features, [
         recordOutcome(context.world, null, acquired.error || new Error('Lock was not acquired'));
         return;
       }
-      const cleanup = async () => {
-        await context.world.serviceClient.locks.release(context.world.lockKey, acquired.lease);
-      };
-      context.world.cleanupCallbacks.push(cleanup);
+      const cleanup = context.world.registerLockCleanup(context.world.lockKey, acquired.lease);
       const released = await context.world.serviceClient.locks.release(
         context.world.lockKey,
         acquired.lease,

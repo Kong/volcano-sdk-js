@@ -82,6 +82,17 @@ class ContractWorld {
     await Promise.all([this.subscriber.subscribe(), this.publisher.subscribe()]);
   }
 
+  registerLockCleanup(key, lease) {
+    const cleanup = async () => {
+      const released = await this.serviceClient.locks.release(key, lease);
+      if (released.error) {
+        throw released.error;
+      }
+    };
+    this.cleanupCallbacks.push(cleanup);
+    return cleanup;
+  }
+
   async cleanup() {
     const failures = [];
     for (const callback of this.cleanupCallbacks.slice().reverse()) {
