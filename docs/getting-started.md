@@ -5,6 +5,9 @@ description: 'This guide walks you through installing the Volcano SDK and making
 
 This guide walks you through installing the Volcano SDK and making your first authenticated request.
 
+Use `VolcanoClient` for new applications. `VolcanoAuth` remains a compatible
+alias for existing applications.
+
 ## Installation
 
 Install the SDK using your preferred package manager:
@@ -39,7 +42,7 @@ For quick prototyping or simple HTML pages, you can load the SDK directly from a
 ```html
 <script src="https://unpkg.com/@volcano.dev/sdk@latest/dist/index.js"></script>
 <script>
-  const volcano = new VolcanoAuth({
+  const volcano = new VolcanoClient({
     apiUrl: 'https://api.yourproject.volcano.dev',
     anonKey: 'your-anon-key',
   });
@@ -58,9 +61,9 @@ You can find both in your project's settings dashboard.
 ### Initialize the Client
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { VolcanoClient } from '@volcano.dev/sdk';
 
-const volcano = new VolcanoAuth({
+const volcano = new VolcanoClient({
   apiUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
 });
@@ -73,7 +76,7 @@ The anon key is safe to include in client-side code. It identifies your project 
 In production, store your configuration in environment variables:
 
 ```javascript
-const volcano = new VolcanoAuth({
+const volcano = new VolcanoClient({
   apiUrl: process.env.VOLCANO_API_URL,
   anonKey: process.env.VOLCANO_ANON_KEY,
 });

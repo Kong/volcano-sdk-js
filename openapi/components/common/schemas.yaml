@@ -1,0 +1,5204 @@
+openapi: 3.0.3
+info:
+  title: Volcano Hosting Common Schemas
+  version: 3.0.0
+paths: {}
+components:
+  schemas:
+    AnonKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key_value:
+          type: string
+          description: JWT token - use this in frontend Authorization header
+        permissions:
+          type: array
+          items:
+            type: string
+          description: |
+            Permissions granted to this anon key.
+            Auth permissions: auth.signup, auth.signin, auth.refresh, auth.logout, auth.password_reset, auth.confirm_email, auth.resend_confirmation
+            Storage permissions: storage.upload, storage.download, storage.list, storage.delete
+            Realtime permissions: realtime.connect, realtime.subscribe, realtime.publish
+            Functions permissions: functions.invoke
+          example: ["auth.signup", "auth.signin", "auth.refresh", "auth.logout"]
+        is_default:
+          type: boolean
+          description: Whether this is the project's configured default anon key. Only one key per project can be default.
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - key_value
+    AuthConfig:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        access_token_lifetime:
+          type: integer
+          description: Access token lifetime in seconds
+          default: 3600
+        refresh_token_lifetime:
+          type: integer
+          description: Refresh token lifetime in seconds
+          default: 2592000
+        inactivity_timeout:
+          type: integer
+          description: Force re-login after inactivity (seconds, 0=never)
+          default: 0
+        max_session_duration:
+          type: integer
+          description: Force re-login after duration (seconds, 0=never)
+          default: 0
+        min_password_length:
+          type: integer
+          minimum: 15
+          maximum: 128
+          default: 15
+          description: Configured minimum password length in Unicode characters.
+        # No readOnly here: OpenAPI 3.0 ignores every sibling of $ref, so it never
+        # had an effect, and strict loaders reject the pair outright.
+        password_policy:
+          $ref: '#/components/schemas/AuthPasswordPolicy'
+        require_uppercase:
+          type: boolean
+          default: false
+        require_lowercase:
+          type: boolean
+          default: false
+        require_numbers:
+          type: boolean
+          default: false
+        require_special_chars:
+          type: boolean
+          default: false
+        enable_signup:
+          type: boolean
+          description: Master switch - allow new user signups via ANY provider
+          default: true
+        enable_email_password:
+          type: boolean
+          description: Enable email/password authentication as a provider
+          default: true
+        rate_limit_signup:
+          type: integer
+          description: Signups per hour per IP
+          default: 100
+        rate_limit_signin:
+          type: integer
+          description: Signins per hour per IP
+          default: 100
+        rate_limit_token_refresh:
+          type: integer
+          description: Refreshes per hour per IP
+          default: 1000
+        cors_enabled:
+          type: boolean
+          default: false
+        cors_allowed_origins:
+          type: array
+          items:
+            type: string
+          example: ["https://myapp.com", "http://localhost:3000"]
+        enable_anonymous_signins:
+          type: boolean
+          description: Allow creating users without email/password
+          default: false
+        allowed_email_domains:
+          type: array
+          description: |
+            Email domains allowed to create users in this project. Applies to
+            email/password signup, OAuth/SSO signup, anonymous conversion, and
+            email changes. Empty (the default) allows every domain.
+
+            Entries are stored normalized (lowercase, no `@` prefix) and match
+            the domain part exactly: `domain1.com` does not cover
+            `mail.domain1.com`. Signups from other domains are rejected with
+            403, and `allowed_email_domains_mode` decides whether sign-in is
+            covered as well.
+
+            The allowlist is a PRO feature to configure and to enforce. A
+            downgrade parks it: the domains are still returned here and stop
+            being applied until the project is back on PRO.
+          items:
+            type: string
+          example: ["domain1.com", "domain2.com"]
+        allowed_email_domains_mode:
+          type: string
+          description: |
+            How far `allowed_email_domains` reaches. `signup` only gates account
+            creation, so accounts that predate the list keep signing in.
+            `signup_and_signin` also refuses to issue a session to an account
+            whose domain is not listed. `disabled` keeps the list without
+            enforcing it.
+          enum: [disabled, signup, signup_and_signin]
+          default: signup
+        platform_token_ttl:
+          type: integer
+          description: TTL in seconds for platform tokens minted via `/auth/platform/exchange`
+          default: 2592000
+        allow_password_reset:
+          type: boolean
+          description: Enable forgot password flow
+          default: true
+        password_reset_timeout:
+          type: integer
+          description: Recovery token expiry in seconds
+          default: 3600
+        max_password_history:
+          type: integer
+          description: Number of previous passwords to remember (0=disabled)
+          default: 0
+        cors_allow_credentials:
+          type: boolean
+          description: Allow credentials in CORS requests
+          default: true
+        cors_max_age:
+          type: integer
+          description: CORS preflight cache duration (seconds)
+          default: 86400
+        require_email_confirmation:
+          type: boolean
+          description: Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+          default: false
+        email_confirmation_timeout:
+          type: integer
+          description: Email confirmation token expiry in seconds.
+          default: 86400
+        auto_link_verified_oauth:
+          type: boolean
+          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+          default: false
+        email_enabled:
+          type: boolean
+          description: Enable transactional email sending (confirmation, reset, change notifications). Must be true when require_email_confirmation is true.
+          default: false
+        email_from_address:
+          type: string
+        email_from_name:
+          type: string
+        smtp_host:
+          type: string
+        smtp_port:
+          type: integer
+          default: 587
+        smtp_username:
+          type: string
+        smtp_password_configured:
+          type: boolean
+          description: Whether an SMTP password is configured. The password itself is never returned.
+          default: false
+        smtp_use_tls:
+          type: boolean
+          default: true
+        email_confirmation_subject:
+          type: string
+        email_password_reset_subject:
+          type: string
+        email_password_changed_subject:
+          type: string
+        managed_auth_enabled:
+          type: boolean
+          description: Enables project-hosted managed auth pages.
+          default: false
+        post_auth_redirect_url:
+          type: string
+          description: Default redirect target after successful hosted auth.
+        allowed_redirect_urls:
+          type: array
+          description: Redirect allowlist used to validate post_auth_redirect_url and post_logout_redirect_url.
+          items:
+            type: string
+        post_logout_redirect_url:
+          type: string
+          description: Redirect target after logout from hosted pages.
+        device_verification_url:
+          type: string
+          description: |
+            Optional override for the device-authorization verification page.
+            When set, POST /auth/device/authorize returns this URL (with the
+            user_code) as verification_uri/verification_uri_complete instead of
+            the built-in managed device page. Lets a CLI surface the project's
+            own RFC 8628 approval page. Empty falls back to the managed page.
+          example: "https://app.acme.com/device"
+      required:
+        - password_policy
+    AuthPasswordPolicy:
+      type: object
+      additionalProperties: false
+      description: Effective backend-enforced password policy.
+      properties:
+        effective_min_length:
+          type: integer
+          minimum: 15
+          maximum: 128
+          description: Effective minimum password length in Unicode characters.
+        min_configurable_length:
+          type: integer
+          minimum: 15
+          maximum: 15
+          description: Lowest minimum password length accepted by the auth configuration endpoint.
+        max_length:
+          type: integer
+          minimum: 128
+          maximum: 128
+          description: Maximum password length in Unicode characters.
+        require_uppercase:
+          type: boolean
+          description: Whether passwords must contain an ASCII uppercase letter (A-Z).
+        require_lowercase:
+          type: boolean
+          description: Whether passwords must contain an ASCII lowercase letter (a-z).
+        require_numbers:
+          type: boolean
+          description: Whether passwords must contain an ASCII digit (0-9).
+        require_special_chars:
+          type: boolean
+          description: Whether passwords must contain one of the backend-supported special characters.
+        compromised_passwords_rejected:
+          type: boolean
+          description: Whether common and known-compromised passwords are rejected by the backend.
+      required:
+        - effective_min_length
+        - min_configurable_length
+        - max_length
+        - require_uppercase
+        - require_lowercase
+        - require_numbers
+        - require_special_chars
+        - compromised_passwords_rejected
+    AuthHostedPage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        page_type:
+          $ref: '#/components/schemas/HostedAuthPageType'
+        html:
+          type: string
+          description: HTML content for this page type.
+        css:
+          type: string
+          description: CSS content for this page type.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AuthHostedPageResponse:
+      type: object
+      required: [page, defaults, runtime]
+      properties:
+        page:
+          allOf:
+            - $ref: '#/components/schemas/AuthHostedPage'
+          nullable: true
+          description: The saved page, or null when the project has not customized this page type yet.
+        defaults:
+          $ref: '#/components/schemas/AuthHostedPageDefaults'
+        runtime:
+          $ref: '#/components/schemas/AuthHostedPageRuntime'
+    AuthHostedPageDefaults:
+      type: object
+      required: [html, css]
+      description: |
+        The starting point for an unsaved page: the theme shell we render for the
+        built-in page plus its stylesheet. Valid input to the update endpoint —
+        it carries no script, meta, or link tags.
+      properties:
+        html:
+          type: string
+          description: Body shell markup containing the runtime render root.
+        css:
+          type: string
+          description: The built-in stylesheet, themed by the customer.
+    AuthHostedPageRuntime:
+      type: object
+      required: [root_id, script, mock_prelude]
+      description: |
+        The server-owned behavior of a hosted page. Clients compose previews from
+        this instead of reimplementing the page, so a preview cannot drift from
+        what is actually served.
+      properties:
+        root_id:
+          type: string
+          description: Element id the runtime script renders into. Markup carrying it opts into the theme-shell contract.
+        script:
+          type: string
+          description: The runtime script injected into the rendered page.
+        mock_prelude:
+          type: string
+          description: Preview harness that supplies request params and stubs the hosted-auth API. Never served on a real page.
+    AuthSession:
+      type: object
+      description: An authentication session for a user
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique session identifier
+        user_id:
+          type: string
+          format: uuid
+          description: The user this session belongs to
+        provider:
+          type: string
+          description: Authentication provider used to create this session
+          enum:
+            - email
+            - google
+            - github
+            - microsoft
+            - apple
+            - anonymous
+          example: "email"
+        user_agent:
+          type: string
+          description: Browser/device user agent string
+          example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+        ip_address:
+          type: string
+          description: IP address of the client when the session was created
+          example: "192.168.1.1"
+        last_ip_address:
+          type: string
+          description: IP address of the most recent activity (token refresh)
+          example: "192.168.1.100"
+        expires_at:
+          type: string
+          format: date-time
+          description: When this session expires
+        last_activity_at:
+          type: string
+          format: date-time
+          description: Last activity timestamp
+        session_started_at:
+          type: string
+          format: date-time
+          description: When the session was created
+        is_active:
+          type: boolean
+          description: Whether the session is currently active (not expired)
+        is_current:
+          type: boolean
+          description: Whether this is the session making the current request
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - user_id
+        - provider
+        - expires_at
+        - is_active
+        - is_current
+    AuthIdentity:
+      type: object
+      description: |
+        A real email identity owned by the account. One account can own multiple
+        identities (for example a work email plus a personal email linked via OAuth).
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identity identifier
+        email:
+          type: string
+          format: email
+          description: The email address this identity represents
+        email_verified:
+          type: boolean
+          description: Whether ownership of this email has been verified
+        is_primary:
+          type: boolean
+          description: Whether the account's primary sign-in method resolves to this identity
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - email_verified
+        - is_primary
+        - created_at
+    AuthMethodSummary:
+      type: object
+      description: |
+        A single sign-in method the account owns (password, an OAuth provider, or an
+        active anonymous method). `is_primary` reflects the account's primary_method_id.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique method identifier
+        type:
+          type: string
+          # x-go-type keeps the server DTO field a plain string. The enum below still
+          # drives request validation and SDK/CLI generation, but no Go enum type is
+          # emitted — emitting one perturbs oapi-codegen's package-wide enum-constant
+          # dedup and renames unrelated provider enum constants in this shared package.
+          x-go-type: string
+          description: The kind of sign-in method
+          enum:
+            - password
+            - oauth
+            - anonymous
+        provider:
+          type: string
+          description: OAuth provider name; present only when type is oauth
+          example: google
+        identity_id:
+          type: string
+          # Kept a plain string (not format: uuid) intentionally: it is the identity UUID
+          # for password/oauth methods but empty for anonymous methods, which format: uuid
+          # would reject.
+          description: |
+            The identity this method signs in to — a UUID for password/oauth methods,
+            empty for anonymous methods.
+        email:
+          type: string
+          description: The email of the method's identity (empty for anonymous)
+        is_primary:
+          type: boolean
+          description: Whether this is the account's primary sign-in method
+        last_used_at:
+          type: string
+          format: date-time
+          description: When this method was last used to sign in, if ever
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - identity_id
+        - email
+        - is_primary
+        - created_at
+        - updated_at
+    AuthIdentitiesResponse:
+      type: object
+      properties:
+        identities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthIdentity'
+      required:
+        - identities
+    AuthMethodsResponse:
+      type: object
+      properties:
+        methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthMethodSummary'
+      required:
+        - methods
+    AuthSignupResponse:
+      type: object
+      description: |
+        Uniform, session-less response returned by POST /auth/signup. It carries no
+        tokens and no user object, and is identical for a new account and for an
+        already-registered email (anti-enumeration). Clients obtain a session with a
+        subsequent POST /auth/signin.
+      properties:
+        confirmation_required:
+          type: boolean
+          description: |
+            Whether the project requires email confirmation. Reflects project config
+            only (identical for a new and an existing email), so it leaks nothing about
+            account existence.
+        message:
+          type: string
+          description: Human-readable acknowledgement.
+      required:
+        - confirmation_required
+        - message
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (expires after configured lifetime)
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds
+        refresh_token:
+          type: string
+          x-go-type-skip-optional-pointer: true
+          description: |
+            Long-lived token for getting new access tokens. Omitted when the
+            request uses eligible HttpOnly cookie session storage.
+        user:
+          $ref: '#/components/schemas/AuthUser'
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - user
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        email_confirmed:
+          type: boolean
+        user_metadata:
+          type: object
+          additionalProperties: true
+          description: User-editable metadata
+        app_metadata:
+          type: object
+          additionalProperties: true
+          description: Application-controlled metadata (read-only for users)
+        avatar_url:
+          type: string
+          format: uri
+          description: User avatar URL (from OAuth provider or manually set)
+        status:
+          type: string
+          enum: [active, banned, deleted]
+        banned_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: When temporary ban expires (null if not banned or permanent)
+        last_sign_in_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - status
+    BanUserResponse:
+      type: object
+      description: Response when banning a user
+      properties:
+        message:
+          type: string
+          example: "User banned until 2026-12-31T23:59:59Z"
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [banned]
+        banned_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the ban expires (null for permanent ban)
+      required:
+        - message
+        - user_id
+        - email
+        - status
+    BatchFunctionDeployFailure:
+      type: object
+      properties:
+        name:
+          type: string
+        function_id:
+          type: string
+          format: uuid
+        operation:
+          type: string
+          enum: [deploy, update]
+        error:
+          type: string
+      required:
+        - name
+        - error
+    BatchFunctionDeployResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        data:
+          type: array
+          description: Functions whose deployment workflows were started successfully
+          items:
+            $ref: '#/components/schemas/Function'
+        failed:
+          type: array
+          description: Functions that failed before their workflow started. Successful functions are left running; failed new functions are deleted and failed updates are rolled back where possible.
+          items:
+            $ref: '#/components/schemas/BatchFunctionDeployFailure'
+      required:
+        - batch_id
+        - data
+    CompleteUploadSessionResponse:
+      type: object
+      description: Response when completing an upload
+      properties:
+        object:
+          $ref: '#/components/schemas/StorageObject'
+    CreateDatabaseRequest:
+      type: object
+      description: |
+        Create a new PostgreSQL database. Volcano automatically sets up:
+        - Auth helpers (auth.uid(), auth.email(), auth.role())
+        - Database roles (anon for unauthenticated, authenticated for signed-in users)
+        - Secure multi-tenant isolation
+        - Ready for Row-Level Security
+      properties:
+        name:
+          type: string
+          description: Database name (must be unique within project)
+          pattern: '^[a-z0-9_]+$'
+          maxLength: 64
+          example: "my_database"
+        region:
+          type: string
+          description: Region for database hosting
+          example: "aws-us-east-1"
+          enum:
+            - aws-us-east-1
+            - aws-us-east-2
+            - aws-us-west-2
+            - aws-eu-central-1
+            - aws-eu-west-2
+            - aws-ap-southeast-1
+            - aws-ap-southeast-2
+            - aws-sa-east-1
+        pg_version:
+          type: string
+          description: PostgreSQL major version
+          example: "16"
+          enum: ["15", "16"]
+        database_type:
+          type: string
+          description: |
+            Compute size tier (optional, defaults to volcano-db-xs).
+            Determines autoscaling limits for the database.
+          enum:
+            - volcano-db-xs
+            - volcano-db-s
+            - volcano-db-m
+            - volcano-db-l
+            - volcano-db-xl
+            - volcano-db-2xl
+          default: volcano-db-xs
+          example: volcano-db-xs
+      required:
+        - name
+        - region
+        - pg_version
+    CreateEmailTemplateRequest:
+      type: object
+      properties:
+        template_type:
+          type: string
+          enum: [welcome, confirmation, password_reset, password_changed]
+          description: Type of email template
+        subject:
+          type: string
+          description: Email subject line
+          example: "Confirm your email"
+        html_body:
+          type: string
+          description: |
+            HTML template body. Available placeholders:
+            - {{.Token}} - The confirmation/reset token
+            - {{.ProjectName}} - The project name
+            - {{.Email}} - User's email address
+        text_body:
+          type: string
+          description: Plain text template body (same placeholders as HTML)
+      required:
+        - template_type
+        - subject
+        - html_body
+        - text_body
+    CreateFrontendCustomDomainRequest:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: Fully-qualified domain name (hostname only, no scheme/path)
+          example: app.example.com
+        tls:
+          $ref: '#/components/schemas/FrontendCustomDomainTLSConfig'
+      required:
+        - domain
+        - tls
+    CreateFunctionSchedulerRequest:
+      type: object
+      required: [name, schedule]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        enabled:
+          type: boolean
+          default: true
+        schedule:
+          $ref: '#/components/schemas/ScheduleRequest'
+        payload:
+          type: object
+          additionalProperties: true
+        regions:
+          type: array
+          description: Optional single explicit deployed region. If omitted, the scheduler chooses one deployed region and invokes according to the cron expression.
+          maxItems: 1
+          items:
+            type: string
+    CreateOAuthConfigRequest:
+      type: object
+      required:
+        - provider
+      properties:
+        provider:
+          type: string
+          enum: [google, github, microsoft, apple, device]
+          example: "google"
+        client_id:
+          type: string
+          example: "123456789.apps.googleusercontent.com"
+          description: Required for non-device providers. Must not be provided for `provider=device`; server always auto-generates it.
+        client_secret:
+          type: string
+          example: "GOCSPX-abc123def456"
+          description: Required for non-device providers. Must not be provided for `provider=device`; server always auto-generates it.
+        redirect_url:
+          type: string
+          description: Required for non-device providers. Not used for `provider=device`.
+          format: uri
+          example: "https://yourapp.com/auth/callback"
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["openid", "email", "profile"]
+          description: Optional for non-device providers, uses provider defaults if omitted. Not used for `provider=device`.
+    CreateProjectRequest:
+      type: object
+      description: Request to create a new project
+      properties:
+        name:
+          type: string
+          description: |
+            Project name (must be unique).
+            Can only contain letters, numbers, underscores, and hyphens.
+          pattern: "^[A-Za-z0-9_-]+$"
+          minLength: 1
+          maxLength: 255
+          example: "my-awesome-app"
+        all_regions:
+          type: boolean
+          description: |
+            Optional region policy.
+            - `true` (default): project functions deploy to all configured regions
+            - `false`: project deploys only to `selected_regions`
+          default: true
+        selected_regions:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional region subset. Requires `all_regions=false`.
+            Region names must be a subset of platform `AWS_REGIONS`.
+          example: ["us-east-1", "us-west-2"]
+      required:
+        - name
+    CreateStorageBucketRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Bucket name (alphanumeric, dashes, underscores)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
+        file_size_limit:
+          type: integer
+          format: int64
+          description: Maximum file size in bytes
+        allowed_mime_types:
+          type: array
+          items:
+            type: string
+          description: Allowed MIME types (e.g., ["image/png", "image/jpeg"])
+      required:
+        - name
+    CreateStoragePolicyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Policy name
+        operation:
+          type: string
+          enum: [SELECT, INSERT, UPDATE, DELETE]
+          description: Operation this policy applies to
+        definition:
+          type: string
+          description: Policy expression
+      required:
+        - name
+        - operation
+        - definition
+    CreateUploadSessionRequest:
+      type: object
+      description: Request to create a resumable upload session
+      properties:
+        object_path:
+          type: string
+          description: Target file path within the bucket
+          example: "videos/large-file.mp4"
+        content_type:
+          type: string
+          description: MIME type of the file
+          example: "video/mp4"
+        total_size:
+          type: integer
+          format: int64
+          description: Total file size in bytes (max 5TB)
+          minimum: 1
+          maximum: 5497558138880
+          example: 5368709120
+        part_size:
+          type: integer
+          format: int64
+          description: "Part size in bytes (default: 25MB, min: 5MB, max: 25MB)"
+          minimum: 5242880
+          maximum: 26214400
+          example: 26214400
+      required:
+        - object_path
+        - content_type
+        - total_size
+    CreateUploadSessionResponse:
+      type: object
+      description: Response when creating an upload session
+      properties:
+        session_id:
+          type: string
+          description: Upload session ID
+          example: "session-abc123"
+        part_size:
+          type: integer
+          format: int64
+          description: Actual part size to use
+          example: 26214400
+        total_parts:
+          type: integer
+          description: Number of parts to upload
+          example: 52
+        expires_at:
+          type: string
+          format: date-time
+          description: When the session expires (7 days from creation)
+          example: "2024-01-22T10:30:00Z"
+    CreateVariableRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+        value:
+          type: string
+      required:
+        - name
+        - value
+    Database:
+      type: object
+      description: |
+        PostgreSQL database with automatic scalability and security features.
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Database name
+          pattern: '^[a-z0-9_]+$'
+          maxLength: 64
+        status:
+          type: string
+          enum: [provisioning, active, failed, deleting]
+          description: Database provisioning status
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current provisioning phase started
+        connection_string:
+          type: string
+          description: |
+            Secure PostgreSQL connection URI for your database.
+
+            The database is identified by the globally-unique username
+            (`volcano_client_{database_id}`) already in this URI; the
+            `application_name` parameter only selects the access mode:
+            - `volcano_full_access` — Full admin access (DDL, migrations)
+            - `volcano_user_access:{user_id}` — User impersonation (RLS enforced)
+            - `volcano_user_access` — Anonymous access (anon role, RLS enforced)
+        region:
+          type: string
+          description: Region where the database is hosted
+          example: aws-us-east-1
+        pg_version:
+          type: string
+          description: PostgreSQL major version
+          example: "16"
+        database_type:
+          type: string
+          description: |
+            Database size tier that determines available RAM and scaling limits.
+          enum:
+            - volcano-db-xs
+            - volcano-db-s
+            - volcano-db-m
+            - volcano-db-l
+            - volcano-db-xl
+            - volcano-db-2xl
+          example: volcano-db-xs
+        storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Latest observed on-disk size from `pg_database_size`, in bytes. This
+            point-in-time gauge may be absent until the database has been sampled.
+            Summing the latest samples for every database in a project produces
+            the project's "Database Storage (Bytes)" usage gauge. Populated on
+            database list responses; single-database responses omit it.
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent request timestamp for this database
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - status
+        - created_at
+        - updated_at
+    DatabaseQueryFilter:
+      type: object
+      description: One WHERE condition. Conditions are combined with AND.
+      properties:
+        column:
+          type: string
+          example: status
+        operator:
+          type: string
+          enum: [eq, neq, gt, gte, lt, lte, like, ilike, is, in]
+          example: eq
+          description: |
+            Filter operators:
+            - eq: equals (=)
+            - neq: not equals (<>)
+            - gt: greater than (>)
+            - gte: greater than or equal (>=)
+            - lt: less than (<)
+            - lte: less than or equal (<=)
+            - like: pattern match (LIKE)
+            - ilike: case-insensitive pattern match (ILIKE)
+            - is: IS NULL / IS NOT NULL
+            - in: IN array
+        value:
+          oneOf:
+            - type: string
+              nullable: true
+            - type: number
+            - type: boolean
+            - type: array
+              description: Array of values, for the `in` operator
+              items:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+          example: published
+      required:
+        - column
+        - operator
+        - value
+    DatabaseQueryOrder:
+      type: object
+      description: One ORDER BY clause.
+      properties:
+        column:
+          type: string
+          example: created_at
+        ascending:
+          type: boolean
+          default: true
+          example: false
+        nulls_first:
+          type: boolean
+          default: false
+      required:
+        - column
+    DatabaseQueryResult:
+      type: object
+      description: |
+        Rows returned by a data API request. RLS-filtered unless the request was
+        made with a service key.
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Result rows
+        count:
+          type: integer
+          description: Number of rows returned
+    DatabaseSelectRequest:
+      type: object
+      properties:
+        table:
+          type: string
+          description: Table name to query
+          example: posts
+        select:
+          type: array
+          items:
+            type: string
+          description: Columns to select (omit for *)
+          example: ["id", "title", "content", "created_at"]
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseQueryFilter'
+          description: WHERE conditions (combined with AND)
+          example:
+            - column: status
+              operator: eq
+              value: published
+            - column: views
+              operator: gt
+              value: 100
+        order:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseQueryOrder'
+          description: ORDER BY clauses
+          example:
+            - column: created_at
+              ascending: false
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Maximum rows to return
+          example: 10
+        offset:
+          type: integer
+          minimum: 0
+          description: Number of rows to skip (for pagination)
+          example: 0
+      required:
+        - table
+    DatabaseInsertRequest:
+      type: object
+      properties:
+        table:
+          type: string
+          description: Table name
+          example: posts
+        values:
+          type: object
+          additionalProperties: true
+          description: Column values to insert
+          example:
+            title: "My New Post"
+            content: "This is the content"
+            status: "draft"
+      required:
+        - table
+        - values
+    DatabaseUpdateRequest:
+      type: object
+      properties:
+        table:
+          type: string
+          description: Table name
+          example: posts
+        values:
+          type: object
+          additionalProperties: true
+          description: Column values to update
+          example:
+            title: "Updated Title"
+            status: "published"
+        filters:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/DatabaseQueryFilter'
+          description: |
+            WHERE conditions for which rows to update. At least one filter is
+            required; a filterless update is rejected to avoid rewriting every
+            row.
+          example:
+            - column: id
+              operator: eq
+              value: "post-uuid"
+      required:
+        - table
+        - values
+        - filters
+    DatabaseDeleteRequest:
+      type: object
+      properties:
+        table:
+          type: string
+          description: Table name
+          example: posts
+        filters:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/DatabaseQueryFilter'
+          description: WHERE conditions (required for safety)
+          example:
+            - column: id
+              operator: eq
+              value: "post-uuid"
+      required:
+        - table
+        - filters
+    DatabaseBranch:
+      type: object
+      description: |
+        A copy-on-write fork of a database, for development and testing.
+
+        A branch starts as an exact copy of its parent's data and diverges from
+        there. It has its own connection string and its own credential, so a
+        branch password cannot reach the parent.
+
+        Every branch expires. `expires_at` is a hard deadline: once it passes the
+        branch stops accepting connections and is deleted. Use `PATCH` to extend
+        a branch you are still working on.
+      properties:
+        id:
+          type: string
+          format: uuid
+        database_id:
+          type: string
+          format: uuid
+          description: The parent database this branch was forked from.
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Branch name, unique within the parent database.
+          pattern: '^[a-z0-9_]+$'
+          maxLength: 64
+        status:
+          type: string
+          enum: [provisioning, active, failed, deleting]
+          description: |
+            Branch status. A new branch starts `provisioning` and is not
+            connectable until it reports `active`; poll this endpoint until it
+            does. `connection_string` is only present while `active`.
+
+            `provisioning` also covers a branch being rebuilt after a `reset`,
+            and a build that is between retries, so it is the status to keep
+            waiting on. `failed` is terminal: it means the platform gave up, and
+            the branch will not become `active` on its own.
+        connection_string:
+          type: string
+          description: |
+            PostgreSQL connection URI for this branch. Present only while the
+            branch is `active`.
+
+            The URI carries the branch's own globally-unique username and
+            password; `application_name` selects the access mode exactly as it
+            does for the parent database:
+            - `volcano_full_access` — Full admin access (DDL, migrations)
+            - `volcano_user_access:{user_id}` — User impersonation (RLS enforced)
+            - `volcano_user_access` — Anonymous access (anon role, RLS enforced)
+        ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            The lifetime the branch was created with. Resetting a branch re-arms
+            this same duration, so a reset never shortens a branch's remaining
+            life.
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            When the branch stops serving connections and becomes eligible for
+            deletion. Enforced on the connection path, so it holds even if
+            reclamation is delayed.
+        storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Bytes this branch has diverged from its parent, which is what a
+            branch actually costs. Shared pages are not counted twice. Counts
+            against the parent database's storage allowance. Absent until the
+            branch has been sampled.
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent request timestamp for this branch
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - database_id
+        - project_id
+        - name
+        - status
+        - ttl_seconds
+        - expires_at
+        - created_at
+        - updated_at
+    CreateDatabaseBranchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Branch name (must be unique within the parent database)
+          pattern: '^[a-z0-9_]+$'
+          maxLength: 64
+          example: "feature_checkout"
+        ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 3600
+          maximum: 2592000
+          description: |
+            How long the branch should live, between one hour and 30 days.
+            Defaults to 7 days when omitted.
+          example: 86400
+      required:
+        - name
+    UpdateDatabaseBranchRequest:
+      type: object
+      description: Replace the branch's lifetime and restart its countdown from now.
+      properties:
+        ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 3600
+          maximum: 2592000
+          description: The new lifetime, between one hour and 30 days.
+          example: 86400
+      required:
+        - ttl_seconds
+    DatabaseBranchList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseBranch'
+      required:
+        - data
+    DatabaseStats:
+      type: object
+      properties:
+        current_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            On-disk size right now, in bytes: the database itself plus every
+            branch's divergence from it. This is the figure the storage
+            allowance is enforced against. `branches` breaks it down.
+        current_storage_mb:
+          type: number
+          format: double
+          minimum: 0
+          description: '`current_storage_bytes` expressed in megabytes.'
+        branches:
+          type: array
+          description: |
+            Per-branch contribution to `current_storage_bytes`. Empty when the
+            database has no branches. A branch that has not diverged from its
+            parent contributes nothing.
+          items:
+            $ref: '#/components/schemas/DatabaseBranchStorage'
+        storage_bytes:
+          type: integer
+          format: int64
+          description: Total storage used in bytes (data + WAL)
+        data_written_bytes:
+          type: integer
+          format: int64
+          description: Total data written in bytes
+        data_transfer_bytes:
+          type: integer
+          format: int64
+          description: Total data transferred in bytes
+        compute_time_seconds:
+          type: number
+          format: double
+          description: Total CPU seconds consumed
+        active_time_seconds:
+          type: number
+          format: double
+          description: Total active compute time in seconds
+        time_range:
+          type: string
+          description: Time range of the metrics (e.g., "2024-01-01T00:00:00Z to 2024-01-02T00:00:00Z")
+        granularity:
+          type: string
+          enum: [hourly, daily, monthly]
+          description: Granularity of the aggregated metrics
+      required:
+        - current_storage_bytes
+        - current_storage_mb
+        - storage_bytes
+        - data_written_bytes
+        - data_transfer_bytes
+        - compute_time_seconds
+        - active_time_seconds
+    DatabaseBranchStorage:
+      type: object
+      description: One branch's contribution to its parent database's storage.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Branch name
+        storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Bytes this branch has diverged from its parent. Pages the branch
+            still shares with the parent are not counted, so this is what the
+            branch actually adds to the total rather than its apparent size.
+      required:
+        - id
+        - name
+        - storage_bytes
+    DatabaseQueryPerformanceDatabase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - id
+        - name
+    DatabaseQueryPerformanceItem:
+      type: object
+      properties:
+        query_id:
+          type: string
+          description: pg_stat_statements query identifier.
+        query:
+          type: string
+          maxLength: 8192
+          description: Normalized and obfuscated representative query text.
+        database:
+          $ref: '#/components/schemas/DatabaseQueryPerformanceDatabase'
+        role:
+          type: string
+          description: Database role used for the query.
+        calls:
+          type: integer
+          format: int64
+        total_exec_time_seconds:
+          type: number
+          format: double
+          description: Cumulative total execution time from pg_stat_statements in seconds.
+        max_exec_time_seconds:
+          type: number
+          format: double
+        mean_exec_time_seconds:
+          type: number
+          format: double
+        min_exec_time_seconds:
+          type: number
+          format: double
+        rows_processed:
+          type: integer
+          format: int64
+      required:
+        - query_id
+        - query
+        - database
+        - role
+        - calls
+        - total_exec_time_seconds
+        - max_exec_time_seconds
+        - mean_exec_time_seconds
+        - min_exec_time_seconds
+        - rows_processed
+    DatabaseQueryPerformanceResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseQueryPerformanceItem'
+      required:
+        - data
+    DeviceAuthorizationResponse:
+      type: object
+      properties:
+        device_code:
+          type: string
+        user_code:
+          type: string
+        verification_uri:
+          type: string
+          description: |
+            Browser verification URL. Points at the project's managed device
+            approval page served by this API:
+            `/projects/{projectId}/auth/hosted?action=device&anon_key=...`.
+            Requires the project to have managed auth enabled and a default anon
+            key. A custom CLI may ignore this and direct users to its own
+            RFC 8628-compatible page instead (see the device-auth guide).
+        verification_uri_complete:
+          type: string
+          description: |
+            Same as `verification_uri` but with the `user_code` prefilled
+            (`&user_code=...`). This is the URL most device clients open.
+        expires_in:
+          type: integer
+        interval:
+          type: integer
+      required:
+        - device_code
+        - user_code
+        - verification_uri
+        - verification_uri_complete
+        - expires_in
+        - interval
+    EmailTemplate:
+      type: object
+      description: Custom email template
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        template_type:
+          type: string
+          enum: [welcome, confirmation, password_reset, password_changed]
+        subject:
+          type: string
+          example: "Confirm your email address"
+        html_body:
+          type: string
+          description: HTML template with placeholders
+        text_body:
+          type: string
+          description: Plain text template with placeholders
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - template_type
+        - subject
+        - html_body
+        - text_body
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Stable machine-readable error code when a specific recovery path is available.
+      required:
+        - error
+    ProjectHealthStatus:
+      type: string
+      enum: [healthy, degraded, critical, unknown]
+    ProjectHealthDataStatus:
+      type: string
+      enum: [complete, partial, no_data, stale]
+    ProjectHealthCategory:
+      type: string
+      enum: [lifecycle, storage]
+    ProjectHealthEvidence:
+      type: object
+      properties:
+        metric:
+          type: string
+        value:
+          type: number
+          format: double
+        unit:
+          type: string
+        sample_count:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - metric
+        - value
+        - unit
+        - sample_count
+    ProjectHealthCheck:
+      type: object
+      properties:
+        id:
+          type: string
+        category:
+          $ref: '#/components/schemas/ProjectHealthCategory'
+        status:
+          $ref: '#/components/schemas/ProjectHealthStatus'
+        reason_code:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ProjectHealthScope'
+        evidence:
+          $ref: '#/components/schemas/ProjectHealthEvidence'
+      required:
+        - id
+        - category
+        - status
+        - reason_code
+        - scope
+        - evidence
+    ResourceReference:
+      type: object
+      description: Stable reference to a Volcano resource.
+      properties:
+        type:
+          type: string
+          enum: [project, function, frontend, database]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - type
+        - id
+        - name
+    DeploymentReference:
+      type: object
+      description: Stable reference to a Volcano deployment run.
+      properties:
+        id:
+          type: string
+          format: uuid
+      required:
+        - id
+    ProjectHealthResource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [project, function, frontend, database]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - type
+        - id
+        - name
+    ProjectHealthScope:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/ProjectHealthResource'
+      required:
+        - resource
+    ProjectHealthResponse:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ProjectHealthStatus'
+        observed_at:
+          type: string
+          format: date-time
+        fresh_through:
+          type: string
+          format: date-time
+        data_status:
+          $ref: '#/components/schemas/ProjectHealthDataStatus'
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectHealthCheck'
+        findings:
+          description: Top findings ordered by severity, then stable check ID.
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ProjectHealthCheck'
+      required:
+        - project_id
+        - status
+        - observed_at
+        - fresh_through
+        - data_status
+        - checks
+        - findings
+    ProjectMetricsDataStatus:
+      type: string
+      enum: [complete, partial, no_data]
+    ProjectMetricsMetric:
+      type: string
+      enum: [request_count, server_error_count, availability, p95_latency]
+    ProjectMetricsGroupBy:
+      type: string
+      enum: [region, resource_type]
+    ProjectMetricsUnit:
+      type: string
+      enum: [count, ratio, seconds]
+    ProjectMetricsQueryTimeRange:
+      type: object
+      additionalProperties: false
+      properties:
+        window:
+          type: string
+          enum: [30m, 1h, 24h, 7d]
+      required:
+        - window
+    ProjectMetricsQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z][A-Za-z0-9_-]*$'
+        metric:
+          $ref: '#/components/schemas/ProjectMetricsMetric'
+        group_by:
+          $ref: '#/components/schemas/ProjectMetricsGroupBy'
+      required:
+        - id
+        - metric
+    ProjectMetricsQueryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        time_range:
+          $ref: '#/components/schemas/ProjectMetricsQueryTimeRange'
+        queries:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ProjectMetricsQuery'
+      required:
+        - time_range
+        - queries
+    ProjectMetricsWindow:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+    ProjectMetricsDimensions:
+      type: object
+      additionalProperties: false
+      properties:
+        region:
+          type: string
+        resource_type:
+          type: string
+          enum: [function, frontend]
+    ProjectMetricsValue:
+      type: object
+      additionalProperties: false
+      properties:
+        dimensions:
+          $ref: '#/components/schemas/ProjectMetricsDimensions'
+        value:
+          type: number
+          format: double
+          minimum: 0
+      required:
+        - dimensions
+        - value
+    ProjectMetricsResult:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        metric:
+          $ref: '#/components/schemas/ProjectMetricsMetric'
+        unit:
+          $ref: '#/components/schemas/ProjectMetricsUnit'
+        data_status:
+          $ref: '#/components/schemas/ProjectMetricsDataStatus'
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMetricsValue'
+      required:
+        - id
+        - metric
+        - unit
+        - data_status
+        - values
+    ProjectMetricsQueryResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        observed_at:
+          type: string
+          format: date-time
+        fresh_through:
+          type: string
+          format: date-time
+        window:
+          $ref: '#/components/schemas/ProjectMetricsWindow'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMetricsResult'
+      required:
+        - observed_at
+        - window
+        - results
+    AuthInsightsInterval:
+      type: string
+      enum: [day, week, month]
+    AuthInsightsWindow:
+      type: object
+      additionalProperties: false
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        interval:
+          $ref: '#/components/schemas/AuthInsightsInterval'
+      required:
+        - from
+        - to
+        - interval
+    AuthInsightsSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        total_users:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Current auth-user count, matching the auth-user list total.
+        active_users_30d:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Users with a successful session creation or refresh in the trailing 30 days since activity collection was deployed.
+      required:
+        - total_users
+        - active_users_30d
+    AuthInsightsSeriesPoint:
+      type: object
+      additionalProperties: false
+      properties:
+        bucket_start:
+          type: string
+          format: date
+        signups:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accounts created during the bucket.
+        signins:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Successful session creations during the bucket.
+        is_partial:
+          type: boolean
+          description: Whether the requested window or observation time clips this bucket.
+      required:
+        - bucket_start
+        - signups
+        - signins
+        - is_partial
+    AuthInsightsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        observed_at:
+          type: string
+          format: date-time
+        window:
+          $ref: '#/components/schemas/AuthInsightsWindow'
+        summary:
+          $ref: '#/components/schemas/AuthInsightsSummary'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthInsightsSeriesPoint'
+      required:
+        - project_id
+        - observed_at
+        - window
+        - summary
+        - series
+    Frontend:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 63
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+        framework:
+          type: string
+          enum: [nextjs]
+        app_root:
+          type: string
+          maxLength: 1024
+          description: Optional relative POSIX path from the uploaded archive root to the Next.js app that is deployed.
+        status:
+          type: string
+          description: |
+            Frontend lifecycle status. `degraded` means the regional runtime remains
+            available but edge synchronization exhausted its immediate retries; Volcano
+            retries edge recovery without rebuilding the frontend, and stops once a new
+            deployment is queued or the retry budget runs out, leaving the frontend
+            `degraded` until the next redeploy. A redeploy that fails over a serving
+            frontend stays `active` on the previous deployment, so `failed` means no
+            deployment is serving.
+          enum: [provisioning, active, degraded, failed, deleting]
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current provisioning phase started
+        deployed_regions:
+          type: array
+          items:
+            type: string
+        current_deployment_id:
+          type: string
+          format: uuid
+          description: Identifier of the latest frontend deployment operation
+        pending_deployment_id:
+          type: string
+          format: uuid
+          description: Newest queued deployment that will run after the current operation
+        site_url:
+          type: string
+        custom_domain:
+          type: string
+          description: Active custom domain hostname when configured
+        custom_domain_status:
+          type: string
+          description: Current custom domain lifecycle status
+          enum: [pending_verification, provisioning, active, detaching, failed, deleted]
+        last_invoked_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - framework
+        - status
+        - deployed_regions
+        - created_at
+        - updated_at
+    FrontendCustomDomainResponse:
+      type: object
+      properties:
+        domain:
+          type: string
+        tls_mode:
+          type: string
+          enum: [managed, byoc]
+        domain_status:
+          type: string
+          enum: [pending_verification, provisioning, active, detaching, failed, deleted]
+        verification_status:
+          type: string
+          enum: [pending, verified]
+        verification_records:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrontendDomainVerificationRecord'
+        required_routing_record:
+          $ref: '#/components/schemas/FrontendDomainRoutingRecord'
+        effective_urls:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - domain
+        - tls_mode
+        - domain_status
+        - verification_status
+        - effective_urls
+        - created_at
+        - updated_at
+    FrontendCustomDomainTLSConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [byoc]
+          default: byoc
+          description: BYOC is mandatory for custom domain creation.
+        certificate_pem:
+          type: string
+          description: Required. PEM-encoded certificate.
+        private_key_pem:
+          type: string
+          description: Required. PEM-encoded private key.
+        certificate_chain_pem:
+          type: string
+          description: Optional PEM-encoded certificate chain.
+      required:
+        - mode
+        - certificate_pem
+        - private_key_pem
+    DeploymentPhase:
+      type: object
+      description: Timing and outcome for one normalized deployment pipeline phase.
+      properties:
+        name:
+          type: string
+          enum: [queue, checkout, build, image, provisioning, rollout, verification]
+        status:
+          type: string
+          enum: [pending, in_progress, succeeded, failed, skipped]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - name
+        - status
+    DeploymentProgress:
+      type: object
+      description: Normalized live progress derived from the deployment workflow and build phases.
+      properties:
+        current_phase:
+          type: string
+          enum: [queue, checkout, build, image, provisioning, rollout, verification]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        elapsed_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        phases:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/DeploymentPhase'
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - started_at
+        - elapsed_seconds
+        - phases
+        - updated_at
+    FrontendDeployment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        frontend_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        operation:
+          type: string
+          enum: [deploy, redeploy, delete]
+        status:
+          type: string
+          description: |
+            Deployment lifecycle status. A `degraded` redeploy remains available while
+            edge-only recovery is retried. A `failed` redeploy is recorded here while the
+            frontend keeps serving its previous deployment.
+          enum: [queued, provisioning, active, degraded, failed, superseded, deleting, deleted]
+        deploy_source:
+          type: string
+          enum: [git, cli, web, api, system, unknown]
+          description: What initiated this deployment.
+        initiated_by:
+          type: string
+          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+        artifact_bucket:
+          type: string
+        artifact_key:
+          type: string
+        artifact_version:
+          type: string
+        site_url:
+          type: string
+        cloudformation_stack_id:
+          type: string
+        cloudformation_stack_url:
+          type: string
+        codebuild_duration_seconds:
+          type: integer
+          format: int64
+          description: Total CodeBuild build duration recorded for this deployment, in seconds.
+        codebuild_build_count:
+          type: integer
+          description: Number of completed CodeBuild builds included in codebuild_duration_seconds.
+        codebuild_duration_recorded_at:
+          type: string
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - frontend_id
+        - project_id
+        - operation
+        - status
+        - deploy_source
+        - created_at
+        - updated_at
+    FrontendDomainRoutingRecord:
+      type: object
+      properties:
+        record_type:
+          type: string
+          enum: [CNAME]
+        name:
+          type: string
+        value:
+          type: string
+      required:
+        - record_type
+        - name
+        - value
+    FrontendDomainVerificationRecord:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        value:
+          type: string
+      required:
+        - name
+        - type
+        - value
+    FrontendUsageDailyEntry:
+      type: object
+      description: One day of request and error counts for a single frontend.
+      properties:
+        day:
+          type: string
+          format: date
+          description: UTC date (YYYY-MM-DD) the counts cover.
+        requests:
+          type: integer
+          format: int64
+          description: Total requests served on this day.
+        errors:
+          type: integer
+          format: int64
+          description: 5xx responses served on this day.
+        page_views:
+          type: integer
+          format: int64
+          description: Navigable-document responses served on this day (text/html or Sec-Fetch-Dest=document) — strict subset of `requests`.
+      required:
+        - day
+        - requests
+        - errors
+        - page_views
+    FrontendUsageHistoryResponse:
+      type: object
+      description: Zero-filled daily series of request + error counts for a single frontend, oldest first.
+      properties:
+        frontend_id:
+          type: string
+          format: uuid
+        days:
+          type: integer
+          description: Number of daily entries returned (always equal to the `days` query param after clamping).
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrontendUsageDailyEntry'
+        total_requests:
+          type: integer
+          format: int64
+        total_errors:
+          type: integer
+          format: int64
+        total_page_views:
+          type: integer
+          format: int64
+      required:
+        - frontend_id
+        - days
+        - daily
+        - total_requests
+        - total_errors
+        - total_page_views
+    FrontendUsageData:
+      type: object
+      description: Monthly frontend request totals grouped by frontend.
+      properties:
+        frontend_id:
+          type: string
+          format: uuid
+          description: Frontend ID
+        frontend_name:
+          type: string
+          description: Frontend name at the time usage was fetched
+          nullable: true
+        requests:
+          type: integer
+          format: int64
+          description: Total requests for this frontend in the current usage month
+      required:
+        - frontend_id
+        - requests
+    Function:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 63
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+        status:
+          type: string
+          enum: [provisioning, active, failed, deleting]
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current provisioning phase started
+        is_public:
+          type: boolean
+          description: |
+            Function visibility for anon-key invocation.
+            - `false` (default): only auth user tokens and service keys can invoke
+            - `true`: anon keys with `functions.invoke` can invoke
+        aws_function_arn:
+          type: string
+        invoke_url:
+          type: string
+          description: Canonical GeoDNS endpoint URL for invoking this function (always HTTPS)
+        deployed_regions:
+          type: array
+          items:
+            type: string
+          description: Regions where this function is currently deployed
+        runtime:
+          type: string
+        handler:
+          type: string
+        current_deployment_id:
+          type: string
+          format: uuid
+          description: Identifier of the latest function deployment operation
+        pending_deployment_id:
+          type: string
+          format: uuid
+          description: Newest queued deployment that will run after the current operation
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent successful invocation timestamp
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - status
+        - is_public
+        - deployed_regions
+        - created_at
+        - updated_at
+    FunctionDeployment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        function_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        operation:
+          type: string
+          enum: [deploy, update, delete]
+        status:
+          type: string
+          enum: [queued, provisioning, active, failed, superseded, deleting, deleted]
+        deploy_source:
+          type: string
+          enum: [git, cli, web, api, system, unknown]
+          description: What initiated this deployment.
+        initiated_by:
+          type: string
+          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+        artifact_bucket:
+          type: string
+        artifact_key:
+          type: string
+        artifact_version:
+          type: string
+        codebuild_duration_seconds:
+          type: integer
+          format: int64
+          description: Total CodeBuild build duration recorded for this deployment, in seconds.
+        codebuild_build_count:
+          type: integer
+          description: Number of completed CodeBuild builds included in codebuild_duration_seconds.
+        codebuild_duration_recorded_at:
+          type: string
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
+        error_message:
+          type: string
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - function_id
+        - project_id
+        - operation
+        - status
+        - deploy_source
+        - created_at
+        - updated_at
+    FunctionInvocationRequest:
+      type: object
+      properties:
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            Payload to send to the function.
+
+            If invoked with auth user token, Volcano automatically injects `__volcano_auth` context:
+            ```javascript
+            {
+              ...yourPayload,
+              __volcano_auth: {
+                user_id: "uuid",
+                email: "user@example.com",
+                project_id: "uuid",
+                role: "authenticated" | "anonymous"
+              }
+            }
+            ```
+    FunctionInvocationResponse:
+      type: object
+      description: Raw function response body returned by the invoked function.
+      additionalProperties: true
+    FunctionRuntimeOption:
+      type: object
+      required:
+        - name
+        - language
+        - default
+        - deployment
+      properties:
+        name:
+          type: string
+          example: nodejs24.x
+          description: Runtime identifier accepted by function APIs.
+        language:
+          type: string
+          example: nodejs
+          description: Runtime language family used by the CLI to choose defaults from source files.
+        default:
+          type: boolean
+          description: Whether this runtime is the CLI default for its language.
+        deployment:
+          $ref: '#/components/schemas/FunctionRuntimeDeployment'
+    FunctionRuntimeDeployment:
+      type: object
+      required:
+        - file_extensions
+        - entrypoint
+        - handler
+        - dependency_manifests
+      properties:
+        file_extensions:
+          type: array
+          description: Source file extensions the CLI can use to detect this runtime.
+          items:
+            type: string
+          example:
+            - .js
+            - .mjs
+        entrypoint:
+          type: string
+          description: Archive path the CLI should use for a single-file function source.
+          example: index.js
+        handler:
+          type: string
+          description: Handler symbol the CLI should submit when deploying this runtime.
+          example: handler
+        dependency_manifests:
+          type: array
+          description: Dependency manifest files the CLI should include for hosted builds.
+          items:
+            type: string
+          example:
+            - package.json
+            - package-lock.json
+    FunctionRuntimesResponse:
+      type: object
+      required:
+        - runtimes
+      properties:
+        runtimes:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionRuntimeOption'
+    FunctionRegion:
+      type: object
+      required:
+        - code
+        - label
+        - flag
+      properties:
+        code:
+          type: string
+          example: us-east-1
+          description: Region identifier accepted by function APIs.
+        label:
+          type: string
+          example: NA-East
+          description: Human-readable region label suitable for display in pickers.
+        flag:
+          type: string
+          example: "\U0001F1FA\U0001F1F8"
+          description: Country flag emoji associated with the region's geography.
+    FunctionScheduler:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        function_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        enabled:
+          type: boolean
+        schedule_kind:
+          type: string
+          enum: [cron]
+        cron_expression:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        regions:
+          type: array
+          items:
+            type: string
+        regions_explicit:
+          type: boolean
+        next_run_at:
+          type: string
+          format: date-time
+        last_started_at:
+          type: string
+          format: date-time
+        last_completed_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        run_count:
+          type: integer
+          format: int64
+          description: >-
+            Total number of times this scheduler has executed. 0 for a
+            scheduler that has never run.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FunctionSchedulerListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionScheduler'
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        has_more:
+          type: boolean
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    LogActivityBucket:
+      type: object
+      description: Log-event counts for one activity time bucket.
+      properties:
+        start_time:
+          type: string
+          format: date-time
+          description: Bucket start time.
+        end_time:
+          type: string
+          format: date-time
+          description: Bucket end time.
+        counts:
+          type: object
+          description: Counts grouped by activity dimension.
+          properties:
+            levels:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Counts by normalized log level.
+            regions:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Counts by event region.
+            resource_ids:
+              type: object
+              additionalProperties:
+                type: integer
+              description: Counts by resource ID.
+          required:
+            - levels
+            - regions
+            - resource_ids
+        total:
+          type: integer
+          description: Total events in this bucket.
+      required:
+        - start_time
+        - end_time
+        - counts
+        - total
+    LogActivityResponse:
+      type: object
+      description: Bucketed runtime log activity.
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogActivityBucket'
+        total:
+          type: integer
+          description: Total events counted across all buckets.
+      required:
+        - data
+        - total
+    LogFunctionRequestResource:
+      type: object
+      description: Edge Function log resource selector.
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - function
+          description: Resource type to read logs for.
+        ids:
+          type: array
+          maxItems: 25
+          description: Optional function identifiers. Omit or send an empty array to include every function in the project.
+          items:
+            type: string
+            format: uuid
+        deployments:
+          $ref: '#/components/schemas/LogDeploymentRequestSelector'
+      required:
+        - type
+    LogFrontendRequestResource:
+      type: object
+      description: Frontend log resource selector.
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - frontend
+          description: Resource type to read logs for.
+        ids:
+          type: array
+          maxItems: 25
+          description: Optional frontend identifiers. Omit or send an empty array to include every frontend in the project.
+          items:
+            type: string
+            format: uuid
+        deployments:
+          $ref: '#/components/schemas/LogDeploymentRequestSelector'
+      required:
+        - type
+    LogDatabaseRequestResource:
+      type: object
+      description: Database runtime log resource selector. Deployment logs are not supported for databases.
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+            - database
+          description: Resource type to read logs for.
+        ids:
+          type: array
+          maxItems: 25
+          description: Optional database identifiers. Omit or send an empty array to include every database in the project.
+          items:
+            type: string
+            format: uuid
+      required:
+        - type
+    LogDeploymentRequestSelector:
+      type: object
+      description: Deployment log selector for deployable resources.
+      additionalProperties: false
+      properties:
+        ids:
+          type: array
+          maxItems: 25
+          description: Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources.
+          items:
+            type: string
+            format: uuid
+    LogRequestResource:
+      description: Resource selectors for project log reads.
+      oneOf:
+        - $ref: '#/components/schemas/LogFunctionRequestResource'
+        - $ref: '#/components/schemas/LogFrontendRequestResource'
+        - $ref: '#/components/schemas/LogDatabaseRequestResource'
+      discriminator:
+        propertyName: type
+        mapping:
+          function: '#/components/schemas/LogFunctionRequestResource'
+          frontend: '#/components/schemas/LogFrontendRequestResource'
+          database: '#/components/schemas/LogDatabaseRequestResource'
+    LogActivityRequest:
+      type: object
+      description: Activity request for bucketed log counts.
+      additionalProperties: false
+      properties:
+        resource:
+          $ref: '#/components/schemas/LogRequestResource'
+        q:
+          type: string
+          maxLength: 512
+          description: Optional activity query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
+        start_time:
+          type: string
+          format: date-time
+          description: Start time.
+        end_time:
+          type: string
+          format: date-time
+          description: End time.
+        bucket_count:
+          type: integer
+          minimum: 1
+          maximum: 96
+          description: Number of activity buckets to return.
+      required:
+        - resource
+    LogSearchRequest:
+      type: object
+      description: Search request for project logs.
+      additionalProperties: false
+      properties:
+        resource:
+          $ref: '#/components/schemas/LogRequestResource'
+        q:
+          type: string
+          maxLength: 512
+          description: Optional log query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
+        start_time:
+          type: string
+          format: date-time
+          description: Start time.
+        end_time:
+          type: string
+          format: date-time
+          description: End time.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+          description: Maximum number of records to return.
+        cursor:
+          type: string
+          description: Opaque pagination cursor from the previous response's `next_cursor`.
+      required:
+        - resource
+    LogStreamRequest:
+      type: object
+      description: Stream request for live project logs. Pagination cursors and fixed end times are not supported.
+      additionalProperties: false
+      properties:
+        resource:
+          $ref: '#/components/schemas/LogRequestResource'
+        q:
+          type: string
+          maxLength: 512
+          description: Optional log query using the same syntax as search and activity requests.
+        start_time:
+          type: string
+          format: date-time
+          description: Start time.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+          description: Maximum number of records to deliver on connect or reconnect before following new events.
+      required:
+        - resource
+    LogSearchEvent:
+      allOf:
+        - $ref: '#/components/schemas/LogEvent'
+        - type: object
+          description: Runtime log event returned by project log search. Search results always include a stable event ID and owning resource.
+          properties:
+            id:
+              type: string
+              description: Opaque stable log event ID for pagination, deduplication, and display.
+            resource:
+              $ref: '#/components/schemas/LogResource'
+          required:
+            - id
+            - resource
+    LogSearchResponse:
+      type: object
+      description: Paginated project runtime log search response.
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogSearchEvent'
+          description: Array of log events sorted by timestamp, newest first.
+        limit:
+          type: integer
+          description: Number of items requested per page.
+        has_more:
+          type: boolean
+          description: Whether there are more log events available.
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Send this value as `cursor` on the next request.
+      required:
+        - data
+        - limit
+        - has_more
+    HostedAuthPageType:
+      type: string
+      enum: [login, reset-password]
+    HostedLoginEmailCheckRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    HostedLoginEmailCheckResponse:
+      type: object
+      properties:
+        exists:
+          type: boolean
+    HostedLoginOptionsResponse:
+      type: object
+      properties:
+        require_email_confirmation:
+          type: boolean
+        email_password_enabled:
+          type: boolean
+        enable_signup:
+          type: boolean
+        post_auth_redirect_url:
+          type: string
+        oauth_providers:
+          type: array
+          items:
+            type: string
+    HostedRenderablePageType:
+      type: string
+      enum: [reset-password]
+    LogResource:
+      type: object
+      description: Resource that owns a historical log event.
+      properties:
+        type:
+          type: string
+          enum:
+            - function
+            - frontend
+            - database
+          description: Resource type that owns the log event.
+        id:
+          type: string
+          format: uuid
+          description: Resource ID that owns the log event.
+        name:
+          type: string
+          description: Resource name associated with the log event, when available.
+      required:
+        - type
+        - id
+    LogDeployment:
+      type: object
+      description: Deployment context associated with a historical deployment log event.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Deployment ID associated with the log event.
+        stage:
+          type: string
+          enum:
+            - compile
+            - publish
+          description: Deployment stage that produced the log event, when available.
+      required:
+        - id
+    LogEvent:
+      type: object
+      description: Historical log event returned by log APIs.
+      properties:
+        id:
+          type: string
+          description: Opaque stable log event ID for pagination, deduplication, and display.
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp.
+        level:
+          $ref: '#/components/schemas/LiveLogLevel'
+        body:
+          description: Application log value. JSON arguments retain their JSON type. Strings containing a serialized JSON object or array are normalized to that object or array; all other strings remain strings.
+          nullable: true
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: number
+              format: double
+            - type: boolean
+        region:
+          type: string
+          description: Region where this log event originated.
+        resource:
+          $ref: '#/components/schemas/LogResource'
+        deployment:
+          $ref: '#/components/schemas/LogDeployment'
+        invocation_id:
+          type: string
+          description: Function invocation ID associated with this log event, when available.
+      required:
+        - timestamp
+        - body
+    LiveLogLevel:
+      type: string
+      enum:
+        - trace
+        - debug
+        - info
+        - warn
+        - error
+        - fatal
+      description: Canonical lowercase function runtime log level.
+    MetricUsageData:
+      type: object
+      description: Usage data for one metric across totals, daily, and hourly windows.
+      properties:
+        metric:
+          type: string
+          description: |
+            Metric name (for example, "Function & Frontend Invocations", "Frontend Requests",
+            "CodeBuild Build Seconds", "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
+            "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
+            reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
+            is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
+            not a cumulative counter. It is the sum of the latest `pg_database_size` samples
+            exposed as `storage_bytes` by the project's database list.
+        total:
+          type: integer
+          format: int64
+          description: Total usage for the current usage month
+        all_time:
+          type: integer
+          format: int64
+          description: Lifetime cumulative usage across every month for this metric
+        daily:
+          type: array
+          description: Last 30 days of daily usage points
+          items:
+            $ref: '#/components/schemas/UsageDataPoint'
+        hourly:
+          type: array
+          description: Last 24 hours of hourly usage points
+          items:
+            $ref: '#/components/schemas/UsageDataPoint'
+      required:
+        - metric
+        - total
+        - all_time
+        - daily
+        - hourly
+    OAuthConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [google, github, microsoft, apple, device]
+        client_id:
+          type: string
+          example: "123456789.apps.googleusercontent.com"
+        client_secret:
+          type: string
+          description: Masked in responses (shows only first/last 4 chars)
+          example: "GOCS...****"
+        enabled:
+          type: boolean
+        redirect_url:
+          type: string
+          format: uri
+          example: "https://yourapp.com/auth/callback"
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["openid", "email", "profile"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OAuthErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+      required:
+        - error
+    PaginatedAuthUsers:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthUser'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedDatabases:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Database'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedFrontendDeployments:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrontendDeployment'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    ProjectDeploymentResource:
+      type: object
+      description: The resource this deployment belongs to.
+      properties:
+        type:
+          type: string
+          enum: [function, frontend]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - type
+        - id
+        - name
+    ProjectDeployment:
+      type: object
+      description: A Function or Frontend deployment attempt in a project-scoped feed.
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        resource:
+          $ref: '#/components/schemas/ProjectDeploymentResource'
+        operation:
+          type: string
+          enum: [deploy, redeploy, update, delete]
+        status:
+          type: string
+          enum: [queued, provisioning, active, degraded, failed, superseded, deleting, deleted]
+        deploy_source:
+          type: string
+          enum: [git, cli, web, api, system, unknown]
+          description: What initiated this deployment.
+        artifact_version:
+          type: string
+        error_message:
+          type: string
+        completed_at:
+          type: string
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/DeploymentProgress'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - resource
+        - operation
+        - status
+        - deploy_source
+        - created_at
+        - updated_at
+    ProjectDeploymentSummary:
+      type: object
+      description: Aggregate deployment statistics for one resource pipeline.
+      properties:
+        deployment_count:
+          type: integer
+          description: All deployment attempts matching the filters.
+        successful_count:
+          type: integer
+          description: Attempts that reached active or deleted.
+        failed_count:
+          type: integer
+          description: Attempts that reached failed or degraded.
+        canceled_count:
+          type: integer
+          description: Superseded attempts, excluded from success rate and duration.
+        success_rate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: Successful attempts divided by successful plus failed attempts.
+        median_build_duration_seconds:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+          description: Median CodeBuild duration across eligible completed attempts.
+      required:
+        - deployment_count
+        - successful_count
+        - failed_count
+        - canceled_count
+        - success_rate
+        - median_build_duration_seconds
+    PaginatedProjectDeployments:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectDeployment'
+        page:
+          type: integer
+          minimum: 1
+          description: |
+            Current page number (1-indexed). Offset pagination only — omitted in
+            cursor mode, where position comes from the cursor and there is no page
+            number to report. Required-and-1-indexed would otherwise force a `0`
+            onto every cursor response.
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - limit
+        - total
+        - has_more
+    ProjectFrontendCustomDomain:
+      allOf:
+        - $ref: '#/components/schemas/FrontendCustomDomainResponse'
+        - type: object
+          properties:
+            frontend:
+              type: object
+              description: |
+                The frontend this custom domain is attached to. Inlined to
+                avoid a second fetch from the project-scoped feed.
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+              required:
+                - id
+                - name
+          required:
+            - frontend
+    PaginatedProjectCustomDomains:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectFrontendCustomDomain'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedFrontends:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Frontend'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedFunctionDeployments:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionDeployment'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedFunctions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Function'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedStorageBuckets:
+      type: object
+      description: Cursor-paginated storage buckets (returned only when cursor pagination is requested).
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageBucket'
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items matching the query
+        has_more:
+          type: boolean
+          description: Whether a next page exists
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - limit
+        - has_more
+    PaginatedProjects:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+        status:
+          type: string
+          enum: [provisioning, active, failed]
+          description: Latest project variable propagation status.
+        current_sync_id:
+          type: string
+          format: uuid
+          description: Identifier of the latest variable propagation sync.
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current variable propagation phase started.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedServiceKeys:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceKey'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (offset pagination only; present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedVariables:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variable'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+        next:
+          type: string
+          description: URL path to next page (only present if has_more is true)
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+        prev_cursor:
+          type: string
+          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PlatformExchangeResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user_id:
+          type: string
+        token_id:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - token
+        - user_id
+        - token_id
+        - expires_at
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, deleting, failed]
+        plan:
+          type: string
+          enum: [FREE, PRO]
+          description: Platform plan applied to the project when available
+        all_regions:
+          type: boolean
+          description: |
+            Region policy for function deployment.
+            - `true`: deploy functions to all configured platform regions
+            - `false`: deploy only to `selected_regions`
+        selected_regions:
+          type: array
+          items:
+            type: string
+          description: Effective region set for this project (normalized and deduplicated)
+        aws_application_name:
+          type: string
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent activity timestamp across project resources
+        logo_url:
+          type: string
+          description: |
+            Relative API path that serves the project logo when one has been
+            uploaded. The path is versioned with a `?v=` cache-busting query
+            param that changes on each upload. Absent when the project has no
+            logo. The logo image is stored in the project's storage folder.
+          example: "/projects/3fa85f64-5717-4562-b3fc-2c963f66afa6/logo?v=1718524800"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - status
+        - all_regions
+        - selected_regions
+        - created_at
+        - updated_at
+    ProjectConfig:
+      type: object
+      additionalProperties: false
+      description: |
+        Declarative project configuration manifest (the JSON form of
+        volcano-config.yaml). Omitted sections are left untouched. Within
+        declared entries, omitted optional fields keep their current server
+        values (patch semantics). Declared collection keys are fully synced to
+        the manifest: `variables`, `buckets[].policies`, `auth.providers.oauth`,
+        `auth.email.templates`, and `functions[].schedulers` are reconciled to
+        exactly match, deleting resources absent from the manifest. Functions,
+        frontends, databases, and buckets are never created or deleted through
+        this manifest; entries referencing resources that do not exist are
+        skipped and reported.
+      properties:
+        version:
+          type: integer
+          enum: [1]
+          description: Manifest schema version. Must be 1.
+        project:
+          $ref: '#/components/schemas/ProjectConfigProject'
+        databases:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigDatabase'
+        variables:
+          type: array
+          description: Fully synced when declared - variables absent from this list are deleted.
+          items:
+            $ref: '#/components/schemas/ProjectConfigVariable'
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigBucket'
+        realtime:
+          $ref: '#/components/schemas/ProjectConfigRealtime'
+        auth:
+          $ref: '#/components/schemas/ProjectConfigAuth'
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigFunction'
+        frontends:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigFrontend'
+      required:
+        - version
+    ProjectConfigProject:
+      type: object
+      additionalProperties: false
+      description: Project-level settings. `name` renames the project.
+      properties:
+        name:
+          type: string
+          pattern: "^[A-Za-z0-9_-]+$"
+          minLength: 1
+          maxLength: 255
+        all_regions:
+          type: boolean
+          description: Region policy. `false` requires `selected_regions` (PRO plan).
+        selected_regions:
+          type: array
+          items:
+            type: string
+          description: Region subset (bare region names). Requires `all_regions=false`.
+    ProjectConfigDatabase:
+      type: object
+      additionalProperties: false
+      description: |
+        Assertion-only entry for an existing database. No database property is
+        mutable through the manifest; declared values are compared against the
+        deployed database and any mismatch fails validation. Databases are
+        never created or deleted here.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        region:
+          type: string
+          description: Deployed region ID (e.g. aws-us-east-1). Asserted, never written.
+        pg_version:
+          type: string
+          enum: ["15", "16"]
+          description: PostgreSQL major version. Asserted, never written.
+        database_type:
+          type: string
+          enum:
+            - volcano-db-xs
+            - volcano-db-s
+            - volcano-db-m
+            - volcano-db-l
+            - volcano-db-xl
+            - volcano-db-2xl
+          description: |
+            Compute tier. Asserted, never written - tier changes are not
+            supported via the manifest; use the databases API/CLI/GUI instead.
+      required:
+        - name
+        - region
+        - pg_version
+    ProjectConfigVariable:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        value:
+          type: string
+      required:
+        - name
+        - value
+    ProjectConfigBucket:
+      type: object
+      additionalProperties: false
+      description: |
+        Settings for an existing storage bucket. Buckets are never created or
+        deleted through the manifest. When `policies` is declared it is fully
+        synced (policies absent from the list are deleted; an empty list
+        deletes all); omitting `policies` leaves the bucket's policies
+        untouched.
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
+        file_size_limit:
+          type: integer
+          format: int64
+          description: Maximum file size in bytes
+        allowed_mime_types:
+          type: array
+          items:
+            type: string
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigBucketPolicy'
+      required:
+        - name
+    ProjectConfigBucketPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        operation:
+          type: string
+          enum: [SELECT, INSERT, UPDATE, DELETE]
+        definition:
+          type: string
+          description: Policy expression
+      required:
+        - name
+        - operation
+        - definition
+    ProjectConfigRealtime:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        broadcast_enabled:
+          type: boolean
+        presence_enabled:
+          type: boolean
+        postgres_changes_enabled:
+          type: boolean
+    ProjectConfigAuth:
+      type: object
+      additionalProperties: false
+      description: Authentication settings, grouped like the dashboard auth-settings tabs.
+      properties:
+        tokens:
+          $ref: '#/components/schemas/ProjectConfigAuthTokens'
+        sessions:
+          $ref: '#/components/schemas/ProjectConfigAuthSessions'
+        signup:
+          $ref: '#/components/schemas/ProjectConfigAuthSignup'
+        rate_limits:
+          $ref: '#/components/schemas/ProjectConfigAuthRateLimits'
+        password:
+          $ref: '#/components/schemas/ProjectConfigAuthPassword'
+        password_reset:
+          $ref: '#/components/schemas/ProjectConfigAuthPasswordReset'
+        email_verification:
+          $ref: '#/components/schemas/ProjectConfigAuthEmailVerification'
+        cors:
+          $ref: '#/components/schemas/ProjectConfigAuthCORS'
+        providers:
+          $ref: '#/components/schemas/ProjectConfigAuthProviders'
+        email:
+          $ref: '#/components/schemas/ProjectConfigAuthEmail'
+        managed_pages:
+          $ref: '#/components/schemas/ProjectConfigAuthManagedPages'
+    ProjectConfigAuthTokens:
+      type: object
+      additionalProperties: false
+      description: Token lifetimes in seconds.
+      properties:
+        access_token_lifetime:
+          type: integer
+        refresh_token_lifetime:
+          type: integer
+        refresh_token_reuse_interval:
+          type: integer
+        platform_token_ttl:
+          type: integer
+    ProjectConfigAuthSessions:
+      type: object
+      additionalProperties: false
+      properties:
+        inactivity_timeout:
+          type: integer
+          description: Force re-login after inactivity (seconds, 0=never)
+        max_session_duration:
+          type: integer
+          description: Force re-login after duration (seconds, 0=never)
+    ProjectConfigAuthSignup:
+      type: object
+      additionalProperties: false
+      properties:
+        enable_signup:
+          type: boolean
+          description: Master switch for signups across ALL providers
+        enable_anonymous_signins:
+          type: boolean
+        allowed_email_domains:
+          type: array
+          maxItems: 100
+          description: |
+            Email domains allowed to create users. Empty allows every domain.
+            Replaces the stored list; entries are normalized (lowercase, no `@`
+            prefix) and must be bare domains such as `domain1.com`. Matching is
+            exact, so subdomains need their own entry. At most 100 entries.
+
+            Restricting signups is a PRO feature to configure and to enforce: a
+            FREE project can only declare the list it already has or remove the
+            restriction, and the list it keeps is parked until it upgrades.
+          items:
+            type: string
+          example: ["domain1.com", "domain2.com"]
+        allowed_email_domains_mode:
+          type: string
+          description: |
+            How far `allowed_email_domains` reaches. `signup` gates account
+            creation only. `signup_and_signin` also blocks sign-in for accounts
+            outside the list and signs out the ones it locks out. `disabled`
+            keeps the list without enforcing it.
+          enum: [disabled, signup, signup_and_signin]
+    ProjectConfigAuthRateLimits:
+      type: object
+      additionalProperties: false
+      description: Rate limits per hour.
+      properties:
+        signup:
+          type: integer
+        signin:
+          type: integer
+        token_refresh:
+          type: integer
+        password_reset:
+          type: integer
+    ProjectConfigAuthPassword:
+      type: object
+      additionalProperties: false
+      properties:
+        min_length:
+          type: integer
+          minimum: 15
+          maximum: 128
+        require_uppercase:
+          type: boolean
+        require_lowercase:
+          type: boolean
+        require_numbers:
+          type: boolean
+        require_special_chars:
+          type: boolean
+    ProjectConfigAuthPasswordReset:
+      type: object
+      additionalProperties: false
+      properties:
+        allow:
+          type: boolean
+        timeout:
+          type: integer
+          description: Password reset token expiry in seconds
+        max_history:
+          type: integer
+          description: Number of previous passwords to disallow (0=disabled)
+    ProjectConfigAuthEmailVerification:
+      type: object
+      additionalProperties: false
+      properties:
+        require_confirmation:
+          type: boolean
+          description: Require users to confirm email before sign-in. Requires email sending to be enabled.
+        confirmation_timeout:
+          type: integer
+          description: Email confirmation token expiry in seconds
+    ProjectConfigAuthCORS:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        allow_credentials:
+          type: boolean
+        max_age:
+          type: integer
+    ProjectConfigAuthProviders:
+      type: object
+      additionalProperties: false
+      properties:
+        email_password:
+          $ref: '#/components/schemas/ProjectConfigAuthEmailPasswordProvider'
+        oauth:
+          type: array
+          description: Fully synced when declared - providers absent from this list are deleted.
+          items:
+            $ref: '#/components/schemas/ProjectConfigOAuthProvider'
+    ProjectConfigAuthEmailPasswordProvider:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+    ProjectConfigOAuthProvider:
+      type: object
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+          enum: [google, github, microsoft, apple, device]
+        enabled:
+          type: boolean
+        client_id:
+          type: string
+          description: |
+            Required for non-device providers. Server-generated for
+            `provider=device` (exported read-only, ignored on apply).
+        client_secret:
+          type: string
+          format: password
+          writeOnly: true
+          description: Write-only; omitted from config export. Not used for `provider=device`.
+        redirect_url:
+          type: string
+          description: Not used for `provider=device`.
+        scopes:
+          type: array
+          items:
+            type: string
+      required:
+        - provider
+    ProjectConfigAuthEmail:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: Enable transactional email sending
+        from:
+          $ref: '#/components/schemas/ProjectConfigAuthEmailFrom'
+        smtp:
+          $ref: '#/components/schemas/ProjectConfigAuthEmailSMTP'
+        templates:
+          $ref: '#/components/schemas/ProjectConfigEmailTemplates'
+    ProjectConfigAuthEmailFrom:
+      type: object
+      additionalProperties: false
+      properties:
+        address:
+          type: string
+        name:
+          type: string
+    ProjectConfigAuthEmailSMTP:
+      type: object
+      additionalProperties: false
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          description: Write-only; omitted from config export.
+        use_tls:
+          type: boolean
+    ProjectConfigEmailTemplates:
+      type: object
+      additionalProperties: false
+      description: |
+        Email templates keyed by type. Fully synced when declared - template
+        types absent from a declared map revert to server defaults (custom
+        bodies deleted, subject overrides cleared). Custom template bodies
+        require the PRO plan; subject-only changes are available on FREE.
+      properties:
+        confirmation:
+          $ref: '#/components/schemas/ProjectConfigEmailTemplate'
+        password_reset:
+          $ref: '#/components/schemas/ProjectConfigEmailTemplate'
+        password_changed:
+          $ref: '#/components/schemas/ProjectConfigEmailTemplate'
+        welcome:
+          $ref: '#/components/schemas/ProjectConfigEmailTemplate'
+    ProjectConfigEmailTemplate:
+      type: object
+      additionalProperties: false
+      properties:
+        subject:
+          type: string
+        html_body:
+          type: string
+          maxLength: 262144
+          description: HTML body. Max 256 KiB. PRO plan required for custom bodies.
+        text_body:
+          type: string
+          maxLength: 262144
+          description: Plain-text body. Max 256 KiB. PRO plan required for custom bodies.
+    ProjectConfigAuthManagedPages:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: Enable or disable managed auth hosted pages
+        redirects:
+          $ref: '#/components/schemas/ProjectConfigAuthRedirects'
+        pages:
+          $ref: '#/components/schemas/ProjectConfigHostedPages'
+    ProjectConfigAuthRedirects:
+      type: object
+      additionalProperties: false
+      properties:
+        allowed:
+          type: array
+          items:
+            type: string
+          description: Redirect allowlist. Every entry must be a valid http/https URL.
+        post_auth:
+          type: string
+          description: Must be included in `allowed` when set.
+        post_logout:
+          type: string
+          description: Must be included in `allowed` when set.
+        device_verification:
+          type: string
+          description: Optional custom device-authorization verification page URL.
+    ProjectConfigHostedPages:
+      type: object
+      additionalProperties: false
+      description: |
+        Hosted auth pages keyed by page type (PRO plan). Upsert-only: omitted
+        pages are left untouched (there is no delete for hosted pages).
+      properties:
+        login:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+        reset_password:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+    ProjectConfigHostedPage:
+      type: object
+      additionalProperties: false
+      properties:
+        html:
+          type: string
+          maxLength: 262144
+          description: Raw HTML markup for the page. Max 256 KiB.
+        css:
+          type: string
+          maxLength: 262144
+          description: Optional CSS injected at render time. Max 256 KiB.
+      required:
+        - html
+    ProjectConfigFunction:
+      type: object
+      additionalProperties: false
+      description: |
+        Configuration for an existing (deployed) function. Functions are never
+        created or deleted through the manifest. When `schedulers` is declared
+        it is fully synced (schedulers absent from the list are deleted);
+        omitting `schedulers` leaves the function's schedulers untouched.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        public:
+          type: boolean
+          description: Function visibility for anon-key invocation
+        schedulers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigScheduler'
+      required:
+        - name
+    ProjectConfigScheduler:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        cron:
+          type: string
+          description: 5-field UTC cron expression
+        enabled:
+          type: boolean
+        payload:
+          type: object
+          additionalProperties: true
+      required:
+        - name
+        - cron
+    ProjectConfigFrontend:
+      type: object
+      additionalProperties: false
+      description: |
+        Configuration for an existing (deployed) frontend. Frontends are never
+        created or deleted through the manifest. A declared frontend entry
+        without `custom_domain` deletes an existing custom domain.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        custom_domain:
+          $ref: '#/components/schemas/ProjectConfigCustomDomain'
+      required:
+        - name
+    ProjectConfigCustomDomain:
+      type: object
+      additionalProperties: false
+      description: |
+        Custom domain with BYOC TLS (PRO plan). `tls` is required when the
+        domain is first created and optional afterwards: providing new TLS
+        material for the same domain rotates the certificate in place (zero
+        downtime); omitting `tls` keeps the stored certificate. TLS material is
+        write-only and omitted from config export.
+      properties:
+        domain:
+          type: string
+          description: Fully-qualified domain name (hostname only, no scheme/path)
+        tls:
+          $ref: '#/components/schemas/FrontendCustomDomainTLSConfig'
+      required:
+        - domain
+    ProjectConfigApplyResult:
+      type: object
+      description: Per-resource report for a project config apply (or dry run).
+      properties:
+        dry_run:
+          type: boolean
+          description: True when the request was a dry run and no changes were made.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigApplyResultEntry'
+        skipped:
+          type: array
+          description: |
+            Manifest entries referencing functions, frontends, databases, or
+            buckets that do not exist. Their configuration was not applied;
+            deploy/create the resource first, then re-apply.
+          items:
+            $ref: '#/components/schemas/ProjectConfigSkippedResource'
+        missing:
+          type: array
+          description: |
+            Existing functions, frontends, databases, or buckets that have no
+            entry in the corresponding declared manifest section.
+          items:
+            $ref: '#/components/schemas/ProjectConfigMissingResource'
+        summary:
+          $ref: '#/components/schemas/ProjectConfigApplySummary'
+      required:
+        - results
+        - skipped
+        - missing
+        - summary
+    ProjectConfigApplyResultEntry:
+      type: object
+      properties:
+        section:
+          type: string
+          description: Manifest section the entry belongs to (e.g. variables, buckets, auth.providers.oauth).
+        name:
+          type: string
+          description: Resource name or key within the section. Empty for singleton sections.
+        action:
+          type: string
+          enum: [created, updated, deleted, unchanged, error]
+        error:
+          type: string
+          description: Error detail when action is `error`.
+        notice:
+          type: string
+          description: Optional operational note (e.g. disabling realtime drops active connections).
+      required:
+        - section
+        - action
+    ProjectConfigSkippedResource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [function, frontend, database, bucket]
+        name:
+          type: string
+        reason:
+          type: string
+      required:
+        - type
+        - name
+        - reason
+    ProjectConfigMissingResource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [function, frontend, database, bucket]
+        name:
+          type: string
+      required:
+        - type
+        - name
+    ProjectConfigApplySummary:
+      type: object
+      properties:
+        created:
+          type: integer
+        updated:
+          type: integer
+        deleted:
+          type: integer
+        unchanged:
+          type: integer
+        errors:
+          type: integer
+        skipped:
+          type: integer
+        missing:
+          type: integer
+      required:
+        - created
+        - updated
+        - deleted
+        - unchanged
+        - errors
+        - skipped
+        - missing
+    ProjectConfigValidationError:
+      type: object
+      properties:
+        section:
+          type: string
+          description: Manifest section the error refers to (e.g. databases, functions).
+        name:
+          type: string
+          description: Resource name or key within the section, when applicable.
+        message:
+          type: string
+      required:
+        - section
+        - message
+    ProjectConfigValidationErrorResponse:
+      type: object
+      description: Returned when manifest validation fails. Nothing was applied.
+      properties:
+        error:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectConfigValidationError'
+      required:
+        - error
+        - errors
+    ProjectUsageResponse:
+      type: object
+      description: Aggregated usage metrics for a project.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+        month:
+          type: string
+          description: Usage month in YYYY-MM format
+          example: "2026-02"
+        metrics:
+          type: array
+          description: Usage metrics for the project
+          items:
+            $ref: '#/components/schemas/MetricUsageData'
+        frontends:
+          type: array
+          description: Per-frontend request totals for the current usage month
+          items:
+            $ref: '#/components/schemas/FrontendUsageData'
+      required:
+        - project_id
+        - month
+        - metrics
+    RealtimeConfig:
+      type: object
+      description: |
+        Realtime configuration for a project.
+        Note: Message size and channels per connection are plan-based (not configurable).
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+        enabled:
+          type: boolean
+          description: Whether realtime is enabled for this project
+          default: false
+        broadcast_enabled:
+          type: boolean
+          description: Whether broadcast channels are enabled
+          default: true
+        presence_enabled:
+          type: boolean
+          description: Whether presence tracking is enabled
+          default: true
+        postgres_changes_enabled:
+          type: boolean
+          description: Whether Postgres change notifications are enabled
+          default: true
+        created_at:
+          type: string
+          format: date-time
+          description: When the configuration was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the configuration was last updated
+    RealtimePlanLimits:
+      type: object
+      description: Plan-based limits for realtime features
+      properties:
+        plan:
+          type: string
+          description: Plan name (FREE or PRO)
+          example: "FREE"
+        max_connections:
+          type: integer
+          description: Maximum concurrent connections allowed
+          example: 100
+        messages_per_month:
+          type: integer
+          description: Maximum messages per month
+          example: 1000000
+        message_size_kb:
+          type: integer
+          description: Maximum message size in KB
+          example: 32
+        channels_per_conn:
+          type: integer
+          description: Maximum channels per connection
+          example: 100
+    RealtimeStats:
+      type: object
+      description: Realtime usage statistics for a project
+      properties:
+        num_connections:
+          type: integer
+          description: Current number of active connections
+        peak_connections:
+          type: integer
+          description: Peak concurrent connections this usage period
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent realtime activity timestamp across channels
+        limits:
+          $ref: '#/components/schemas/RealtimePlanLimits'
+    ResolveFunctionResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 63
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+          description: DNS-safe function name
+        function_id:
+          type: string
+          format: uuid
+          description: Canonical function ID used for invocation routing
+        cache_ttl_seconds:
+          type: integer
+          minimum: 1
+          description: Suggested SDK cache TTL for this name-to-ID mapping
+      required:
+        - name
+        - function_id
+        - cache_ttl_seconds
+    ScheduleRequest:
+      type: object
+      required: [cron_expression]
+      properties:
+        kind:
+          type: string
+          enum: [cron]
+          default: cron
+        cron_expression:
+          type: string
+          description: Standard 5-field cron expression evaluated in UTC. Seconds fields, descriptors, and Quartz syntax are not supported.
+          example: "*/5 * * * *"
+    ServiceKey:
+      type: object
+      description: |
+        Service role key for admin operations.
+        **WARNING:** Bypasses all RLS - backend use only!
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Descriptive name for the key
+        key_value:
+          type: string
+          description: |
+            Full JWT token for Authorization header.
+            Returned on create, get, and list (decrypted from storage).
+            **Store securely - NEVER expose in frontend code!**
+        key_prefix:
+          type: string
+          description: First 12 characters of the key for display/identification
+          maxLength: 12
+        permissions:
+          type: array
+          items:
+            type: string
+          description: |
+            Operations this key may perform. ["*"] grants full admin access
+            (default for keys created without an explicit scope). Scoped keys
+            list specific permissions, e.g. ["functions.invoke", "locks.manage"].
+          example: ["*"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - key_prefix
+        - permissions
+    StorageBucket:
+      type: object
+      description: |
+        A named container for files within a project.
+        Public access is controlled at the file level via is_public on StorageObject.
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Bucket name (unique within project)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 64
+        file_size_limit:
+          type: integer
+          format: int64
+          nullable: true
+          description: Maximum file size in bytes (null for no limit)
+        allowed_mime_types:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Allowed MIME types (null for all types)
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent bucket operation timestamp
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+    StorageCopyRequest:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Source path
+        to:
+          type: string
+          description: Destination path
+      required:
+        - from
+        - to
+    StorageListResponse:
+      type: object
+      properties:
+        objects:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageObject'
+        next_cursor:
+          type: string
+          description: Cursor for next page (empty if no more results)
+    StorageMoveRequest:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Source path
+        to:
+          type: string
+          description: Destination path
+      required:
+        - from
+        - to
+    StorageObject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bucket_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Full path within bucket (e.g., "users/abc123/avatar.png")
+        owner_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Auth user who uploaded (null for anonymous/service)
+        is_public:
+          type: boolean
+          default: false
+          description: |
+            If true, the file can be downloaded with just an anon key (no user authentication).
+            Files are private by default. Only the owner or a service key can change visibility.
+        size:
+          type: integer
+          format: int64
+          description: File size in bytes
+        mime_type:
+          type: string
+          description: MIME type
+        etag:
+          type: string
+          description: Entity tag for cache validation
+        metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            Custom user metadata (key-value pairs).
+            Limits: Maximum 50 keys, maximum 10KB total serialized size.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        public_url:
+          type: string
+          format: uri
+          description: |
+            Shareable public URL for this file (only set for public files with is_public=true).
+            This URL requires NO authentication and can be embedded in HTML, shared via email, etc.
+            The URL is properly URL-encoded by the server - use it as-is without additional encoding.
+      required:
+        - id
+        - bucket_id
+        - name
+        - is_public
+        - size
+        - mime_type
+    StorageObjectWithBucket:
+      type: object
+      description: Storage object with bucket name included (for admin listing across buckets)
+      properties:
+        id:
+          type: string
+          format: uuid
+        bucket_id:
+          type: string
+          format: uuid
+        bucket_name:
+          type: string
+          description: Name of the bucket containing this object
+        name:
+          type: string
+          description: Full path within bucket
+        owner_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Auth user who uploaded (null for anonymous/service)
+        is_public:
+          type: boolean
+          default: false
+        size:
+          type: integer
+          format: int64
+          description: File size in bytes
+        mime_type:
+          type: string
+        etag:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        public_url:
+          type: string
+          format: uri
+          description: |
+            Shareable public URL for this file (only set for public files with is_public=true).
+            This URL requires NO authentication and can be embedded in HTML, shared via email, etc.
+      required:
+        - id
+        - bucket_id
+        - bucket_name
+        - name
+        - is_public
+        - size
+        - mime_type
+    StoragePolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bucket_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Policy name (unique within bucket)
+        operation:
+          type: string
+          enum: [SELECT, INSERT, UPDATE, DELETE]
+          description: Operation this policy applies to
+        definition:
+          type: string
+          description: |
+            Policy expression evaluated at request time.
+            Examples:
+            - "true" - Allow all
+            - "auth.uid() = owner_id" - Owner only
+            - "auth.role() = 'authenticated'" - Authenticated users
+            - "(storage.foldername(name))[1] = auth.uid()::text" - User's folder
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - bucket_id
+        - name
+        - operation
+        - definition
+    StorageStats:
+      type: object
+      description: Aggregate storage statistics for a project
+      properties:
+        bucket_count:
+          type: integer
+          description: Number of storage buckets
+        object_count:
+          type: integer
+          description: Total number of stored files
+        total_size:
+          type: integer
+          format: int64
+          description: Total storage used in bytes
+      required:
+        - bucket_count
+        - object_count
+        - total_size
+    StorageVisibilityRequest:
+      type: object
+      properties:
+        is_public:
+          type: boolean
+          description: Whether the file should be publicly accessible
+      required:
+        - is_public
+    UnbanUserResponse:
+      type: object
+      description: Response when unbanning a user
+      properties:
+        message:
+          type: string
+          example: "User unbanned successfully"
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active]
+      required:
+        - message
+        - user_id
+        - email
+        - status
+    UpdateAuthConfigRequest:
+      type: object
+      description: "All fields optional - only include fields you want to update. Validation rule: require_email_confirmation=true requires email_enabled=true."
+      properties:
+        access_token_lifetime:
+          type: integer
+        refresh_token_lifetime:
+          type: integer
+        inactivity_timeout:
+          type: integer
+        max_session_duration:
+          type: integer
+        min_password_length:
+          type: integer
+          minimum: 15
+          maximum: 128
+        require_uppercase:
+          type: boolean
+        require_lowercase:
+          type: boolean
+        require_numbers:
+          type: boolean
+        require_special_chars:
+          type: boolean
+        enable_signup:
+          type: boolean
+          description: Master switch for signups across ALL providers
+        enable_email_password:
+          type: boolean
+          description: Enable/disable email/password provider
+        rate_limit_signup:
+          type: integer
+        rate_limit_signin:
+          type: integer
+        rate_limit_token_refresh:
+          type: integer
+        cors_allow_credentials:
+          type: boolean
+        cors_max_age:
+          type: integer
+        enable_anonymous_signins:
+          type: boolean
+        allowed_email_domains:
+          type: array
+          maxItems: 100
+          description: |
+            Replaces the email domain allowlist. Empty array removes the
+            restriction so any domain can sign up. Entries must be bare domains
+            such as `domain1.com` and are stored normalized (lowercase, no `@`
+            prefix); matching is exact, so subdomains need their own entry. At
+            most 100 entries.
+
+            Restricting signups is a PRO feature to configure and to enforce: a
+            FREE project can only remove the restriction and gets 403 for any
+            other change, and the list it keeps is parked until it upgrades.
+          items:
+            type: string
+          example: ["domain1.com", "domain2.com"]
+        allowed_email_domains_mode:
+          type: string
+          description: |
+            How far `allowed_email_domains` reaches. `signup` gates account
+            creation only. `signup_and_signin` also blocks sign-in for accounts
+            outside the list; switching to it, or narrowing the list while in
+            it, deletes the sessions of every account it locks out. `disabled`
+            keeps the list without enforcing it.
+          enum: [disabled, signup, signup_and_signin]
+        allow_password_reset:
+          type: boolean
+        password_reset_timeout:
+          type: integer
+        max_password_history:
+          type: integer
+        require_email_confirmation:
+          type: boolean
+          description: Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+        email_confirmation_timeout:
+          type: integer
+          description: Email confirmation token expiry in seconds.
+        auto_link_verified_oauth:
+          type: boolean
+          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+        email_enabled:
+          type: boolean
+          description: Enable transactional email sending. Cannot be false while require_email_confirmation is true.
+        email_from_address:
+          type: string
+        email_from_name:
+          type: string
+        smtp_host:
+          type: string
+        smtp_port:
+          type: integer
+        smtp_username:
+          type: string
+        smtp_password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 1
+          description: Replacement SMTP password. Omit this field to preserve the configured password. The value is encrypted at rest and never returned.
+        smtp_use_tls:
+          type: boolean
+        email_confirmation_subject:
+          type: string
+        email_password_reset_subject:
+          type: string
+        email_password_changed_subject:
+          type: string
+        managed_auth_enabled:
+          type: boolean
+          description: Enable or disable managed auth hosted pages for the project.
+        post_auth_redirect_url:
+          type: string
+          description: Must be included in allowed_redirect_urls when set.
+        allowed_redirect_urls:
+          type: array
+          items:
+            type: string
+          description: Redirect allowlist. Every entry must be a valid http/https URL.
+        post_logout_redirect_url:
+          type: string
+          description: Must be included in allowed_redirect_urls when set.
+        device_verification_url:
+          type: string
+          description: |
+            Optional custom device-authorization verification page. Must be a
+            valid http/https URL (not tied to allowed_redirect_urls). When set,
+            device-code logins return this URL (with user_code) instead of the
+            managed device page. Send an empty string to clear the override.
+    TestEmailRequest:
+      type: object
+      required: [to_email]
+      description: |
+        When `html_body` or `text_body` is provided the backend renders
+        those (plus optional `subject`) through html/text templates
+        against the standard `Data` (ProjectName, Name, SiteURL)
+        and sends the result — used by the template-editor "Send Test"
+        affordance to preview an unsaved template. When both bodies are
+        omitted a hardcoded diagnostic message is sent to verify SMTP
+        credentials and `subject` is ignored. Sending `subject` alone
+        (without a body) is rejected with 400.
+      properties:
+        to_email:
+          type: string
+          format: email
+          description: Recipient address for the diagnostic email.
+        subject:
+          type: string
+          description: |
+            Optional subject override, rendered as a text/template. Only
+            applied on the override path — requires `html_body` or
+            `text_body` to also be set, otherwise the request is
+            rejected with 400.
+        html_body:
+          type: string
+          maxLength: 262144
+          description: Optional HTML body override. Rendered as an html/template. Max 256 KiB.
+        text_body:
+          type: string
+          maxLength: 262144
+          description: Optional plain-text body override. Rendered as a text/template. Max 256 KiB.
+    TestEmailResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+    UpdateAuthHostedPageRequest:
+      type: object
+      required: [html]
+      properties:
+        html:
+          type: string
+          description: Raw HTML markup for the page. Max 256 KiB.
+        css:
+          type: string
+          description: Optional CSS injected at render time. Max 256 KiB.
+    UpdateDatabaseTypeRequest:
+      type: object
+      description: Update database compute size tier
+      properties:
+        database_type:
+          type: string
+          description: New compute size tier
+          enum:
+            - volcano-db-xs
+            - volcano-db-s
+            - volcano-db-m
+            - volcano-db-l
+            - volcano-db-xl
+            - volcano-db-2xl
+          example: volcano-db-m
+      required:
+        - database_type
+    UpdateEmailTemplateRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+        html_body:
+          type: string
+        text_body:
+          type: string
+    UpdateFunctionRequest:
+      type: object
+      properties:
+        is_public:
+          type: boolean
+          description: |
+            Function visibility for anon-key invocation.
+            - `false` (default): private function
+            - `true`: public function (anon keys with `functions.invoke` can invoke)
+      required:
+        - is_public
+    UpdateFunctionSchedulerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        enabled:
+          type: boolean
+        schedule:
+          $ref: '#/components/schemas/ScheduleRequest'
+        payload:
+          type: object
+          additionalProperties: true
+        regions:
+          type: array
+          maxItems: 1
+          items:
+            type: string
+    UpdateOAuthConfigRequest:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Supported for non-device providers. Not supported for `provider=device`.
+        client_secret:
+          type: string
+          description: Supported for non-device providers. Not supported for `provider=device`.
+        redirect_url:
+          type: string
+          format: uri
+        scopes:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+    UpdateProjectRequest:
+      type: object
+      description: Update mutable project fields (name and/or region policy)
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "my-awesome-app-renamed"
+        all_regions:
+          type: boolean
+          description: |
+            If omitted and `selected_regions` is also omitted, existing region policy is preserved.
+            If `selected_regions` is provided without `all_regions`, it is treated as subset mode.
+        selected_regions:
+          type: array
+          items:
+            type: string
+          description: |
+            Region subset for project deployments.
+            Provide with `all_regions=false`.
+          example: ["us-east-1"]
+    UpdateRealtimeConfigRequest:
+      type: object
+      description: |
+        Request to update realtime configuration.
+        Limits (message size, channels per connection) are plan-based and cannot be configured.
+      properties:
+        enabled:
+          type: boolean
+          description: Whether realtime is enabled for this project
+        broadcast_enabled:
+          type: boolean
+          description: Whether broadcast channels are enabled
+        presence_enabled:
+          type: boolean
+          description: Whether presence tracking is enabled
+        postgres_changes_enabled:
+          type: boolean
+          description: Whether Postgres change notifications are enabled
+    UpdateStorageBucketRequest:
+      type: object
+      properties:
+        file_size_limit:
+          type: integer
+          format: int64
+        allowed_mime_types:
+          type: array
+          items:
+            type: string
+    UpdateVariableRequest:
+      type: object
+      properties:
+        value:
+          type: string
+      required:
+        - value
+    UploadSessionPart:
+      type: object
+      description: Information about an uploaded part
+      properties:
+        part_number:
+          type: integer
+          description: Part number (1-10000)
+        etag:
+          type: string
+          description: ETag of the uploaded part
+        size:
+          type: integer
+          format: int64
+          description: Size of the part in bytes
+    UploadSessionStatusResponse:
+      type: object
+      description: Status of an upload session
+      properties:
+        session_id:
+          type: string
+          description: Upload session ID
+        status:
+          type: string
+          enum: [pending, uploading, completing, completed, aborted]
+          description: Current status of the upload
+        path:
+          type: string
+          description: Target file path
+        content_type:
+          type: string
+          description: MIME type
+        total_size:
+          type: integer
+          format: int64
+          description: Total file size in bytes
+        part_size:
+          type: integer
+          format: int64
+          description: Size of each part (except last)
+        total_parts:
+          type: integer
+          description: Total number of parts
+        parts_uploaded:
+          type: integer
+          description: Number of parts uploaded
+        bytes_uploaded:
+          type: integer
+          format: int64
+          description: Total bytes uploaded so far
+        parts:
+          type: array
+          description: List of uploaded parts (for resume)
+          items:
+            $ref: '#/components/schemas/UploadSessionPart'
+        expires_at:
+          type: string
+          format: date-time
+          description: Session expiry time
+        created_at:
+          type: string
+          format: date-time
+          description: Session creation time
+    UsageDataPoint:
+      type: object
+      description: A single timestamped usage value.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: UTC timestamp for the data point
+        value:
+          type: integer
+          format: int64
+          description: Usage value at the timestamp
+      required:
+        - timestamp
+        - value
+    Variable:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 256
+        value:
+          type: string
+        status:
+          type: string
+          enum: [provisioning, active, failed]
+          description: Latest project variable propagation status, when a sync has run.
+        current_sync_id:
+          type: string
+          format: uuid
+          description: Identifier of the latest variable propagation sync.
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current variable propagation phase started.
+        deploy_source:
+          type: string
+          enum: [git, cli, web, api, system, unknown]
+          description: What initiated the latest variable propagation sync, when one has run.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - value
+        - created_at
+        - updated_at

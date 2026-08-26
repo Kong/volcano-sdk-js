@@ -52,8 +52,8 @@
   ],
   "scripts": {
     "build": "rollup -c rollup.config.mjs && node scripts/copy-types.mjs",
-    "generate:openapi": "openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write",
-    "check:openapi": "openapi-typescript openapi/openapi.yaml --default-non-nullable false | prettier --parser typescript | diff - src/generated/openapi.d.ts",
+    "generate:openapi": "orval --config orval.config.mjs && tsc -p tsconfig.generated.json",
+    "check:openapi": "pnpm generate:openapi && git diff --exit-code -- src/generated src/generated-runtime",
     "dev": "rollup -c -w",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -65,6 +65,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPatterns=integration --passWithNoTests --testTimeout=120000 --forceExit",
+    "test:contract": "jest --config jest.contract.config.cjs --runInBand",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -125,8 +126,11 @@
     "eslint-plugin-unicorn": "^64.0.0",
     "globals": "^17.6.0",
     "jest": "^30.3.0",
+    "jest-cucumber": "4.5.0",
     "jest-environment-jsdom": "^30.3.0",
+    "jest-junit": "17.0.0",
     "openapi-typescript": "7.13.0",
+    "orval": "8.26.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",

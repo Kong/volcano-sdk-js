@@ -1,6 +1,9 @@
 coverage
 dist
 node_modules
+openapi
+src/generated
+src/generated-runtime
 examples/nextjs-notes-app/.next
 examples/nextjs-notes-app/node_modules
 *.tgz

@@ -15,9 +15,9 @@ npm install @volcano.dev/sdk
 ## Quick Start
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { VolcanoClient } from '@volcano.dev/sdk';
 
-const volcano = new VolcanoAuth({
+const volcano = new VolcanoClient({
   apiUrl: 'https://api.yourproject.volcano.dev',
   anonKey: 'your-anon-key',
 });
@@ -61,6 +61,9 @@ channel.onPostgresChanges('INSERT', 'public', 'posts', (change) => {
 });
 await channel.subscribe();
 ```
+
+`VolcanoClient` is the preferred name for new code. `VolcanoAuth` remains a
+compatible alias, so existing applications do not need to change imports.
 
 For browser realtime connections, make sure the browser app's origin is allowed in your project's auth CORS settings. The anonymous key is used to identify the project before the WebSocket upgrade completes.
 

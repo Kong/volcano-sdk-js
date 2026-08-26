@@ -1,0 +1,205 @@
+openapi: 3.0.3
+info:
+  title: Volcano Hosting Common Parameters
+  version: 3.0.0
+paths: {}
+components:
+  parameters:
+    BucketName:
+      name: bucketName
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]+$'
+        minLength: 1
+        maxLength: 64
+      description: Storage bucket name
+    BranchName:
+      name: branchName
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9_]+$'
+        maxLength: 64
+      description: Branch name (unique within the parent database, lowercase letters, numbers, and underscores only)
+    DatabaseName:
+      name: databaseName
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9_]+$'
+        maxLength: 64
+      description: Database name (unique within project, lowercase letters, numbers, and underscores only)
+    DeploymentId:
+      name: deploymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Frontend deployment ID
+    FrontendId:
+      name: frontendId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Frontend ID
+    FunctionId:
+      name: functionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Function ID
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      description: Number of items per page (max 100)
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque keyset pagination cursor from a previous response's `next_cursor`
+        — pages forward. Mutually exclusive with `page` and `ending_before`;
+        combining them returns 400. When supplied, the request's `search` and
+        `limit` must match the values bound to the cursor or the request returns 400.
+    EndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Opaque keyset pagination cursor from a previous response's `prev_cursor`
+        — pages backward (the page immediately preceding this cursor). Mutually
+        exclusive with `page` and `cursor`; combining them returns 400. `search`
+        and `limit` must match the values bound to the cursor or the request
+        returns 400.
+    DeploymentStatus:
+      name: status
+      in: query
+      required: false
+      description: Restrict a deployment feed to attempts in one status.
+      schema:
+        type: string
+        enum: [queued, provisioning, active, degraded, failed, superseded, deleting, deleted]
+    DeploymentOwnerId:
+      name: owner_id
+      in: query
+      required: false
+      description: |
+        The user who owns the projects whose deployments to return
+        (`projects.user_id`). This is ownership, not the actor that started the
+        deployment — see `initiated_by_user_id` for that. Not a UUID: platform
+        user ids are opaque strings.
+      schema:
+        type: string
+        maxLength: 255
+    DeploymentOperation:
+      name: operation
+      in: query
+      required: false
+      description: Restrict a deployment feed to one kind of operation.
+      schema:
+        type: string
+        enum: [deploy, redeploy, update, delete]
+    DeploymentOrder:
+      name: order
+      in: query
+      required: false
+      description: |
+        Sort key and direction. `created_at.desc` (default) is the feed order.
+        `completed_at.asc` orders finished attempts by completion, oldest first,
+        and excludes attempts that never completed.
+      schema:
+        type: string
+        enum: [created_at.desc, completed_at.asc]
+        default: created_at.desc
+    DeploymentResourceType:
+      name: resource_type
+      in: query
+      required: false
+      description: |
+        Restrict a deployment feed to a single resource type. Omit to return
+        both Function and Frontend deployments.
+      schema:
+        type: string
+        enum: [function, frontend]
+    Search:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 256
+      description: |
+        Case-insensitive substring match on the resource `name`. See the
+        endpoint description for supported pagination modes.
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: |
+        Bounded row offset past the keyset anchor named by `cursor` (forward) or
+        `ending_before` (backward) — the hybrid jump. Seek to the anchor, then
+        skip this many rows within. Used for numbered jump-to-page: from the
+        current page, seek to its next/prev cursor and offset the remaining
+        pages. Only honored on the cursor pagination path; ignored otherwise.
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+      description: |
+        Page number (1-indexed) for offset pagination. Declares no schema
+        default so the request validator does not inject one: handlers that omit
+        `page` see it unset (nil) and default to 1 in code, while cursor-first
+        endpoints (e.g. the project deployments feed) can detect its absence to
+        stay in keyset/search mode. Supplying `page` selects offset pagination.
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Project ID
+    SchedulerId:
+      name: schedulerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Function scheduler ID
+    VariableName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+        pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+      description: Variable name

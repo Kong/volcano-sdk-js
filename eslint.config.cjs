@@ -57,6 +57,7 @@ module.exports = [
       'dist/**',
       'node_modules/**',
       'src/generated/**',
+      'src/generated-runtime/**',
       'examples/nextjs-notes-app/.next/**',
       'examples/nextjs-notes-app/node_modules/**',
       '*.tgz',

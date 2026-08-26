@@ -12,6 +12,7 @@ const umdBrowserGlobalFooter = `;(function () {
   if (!g || !g.VolcanoAuth || !g.VolcanoAuth.VolcanoAuth) return;
   var ns = g.VolcanoAuth;
   g.VolcanoAuth = ns.VolcanoAuth;
+  g.VolcanoClient = ns.VolcanoClient;
   g.QueryBuilder = ns.QueryBuilder;
   g.StorageFileApi = ns.StorageFileApi;
   g.isBrowser = ns.isBrowser;

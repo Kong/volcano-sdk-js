@@ -947,6 +947,8 @@ export class VolcanoAuth {
   initialize(): Promise<UserResponse>;
 }
 
+export { VolcanoAuth as VolcanoClient };
+
 export default VolcanoAuth;
 
 // ============================================================================
