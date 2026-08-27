@@ -64,10 +64,13 @@ autoBindSteps(features, [
     });
 
     then('the current session exposes access and refresh tokens', () => {
-      expect(context.world.lastOutcome.value.access_token).toEqual(expect.any(String));
-      expect(context.world.lastOutcome.value.access_token).not.toHaveLength(0);
-      expect(context.world.lastOutcome.value.refresh_token).toEqual(expect.any(String));
-      expect(context.world.lastOutcome.value.refresh_token).not.toHaveLength(0);
+      const session = context.world.lastOutcome.value.session;
+      expect(session.access_token).toEqual(expect.any(String));
+      expect(session.access_token).not.toHaveLength(0);
+      expect(session.refresh_token).toEqual(expect.any(String));
+      expect(session.refresh_token).not.toHaveLength(0);
+      expect(context.world.client.accessToken).toBe(session.access_token);
+      expect(context.world.client.refreshToken).toBe(session.refresh_token);
     });
 
     given('an authenticated client', async () => {
@@ -109,11 +112,15 @@ autoBindSteps(features, [
         return;
       }
       const bytes = Buffer.from(await download.data.arrayBuffer());
-      recordOutcome(context.world, bytes, null);
+      recordOutcome(context.world, { bytes, path: upload.data.name }, null);
     });
 
     then('the downloaded bytes equal the uploaded bytes', () => {
-      expect(context.world.lastOutcome.value).toEqual(context.world.storageBytes);
+      expect(context.world.lastOutcome.value.bytes).toEqual(context.world.storageBytes);
+    });
+
+    then('the stored object path equals the contract path', () => {
+      expect(context.world.lastOutcome.value.path).toBe(context.world.storagePath);
     });
 
     given('a service-role client', () => {
