@@ -63,6 +63,13 @@ autoBindSteps(features, [
       expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
     });
 
+    then('the current session exposes access and refresh tokens', () => {
+      expect(context.world.lastOutcome.value.access_token).toEqual(expect.any(String));
+      expect(context.world.lastOutcome.value.access_token).not.toHaveLength(0);
+      expect(context.world.lastOutcome.value.refresh_token).toEqual(expect.any(String));
+      expect(context.world.lastOutcome.value.refresh_token).not.toHaveLength(0);
+    });
+
     given('an authenticated client', async () => {
       const world = startScenario(context);
       await authenticate(world);

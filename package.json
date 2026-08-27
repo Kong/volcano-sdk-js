@@ -52,8 +52,8 @@
   ],
   "scripts": {
     "build": "rollup -c rollup.config.mjs && node scripts/copy-types.mjs",
-    "generate:openapi": "orval --config orval.config.mjs && tsc -p tsconfig.generated.json",
-    "check:openapi": "pnpm generate:openapi && git diff --exit-code -- src/generated src/generated-runtime",
+    "generate:openapi": "node scripts/generate-openapi.mjs",
+    "check:openapi": "pnpm generate:openapi && node scripts/check-openapi.mjs",
     "dev": "rollup -c -w",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
