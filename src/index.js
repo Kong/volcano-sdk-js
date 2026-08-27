@@ -1015,11 +1015,12 @@ class VolcanoAuth {
     }
   }
 
-  _generatedOptions(volcanoAuthorization, headers) {
+  _generatedOptions(volcanoAuthorization, headers, responseType) {
     return {
       volcanoAuthorization,
       volcanoClient: this,
       ...(headers ? { headers } : {}),
+      ...(responseType ? { volcanoResponseType: responseType } : {}),
     };
   }
 
@@ -2744,6 +2745,7 @@ class StorageFileApi {
         this.volcanoAuth._generatedOptions(
           'session',
           options.range ? { Range: options.range } : undefined,
+          'blob',
         ),
       );
       return { data: response.data, error: null };

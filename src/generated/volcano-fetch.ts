@@ -11,11 +11,16 @@ interface GeneratedTransportClient {
 export interface VolcanoRequestInit extends RequestInit {
   volcanoAuthorization?: GeneratedAuthorization;
   volcanoClient?: GeneratedTransportClient;
+  volcanoResponseType?: 'blob';
 }
 
-async function responseData(response: Response): Promise<unknown> {
+async function responseData(response: Response, responseType?: 'blob'): Promise<unknown> {
   if ([204, 205, 304].includes(response.status)) {
     return undefined;
+  }
+
+  if (response.ok && responseType === 'blob') {
+    return response.blob();
   }
 
   const contentType = (response.headers?.get?.('content-type') || '').toLowerCase();
@@ -29,12 +34,12 @@ export async function volcanoFetch<T>(
   path: string,
   options: VolcanoRequestInit,
 ): Promise<T> {
-  const { volcanoAuthorization, volcanoClient, ...request } = options;
+  const { volcanoAuthorization, volcanoClient, volcanoResponseType, ...request } = options;
   if (!volcanoClient || !volcanoAuthorization) {
     throw new Error('Generated transport requires a Volcano client and authorization mode');
   }
   const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization);
-  const data = await responseData(response);
+  const data = await responseData(response, volcanoResponseType);
 
   if (!response.ok) {
     const message =

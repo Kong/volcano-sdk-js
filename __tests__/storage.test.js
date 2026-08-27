@@ -166,6 +166,23 @@ describe('Storage', () => {
       );
     });
 
+    it('should preserve JSON file bytes as a Blob', async () => {
+      const mockBlob = new Blob(['{"hello":"world"}'], { type: 'application/json' });
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ hello: 'world' }),
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      const { data, error } = await volcano.storage.from('files').download('data.json');
+
+      expect(error).toBeNull();
+      expect(data).toBe(mockBlob);
+    });
+
     it('should support Range header for partial downloads', async () => {
       const mockBlob = new Blob(['partial content']);
 

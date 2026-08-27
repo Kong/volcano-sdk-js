@@ -1,6 +1,9 @@
-async function responseData(response) {
+async function responseData(response, responseType) {
     if ([204, 205, 304].includes(response.status)) {
         return undefined;
+    }
+    if (response.ok && responseType === 'blob') {
+        return response.blob();
     }
     const contentType = (response.headers?.get?.('content-type') || '').toLowerCase();
     if (contentType.includes('json') || typeof response.blob !== 'function') {
@@ -9,12 +12,12 @@ async function responseData(response) {
     return response.blob();
 }
 export async function volcanoFetch(path, options) {
-    const { volcanoAuthorization, volcanoClient, ...request } = options;
+    const { volcanoAuthorization, volcanoClient, volcanoResponseType, ...request } = options;
     if (!volcanoClient || !volcanoAuthorization) {
         throw new Error('Generated transport requires a Volcano client and authorization mode');
     }
     const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization);
-    const data = await responseData(response);
+    const data = await responseData(response, volcanoResponseType);
     if (!response.ok) {
         const message = typeof data === 'object' && data !== null && 'error' in data
             ? String(data.error)
