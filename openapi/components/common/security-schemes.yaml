@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: Volcano Hosting Common Security Schemes
+  version: 3.0.0
+paths: {}
+components:
+  securitySchemes:
+    AnonKey:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Project-specific public key for frontend authentication.
+        Required for signup, signin, refresh, and logout endpoints.
+        Get from Project Settings → Authentication → Anon Keys.
+        Safe to expose in frontend code (scoped to project, limited permissions).
+    AuthUserAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Auth user access token obtained from signup/signin.
+        Used for authenticated function invocation and user profile access.
+        Functions invoked with access tokens receive user context in event.__volcano_auth.
+        Expires after configured lifetime (default: 1 hour).
+    ServiceRoleKey:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Service role key for admin operations.
+        **WARNING:** Bypasses Row-Level Security - backend use only!
+        Create via POST /projects/{id}/service-keys.
+        Used for function invocation with full database access.
+    UserToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Platform user token from the Management API.
+        Required for project management operations.
+        Obtain via POST /tokens in Management API (port 8001).

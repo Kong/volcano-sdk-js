@@ -77,6 +77,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Discover SDK contract test lane
+        run: pnpm test:contract --listTests
+
       - name: Build SDK
         run: pnpm build
 

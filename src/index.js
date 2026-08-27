@@ -1,3 +1,12 @@
+import {
+  acquireProjectLock,
+  authSignin,
+  downloadStorageObject,
+  queryDatabaseSelect,
+  releaseProjectLock,
+  uploadStorageObject,
+} from './generated-runtime/client.js';
+
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
  *
@@ -84,6 +93,14 @@ const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 // failed: another live holder, or this caller's own lapsed lease still inside
 // the takeover grace window.
 const LOCK_CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
+const GENERATED_TRANSPORT = {
+  acquireProjectLock,
+  authSignin,
+  downloadStorageObject,
+  queryDatabaseSelect,
+  releaseProjectLock,
+  uploadStorageObject,
+};
 
 // ============================================================================
 // Utility Functions
@@ -544,29 +561,36 @@ class ProjectLocksApi {
     const token = options.token || crypto.randomUUID();
     const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null, fencingToken: null };
-    let result;
+    let response;
+    let requestError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
-        method: 'POST',
-        headers: {
-          'X-Volcano-Lock-Token': token,
-          'X-Volcano-Request-Id': requestId,
-        },
-        body: JSON.stringify({ ttl_seconds: ttl }),
-      });
-      if (result.ok || result.status === 409 || (result.status !== null && result.status !== 503)) {
+      try {
+        response = await this.client._transport.acquireProjectLock(
+          encodeURIComponent(key),
+          { ttl_seconds: ttl },
+          this.client._generatedOptions('session', {
+            'X-Volcano-Lock-Token': token,
+            'X-Volcano-Request-Id': requestId,
+          }),
+        );
+        requestError = null;
         break;
+      } catch (error) {
+        requestError = error instanceof Error ? error : new Error('Lock acquisition failed');
+        if (requestError.status != null && requestError.status !== 503) {
+          break;
+        }
       }
     }
-    if (result.ok) {
-      lease.expiresAt = result.data.expires_at;
-      lease.fencingToken = result.data.fencing_token ?? null;
+    if (response) {
+      lease.expiresAt = response.data.expires_at;
+      lease.fencingToken = response.data.fencing_token ?? null;
       return { acquired: true, lease, error: null };
     }
-    if (result.status === 409 && LOCK_CONTENTION_CODES.has(result.data?.code)) {
+    if (requestError?.status === 409 && LOCK_CONTENTION_CODES.has(requestError.info?.code)) {
       return { acquired: false, lease: null, error: null };
     }
-    return { acquired: false, lease, error: result.error };
+    return { acquired: false, lease, error: requestError };
   }
 
   async renew(key, lease, options = {}) {
@@ -591,14 +615,18 @@ class ProjectLocksApi {
   async release(key, lease, options = {}) {
     validateLockKey(key);
     validateLease(key, lease);
-    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
-      method: 'DELETE',
-      headers: {
-        'X-Volcano-Lock-Token': lease.token,
-        'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
-      },
-    });
-    return { error: result.ok ? null : result.error };
+    try {
+      await this.client._transport.releaseProjectLock(
+        encodeURIComponent(key),
+        this.client._generatedOptions('session', {
+          'X-Volcano-Lock-Token': lease.token,
+          'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
+        }),
+      );
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error : new Error('Lock release failed') };
+    }
   }
 
   async get(key, options = {}) {
@@ -767,6 +795,7 @@ class VolcanoAuth {
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
+    this._transport = (config.transportFactory || (() => GENERATED_TRANSPORT))(this);
 
     // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
     if (config.accessToken) {
@@ -984,6 +1013,34 @@ class VolcanoAuth {
         };
       }
     }
+  }
+
+  _generatedOptions(volcanoAuthorization, headers, responseType) {
+    return {
+      volcanoAuthorization,
+      volcanoClient: this,
+      ...(headers ? { headers } : {}),
+      ...(responseType ? { volcanoResponseType: responseType } : {}),
+    };
+  }
+
+  async _generatedFetch(path, options, authorization) {
+    const url = `${this.apiUrl}${path}`;
+    if (authorization === 'anon') {
+      return fetchWithTimeout(
+        url,
+        {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${this.anonKey}`,
+            ...options.headers,
+          },
+        },
+        this.timeout,
+      );
+    }
+
+    return fetchWithAuthRetry(this, url, options);
   }
 
   _getFunctionInvokeUrl(functionIdentifier) {
@@ -1208,22 +1265,27 @@ class VolcanoAuth {
   }
 
   async signIn({ email, password }) {
-    const result = await this._anonFetch('/auth/signin', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!result.ok) {
-      return { user: null, session: null, error: result.error };
+    let response;
+    try {
+      response = await this._transport.authSignin(
+        { email, password },
+        this._generatedOptions('anon'),
+      );
+    } catch (error) {
+      return {
+        user: null,
+        session: null,
+        error: error instanceof Error ? error : new Error('Sign in failed'),
+      };
     }
 
-    this._setSession(result.data);
+    this._setSession(response.data);
     return {
-      user: result.data.user,
+      user: response.data.user,
       session: {
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-        expires_in: result.data.expires_in,
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        expires_in: response.data.expires_in,
       },
       error: null,
     };
@@ -2468,24 +2530,12 @@ class QueryBuilder {
     }
 
     try {
-      const response = await fetchWithAuthRetry(
-        this.volcanoAuth,
-        `${this.volcanoAuth.apiUrl}/databases/${encodeURIComponent(this.databaseName)}/query/select`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        },
+      const response = await this.volcanoAuth._transport.queryDatabaseSelect(
+        encodeURIComponent(this.databaseName),
+        requestBody,
+        this.volcanoAuth._generatedOptions('session'),
       );
-
-      const result = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return errorResult(result.error || 'Query failed', { count: 0 });
-      }
-
+      const result = response.data;
       return { data: result.data, error: null, count: result.count || result.data.length };
     } catch (error) {
       return {
@@ -2655,7 +2705,6 @@ class StorageFileApi {
     }
 
     try {
-      const formData = new FormData();
       let file;
 
       if (fileBody instanceof File) {
@@ -2667,20 +2716,14 @@ class StorageFileApi {
         return errorResult('Invalid file body type. Expected File, Blob, or ArrayBuffer.');
       }
 
-      formData.append('file', file);
+      const response = await this.volcanoAuth._transport.uploadStorageObject(
+        encodeURIComponent(this.bucketName),
+        this._encodePath(path),
+        { file },
+        this.volcanoAuth._generatedOptions('session'),
+      );
 
-      const response = await fetchWithAuthRetry(this.volcanoAuth, this._buildUrl(path), {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return errorResult(data.error || 'Upload failed');
-      }
-
-      return { data, error: null };
+      return { data: response.data, error: null };
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error('Upload failed') };
     }
@@ -2695,16 +2738,20 @@ class StorageFileApi {
       return authError;
     }
 
-    const headers = {};
-    if (options.range) {
-      headers.Range = options.range;
+    try {
+      const response = await this.volcanoAuth._transport.downloadStorageObject(
+        encodeURIComponent(this.bucketName),
+        this._encodePath(path),
+        this.volcanoAuth._generatedOptions(
+          'session',
+          options.range ? { Range: options.range } : undefined,
+          'blob',
+        ),
+      );
+      return { data: response.data, error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error : new Error('Download failed') };
     }
-
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'GET',
-      headers,
-      responseType: 'blob',
-    });
   }
 
   /**
@@ -3044,12 +3091,14 @@ async function loadRealtime() {
 
 // Exports. Author these as pure ES module declarations only; rollup emits the
 // ESM, CJS, and UMD builds (see rollup.config.mjs, all `exports: 'named'`).
-// Do NOT hand-write `module.exports = ...`, `window.* = ...`, or `define(...)`
+// Do NOT hand-write CommonJS, browser-global, or AMD export assignments
 // here: rollup passes such statements through verbatim into the ES build too,
-// and a stray top-level `module.exports = VolcanoAuth` in dist/index.esm.mjs
-// overwrites the module.exports of any CJS bundle that inlines the SDK
+// and a stray top-level CommonJS assignment in dist/index.esm.mjs overwrites
+// the export object of any CJS bundle that inlines the SDK
 // (e.g. esbuild --bundle --format=cjs), producing "handler is not a function"
 // at runtime. See VOL-505.
+const VolcanoClient = VolcanoAuth;
+
 export {
   databaseConnectionString,
   isBrowser,
@@ -3057,6 +3106,7 @@ export {
   QueryBuilder,
   StorageFileApi,
   VolcanoAuth,
+  VolcanoClient,
   VolcanoSystemError,
 };
 export default VolcanoAuth;
