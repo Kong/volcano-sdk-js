@@ -158,8 +158,8 @@ export interface DeviceAuthorization {
 export type DeviceVerificationAction = 'approve' | 'deny';
 
 export interface DeviceVerification {
-  success: boolean;
-  status: string;
+  success?: boolean;
+  status?: string;
 }
 
 export interface PlatformToken {

@@ -2512,6 +2512,20 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Device and Platform Authentication', () => {
+    it('accepts omitted device verification metadata', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+      await expect(volcano.auth.verifyDevice('ABCD-EFGH')).resolves.toEqual({
+        verification: {},
+        error: null,
+      });
+    });
+
     it('rejects an unknown device action before making a request', async () => {
       await expect(volcano.auth.verifyDevice('ABCD-EFGH', 'ignore')).rejects.toThrow(
         'approve or deny',
