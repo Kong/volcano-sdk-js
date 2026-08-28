@@ -1637,7 +1637,7 @@ class VolcanoAuth {
     }
     this._oauthExchangeError = null;
     if (!this.refreshToken) {
-      this._clearSession();
+      this._clearSessionIfPresent();
       return { session: null, error: new Error('No refresh token') };
     }
 
@@ -1754,8 +1754,13 @@ class VolcanoAuth {
     }
     if (this.accessToken) {
       const needsExplicitNotification = this.currentUser !== null;
+      const notificationGeneration = this._authNotificationGeneration;
       const profile = await this.getUser();
-      if (!profile.error && needsExplicitNotification) {
+      if (
+        !profile.error &&
+        needsExplicitNotification &&
+        notificationGeneration === this._authNotificationGeneration
+      ) {
         this._notifyAuthCallbacks(this.currentUser);
       }
     }
@@ -2240,6 +2245,12 @@ class VolcanoAuth {
     this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
 
     this._notifyAuthCallbacks(null);
+  }
+
+  _clearSessionIfPresent() {
+    if (this.accessToken || this.currentUser) {
+      this._clearSession();
+    }
   }
 
   _notifyAuthCallbacks(user) {

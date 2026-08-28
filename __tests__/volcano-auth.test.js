@@ -1346,6 +1346,16 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBeNull();
     });
 
+    it('does not emit another signed-out event without local auth', async () => {
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
+
+      await volcano.auth.refreshSession();
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('should clear session on refresh failure', async () => {
       volcano.accessToken = 'old-access';
       volcano.refreshToken = 'expired-refresh';
@@ -1750,6 +1760,43 @@ describe('VolcanoAuth', () => {
       expect(result.error).toBeNull();
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith({ id: 'restored-user' });
+    });
+
+    it('notifies once when confirmation refreshes a resolved session', async () => {
+      volcano.accessToken = 'expired-access';
+      volcano.refreshToken = 'valid-refresh';
+      volcano.currentUser = { id: 'resolved-user' };
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Email confirmed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+              user: { id: 'resolved-user' },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'resolved-user' } }),
+        });
+
+      await volcano.auth.confirmEmail('confirm-token-123');
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith({ id: 'resolved-user' });
     });
 
     it('should return error on confirm email failure', async () => {
