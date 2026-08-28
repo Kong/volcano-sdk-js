@@ -1102,6 +1102,14 @@ function signupAcknowledgement(data) {
   };
 }
 
+function rememberCurrentSessionIds(target, sessions) {
+  for (const session of sessions) {
+    if (session.is_current) {
+      target.add(session.id);
+    }
+  }
+}
+
 function shouldSignInAfterSignup(signInWhenAllowed, confirmationRequired) {
   return signInWhenAllowed && !confirmationRequired;
 }
@@ -1133,6 +1141,7 @@ class VolcanoAuth {
     this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
     this._currentDatabaseName = null;
     this.currentUser = null;
+    this._currentDeviceSessionIds = new Set();
     // Tracks whether a managed-redirect session was already adopted from the URL
     // fragment so repeated getUser()/initialize() calls don't re-adopt and
     // re-fire auth callbacks when the hash can't be stripped (see
@@ -1706,8 +1715,11 @@ class VolcanoAuth {
       return { user: null, error: result.error };
     }
 
-    this.currentUser = result.data.user;
-    return { user: result.data.user, error: null };
+    const refreshed = await this.refreshSession();
+    if (refreshed.error) {
+      return { user: null, error: refreshed.error };
+    }
+    return { user: this.currentUser || result.data.user, error: null };
   }
 
   // ========================================================================
@@ -1721,6 +1733,12 @@ class VolcanoAuth {
 
     if (!result.ok) {
       return { message: null, error: result.error };
+    }
+    if (this.accessToken) {
+      const profile = await this.getUser();
+      if (!profile.error) {
+        this._notifyAuthCallbacks(this.currentUser);
+      }
     }
     return { message: result.data.message, error: null };
   }
@@ -2025,6 +2043,7 @@ class VolcanoAuth {
         error: result.error,
       };
     }
+    rememberCurrentSessionIds(this._currentDeviceSessionIds, result.data.sessions);
     return {
       sessions: result.data.sessions,
       total: result.data.total,
@@ -2045,6 +2064,9 @@ class VolcanoAuth {
 
     if (!result.ok) {
       return { error: result.error };
+    }
+    if (this._currentDeviceSessionIds.has(sessionId)) {
+      this._clearSession();
     }
     return { error: null };
   }
@@ -2162,6 +2184,7 @@ class VolcanoAuth {
     this.accessToken = data.access_token;
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
+    this._currentDeviceSessionIds.clear();
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -2174,6 +2197,7 @@ class VolcanoAuth {
     this.accessToken = null;
     this.refreshToken = null;
     this.currentUser = null;
+    this._currentDeviceSessionIds.clear();
 
     this._removeStorageItem(STORAGE_KEY_ACCESS_TOKEN);
     this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
@@ -2321,6 +2345,7 @@ class VolcanoAuth {
   _storeRedirectSession(params, accessToken) {
     this.accessToken = accessToken;
     this.refreshToken = params.get('refresh_token') || null;
+    this._currentDeviceSessionIds.clear();
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
       this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);

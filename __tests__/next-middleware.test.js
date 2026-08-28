@@ -23,6 +23,21 @@ describe('Next.js middleware helpers', () => {
     expect(user).toEqual({ id: 'user-123', email: 'test@example.com' });
   });
 
+  it('rejects a successful refresh response without tokens', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    const result = await createServerClient(config).refreshToken('refresh-token');
+
+    expect(result).toEqual({
+      accessToken: null,
+      refreshToken: null,
+      error: expect.objectContaining({ message: 'Invalid refresh response' }),
+    });
+  });
+
   it('withAuth returns user when Authorization header is present', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,

@@ -225,8 +225,9 @@ describe('generated transport boundary', () => {
     await volcano.auth.deleteAllOtherSessions();
     await volcano.auth.signOut();
 
-    for (const operation of Object.values(transport)) {
-      expect(operation).toHaveBeenCalledTimes(1);
+    const repeatedOperations = new Set(['authGetUser', 'authRefresh']);
+    for (const [name, operation] of Object.entries(transport)) {
+      expect(operation).toHaveBeenCalledTimes(repeatedOperations.has(name) ? 2 : 1);
     }
     expect(transport.authSignup).toHaveBeenCalledWith(
       { email: user.email, password: 'password', user_metadata: { role: 'dev' } },

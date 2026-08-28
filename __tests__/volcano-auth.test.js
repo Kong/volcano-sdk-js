@@ -1554,12 +1554,23 @@ describe('VolcanoAuth', () => {
 
     it('should convert anonymous user', async () => {
       volcano.accessToken = 'anon-token';
+      volcano.refreshToken = 'anon-refresh';
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
             user: { id: 'user-123', email: 'new@example.com', is_anonymous: false },
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'new@example.com', is_anonymous: false },
+            access_token: 'converted-token',
+            refresh_token: 'converted-refresh',
+            expires_in: 3600,
           }),
       });
 
@@ -1571,6 +1582,7 @@ describe('VolcanoAuth', () => {
       expect(result.user.is_anonymous).toBe(false);
       expect(result.user.email).toBe('new@example.com');
       expect(volcano.currentUser).toEqual(result.user);
+      expect(volcano.accessToken).toBe('converted-token');
     });
 
     it('should return error when converting non-authenticated user', async () => {
@@ -1627,6 +1639,24 @@ describe('VolcanoAuth', () => {
 
       expect(result.message).toBeNull();
       expect(result.error.message).toBe('Invalid or expired token');
+    });
+
+    it('preserves confirmation success when refreshing the current user fails', async () => {
+      volcano.accessToken = 'access-token';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Email confirmed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({ error: 'Temporarily unavailable' }),
+        });
+
+      const result = await volcano.auth.confirmEmail('confirm-token-123');
+
+      expect(result).toEqual({ message: 'Email confirmed', error: null });
     });
 
     it('should resend confirmation', async () => {
@@ -2183,6 +2213,47 @@ describe('VolcanoAuth', () => {
       const result = await volcano.auth.deleteSession('invalid-session');
 
       expect(result.error.message).toBe('Session not found');
+    });
+
+    it('clears local auth after deleting the current device session', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'refresh-token';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              sessions: [{ id: 'current-session', is_current: true }],
+              total: 1,
+              page: 1,
+              limit: 20,
+              total_pages: 1,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              sessions: [],
+              total: 1,
+              page: 2,
+              limit: 20,
+              total_pages: 2,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          json: () => Promise.resolve({}),
+        });
+
+      await volcano.auth.getSessions();
+      await volcano.auth.getSessions({ page: 2 });
+      const result = await volcano.auth.deleteSession('current-session');
+
+      expect(result.error).toBeNull();
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
     });
 
     it('should delete all other sessions', async () => {

@@ -73,13 +73,26 @@ async function getServerUser(apiUrl, anonKey, accessToken) {
   }
 }
 
+function failedRefresh(error) {
+  return { accessToken: null, refreshToken: null, error };
+}
+
+function validRefreshTokens(data) {
+  return (
+    typeof data.access_token === 'string' &&
+    data.access_token !== '' &&
+    typeof data.refresh_token === 'string' &&
+    data.refresh_token !== ''
+  );
+}
+
+async function refreshResponseData(response) {
+  return response.ok ? response.json() : response.json().catch(() => ({}));
+}
+
 async function refreshServerToken(apiUrl, anonKey, refreshToken) {
   if (!refreshToken) {
-    return {
-      accessToken: null,
-      refreshToken: null,
-      error: new Error('No refresh token provided'),
-    };
+    return failedRefresh(new Error('No refresh token provided'));
   }
   try {
     const response = await fetch(`${apiUrl}/auth/refresh`, {
@@ -87,17 +100,16 @@ async function refreshServerToken(apiUrl, anonKey, refreshToken) {
       headers: { 'X-Anon-Key': anonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await refreshResponseData(response);
     if (!response.ok) {
-      return {
-        accessToken: null,
-        refreshToken: null,
-        error: new Error(data.error || `Refresh failed: ${response.status}`),
-      };
+      return failedRefresh(new Error(data.error || `Refresh failed: ${response.status}`));
+    }
+    if (!validRefreshTokens(data)) {
+      return failedRefresh(new Error('Invalid refresh response'));
     }
     return { accessToken: data.access_token, refreshToken: data.refresh_token, error: null };
   } catch (error) {
-    return { accessToken: null, refreshToken: null, error };
+    return failedRefresh(error);
   }
 }
 
