@@ -1,6 +1,29 @@
 const { ContractWorld } = require('./world.js');
 
 describe('contract world cleanup', () => {
+  test('creates isolated authentication identities and listener state', () => {
+    const fixture = {
+      api_url: 'https://api.test.com',
+      anon_key: 'ak-contract',
+      service_key: 'sk-contract',
+      storage_path: 'contract/object.bin',
+      realtime_channel: 'contract-channel',
+      lock_key: 'contract-lock',
+    };
+    const first = new ContractWorld(fixture);
+    const second = new ContractWorld(fixture);
+
+    expect(first.uniqueEmail).toMatch(/^js-\d+-[a-f0-9]+@example\.com$/);
+    expect(first.uniqueEmail).not.toBe(second.uniqueEmail);
+    expect(first.uniquePassword).not.toBe(second.uniquePassword);
+    expect(first.metadataMarker).not.toBe(second.metadataMarker);
+    expect(first.listenerEvents).toEqual([]);
+    expect(first.listenerEventCount).toBe(0);
+    expect(first.unsubscribeAuth).toBeNull();
+    expect(first.anonymousUserId).toBeNull();
+    expect(first.deletedSessionId).toBeNull();
+  });
+
   test('reports lock release error envelopes as cleanup failures', async () => {
     const world = new ContractWorld({
       api_url: 'https://api.test.com',

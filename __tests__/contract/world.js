@@ -50,11 +50,22 @@ class ContractWorld {
     this.cleanupCallbacks = [];
 
     const suffix = `js-${process.pid}-${randomBytes(5).toString('hex')}`;
+    this.uniqueEmail = `${suffix}@example.com`;
+    this.uniquePassword = `Sdk-${suffix}!123`;
+    this.metadataMarker = `updated-${suffix}`;
     this.storagePath = `${fixture.storage_path}.${suffix}`;
     this.realtimeChannel = `${fixture.realtime_channel}-${suffix}`;
     this.lockKey = `${fixture.lock_key}-${suffix}`;
     this.storageBytes = Buffer.from(`volcano-sdk-contract-${suffix}`, 'utf8');
     this.realtimeMessage = { event: 'message', value: `volcano-sdk-contract-${suffix}` };
+    this.secondaryClient = null;
+    this.listenerEvents = [];
+    this.listenerEventCount = 0;
+    this.unsubscribeAuth = null;
+    this.previousAccessToken = null;
+    this.previousRefreshToken = null;
+    this.anonymousUserId = null;
+    this.deletedSessionId = null;
   }
 
   async authenticate() {
