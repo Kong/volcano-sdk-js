@@ -392,30 +392,33 @@ describe('VolcanoAuth', () => {
       expect(result.session).toBeDefined();
     });
 
-    it.each(['', 7])('rejects an unusable refresh token response: %p', async (refreshToken) => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            user: { id: 'user-123', email: 'test@example.com' },
-            access_token: 'access-token-123',
-            refresh_token: refreshToken,
-            expires_in: 3600,
-          }),
-      });
+    it.each([undefined, '', 7])(
+      'rejects an unusable refresh token response: %p',
+      async (refreshToken) => {
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-123', email: 'test@example.com' },
+              access_token: 'access-token-123',
+              refresh_token: refreshToken,
+              expires_in: 3600,
+            }),
+        });
 
-      const result = await volcano.auth.signIn({
-        email: 'test@example.com',
-        password: 'password123',
-      });
+        const result = await volcano.auth.signIn({
+          email: 'test@example.com',
+          password: 'password123',
+        });
 
-      expect(result).toEqual({
-        user: null,
-        session: null,
-        error: expect.objectContaining({ message: 'Invalid authentication response' }),
-      });
-      expect(volcano.accessToken).toBeNull();
-    });
+        expect(result).toEqual({
+          user: null,
+          session: null,
+          error: expect.objectContaining({ message: 'Invalid authentication response' }),
+        });
+        expect(volcano.accessToken).toBeNull();
+      },
+    );
   });
 
   describe('Authentication - signOut', () => {
@@ -1899,6 +1902,9 @@ describe('VolcanoAuth', () => {
     it('preserves confirmation success when refreshing the current user fails', async () => {
       volcano.accessToken = 'access-token';
       volcano.currentUser = { id: 'user-123', email: 'stale@example.com' };
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
       global.fetch
         .mockResolvedValueOnce({
           ok: true,
@@ -1914,6 +1920,7 @@ describe('VolcanoAuth', () => {
 
       expect(result).toEqual({ message: 'Email confirmed', error: null });
       expect(volcano.currentUser).toBeNull();
+      expect(callback).not.toHaveBeenCalled();
     });
 
     it('should resend confirmation', async () => {
@@ -2566,6 +2573,44 @@ describe('VolcanoAuth', () => {
         'https://api.test.com/auth/user',
         `https://api.test.com/auth/user/identities/${identity.id}`,
       ]);
+    });
+
+    it('coalesces promotion notification with token-refresh hydration', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'refresh-token';
+      volcano.currentUser = { id: 'user-123', email: 'previous@example.com' };
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
+      const method = { id: 'method-id', email: 'primary@example.com' };
+      const user = { id: 'user-123', email: 'primary@example.com' };
+      global.fetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(method) })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+              user,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ user }),
+        });
+
+      await volcano.auth.promoteMethod(method.id);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(user);
     });
   });
 

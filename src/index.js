@@ -920,11 +920,7 @@ function sessionPayloadError(data) {
     return invalidAuthResponse();
   }
   const refreshToken = data.refresh_token;
-  if (
-    refreshToken !== undefined &&
-    refreshToken !== null &&
-    (typeof refreshToken !== 'string' || refreshToken === '')
-  ) {
+  if (typeof refreshToken !== 'string' || refreshToken === '') {
     return invalidAuthResponse();
   }
   return null;
@@ -1820,7 +1816,7 @@ class VolcanoAuth {
     if (result.data.user === undefined) {
       const profile = await this.getUser();
       if (profile.error) {
-        this._clearUserIfPresent();
+        this._invalidateUserCache();
         return { user: null, error: null };
       }
       return profile;
@@ -1965,7 +1961,7 @@ class VolcanoAuth {
       const notificationGeneration = this._authNotificationGeneration;
       const profile = await this.getUser();
       if (profile.error) {
-        this._clearUserIfPresent();
+        this._invalidateUserCache();
       }
       if (
         !profile.error &&
@@ -2201,7 +2197,7 @@ class VolcanoAuth {
     if (this.currentUser !== null) {
       const profile = await this.getUser();
       if (profile.error) {
-        this._clearUserIfPresent();
+        this._invalidateUserCache();
       }
     }
     return { error: null };
@@ -2303,11 +2299,15 @@ class VolcanoAuth {
     if (!result.ok) {
       return { method: null, error: result.error };
     }
-    if (this.currentUser) {
+    const shouldNotify = this.currentUser !== null;
+    const notificationGeneration = this._authNotificationGeneration;
+    if (shouldNotify) {
       this.currentUser = { ...this.currentUser, email: result.data.email };
-      this._notifyAuthCallbacks(this.currentUser);
     }
     await this.getUser();
+    if (shouldNotify && notificationGeneration === this._authNotificationGeneration) {
+      this._notifyAuthCallbacks(this.currentUser);
+    }
     return { method: result.data, error: null };
   }
 
@@ -2521,11 +2521,8 @@ class VolcanoAuth {
     }
   }
 
-  _clearUserIfPresent() {
-    if (this.currentUser !== null) {
-      this.currentUser = null;
-      this._notifyAuthCallbacks(null);
-    }
+  _invalidateUserCache() {
+    this.currentUser = null;
   }
 
   _notifyAuthCallbacks(user) {
