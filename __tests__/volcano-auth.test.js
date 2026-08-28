@@ -2597,8 +2597,6 @@ describe('VolcanoAuth', () => {
         json: () =>
           Promise.resolve({
             data: [{ id: 'session-3', provider: 'email' }],
-            total: 3,
-            limit: 1,
             has_more: true,
             next_cursor: 'next',
             prev_cursor: 'previous',
@@ -2620,6 +2618,7 @@ describe('VolcanoAuth', () => {
         'next',
         'previous',
       ]);
+      expect([result.total, result.limit]).toEqual([null, null]);
       expect(query).toEqual({
         limit: '1',
         sort: 'created_at',

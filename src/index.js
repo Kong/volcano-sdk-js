@@ -1171,17 +1171,21 @@ function sessionQueryParams(options) {
   return Object.fromEntries(Object.entries(params).filter((entry) => entry[1] !== undefined));
 }
 
+function nullable(value) {
+  return value === undefined ? null : value;
+}
+
 function successfulSessionsResponse(data) {
   const sessions = data.sessions ?? data.data ?? [];
   return {
     sessions,
-    total: data.total,
-    page: data.page ?? null,
-    limit: data.limit,
-    total_pages: data.total_pages ?? null,
-    has_more: data.has_more ?? null,
-    next_cursor: data.next_cursor ?? null,
-    prev_cursor: data.prev_cursor ?? null,
+    total: nullable(data.total),
+    page: nullable(data.page),
+    limit: nullable(data.limit),
+    total_pages: nullable(data.total_pages),
+    has_more: nullable(data.has_more),
+    next_cursor: nullable(data.next_cursor),
+    prev_cursor: nullable(data.prev_cursor),
     error: null,
   };
 }

@@ -178,9 +178,9 @@ export interface AuthSession {
 
 export interface SessionsResponse {
   sessions: AuthSession[] | null;
-  total: number;
+  total: number | null;
   page: number | null;
-  limit: number;
+  limit: number | null;
   total_pages: number | null;
   has_more: boolean | null;
   next_cursor: string | null;
