@@ -1622,12 +1622,13 @@ class VolcanoAuth {
     // Announce the redirect adoption — whether it happened just now or earlier
     // at construction — exactly once, so onAuthStateChange listeners see the
     // SIGNED_IN transition on the common hosted-redirect path too.
-    if (
-      (adoptedFromUrl || this._pendingUrlAuthNotify || hydratesRestoredSession) &&
-      notificationGeneration === this._authNotificationGeneration
-    ) {
+    const shouldAnnounceHydration =
+      adoptedFromUrl || this._pendingUrlAuthNotify || hydratesRestoredSession;
+    if (shouldAnnounceHydration) {
       this._pendingUrlAuthNotify = false;
-      this._notifyAuthCallbacks(this.currentUser);
+      if (notificationGeneration === this._authNotificationGeneration) {
+        this._notifyAuthCallbacks(this.currentUser);
+      }
     }
     return { user: result.data.user, error: null };
   }

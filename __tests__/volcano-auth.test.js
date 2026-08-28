@@ -596,6 +596,40 @@ describe('VolcanoAuth', () => {
       expect(callback).toHaveBeenCalledTimes(1);
     });
 
+    it('consumes the pending redirect notification when getUser refreshes', async () => {
+      seedNonce();
+      window.location.hash =
+        '#access_token=expired-access&refresh_token=valid-refresh&state=' + NONCE;
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const callback = jest.fn();
+      v.auth.onAuthStateChange(callback);
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+              user: { id: 'redirect-user' },
+            }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'redirect-user' } }),
+        });
+
+      await v.auth.getUser();
+      await v.auth.getUser();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith({ id: 'redirect-user' });
+    });
+
     it('ignores a fragment that does not contain an access token', () => {
       window.location.hash = '#section=pricing';
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
