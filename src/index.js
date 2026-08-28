@@ -911,6 +911,30 @@ function validateDeviceAction(action) {
   }
 }
 
+function invalidAuthResponse() {
+  return new Error('Invalid authentication response');
+}
+
+function sessionPayloadError(data) {
+  if (typeof data?.access_token !== 'string' || data.access_token === '') {
+    return invalidAuthResponse();
+  }
+  const refreshToken = data.refresh_token;
+  if (
+    refreshToken !== undefined &&
+    refreshToken !== null &&
+    (typeof refreshToken !== 'string' || refreshToken === '')
+  ) {
+    return invalidAuthResponse();
+  }
+  return null;
+}
+
+function requiredTextPayloadError(data, fields) {
+  const invalid = fields.some((field) => typeof data?.[field] !== 'string' || data[field] === '');
+  return invalid ? invalidAuthResponse() : null;
+}
+
 function initializeClientSession(client, config) {
   if (config.accessToken) {
     client.accessToken = config.accessToken;
@@ -1649,7 +1673,10 @@ class VolcanoAuth {
       };
     }
 
-    this._setSession(response.data);
+    const sessionError = this._setSession(response.data);
+    if (sessionError) {
+      return { user: null, session: null, error: sessionError };
+    }
     return {
       user: response.data.user,
       session: {
@@ -1691,7 +1718,10 @@ class VolcanoAuth {
     if (!result.ok) {
       return { user: null, session: null, error: result.error };
     }
-    this._setSession(result.data);
+    const sessionError = this._setSession(result.data);
+    if (sessionError) {
+      return { user: null, session: null, error: sessionError };
+    }
     return {
       user: result.data.user,
       session: {
@@ -1723,7 +1753,13 @@ class VolcanoAuth {
         this._generatedOptions('session'),
       ),
     );
-    return result.ok ? { token: result.data, error: null } : { token: null, error: result.error };
+    if (!result.ok) {
+      return { token: null, error: result.error };
+    }
+    const responseError = requiredTextPayloadError(result.data, ['token', 'user_id', 'token_id']);
+    return responseError
+      ? { token: null, error: responseError }
+      : { token: result.data, error: null };
   }
 
   async signOut() {
@@ -1781,7 +1817,14 @@ class VolcanoAuth {
     if (!result.ok) {
       return { user: null, error: result.error };
     }
-
+    if (result.data.user === undefined) {
+      const profile = await this.getUser();
+      if (profile.error) {
+        this._clearUserIfPresent();
+        return { user: null, error: null };
+      }
+      return profile;
+    }
     this.currentUser = result.data.user;
     return { user: result.data.user, error: null };
   }
@@ -1812,7 +1855,11 @@ class VolcanoAuth {
         return { session: null, error: result.error };
       }
 
-      this._setSession(result.data);
+      const sessionError = this._setSession(result.data);
+      if (sessionError) {
+        this._clearSession();
+        return { session: null, error: sessionError };
+      }
       return {
         session: {
           access_token: result.data.access_token,
@@ -1867,7 +1914,10 @@ class VolcanoAuth {
       return { user: null, session: null, error: result.error };
     }
 
-    this._setSession(result.data);
+    const sessionError = this._setSession(result.data);
+    if (sessionError) {
+      return { user: null, session: null, error: sessionError };
+    }
     return {
       user: result.data.user,
       session: {
@@ -1914,6 +1964,9 @@ class VolcanoAuth {
       const needsExplicitNotification = this.currentUser !== null;
       const notificationGeneration = this._authNotificationGeneration;
       const profile = await this.getUser();
+      if (profile.error) {
+        this._clearUserIfPresent();
+      }
       if (
         !profile.error &&
         needsExplicitNotification &&
@@ -2144,6 +2197,12 @@ class VolcanoAuth {
 
     if (!result.ok) {
       return { error: result.error };
+    }
+    if (this.currentUser !== null) {
+      const profile = await this.getUser();
+      if (profile.error) {
+        this._clearUserIfPresent();
+      }
     }
     return { error: null };
   }
@@ -2426,6 +2485,10 @@ class VolcanoAuth {
   // ========================================================================
 
   _setSession(data) {
+    const responseError = sessionPayloadError(data);
+    if (responseError) {
+      return responseError;
+    }
     this._oauthExchangeError = null;
     this.accessToken = data.access_token;
     this.refreshToken = data.refresh_token;
@@ -2436,6 +2499,7 @@ class VolcanoAuth {
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
 
     this._notifyAuthCallbacks(this.currentUser);
+    return null;
   }
 
   _clearSession() {
@@ -2454,6 +2518,13 @@ class VolcanoAuth {
   _clearSessionIfPresent() {
     if (this.accessToken || this.currentUser) {
       this._clearSession();
+    }
+  }
+
+  _clearUserIfPresent() {
+    if (this.currentUser !== null) {
+      this.currentUser = null;
+      this._notifyAuthCallbacks(null);
     }
   }
 
@@ -2522,7 +2593,11 @@ class VolcanoAuth {
       this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
       return false;
     }
-    this._setSession(result.data);
+    const sessionError = this._setSession(result.data);
+    if (sessionError) {
+      this._oauthExchangeError = sessionError;
+      return false;
+    }
     return true;
   }
 

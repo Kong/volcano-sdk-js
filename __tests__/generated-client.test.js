@@ -226,7 +226,7 @@ describe('generated transport boundary', () => {
     await volcano.auth.signOut();
 
     const repeatedOperations = new Map([
-      ['authGetUser', 3],
+      ['authGetUser', 4],
       ['authRefresh', 2],
     ]);
     for (const [name, operation] of Object.entries(transport)) {

@@ -391,6 +391,31 @@ describe('VolcanoAuth', () => {
       expect(result.user).toBeDefined();
       expect(result.session).toBeDefined();
     });
+
+    it.each(['', 7])('rejects an unusable refresh token response: %p', async (refreshToken) => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'test@example.com' },
+            access_token: 'access-token-123',
+            refresh_token: refreshToken,
+            expires_in: 3600,
+          }),
+      });
+
+      const result = await volcano.auth.signIn({
+        email: 'test@example.com',
+        password: 'password123',
+      });
+
+      expect(result).toEqual({
+        user: null,
+        session: null,
+        error: expect.objectContaining({ message: 'Invalid authentication response' }),
+      });
+      expect(volcano.accessToken).toBeNull();
+    });
   });
 
   describe('Authentication - signOut', () => {
@@ -1354,6 +1379,21 @@ describe('VolcanoAuth', () => {
       expect(result.user).toBeNull();
       expect(result.error.message).toBe('Password too weak');
     });
+
+    it('hydrates a user omitted from the update response', async () => {
+      volcano.accessToken = 'valid-token';
+      global.fetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'user-123', email: 'updated@example.com' } }),
+        });
+
+      const result = await volcano.auth.updateUser({ metadata: { plan: 'pro' } });
+
+      expect(result).toEqual({ user: volcano.currentUser, error: null });
+      expect(volcano.currentUser.email).toBe('updated@example.com');
+    });
   });
 
   describe('Authentication - refreshSession', () => {
@@ -1858,6 +1898,7 @@ describe('VolcanoAuth', () => {
 
     it('preserves confirmation success when refreshing the current user fails', async () => {
       volcano.accessToken = 'access-token';
+      volcano.currentUser = { id: 'user-123', email: 'stale@example.com' };
       global.fetch
         .mockResolvedValueOnce({
           ok: true,
@@ -1872,6 +1913,7 @@ describe('VolcanoAuth', () => {
       const result = await volcano.auth.confirmEmail('confirm-token-123');
 
       expect(result).toEqual({ message: 'Email confirmed', error: null });
+      expect(volcano.currentUser).toBeNull();
     });
 
     it('should resend confirmation', async () => {
@@ -2207,6 +2249,22 @@ describe('VolcanoAuth', () => {
       const { error } = await volcano.auth.unlinkOAuthProvider('github');
 
       expect(error).toBeDefined();
+    });
+
+    it('reconciles the cached user after unlinking an OAuth provider', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.currentUser = { id: 'user-123', email: 'previous@example.com' };
+      global.fetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'user-123', email: 'updated@example.com' } }),
+        });
+
+      const result = await volcano.auth.unlinkOAuthProvider('github');
+
+      expect(result).toEqual({ error: null });
+      expect(volcano.currentUser.email).toBe('updated@example.com');
     });
 
     it('should refresh OAuth token', async () => {
@@ -2596,6 +2654,30 @@ describe('VolcanoAuth', () => {
       expect(verifyResult.verification.status).toBe('approved');
       expect(platformResult).toEqual({ token: platform, error: null });
     });
+
+    it.each(['token', 'user_id', 'token_id'])(
+      'rejects a platform response with an empty %s',
+      async (field) => {
+        volcano.accessToken = TEST_ACCESS_TOKEN;
+        const platform = {
+          token: 'platform-secret',
+          user_id: 'user-123',
+          token_id: 'token-id',
+          expires_at: '2026-08-28T13:00:00Z',
+          [field]: '',
+        };
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(platform),
+        });
+
+        const result = await volcano.auth.exchangePlatformToken('volcano-cli');
+
+        expect(result.token).toBeNull();
+        expect(result.error.message).toBe('Invalid authentication response');
+      },
+    );
   });
 
   describe('Session Management', () => {
