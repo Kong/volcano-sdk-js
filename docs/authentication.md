@@ -419,11 +419,13 @@ const { session } = await deviceClient.auth.pollDeviceToken(
 );
 ```
 
-Signed-in clients can also exchange their session for a short-lived platform
-token. Treat `token.token` as a secret:
+After the device client commits its approved device-flow session, it can
+exchange that verified session for a short-lived platform token. Ordinary
+email/password and OAuth sessions are not eligible. Treat `token.token` as a
+secret:
 
 ```javascript
-const { token, error } = await volcano.auth.exchangePlatformToken('volcano-cli');
+const { token, error } = await deviceClient.auth.exchangePlatformToken('volcano-cli');
 ```
 
 ## Anonymous Users
