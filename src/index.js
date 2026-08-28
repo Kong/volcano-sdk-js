@@ -537,7 +537,7 @@ function sessionExpiredResponse(response) {
  * @param {RequestInit} options
  * @returns {Promise<Response>}
  */
-async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
+async function fetchWithAuthRetry(volcanoAuth, url, options = {}, retryUnauthorized = true) {
   await volcanoAuth._completeOAuthExchange();
   const doFetch = () =>
     fetchWithTimeout(
@@ -553,7 +553,7 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
     );
 
   let response = await doFetch();
-  if (response.status === 401) {
+  if (response.status === 401 && retryUnauthorized) {
     const refreshed = await volcanoAuth.refreshSession();
     if (!refreshed.error) {
       response = await doFetch();
@@ -1246,16 +1246,17 @@ class VolcanoAuth {
     }
   }
 
-  _generatedOptions(volcanoAuthorization, headers, responseType) {
+  _generatedOptions(volcanoAuthorization, headers, responseType, retryUnauthorized = true) {
     return {
       volcanoAuthorization,
       volcanoClient: this,
       ...(headers ? { headers } : {}),
       ...(responseType ? { volcanoResponseType: responseType } : {}),
+      ...(!retryUnauthorized ? { volcanoRetryUnauthorized: false } : {}),
     };
   }
 
-  async _generatedFetch(path, options, authorization) {
+  async _generatedFetch(path, options, authorization, retryUnauthorized = true) {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
       return fetchWithTimeout(
@@ -1271,7 +1272,7 @@ class VolcanoAuth {
       );
     }
 
-    return fetchWithAuthRetry(this, url, options);
+    return fetchWithAuthRetry(this, url, options, retryUnauthorized);
   }
 
   async _generatedRequest(request) {
@@ -1576,6 +1577,7 @@ class VolcanoAuth {
     // Transparently adopt a session handed off by the managed hosted auth pages
     // (tokens in the URL fragment) so callers only ever need getUser().
     const adoptedFromUrl = this._consumeSessionFromUrl();
+    const hydratesRestoredSession = this.currentUser === null;
 
     const result = await this._generatedSessionRequest(() =>
       this._transport.authGetUser(this._generatedOptions('session')),
@@ -1589,7 +1591,7 @@ class VolcanoAuth {
     // Announce the redirect adoption — whether it happened just now or earlier
     // at construction — exactly once, so onAuthStateChange listeners see the
     // SIGNED_IN transition on the common hosted-redirect path too.
-    if (adoptedFromUrl || this._pendingUrlAuthNotify) {
+    if (adoptedFromUrl || this._pendingUrlAuthNotify || hydratesRestoredSession) {
       this._pendingUrlAuthNotify = false;
       this._notifyAuthCallbacks(this.currentUser);
     }
@@ -1663,11 +1665,12 @@ class VolcanoAuth {
     }
     this._authCallbacks.push(callback);
 
-    // Call immediately with current state
-    try {
-      callback(this.currentUser);
-    } catch (err) {
-      console.error('[VolcanoAuth] Error in auth state callback:', err);
+    if (!this.accessToken || this.currentUser) {
+      try {
+        callback(this.currentUser);
+      } catch (err) {
+        console.error('[VolcanoAuth] Error in auth state callback:', err);
+      }
     }
 
     return () => {
@@ -1717,7 +1720,7 @@ class VolcanoAuth {
 
     const refreshed = await this.refreshSession();
     if (refreshed.error) {
-      return { user: null, error: refreshed.error };
+      return { user: result.data.user, error: null };
     }
     return { user: this.currentUser || result.data.user, error: null };
   }
@@ -1780,7 +1783,18 @@ class VolcanoAuth {
     if (!result.ok) {
       return { message: null, error: result.error };
     }
+    await this._validateSessionAfterPasswordReset();
     return { message: result.data.message, error: null };
+  }
+
+  async _validateSessionAfterPasswordReset() {
+    if (!this.accessToken) {
+      return;
+    }
+    const profile = await this.getUser();
+    if (profile.error?.status === 401 && this.accessToken) {
+      this._clearSession();
+    }
   }
 
   // ========================================================================
@@ -2006,7 +2020,7 @@ class VolcanoAuth {
       this._transport.callOAuthProviderAPI(
         provider,
         { endpoint, method, body },
-        this._generatedOptions('session'),
+        this._generatedOptions('session', undefined, undefined, false),
       ),
     );
 
@@ -2055,6 +2069,7 @@ class VolcanoAuth {
   }
 
   async deleteSession(sessionId) {
+    const deletesCurrentSession = this._currentDeviceSessionIds.has(sessionId);
     const result = await this._generatedSessionRequest(() =>
       this._transport.authDeleteMySession(
         encodeURIComponent(sessionId),
@@ -2065,7 +2080,7 @@ class VolcanoAuth {
     if (!result.ok) {
       return { error: result.error };
     }
-    if (this._currentDeviceSessionIds.has(sessionId)) {
+    if (deletesCurrentSession) {
       this._clearSession();
     }
     return { error: null };

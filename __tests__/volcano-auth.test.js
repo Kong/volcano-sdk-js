@@ -578,9 +578,7 @@ describe('VolcanoAuth', () => {
 
       const callback = jest.fn();
       v.auth.onAuthStateChange(callback);
-      // Immediate emission on subscribe reflects the not-yet-fetched user.
-      expect(callback).toHaveBeenLastCalledWith(null);
-      callback.mockClear();
+      expect(callback).not.toHaveBeenCalled();
 
       global.fetch.mockResolvedValue({
         ok: true,
@@ -1368,6 +1366,24 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - onAuthStateChange', () => {
+    it('defers restored-session callbacks until the user is hydrated', async () => {
+      const restored = new VolcanoAuth({
+        ...config,
+        accessToken: 'restored-access',
+      });
+      const callback = jest.fn();
+      restored.auth.onAuthStateChange(callback);
+      expect(callback).not.toHaveBeenCalled();
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'restored-user' } }),
+      });
+      await restored.auth.getUser();
+
+      expect(callback).toHaveBeenCalledWith({ id: 'restored-user' });
+    });
+
     it('should call callback with current user', () => {
       volcano.currentUser = { id: 'user-123' };
       const callback = jest.fn();
@@ -1614,6 +1630,36 @@ describe('VolcanoAuth', () => {
       expect(result.user).toBeNull();
       expect(result.error.message).toBe('Email already exists');
     });
+
+    it('preserves successful conversion when session rotation fails', async () => {
+      volcano.accessToken = 'anon-token';
+      volcano.refreshToken = 'anon-refresh';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-123', email: 'new@example.com', is_anonymous: false },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({ error: 'Refresh unavailable' }),
+        });
+
+      const result = await volcano.auth.convertAnonymous({
+        email: 'new@example.com',
+        password: 'password123',
+      });
+
+      expect(result).toEqual({
+        user: { id: 'user-123', email: 'new@example.com', is_anonymous: false },
+        error: null,
+      });
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+    });
   });
 
   describe('Email Confirmation', () => {
@@ -1708,6 +1754,35 @@ describe('VolcanoAuth', () => {
       });
 
       expect(result.message).toBe('Password reset successful');
+    });
+
+    it('clears a current session revoked by password reset', async () => {
+      volcano.accessToken = 'access-token';
+      volcano.refreshToken = 'refresh-token';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Password reset successful' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Refresh token expired' }),
+        });
+
+      const result = await volcano.auth.resetPassword({
+        token: 'reset-token',
+        newPassword: 'newpassword123',
+      });
+
+      expect(result.message).toBe('Password reset successful');
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
     });
 
     it('should return error on forgotPassword failure', async () => {
@@ -2100,6 +2175,21 @@ describe('VolcanoAuth', () => {
       expect(result.data).toBeNull();
       expect(result.error.message).toBe('Insufficient scope');
     });
+
+    it('preserves access-only auth for provider-level unauthorized responses', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = null;
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Provider is not linked' }),
+      });
+
+      const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
+
+      expect(result.error.message).toBe('Provider is not linked');
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
+    });
   });
 
   describe('Session Management', () => {
@@ -2249,6 +2339,50 @@ describe('VolcanoAuth', () => {
 
       await volcano.auth.getSessions();
       await volcano.auth.getSessions({ page: 2 });
+      const result = await volcano.auth.deleteSession('current-session');
+
+      expect(result.error).toBeNull();
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+    });
+
+    it('clears local auth when deleting the current session retries after refresh', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'refresh-token';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              sessions: [{ id: 'current-session', is_current: true }],
+              total: 1,
+              page: 1,
+              limit: 20,
+              total_pages: 1,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-123' },
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+              expires_in: 3600,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          json: () => Promise.resolve({}),
+        });
+
+      await volcano.auth.getSessions();
       const result = await volcano.auth.deleteSession('current-session');
 
       expect(result.error).toBeNull();

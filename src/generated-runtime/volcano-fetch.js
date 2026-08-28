@@ -12,11 +12,11 @@ async function responseData(response, responseType) {
     return response.blob();
 }
 export async function volcanoFetch(path, options) {
-    const { volcanoAuthorization, volcanoClient, volcanoResponseType, ...request } = options;
+    const { volcanoAuthorization, volcanoClient, volcanoResponseType, volcanoRetryUnauthorized = true, ...request } = options;
     if (!volcanoClient || !volcanoAuthorization) {
         throw new Error('Generated transport requires a Volcano client and authorization mode');
     }
-    const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization);
+    const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization, volcanoRetryUnauthorized);
     const data = await responseData(response, volcanoResponseType);
     if (!response.ok) {
         const message = typeof data === 'object' && data !== null && 'error' in data
