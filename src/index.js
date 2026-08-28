@@ -1149,9 +1149,9 @@ function rememberCurrentSessionIds(target, sessions) {
 }
 
 function sessionQueryParams(options) {
-  const { page = 1, limit = DEFAULT_SESSIONS_LIMIT, endingBefore, ...cursorOptions } = options;
+  const { page, limit = DEFAULT_SESSIONS_LIMIT, endingBefore, ...cursorOptions } = options;
   const params = {
-    page: page > 1 ? page : undefined,
+    page,
     limit: limit === DEFAULT_SESSIONS_LIMIT ? undefined : limit,
     ...cursorOptions,
     ending_before: endingBefore,

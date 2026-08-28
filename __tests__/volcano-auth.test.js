@@ -2504,6 +2504,19 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('preserves an explicit first-page offset request', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ sessions: [], total: 0, page: 1, limit: 20, total_pages: 0 }),
+      });
+
+      await volcano.auth.getSessions({ sort: 'created_at', status: 'expired', page: 1 });
+      const query = Object.fromEntries(new URL(fetch.mock.calls[0][0]).searchParams);
+
+      expect(query).toEqual({ page: '1', sort: 'created_at', status: 'expired' });
+    });
+
     it('should expose session filters and cursor navigation', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       global.fetch.mockResolvedValueOnce({

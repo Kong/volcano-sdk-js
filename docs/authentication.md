@@ -559,7 +559,8 @@ Get all active sessions for the current user:
 
 ```javascript
 const { sessions, total, next_cursor, error } = await volcano.auth.getSessions({
-  page: 1,
+  sort: 'created_at',
+  status: 'active',
   limit: 20,
 });
 
