@@ -1070,6 +1070,15 @@ function noSessionInvocationError(oauthExchangeError) {
   return oauthExchangeError || new Error('No active session');
 }
 
+function shouldRefreshProviderCall(result, refreshToken) {
+  return (
+    !result.ok &&
+    result.status === 401 &&
+    Boolean(refreshToken) &&
+    !/not linked/i.test(result.error?.message || '')
+  );
+}
+
 function readOAuthCallback() {
   try {
     const url = new URL(window.location.href);
@@ -1738,8 +1747,9 @@ class VolcanoAuth {
       return { message: null, error: result.error };
     }
     if (this.accessToken) {
+      const needsExplicitNotification = this.currentUser !== null;
       const profile = await this.getUser();
-      if (!profile.error) {
+      if (!profile.error && needsExplicitNotification) {
         this._notifyAuthCallbacks(this.currentUser);
       }
     }
@@ -2016,13 +2026,19 @@ class VolcanoAuth {
 
   async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
     sanitizeProvider(provider);
-    const result = await this._generatedSessionRequest(() =>
+    const request = () =>
       this._transport.callOAuthProviderAPI(
         provider,
         { endpoint, method, body },
         this._generatedOptions('session', undefined, undefined, false),
-      ),
-    );
+      );
+    let result = await this._generatedSessionRequest(request);
+    if (shouldRefreshProviderCall(result, this.refreshToken)) {
+      const refreshed = await this.refreshSession();
+      if (!refreshed.error) {
+        result = await this._generatedSessionRequest(request);
+      }
+    }
 
     if (!result.ok) {
       return { data: null, error: result.error };

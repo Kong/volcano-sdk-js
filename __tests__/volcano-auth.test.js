@@ -1675,6 +1675,27 @@ describe('VolcanoAuth', () => {
       expect(result.error).toBeNull();
     });
 
+    it('notifies once when confirmation hydrates a restored session', async () => {
+      volcano.accessToken = 'restored-access';
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Email confirmed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'restored-user' } }),
+        });
+
+      const result = await volcano.auth.confirmEmail('confirm-token-123');
+
+      expect(result.error).toBeNull();
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith({ id: 'restored-user' });
+    });
+
     it('should return error on confirm email failure', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: false,
@@ -2189,6 +2210,35 @@ describe('VolcanoAuth', () => {
 
       expect(result.error.message).toBe('Provider is not linked');
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
+    });
+
+    it('refreshes an expired session before retrying a provider API call', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'refresh-token';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Not authenticated' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-123' },
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ data: { login: 'octocat' } }),
+        });
+
+      const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
+
+      expect(result).toEqual({ data: { login: 'octocat' }, error: null });
+      expect(volcano.accessToken).toBe('rotated-access');
     });
   });
 

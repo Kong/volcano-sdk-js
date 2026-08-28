@@ -179,7 +179,11 @@ const unsubscribe = volcano.auth.onAuthStateChange((user) => {
 // unsubscribe();
 ```
 
-This callback fires immediately with the current state, then again whenever the auth state changes.
+This callback fires immediately when the client is signed out or already has a
+resolved user, then again whenever auth state changes. If the client starts with
+restored tokens but no user profile, the initial callback is deferred until
+`initialize()` or `getUser()` hydrates that profile; this avoids reporting a
+valid restored session as signed out.
 
 ### Manual Token Refresh
 
@@ -472,6 +476,10 @@ if (error) {
   console.log('Password updated successfully');
 }
 ```
+
+Password reset revokes the reset account's existing sessions. If this client is
+using one of those sessions, `resetPassword()` clears it and emits a signed-out
+auth-state event before returning; sign in with the new password to continue.
 
 ## Email Change
 
