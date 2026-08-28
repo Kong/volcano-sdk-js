@@ -1141,6 +1141,32 @@ function rememberCurrentSessionIds(target, sessions) {
   }
 }
 
+function sessionQueryParams(options) {
+  const { page = 1, limit = DEFAULT_SESSIONS_LIMIT, endingBefore, ...cursorOptions } = options;
+  const params = {
+    page: page > 1 ? page : undefined,
+    limit: limit === DEFAULT_SESSIONS_LIMIT ? undefined : limit,
+    ...cursorOptions,
+    ending_before: endingBefore,
+  };
+  return Object.fromEntries(Object.entries(params).filter((entry) => entry[1] !== undefined));
+}
+
+function successfulSessionsResponse(data) {
+  const sessions = data.sessions ?? data.data ?? [];
+  return {
+    sessions,
+    total: data.total,
+    page: data.page ?? null,
+    limit: data.limit,
+    total_pages: data.total_pages ?? null,
+    has_more: data.has_more ?? null,
+    next_cursor: data.next_cursor ?? null,
+    prev_cursor: data.prev_cursor ?? null,
+    error: null,
+  };
+}
+
 function shouldSignInAfterSignup(signInWhenAllowed, confirmationRequired) {
   return signInWhenAllowed && !confirmationRequired;
 }
@@ -2099,14 +2125,7 @@ class VolcanoAuth {
   // ========================================================================
 
   async getSessions(options = {}) {
-    const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = {};
-    if (page > 1) {
-      params.page = page;
-    }
-    if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.limit = limit;
-    }
+    const params = sessionQueryParams(options);
     const result = await this._generatedSessionRequest(() =>
       this._transport.authGetMySessions(params, this._generatedOptions('session')),
     );
@@ -2118,18 +2137,15 @@ class VolcanoAuth {
         page: 1,
         limit: DEFAULT_SESSIONS_LIMIT,
         total_pages: 0,
+        has_more: null,
+        next_cursor: null,
+        prev_cursor: null,
         error: result.error,
       };
     }
-    rememberCurrentSessionIds(this._currentDeviceSessionIds, result.data.sessions);
-    return {
-      sessions: result.data.sessions,
-      total: result.data.total,
-      page: result.data.page,
-      limit: result.data.limit,
-      total_pages: result.data.total_pages,
-      error: null,
-    };
+    const response = successfulSessionsResponse(result.data);
+    rememberCurrentSessionIds(this._currentDeviceSessionIds, response.sessions);
+    return response;
   }
 
   async deleteSession(sessionId) {

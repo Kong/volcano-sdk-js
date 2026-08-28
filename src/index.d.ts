@@ -179,9 +179,12 @@ export interface AuthSession {
 export interface SessionsResponse {
   sessions: AuthSession[] | null;
   total: number;
-  page: number;
+  page: number | null;
   limit: number;
-  total_pages: number;
+  total_pages: number | null;
+  has_more: boolean | null;
+  next_cursor: string | null;
+  prev_cursor: string | null;
   error: Error | null;
 }
 
@@ -190,6 +193,16 @@ export interface GetSessionsOptions {
   page?: number;
   /** Number of sessions per page (max 100, default: 20) */
   limit?: number;
+  /** Order by recent activity or session creation time */
+  sort?: 'last_activity' | 'created_at';
+  /** Filter sessions by refresh eligibility */
+  status?: 'active' | 'expired';
+  /** Cursor returned as `next_cursor` by a previous page */
+  cursor?: string;
+  /** Cursor returned as `prev_cursor` by a previous page */
+  endingBefore?: string;
+  /** Bounded row offset past a cursor anchor */
+  offset?: number;
 }
 
 export interface DeleteSessionResponse {

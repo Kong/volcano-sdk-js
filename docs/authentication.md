@@ -558,7 +558,7 @@ Users can manage their active sessions across devices.
 Get all active sessions for the current user:
 
 ```javascript
-const { sessions, total, error } = await volcano.auth.getSessions({
+const { sessions, total, next_cursor, error } = await volcano.auth.getSessions({
   page: 1,
   limit: 20,
 });
@@ -570,6 +570,15 @@ if (sessions) {
     console.log('IP:', session.ip_address);
     console.log('Last active:', session.last_activity_at);
     console.log('Current session:', session.is_current);
+  });
+}
+
+if (next_cursor) {
+  const nextPage = await volcano.auth.getSessions({
+    sort: 'created_at',
+    status: 'active',
+    cursor: next_cursor,
+    limit: 20,
   });
 }
 ```

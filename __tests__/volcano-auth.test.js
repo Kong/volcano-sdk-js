@@ -2488,6 +2488,45 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should expose session filters and cursor navigation', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: 'session-3', provider: 'email' }],
+            total: 3,
+            limit: 1,
+            has_more: true,
+            next_cursor: 'next',
+            prev_cursor: 'previous',
+          }),
+      });
+
+      const result = await volcano.auth.getSessions({
+        sort: 'created_at',
+        status: 'active',
+        endingBefore: 'previous-page',
+        offset: 1,
+        limit: 1,
+      });
+      const query = Object.fromEntries(new URL(fetch.mock.calls[0][0]).searchParams);
+
+      expect(result.sessions.map((session) => session.id)).toEqual(['session-3']);
+      expect([result.has_more, result.next_cursor, result.prev_cursor]).toEqual([
+        true,
+        'next',
+        'previous',
+      ]);
+      expect(query).toEqual({
+        limit: '1',
+        sort: 'created_at',
+        status: 'active',
+        offset: '1',
+        ending_before: 'previous-page',
+      });
+    });
+
     it('should return error when not authenticated for getSessions', async () => {
       volcano.accessToken = null;
 
