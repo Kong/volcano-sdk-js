@@ -126,4 +126,159 @@ describe('generated transport boundary', () => {
       }),
     );
   });
+
+  test('authentication facade methods delegate through the generated transport', async () => {
+    const user = {
+      id: 'user-auth',
+      email: 'auth@example.com',
+      created_at: '2026-08-28T12:00:00Z',
+      updated_at: '2026-08-28T12:00:00Z',
+    };
+    const session = {
+      access_token: 'access-auth',
+      refresh_token: 'refresh-auth',
+      expires_in: 3600,
+    };
+    const success = (data, status = 200) => jest.fn().mockResolvedValue({ data, status });
+    const transport = {
+      authSignup: success({ confirmation_required: false, message: 'Check your email' }, 201),
+      authSignin: success({ user, ...session }),
+      authLogout: success(undefined, 204),
+      authGetUser: success({ user }),
+      authUpdateUser: success({ user }),
+      authRefresh: success({ user, ...session }),
+      authSignupAnonymous: success({ user, ...session }, 201),
+      authConvertAnonymous: success({ user }),
+      authConfirmEmail: success({ message: 'Email confirmed' }),
+      authResendConfirmation: success({ message: 'Confirmation sent' }),
+      authForgotPassword: success({ message: 'Reset sent' }),
+      authResetPassword: success({ message: 'Password reset' }),
+      authRequestEmailChange: success({
+        message: 'Email change requested',
+        new_email: 'next@example.com',
+        email_change_token: 'email-change-token',
+      }),
+      authConfirmEmailChange: success({ user }),
+      authCancelEmailChange: success({ message: 'Email change cancelled' }),
+      authLinkOAuthProvider: success({ authorization_url: 'https://provider.test/authorize' }),
+      authUnlinkOAuthProvider: success(undefined, 204),
+      authListOAuthProviders: success({ providers: [] }),
+      refreshOAuthProviderToken: success({
+        message: 'Token refreshed',
+        provider: 'github',
+        expires_in: 3600,
+      }),
+      getOAuthProviderToken: success({
+        message: 'Token available',
+        provider: 'github',
+        expires_in: 3600,
+      }),
+      callOAuthProviderAPI: success({ data: { login: 'volcano' } }),
+      authGetMySessions: success({
+        sessions: [],
+        total: 0,
+        page: 2,
+        limit: 10,
+        total_pages: 0,
+      }),
+      authDeleteMySession: success(undefined, 204),
+      authDeleteAllMySessions: success(undefined, 204),
+    };
+    const volcano = new VolcanoClient({
+      apiUrl: 'https://api.test.com',
+      anonKey: 'ak-contract',
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
+      transportFactory: () => transport,
+    });
+
+    await volcano.auth.signUp({
+      email: user.email,
+      password: 'password',
+      metadata: { role: 'dev' },
+    });
+    await volcano.auth.signIn({ email: user.email, password: 'password' });
+    await volcano.auth.getUser();
+    await volcano.auth.updateUser({ password: 'new-password', metadata: { role: 'admin' } });
+    await volcano.auth.refreshSession();
+    await volcano.auth.signUpAnonymous({ source: 'contract' });
+    await volcano.auth.convertAnonymous({ email: user.email, password: 'password' });
+    await volcano.auth.confirmEmail('confirmation-token');
+    await volcano.auth.resendConfirmation(user.email);
+    await volcano.auth.forgotPassword(user.email);
+    await volcano.auth.resetPassword({ token: 'reset-token', newPassword: 'new-password' });
+    await volcano.auth.requestEmailChange('next@example.com');
+    await volcano.auth.confirmEmailChange('email-change-token');
+    await volcano.auth.cancelEmailChange();
+    await volcano.auth.linkOAuthProvider('github');
+    await volcano.auth.unlinkOAuthProvider('github');
+    await volcano.auth.getLinkedOAuthProviders();
+    await volcano.auth.refreshOAuthToken('github');
+    await volcano.auth.getOAuthProviderToken('github');
+    await volcano.auth.callOAuthAPI('github', {
+      endpoint: '/user',
+      method: 'POST',
+      body: { visibility: 'private' },
+    });
+    await volcano.auth.getSessions({ page: 2, limit: 10 });
+    await volcano.auth.deleteSession('session/other');
+    await volcano.auth.deleteAllOtherSessions();
+    await volcano.auth.signOut();
+
+    for (const operation of Object.values(transport)) {
+      expect(operation).toHaveBeenCalledTimes(1);
+    }
+    expect(transport.authSignup).toHaveBeenCalledWith(
+      { email: user.email, password: 'password', user_metadata: { role: 'dev' } },
+      expect.objectContaining({ volcanoAuthorization: 'anon', volcanoClient: volcano }),
+    );
+    expect(transport.authUpdateUser).toHaveBeenCalledWith(
+      { password: 'new-password', user_metadata: { role: 'admin' } },
+      expect.objectContaining({ volcanoAuthorization: 'session', volcanoClient: volcano }),
+    );
+    expect(transport.authGetMySessions).toHaveBeenCalledWith(
+      { page: 2, limit: 10 },
+      expect.objectContaining({ volcanoAuthorization: 'session', volcanoClient: volcano }),
+    );
+    expect(transport.authDeleteMySession).toHaveBeenCalledWith(
+      'session%2Fother',
+      expect.objectContaining({ volcanoAuthorization: 'session', volcanoClient: volcano }),
+    );
+  });
+
+  test('OAuth callback exchange delegates through the generated transport', async () => {
+    const user = { id: 'oauth-user', email: 'oauth@example.com' };
+    const session = {
+      access_token: 'oauth-access',
+      refresh_token: 'oauth-refresh',
+      expires_in: 3600,
+    };
+    const transport = {
+      authOAuthExchange: jest.fn().mockResolvedValue({ data: { user, ...session }, status: 200 }),
+      authGetUser: jest.fn().mockResolvedValue({ data: { user }, status: 200 }),
+    };
+    window.sessionStorage.setItem('volcano_auth_state', 'oauth-state');
+    window.sessionStorage.setItem(
+      'volcano_auth_redirect_url',
+      `${window.location.origin}/auth/callback`,
+    );
+    window.history.replaceState(null, '', '/auth/callback?code=oauth-code&state=oauth-state');
+
+    try {
+      const volcano = new VolcanoClient({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'ak-contract',
+        transportFactory: () => transport,
+      });
+
+      await expect(volcano.initialize()).resolves.toMatchObject({ user, error: null });
+      expect(transport.authOAuthExchange).toHaveBeenCalledWith(
+        { code: 'oauth-code', redirect_url: `${window.location.origin}/auth/callback` },
+        expect.objectContaining({ volcanoAuthorization: 'anon', volcanoClient: volcano }),
+      );
+    } finally {
+      window.history.replaceState(null, '', '/');
+      window.sessionStorage.clear();
+    }
+  });
 });

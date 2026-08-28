@@ -60,7 +60,7 @@
     "lint": "eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "eslint . --fix && pnpm format",
     "test": "jest",
-    "test:types": "tsc --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts test/types/openapi-contract.ts",
+    "test:types": "tsc --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts test/types/openapi-contract.ts test/types/auth-contract.ts",
     "test:package": "publint --pack npm --strict",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

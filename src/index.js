@@ -1,8 +1,32 @@
 import {
   acquireProjectLock,
+  authCancelEmailChange,
+  authConfirmEmail,
+  authConfirmEmailChange,
+  authConvertAnonymous,
+  authDeleteAllMySessions,
+  authDeleteMySession,
+  authForgotPassword,
+  authGetMySessions,
+  authGetUser,
+  authLinkOAuthProvider,
+  authListOAuthProviders,
+  authLogout,
+  authOAuthExchange,
+  authRefresh,
+  authRequestEmailChange,
+  authResendConfirmation,
+  authResetPassword,
   authSignin,
+  authSignup,
+  authSignupAnonymous,
+  authUnlinkOAuthProvider,
+  authUpdateUser,
+  callOAuthProviderAPI,
   downloadStorageObject,
+  getOAuthProviderToken,
   queryDatabaseSelect,
+  refreshOAuthProviderToken,
   releaseProjectLock,
   uploadStorageObject,
 } from './generated-runtime/client.js';
@@ -95,10 +119,34 @@ const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 const LOCK_CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
 const GENERATED_TRANSPORT = {
   acquireProjectLock,
+  authCancelEmailChange,
+  authConfirmEmail,
+  authConfirmEmailChange,
+  authConvertAnonymous,
+  authDeleteAllMySessions,
+  authDeleteMySession,
+  authForgotPassword,
+  authGetMySessions,
+  authGetUser,
+  authLinkOAuthProvider,
+  authListOAuthProviders,
+  authLogout,
+  authOAuthExchange,
+  authRefresh,
+  authRequestEmailChange,
+  authResendConfirmation,
+  authResetPassword,
   authSignin,
+  authSignup,
+  authSignupAnonymous,
+  authUnlinkOAuthProvider,
+  authUpdateUser,
+  callOAuthProviderAPI,
   downloadStorageObject,
+  getOAuthProviderToken,
   queryDatabaseSelect,
   releaseProjectLock,
+  refreshOAuthProviderToken,
   uploadStorageObject,
 };
 
@@ -1043,6 +1091,34 @@ class VolcanoAuth {
     return fetchWithAuthRetry(this, url, options);
   }
 
+  async _generatedRequest(request) {
+    try {
+      const response = await request();
+      return { ok: true, status: response.status, data: response.data, error: null };
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error('Request failed');
+      return {
+        ok: false,
+        status: normalized.status ?? null,
+        data: normalized.info ?? null,
+        error: normalized,
+      };
+    }
+  }
+
+  async _generatedSessionRequest(request) {
+    await this._completeOAuthExchange();
+    if (!this.accessToken) {
+      return {
+        ok: false,
+        status: null,
+        data: null,
+        error: this._oauthExchangeError || new Error('No active session'),
+      };
+    }
+    return this._generatedRequest(request);
+  }
+
   _getFunctionInvokeUrl(functionIdentifier) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionIdentifier);
     if (!hostLabel) {
@@ -1217,10 +1293,12 @@ class VolcanoAuth {
   // ========================================================================
 
   async signUp({ email, password, metadata = {}, signInWhenAllowed = false }) {
-    const result = await this._anonFetch('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authSignup(
+        { email, password, user_metadata: metadata },
+        this._generatedOptions('anon'),
+      ),
+    );
 
     if (!result.ok) {
       return {
@@ -1294,14 +1372,12 @@ class VolcanoAuth {
   async signOut() {
     await this._completeOAuthExchange();
     if (this.refreshToken) {
-      try {
-        await this._anonFetch('/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refresh_token: this.refreshToken }),
-        });
-      } catch (err) {
-        console.warn('[VolcanoAuth] Logout request failed:', err.message);
-      }
+      await this._generatedRequest(() =>
+        this._transport.authLogout(
+          { refresh_token: this.refreshToken },
+          this._generatedOptions('anon'),
+        ),
+      );
     }
     this._clearSession();
     return { error: null };
@@ -1312,7 +1388,9 @@ class VolcanoAuth {
     // (tokens in the URL fragment) so callers only ever need getUser().
     const adoptedFromUrl = this._consumeSessionFromUrl();
 
-    const result = await this._authFetch('/auth/user');
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authGetUser(this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1330,10 +1408,12 @@ class VolcanoAuth {
   }
 
   async updateUser({ password, metadata }) {
-    const result = await this._authFetch('/auth/user', {
-      method: 'PUT',
-      body: JSON.stringify({ password, user_metadata: metadata }),
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authUpdateUser(
+        { password, user_metadata: metadata },
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1356,10 +1436,12 @@ class VolcanoAuth {
     }
 
     try {
-      const result = await this._anonFetch('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
-      });
+      const result = await this._generatedRequest(() =>
+        this._transport.authRefresh(
+          { refresh_token: this.refreshToken },
+          this._generatedOptions('anon'),
+        ),
+      );
 
       if (!result.ok) {
         this._clearSession();
@@ -1409,10 +1491,12 @@ class VolcanoAuth {
   // ========================================================================
 
   async signUpAnonymous(metadata = {}) {
-    const result = await this._anonFetch('/auth/signup-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ user_metadata: metadata }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authSignupAnonymous(
+        { user_metadata: metadata },
+        this._generatedOptions('anon'),
+      ),
+    );
 
     if (!result.ok) {
       return { user: null, session: null, error: result.error };
@@ -1431,10 +1515,12 @@ class VolcanoAuth {
   }
 
   async convertAnonymous({ email, password, metadata = {} }) {
-    const result = await this._authFetch('/auth/user/convert-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authConvertAnonymous(
+        { email, password, user_metadata: metadata },
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1449,10 +1535,9 @@ class VolcanoAuth {
   // ========================================================================
 
   async confirmEmail(token) {
-    const result = await this._anonFetch('/auth/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authConfirmEmail({ token }, this._generatedOptions('anon')),
+    );
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1461,10 +1546,9 @@ class VolcanoAuth {
   }
 
   async resendConfirmation(email) {
-    const result = await this._anonFetch('/auth/resend-confirmation', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authResendConfirmation({ email }, this._generatedOptions('anon')),
+    );
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1477,10 +1561,9 @@ class VolcanoAuth {
   // ========================================================================
 
   async forgotPassword(email) {
-    const result = await this._anonFetch('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authForgotPassword({ email }, this._generatedOptions('anon')),
+    );
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1489,10 +1572,12 @@ class VolcanoAuth {
   }
 
   async resetPassword({ token, newPassword }) {
-    const result = await this._anonFetch('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, new_password: newPassword }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authResetPassword(
+        { token, new_password: newPassword },
+        this._generatedOptions('anon'),
+      ),
+    );
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1505,10 +1590,12 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const result = await this._authFetch('/auth/user/change-email', {
-      method: 'POST',
-      body: JSON.stringify({ new_email: newEmail }),
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authRequestEmailChange(
+        { new_email: newEmail },
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { message: null, newEmail: null, error: result.error };
@@ -1522,10 +1609,12 @@ class VolcanoAuth {
   }
 
   async confirmEmailChange(emailChangeToken) {
-    const result = await this._authFetch('/auth/user/confirm-email-change', {
-      method: 'POST',
-      body: JSON.stringify({ email_change_token: emailChangeToken }),
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authConfirmEmailChange(
+        { email_change_token: emailChangeToken },
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1536,9 +1625,9 @@ class VolcanoAuth {
   }
 
   async cancelEmailChange() {
-    const result = await this._authFetch('/auth/user/cancel-email-change', {
-      method: 'DELETE',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authCancelEmailChange(this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { message: null, error: result.error };
@@ -1674,9 +1763,9 @@ class VolcanoAuth {
 
   async linkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/link`, {
-      method: 'POST',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authLinkOAuthProvider(provider, undefined, this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { data: null, error: result.error };
@@ -1686,9 +1775,9 @@ class VolcanoAuth {
 
   async unlinkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/unlink`, {
-      method: 'DELETE',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authUnlinkOAuthProvider(provider, this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { error: result.error };
@@ -1697,7 +1786,9 @@ class VolcanoAuth {
   }
 
   async getLinkedOAuthProviders() {
-    const result = await this._authFetch('/auth/oauth/providers');
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authListOAuthProviders(this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { providers: null, error: result.error };
@@ -1707,9 +1798,9 @@ class VolcanoAuth {
 
   async refreshOAuthToken(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/refresh-token`, {
-      method: 'POST',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.refreshOAuthProviderToken(provider, this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { message: null, provider: null, expiresIn: null, error: result.error };
@@ -1724,7 +1815,9 @@ class VolcanoAuth {
 
   async getOAuthProviderToken(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/token`);
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.getOAuthProviderToken(provider, this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { message: null, provider: null, expiresIn: null, error: result.error };
@@ -1739,10 +1832,13 @@ class VolcanoAuth {
 
   async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/call-api`, {
-      method: 'POST',
-      body: JSON.stringify({ endpoint, method, body }),
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.callOAuthProviderAPI(
+        provider,
+        { endpoint, method, body },
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { data: null, error: result.error };
@@ -1756,17 +1852,16 @@ class VolcanoAuth {
 
   async getSessions(options = {}) {
     const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = new URLSearchParams();
+    const params = {};
     if (page > 1) {
-      params.set('page', page.toString());
+      params.page = page;
     }
     if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.set('limit', limit.toString());
+      params.limit = limit;
     }
-
-    const queryString = params.toString();
-    const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const result = await this._authFetch(url);
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authGetMySessions(params, this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return {
@@ -1789,9 +1884,12 @@ class VolcanoAuth {
   }
 
   async deleteSession(sessionId) {
-    const result = await this._authFetch(`/auth/user/sessions/${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authDeleteMySession(
+        encodeURIComponent(sessionId),
+        this._generatedOptions('session'),
+      ),
+    );
 
     if (!result.ok) {
       return { error: result.error };
@@ -1800,9 +1898,9 @@ class VolcanoAuth {
   }
 
   async deleteAllOtherSessions() {
-    const result = await this._authFetch('/auth/user/sessions', {
-      method: 'DELETE',
-    });
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authDeleteAllMySessions(this._generatedOptions('session')),
+    );
 
     if (!result.ok) {
       return { error: result.error };
@@ -2067,10 +2165,12 @@ class VolcanoAuth {
     }
     const redirectURL =
       storedRedirectURL || `${callbackURL.origin}${callbackURL.pathname}${callbackURL.search}`;
-    const result = await this._anonFetch('/auth/oauth/exchange', {
-      method: 'POST',
-      body: JSON.stringify({ code, redirect_url: redirectURL }),
-    });
+    const result = await this._generatedRequest(() =>
+      this._transport.authOAuthExchange(
+        { code, redirect_url: redirectURL },
+        this._generatedOptions('anon'),
+      ),
+    );
     if (!result.ok) {
       this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
       return false;
