@@ -1070,13 +1070,14 @@ function noSessionInvocationError(oauthExchangeError) {
   return oauthExchangeError || new Error('No active session');
 }
 
-function shouldRefreshProviderCall(result, refreshToken) {
-  return (
-    !result.ok &&
-    result.status === 401 &&
-    Boolean(refreshToken) &&
-    !/not linked/i.test(result.error?.message || '')
-  );
+function isProviderSessionFailure(result) {
+  return !result.ok && result.status === 401 && !/not linked/i.test(result.error?.message || '');
+}
+
+function providerSessionExpiredResult() {
+  const error = new Error('Session expired');
+  error.status = 401;
+  return { ok: false, status: 401, data: null, error };
 }
 
 function readOAuthCallback() {
@@ -2044,17 +2045,31 @@ class VolcanoAuth {
         this._generatedOptions('session', undefined, undefined, false),
       );
     let result = await this._generatedSessionRequest(request);
-    if (shouldRefreshProviderCall(result, this.refreshToken)) {
-      const refreshed = await this.refreshSession();
-      if (!refreshed.error) {
-        result = await this._generatedSessionRequest(request);
-      }
+    if (isProviderSessionFailure(result)) {
+      result = await this._retryProviderCall(request);
     }
 
     if (!result.ok) {
       return { data: null, error: result.error };
     }
     return { data: result.data.data, error: null };
+  }
+
+  async _retryProviderCall(request) {
+    if (!this.refreshToken) {
+      this._clearSessionIfPresent();
+      return providerSessionExpiredResult();
+    }
+    const refreshed = await this.refreshSession();
+    if (refreshed.error) {
+      return providerSessionExpiredResult();
+    }
+    const retried = await this._generatedSessionRequest(request);
+    if (!isProviderSessionFailure(retried)) {
+      return retried;
+    }
+    this._clearSession();
+    return providerSessionExpiredResult();
   }
 
   // ========================================================================

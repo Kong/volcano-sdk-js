@@ -477,9 +477,12 @@ if (error) {
 }
 ```
 
-Password reset revokes the reset account's existing sessions. If this client is
-using one of those sessions, `resetPassword()` clears it and emits a signed-out
-auth-state event before returning; sign in with the new password to continue.
+Password reset revokes the reset account's existing sessions. After a successful
+reset, `resetPassword()` validates this client's current session. A `401` clears
+local auth and emits a signed-out event. If validation cannot complete because of
+a network or server error, the reset still succeeds and local auth remains until
+the next authenticated request; call `signOut()` when immediate local cleanup is
+required. Sign in with the new password to continue.
 
 ## Email Change
 

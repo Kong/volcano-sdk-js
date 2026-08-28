@@ -2315,6 +2315,42 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
     });
 
+    it('clears an access-only expired session for provider API calls', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = null;
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Not authenticated' }),
+      });
+
+      const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
+
+      expect(result.error.message).toBe('Session expired');
+      expect(volcano.accessToken).toBeNull();
+    });
+
+    it('reports session expiry when provider API token refresh fails', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'expired-refresh';
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Not authenticated' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Refresh token expired' }),
+        });
+
+      const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
+
+      expect(result.error.message).toBe('Session expired');
+      expect(volcano.accessToken).toBeNull();
+    });
+
     it('refreshes an expired session before retrying a provider API call', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       volcano.refreshToken = 'refresh-token';
