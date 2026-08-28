@@ -439,11 +439,24 @@ interface AuthSession {
 
 interface SessionsResponse {
   sessions: AuthSession[] | null;
-  total: number;
-  page: number;
-  limit: number;
-  total_pages: number;
+  total: number | null;
+  page: number | null;
+  limit: number | null;
+  total_pages: number | null;
+  has_more: boolean | null;
+  next_cursor: string | null;
+  prev_cursor: string | null;
   error: Error | null;
+}
+
+interface GetSessionsOptions {
+  page?: number;
+  limit?: number;
+  sort?: 'last_activity' | 'created_at';
+  status?: 'active' | 'expired';
+  cursor?: string;
+  endingBefore?: string;
+  offset?: number;
 }
 ```
 

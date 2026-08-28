@@ -135,6 +135,40 @@ export interface AuthResponse {
   error: Error | null;
 }
 
+export interface PasswordPolicy {
+  effective_min_length: number;
+  min_configurable_length: number;
+  max_length: number;
+  require_uppercase: boolean;
+  require_lowercase: boolean;
+  require_numbers: boolean;
+  require_special_chars: boolean;
+  compromised_passwords_rejected: boolean;
+}
+
+export interface DeviceAuthorization {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+}
+
+export type DeviceVerificationAction = 'approve' | 'deny';
+
+export interface DeviceVerification {
+  success: boolean;
+  status: string;
+}
+
+export interface PlatformToken {
+  token: string;
+  user_id: string;
+  token_id: string;
+  expires_at: string;
+}
+
 /**
  * Session-less signup response (VOL-309). The server returns a uniform
  * acknowledgement with no user and no session tokens, so `user`/`session` are
@@ -290,8 +324,27 @@ export interface Auth {
   // Password recovery methods
   /** Request password reset - sends recovery token to email */
   forgotPassword(email: string): Promise<MessageResponse>;
+  /** Get the backend-enforced password policy. */
+  getPasswordPolicy(): Promise<{ policy: PasswordPolicy | null; error: Error | null }>;
   /** Reset password using recovery token from email */
   resetPassword(options: ResetPasswordOptions): Promise<MessageResponse>;
+
+  // Device and platform authentication
+  /** Start an RFC 8628 device authorization. */
+  startDeviceAuthorization(
+    clientId: string,
+  ): Promise<{ authorization: DeviceAuthorization | null; error: Error | null }>;
+  /** Poll once for an approved device token and commit the returned session. */
+  pollDeviceToken(clientId: string, deviceCode: string): Promise<AuthResponse>;
+  /** Approve or deny a pending device authorization. */
+  verifyDevice(
+    userCode: string,
+    action?: DeviceVerificationAction,
+  ): Promise<{ verification: DeviceVerification | null; error: Error | null }>;
+  /** Issue a short-lived platform token for another client. */
+  exchangePlatformToken(
+    clientId: string,
+  ): Promise<{ token: PlatformToken | null; error: Error | null }>;
 
   // Email change methods
   /** Request email change - sends confirmation to new email */

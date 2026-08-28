@@ -135,6 +135,11 @@ describe('VolcanoAuth', () => {
       // Password recovery
       expect(typeof volcano.auth.forgotPassword).toBe('function');
       expect(typeof volcano.auth.resetPassword).toBe('function');
+      expect(typeof volcano.auth.getPasswordPolicy).toBe('function');
+      expect(typeof volcano.auth.startDeviceAuthorization).toBe('function');
+      expect(typeof volcano.auth.pollDeviceToken).toBe('function');
+      expect(typeof volcano.auth.verifyDevice).toBe('function');
+      expect(typeof volcano.auth.exchangePlatformToken).toBe('function');
 
       // Email change
       expect(typeof volcano.auth.requestEmailChange).toBe('function');
@@ -2453,7 +2458,7 @@ describe('VolcanoAuth', () => {
         type: 'oauth',
         provider: 'github',
         identity_id: identity.id,
-        email: identity.email,
+        email: 'primary@example.com',
         is_primary: true,
         created_at: '2026-08-27T12:00:00Z',
         updated_at: '2026-08-28T12:00:00Z',
@@ -2475,9 +2480,9 @@ describe('VolcanoAuth', () => {
           json: () => Promise.resolve(method),
         })
         .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve({ user: { id: 'user-123', email: 'primary@example.com' } }),
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({ error: 'Temporarily unavailable' }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -2487,6 +2492,7 @@ describe('VolcanoAuth', () => {
 
       const identities = await volcano.auth.listIdentities();
       const methods = await volcano.auth.listMethods();
+      volcano.currentUser = { id: 'user-123', email: 'previous@example.com' };
       const promoted = await volcano.auth.promoteMethod(method.id);
       const unlinked = await volcano.auth.unlinkIdentity(identity.id);
 
@@ -2502,6 +2508,79 @@ describe('VolcanoAuth', () => {
         'https://api.test.com/auth/user',
         `https://api.test.com/auth/user/identities/${identity.id}`,
       ]);
+    });
+  });
+
+  describe('Device and Platform Authentication', () => {
+    it('rejects an unknown device action before making a request', async () => {
+      await expect(volcano.auth.verifyDevice('ABCD-EFGH', 'ignore')).rejects.toThrow(
+        'approve or deny',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('exposes password policy and commits an approved device session', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      const policy = {
+        effective_min_length: 12,
+        min_configurable_length: 8,
+        max_length: 128,
+        require_uppercase: true,
+        require_lowercase: true,
+        require_numbers: true,
+        require_special_chars: true,
+        compromised_passwords_rejected: true,
+      };
+      const authorization = {
+        device_code: 'device-secret',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://verify.example',
+        verification_uri_complete: 'https://verify.example?code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 5,
+      };
+      const token = {
+        access_token: 'device-access',
+        refresh_token: 'device-refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+        user: {
+          id: 'user-123',
+          email: 'user@example.com',
+          status: 'active',
+          email_confirmed: true,
+          created_at: '2026-08-27T12:00:00Z',
+          updated_at: '2026-08-28T12:00:00Z',
+        },
+      };
+      const platform = {
+        token: 'platform-secret',
+        user_id: 'user-123',
+        token_id: '00000000-0000-4000-8000-000000000001',
+        expires_at: '2026-08-28T13:00:00Z',
+      };
+      [policy, authorization, token, { success: true, status: 'approved' }, platform].forEach(
+        (payload) => {
+          global.fetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(payload),
+          });
+        },
+      );
+
+      const policyResult = await volcano.auth.getPasswordPolicy();
+      const startResult = await volcano.auth.startDeviceAuthorization('volcano-cli');
+      const tokenResult = await volcano.auth.pollDeviceToken('volcano-cli', 'device-secret');
+      const verifyResult = await volcano.auth.verifyDevice('ABCD-EFGH');
+      const platformResult = await volcano.auth.exchangePlatformToken('volcano-cli');
+
+      expect(policyResult).toEqual({ policy, error: null });
+      expect(startResult).toEqual({ authorization, error: null });
+      expect(tokenResult.session.access_token).toBe('device-access');
+      expect(volcano.currentUser).toEqual(token.user);
+      expect(verifyResult.verification.status).toBe('approved');
+      expect(platformResult).toEqual({ token: platform, error: null });
     });
   });
 

@@ -6,8 +6,12 @@ import {
   authConvertAnonymous,
   authDeleteAllMySessions,
   authDeleteMySession,
+  authDeviceAuthorize,
+  authDeviceToken,
+  authDeviceVerify,
   authForgotPassword,
   authGetMySessions,
+  authGetPasswordPolicy,
   authGetUser,
   authLinkOAuthProvider,
   authListIdentities,
@@ -15,6 +19,7 @@ import {
   authListOAuthProviders,
   authLogout,
   authOAuthExchange,
+  authPlatformExchange,
   authPromoteMethod,
   authRefresh,
   authRequestEmailChange,
@@ -129,7 +134,11 @@ const GENERATED_TRANSPORT = {
   authConvertAnonymous,
   authDeleteAllMySessions,
   authDeleteMySession,
+  authDeviceAuthorize,
+  authDeviceToken,
+  authDeviceVerify,
   authForgotPassword,
+  authGetPasswordPolicy,
   authGetMySessions,
   authGetUser,
   authLinkOAuthProvider,
@@ -138,6 +147,7 @@ const GENERATED_TRANSPORT = {
   authListOAuthProviders,
   authLogout,
   authOAuthExchange,
+  authPlatformExchange,
   authPromoteMethod,
   authRefresh,
   authRequestEmailChange,
@@ -895,6 +905,12 @@ function validateVolcanoConfig(config) {
   }
 }
 
+function validateDeviceAction(action) {
+  if (action !== 'approve' && action !== 'deny') {
+    throw new Error('Device action must be approve or deny');
+  }
+}
+
 function initializeClientSession(client, config) {
   if (config.accessToken) {
     client.accessToken = config.accessToken;
@@ -924,7 +940,12 @@ function createAuthFacade(client) {
     confirmEmail: client.confirmEmail.bind(client),
     resendConfirmation: client.resendConfirmation.bind(client),
     forgotPassword: client.forgotPassword.bind(client),
+    getPasswordPolicy: client.getPasswordPolicy.bind(client),
     resetPassword: client.resetPassword.bind(client),
+    startDeviceAuthorization: client.startDeviceAuthorization.bind(client),
+    pollDeviceToken: client.pollDeviceToken.bind(client),
+    verifyDevice: client.verifyDevice.bind(client),
+    exchangePlatformToken: client.exchangePlatformToken.bind(client),
     requestEmailChange: client.requestEmailChange.bind(client),
     confirmEmailChange: client.confirmEmailChange.bind(client),
     cancelEmailChange: client.cancelEmailChange.bind(client),
@@ -1640,6 +1661,71 @@ class VolcanoAuth {
     };
   }
 
+  async getPasswordPolicy() {
+    const result = await this._generatedRequest(() =>
+      this._transport.authGetPasswordPolicy(this._generatedOptions('anon')),
+    );
+    return result.ok ? { policy: result.data, error: null } : { policy: null, error: result.error };
+  }
+
+  async startDeviceAuthorization(clientId) {
+    const result = await this._generatedRequest(() =>
+      this._transport.authDeviceAuthorize({ client_id: clientId }, this._generatedOptions('anon')),
+    );
+    return result.ok
+      ? { authorization: result.data, error: null }
+      : { authorization: null, error: result.error };
+  }
+
+  async pollDeviceToken(clientId, deviceCode) {
+    const result = await this._generatedRequest(() =>
+      this._transport.authDeviceToken(
+        {
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: deviceCode,
+          client_id: clientId,
+        },
+        this._generatedOptions('anon'),
+      ),
+    );
+    if (!result.ok) {
+      return { user: null, session: null, error: result.error };
+    }
+    this._setSession(result.data);
+    return {
+      user: result.data.user,
+      session: {
+        access_token: result.data.access_token,
+        refresh_token: result.data.refresh_token,
+        expires_in: result.data.expires_in,
+      },
+      error: null,
+    };
+  }
+
+  async verifyDevice(userCode, action = 'approve') {
+    validateDeviceAction(action);
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authDeviceVerify(
+        { user_code: userCode, action },
+        this._generatedOptions('session'),
+      ),
+    );
+    return result.ok
+      ? { verification: result.data, error: null }
+      : { verification: null, error: result.error };
+  }
+
+  async exchangePlatformToken(clientId) {
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authPlatformExchange(
+        { client_id: clientId },
+        this._generatedOptions('session'),
+      ),
+    );
+    return result.ok ? { token: result.data, error: null } : { token: null, error: result.error };
+  }
+
   async signOut() {
     await this._completeOAuthExchange();
     if (this.refreshToken) {
@@ -2157,6 +2243,10 @@ class VolcanoAuth {
     );
     if (!result.ok) {
       return { method: null, error: result.error };
+    }
+    if (this.currentUser) {
+      this.currentUser = { ...this.currentUser, email: result.data.email };
+      this._notifyAuthCallbacks(this.currentUser);
     }
     await this.getUser();
     return { method: result.data, error: null };

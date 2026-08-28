@@ -395,6 +395,37 @@ const { error: unlinkError } = await volcano.auth.unlinkIdentity(identityId);
 
 The API refuses to unlink a primary or last identity, or an identity whose removal would leave the account without a sign-in method.
 
+## Use Password Policy and Device Authorization
+
+Read the server-enforced policy instead of duplicating password rules:
+
+```javascript
+const { policy, error } = await volcano.auth.getPasswordPolicy();
+console.log(policy?.effective_min_length, policy?.compromised_passwords_rejected);
+```
+
+An RFC 8628 device client starts authorization and polls at the returned
+interval. A successful poll commits the returned user and session to that
+client. The signed-in verifier approves the code on a separate client:
+
+```javascript
+const { authorization } = await deviceClient.auth.startDeviceAuthorization('volcano-cli');
+console.log(authorization.verification_uri, authorization.user_code);
+
+await verifier.auth.verifyDevice(authorization.user_code, 'approve');
+const { session } = await deviceClient.auth.pollDeviceToken(
+  'volcano-cli',
+  authorization.device_code,
+);
+```
+
+Signed-in clients can also exchange their session for a short-lived platform
+token. Treat `token.token` as a secret:
+
+```javascript
+const { token, error } = await volcano.auth.exchangePlatformToken('volcano-cli');
+```
+
 ## Anonymous Users
 
 Let users explore your app without creating an account, then convert them to full users later.
@@ -657,30 +688,17 @@ Always use HTTPS URLs for your API endpoint to protect tokens in transit.
 
 ### Secure Password Requirements
 
-Enforce strong passwords in your UI before calling the SDK:
+Read the project policy before validating a password in your UI. The API remains
+the source of truth and rejects passwords that do not satisfy the current
+policy:
 
 ```javascript
-function validatePassword(password) {
-  if (password.length < 8) {
-    return 'Password must be at least 8 characters';
-  }
-  if (!/[A-Z]/.test(password)) {
-    return 'Password must contain an uppercase letter';
-  }
-  if (!/[0-9]/.test(password)) {
-    return 'Password must contain a number';
-  }
-  return null;
+const { policy, error } = await volcano.auth.getPasswordPolicy();
+if (error) {
+  console.error('Could not load password policy:', error.message);
+} else {
+  console.log(`Passwords require at least ${policy.effective_min_length} characters`);
 }
-
-const passwordError = validatePassword(password);
-if (passwordError) {
-  showError(passwordError);
-  return;
-}
-
-// Password is valid, proceed with sign up
-await volcano.auth.signUp({ email, password });
 ```
 
 ### Handle Token Expiration

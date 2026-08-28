@@ -6,6 +6,9 @@ import type {
   AuthStateCallback,
   ConvertAnonymousOptions,
   DeleteSessionResponse,
+  DeviceAuthorization,
+  DeviceVerification,
+  DeviceVerificationAction,
   EmailChangeResponse,
   GetSessionsOptions,
   LinkProviderResponse,
@@ -15,6 +18,8 @@ import type {
   OAuthProvider,
   OAuthProviderName,
   OAuthTokenResponse,
+  PasswordPolicy,
+  PlatformToken,
   ResetPasswordOptions,
   SessionResponse,
   SessionsResponse,
@@ -65,6 +70,44 @@ type _ResendConfirmation = Assert<
 >;
 type _ForgotPassword = Assert<
   HasSignature<Auth['forgotPassword'], (email: string) => Promise<MessageResponse>>
+>;
+type _PasswordPolicy = Assert<
+  HasSignature<
+    Auth['getPasswordPolicy'],
+    () => Promise<{ policy: PasswordPolicy | null; error: Error | null }>
+  >
+>;
+type _StartDevice = Assert<
+  HasSignature<
+    Auth['startDeviceAuthorization'],
+    (
+      clientId: string,
+    ) => Promise<{ authorization: DeviceAuthorization | null; error: Error | null }>
+  >
+>;
+type _PollDevice = Assert<
+  HasSignature<
+    Auth['pollDeviceToken'],
+    (clientId: string, deviceCode: string) => Promise<AuthResponse>
+  >
+>;
+type _VerifyDevice = Assert<
+  HasSignature<
+    Auth['verifyDevice'],
+    (
+      userCode: string,
+      action?: DeviceVerificationAction,
+    ) => Promise<{
+      verification: DeviceVerification | null;
+      error: Error | null;
+    }>
+  >
+>;
+type _ExchangePlatform = Assert<
+  HasSignature<
+    Auth['exchangePlatformToken'],
+    (clientId: string) => Promise<{ token: PlatformToken | null; error: Error | null }>
+  >
 >;
 type _ResetPassword = Assert<
   HasSignature<Auth['resetPassword'], (options: ResetPasswordOptions) => Promise<MessageResponse>>
