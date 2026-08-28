@@ -197,6 +197,9 @@ if (session) {
 }
 ```
 
+`refreshSession()` requires a refresh token. Calling it on an access-token-only client clears the
+local authentication state, emits the signed-out callback, and returns a `No refresh token` error.
+
 ## Hosted Auth Pages (Managed Login)
 
 Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. **Always start the flow with `signInWithHostedAuth()`** (or `getHostedAuthUrl()`): it stores a one-time nonce and passes it as `state`, which the SDK validates when the session comes back. This binds the returned session to the flow you started and prevents an attacker from tricking a user into adopting an attacker-controlled session (login CSRF / session fixation).
