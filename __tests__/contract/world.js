@@ -89,6 +89,23 @@ class ContractWorld {
     return converted;
   }
 
+  async createSecondarySession() {
+    if (!this.secondaryClient) {
+      this.secondaryClient = new VolcanoClient({
+        apiUrl: this.fixture.api_url,
+        anonKey: this.fixture.anon_key,
+      });
+    }
+    const result = await this.secondaryClient.auth.signIn({
+      email: this.uniqueEmail,
+      password: this.uniquePassword,
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    return result;
+  }
+
   async createRealtimeClients() {
     const signedIn = await this.authenticate();
     const config = {

@@ -218,17 +218,7 @@ autoBindSteps(features, [
       async () => {
         const world = startScenario(context);
         await world.createCredentialedUser();
-        world.secondaryClient = new VolcanoClient({
-          apiUrl: world.fixture.api_url,
-          anonKey: world.fixture.anon_key,
-        });
-        const result = await world.secondaryClient.auth.signIn({
-          email: world.uniqueEmail,
-          password: world.uniquePassword,
-        });
-        if (result.error) {
-          throw result.error;
-        }
+        await world.createSecondarySession();
       },
     );
 
@@ -272,10 +262,15 @@ autoBindSteps(features, [
     });
 
     when('the client deletes all current-user sessions', async () => {
+      await context.world.createSecondarySession();
       const deleted = await context.world.client.auth.deleteAllOtherSessions();
       if (deleted.error) {
         recordOutcome(context.world, deleted, deleted.error);
         return;
+      }
+      const revoked = await context.world.secondaryClient.auth.getUser();
+      if (!revoked.error) {
+        throw new Error('Deleted secondary session remains authenticated');
       }
       const result = await context.world.client.auth.signOut();
       recordOutcome(context.world, result, result.error);
