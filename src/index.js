@@ -1151,6 +1151,7 @@ class VolcanoAuth {
     this._currentDatabaseName = null;
     this.currentUser = null;
     this._currentDeviceSessionIds = new Set();
+    this._authNotificationGeneration = 0;
     // Tracks whether a managed-redirect session was already adopted from the URL
     // fragment so repeated getUser()/initialize() calls don't re-adopt and
     // re-fire auth callbacks when the hash can't be stripped (see
@@ -1587,6 +1588,7 @@ class VolcanoAuth {
     // (tokens in the URL fragment) so callers only ever need getUser().
     const adoptedFromUrl = this._consumeSessionFromUrl();
     const hydratesRestoredSession = this.currentUser === null;
+    const notificationGeneration = this._authNotificationGeneration;
 
     const result = await this._generatedSessionRequest(() =>
       this._transport.authGetUser(this._generatedOptions('session')),
@@ -1600,7 +1602,10 @@ class VolcanoAuth {
     // Announce the redirect adoption — whether it happened just now or earlier
     // at construction — exactly once, so onAuthStateChange listeners see the
     // SIGNED_IN transition on the common hosted-redirect path too.
-    if (adoptedFromUrl || this._pendingUrlAuthNotify || hydratesRestoredSession) {
+    if (
+      (adoptedFromUrl || this._pendingUrlAuthNotify || hydratesRestoredSession) &&
+      notificationGeneration === this._authNotificationGeneration
+    ) {
       this._pendingUrlAuthNotify = false;
       this._notifyAuthCallbacks(this.currentUser);
     }
@@ -1632,6 +1637,7 @@ class VolcanoAuth {
     }
     this._oauthExchangeError = null;
     if (!this.refreshToken) {
+      this._clearSession();
       return { session: null, error: new Error('No refresh token') };
     }
 
@@ -2237,6 +2243,7 @@ class VolcanoAuth {
   }
 
   _notifyAuthCallbacks(user) {
+    this._authNotificationGeneration += 1;
     if (this._authCallbacks) {
       this._authCallbacks.forEach((cb) => {
         try {

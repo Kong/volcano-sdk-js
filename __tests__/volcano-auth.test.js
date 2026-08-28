@@ -1343,7 +1343,7 @@ describe('VolcanoAuth', () => {
 
       expect(result.session).toBeNull();
       expect(result.error.message).toBe('No refresh token');
-      expect(volcano.accessToken).toBe('valid-access');
+      expect(volcano.accessToken).toBeNull();
     });
 
     it('should clear session on refresh failure', async () => {
@@ -1381,6 +1381,40 @@ describe('VolcanoAuth', () => {
       });
       await restored.auth.getUser();
 
+      expect(callback).toHaveBeenCalledWith({ id: 'restored-user' });
+    });
+
+    it('notifies restored-session hydration once when getUser refreshes', async () => {
+      const restored = new VolcanoAuth({
+        ...config,
+        accessToken: 'expired-access',
+        refreshToken: 'valid-refresh',
+      });
+      const callback = jest.fn();
+      restored.auth.onAuthStateChange(callback);
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Access token expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: 'rotated-access',
+              refresh_token: 'rotated-refresh',
+              user: { id: 'restored-user' },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ user: { id: 'restored-user' } }),
+        });
+
+      await restored.auth.getUser();
+
+      expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith({ id: 'restored-user' });
     });
 
@@ -1659,6 +1693,28 @@ describe('VolcanoAuth', () => {
       });
       expect(volcano.accessToken).toBeNull();
       expect(volcano.refreshToken).toBeNull();
+    });
+
+    it('clears an access-only anonymous session after conversion', async () => {
+      volcano.accessToken = 'anon-token';
+      volcano.refreshToken = null;
+      volcano.currentUser = { id: 'anonymous-user', is_anonymous: true };
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: 'anonymous-user', email: 'new@example.com', is_anonymous: false },
+          }),
+      });
+
+      const result = await volcano.auth.convertAnonymous({
+        email: 'new@example.com',
+        password: 'password123',
+      });
+
+      expect(result.user.is_anonymous).toBe(false);
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.currentUser).toBeNull();
     });
   });
 
