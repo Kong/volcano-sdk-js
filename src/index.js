@@ -1089,8 +1089,10 @@ function noSessionInvocationError(oauthExchangeError) {
   return oauthExchangeError || new Error('No active session');
 }
 
+const PROVIDER_NOT_LINKED_CODE = 'provider_not_linked';
+
 function isProviderSessionFailure(result) {
-  return !result.ok && result.status === 401 && !/not linked/i.test(result.error?.message || '');
+  return !result.ok && result.status === 401 && result.error?.code !== PROVIDER_NOT_LINKED_CODE;
 }
 
 function providerSessionExpiredResult() {

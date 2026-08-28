@@ -2334,18 +2334,19 @@ describe('VolcanoAuth', () => {
       expect(result.error.message).toBe('Insufficient scope');
     });
 
-    it('preserves access-only auth for provider-level unauthorized responses', async () => {
+    it('uses structured codes to preserve auth for provider-level unauthorized responses', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.refreshToken = null;
+      volcano.refreshToken = 'refresh-token';
       global.fetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: () => Promise.resolve({ error: 'Provider is not linked' }),
+        json: () => Promise.resolve({ error: 'Provider unavailable', code: 'provider_not_linked' }),
       });
 
       const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
 
-      expect(result.error.message).toBe('Provider is not linked');
+      expect(result.error.message).toBe('Provider unavailable');
+      expect(result.error.code).toBe('provider_not_linked');
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
     });
 
