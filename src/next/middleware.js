@@ -50,6 +50,57 @@ export function getTokenFromRequest(request) {
   return null;
 }
 
+async function getServerUser(apiUrl, anonKey, accessToken) {
+  if (!accessToken) {
+    return { user: null, error: new Error('No access token provided') };
+  }
+  try {
+    const response = await fetch(`${apiUrl}/auth/user`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Anon-Key': anonKey,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { user: null, error: new Error(data.error || `Auth failed: ${response.status}`) };
+    }
+    return { user: data.user || null, error: null };
+  } catch (error) {
+    return { user: null, error };
+  }
+}
+
+async function refreshServerToken(apiUrl, anonKey, refreshToken) {
+  if (!refreshToken) {
+    return {
+      accessToken: null,
+      refreshToken: null,
+      error: new Error('No refresh token provided'),
+    };
+  }
+  try {
+    const response = await fetch(`${apiUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'X-Anon-Key': anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        accessToken: null,
+        refreshToken: null,
+        error: new Error(data.error || `Refresh failed: ${response.status}`),
+      };
+    }
+    return { accessToken: data.access_token, refreshToken: data.refresh_token, error: null };
+  } catch (error) {
+    return { accessToken: null, refreshToken: null, error };
+  }
+}
+
 /**
  * Create a server-side Volcano client for middleware/API routes
  * @param {Object} config - Client configuration
@@ -63,84 +114,8 @@ export function createServerClient(config) {
   const anonKey = config.anonKey;
 
   return {
-    /**
-     * Validate a token and get user info
-     * @param {string} accessToken - The access token to validate
-     * @returns {Promise<{user: Object|null, error: Error|null}>}
-     */
-    async getUser(accessToken) {
-      if (!accessToken) {
-        return { user: null, error: new Error('No access token provided') };
-      }
-
-      try {
-        const response = await fetch(`${apiUrl}/auth/user`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'X-Anon-Key': anonKey,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          return {
-            user: null,
-            error: new Error(data.error || `Auth failed: ${response.status}`),
-          };
-        }
-
-        const data = await response.json().catch(() => ({}));
-        return { user: data.user || null, error: null };
-      } catch (err) {
-        return { user: null, error: err };
-      }
-    },
-
-    /**
-     * Refresh an access token
-     * @param {string} refreshToken - The refresh token
-     * @returns {Promise<{accessToken: string|null, refreshToken: string|null, error: Error|null}>}
-     */
-    async refreshToken(refreshToken) {
-      if (!refreshToken) {
-        return {
-          accessToken: null,
-          refreshToken: null,
-          error: new Error('No refresh token provided'),
-        };
-      }
-
-      try {
-        const response = await fetch(`${apiUrl}/auth/refresh`, {
-          method: 'POST',
-          headers: {
-            'X-Anon-Key': anonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          return {
-            accessToken: null,
-            refreshToken: null,
-            error: new Error(data.error || `Refresh failed: ${response.status}`),
-          };
-        }
-
-        const data = await response.json();
-        return {
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          error: null,
-        };
-      } catch (err) {
-        return { accessToken: null, refreshToken: null, error: err };
-      }
-    },
+    getUser: (accessToken) => getServerUser(apiUrl, anonKey, accessToken),
+    refreshToken: (refreshToken) => refreshServerToken(apiUrl, anonKey, refreshToken),
   };
 }
 

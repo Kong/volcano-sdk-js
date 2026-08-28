@@ -215,20 +215,42 @@ async function safeJsonParse(response) {
   }
 }
 
+async function parseJsonOnlyResponse(response) {
+  if (typeof response.json !== 'function') {
+    return null;
+  }
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeJson(response, bodyText) {
+  const contentType = (getHeaderValue(response, 'content-type') || '').toLowerCase();
+  return (
+    contentType.includes('application/json') || bodyText.startsWith('{') || bodyText.startsWith('[')
+  );
+}
+
+function parseTextBody(response, bodyText) {
+  if (!looksLikeJson(response, bodyText)) {
+    return bodyText;
+  }
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    return bodyText;
+  }
+}
+
 async function parseResponseBody(response) {
   if (!response) {
     return null;
   }
 
   if (typeof response.text !== 'function') {
-    if (typeof response.json === 'function') {
-      try {
-        return await response.json();
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return parseJsonOnlyResponse(response);
   }
 
   const bodyText = await response.text();
@@ -236,20 +258,7 @@ async function parseResponseBody(response) {
     return null;
   }
 
-  const contentType = (getHeaderValue(response, 'content-type') || '').toLowerCase();
-  const shouldParseJson =
-    contentType.includes('application/json') ||
-    bodyText.startsWith('{') ||
-    bodyText.startsWith('[');
-  if (!shouldParseJson) {
-    return bodyText;
-  }
-
-  try {
-    return JSON.parse(bodyText);
-  } catch {
-    return bodyText;
-  }
+  return parseTextBody(response, bodyText);
 }
 
 function responseHeadersToObject(response) {
@@ -378,29 +387,41 @@ function getSharedFunctionResolveState() {
   return runtime[GLOBAL_FUNCTION_RESOLVE_STATE_KEY];
 }
 
+function isExpiredCacheEntry(value, nowMs) {
+  return !value || typeof value.expiresAt !== 'number' || value.expiresAt <= nowMs;
+}
+
+function deleteExpiredCacheEntries(cache, nowMs) {
+  for (const [key, value] of cache.entries()) {
+    if (isExpiredCacheEntry(value, nowMs)) {
+      cache.delete(key);
+    }
+  }
+}
+
+function deleteCacheOverflow(state) {
+  const sortedByExpiry = Array.from(state.cache.entries()).sort(
+    (a, b) => (a[1].expiresAt || 0) - (b[1].expiresAt || 0),
+  );
+  const overflowCount = state.cache.size - state.maxEntries;
+  for (const [key] of sortedByExpiry.slice(0, overflowCount)) {
+    state.cache.delete(key);
+  }
+}
+
 function pruneFunctionResolveCache(state, nowMs = Date.now(), force = false) {
   if (!force && nowMs - state.lastPruneAtMs < FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS) {
     return;
   }
   state.lastPruneAtMs = nowMs;
 
-  for (const [key, value] of state.cache.entries()) {
-    if (!value || typeof value.expiresAt !== 'number' || value.expiresAt <= nowMs) {
-      state.cache.delete(key);
-    }
-  }
+  deleteExpiredCacheEntries(state.cache, nowMs);
 
   if (state.cache.size <= state.maxEntries) {
     return;
   }
 
-  const sortedByExpiry = Array.from(state.cache.entries()).sort(
-    (a, b) => (a[1].expiresAt || 0) - (b[1].expiresAt || 0),
-  );
-  const overflowCount = state.cache.size - state.maxEntries;
-  for (let i = 0; i < overflowCount; i += 1) {
-    state.cache.delete(sortedByExpiry[i][0]);
-  }
+  deleteCacheOverflow(state);
 }
 
 function clearSharedFunctionResolveStateForTests() {
@@ -599,6 +620,47 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   return url.toString();
 }
 
+function normalizeLockError(error) {
+  return error instanceof Error ? error : new Error('Lock acquisition failed');
+}
+
+function populateLease(lease, response) {
+  lease.expiresAt = response.data.expires_at;
+  lease.fencingToken = response.data.fencing_token ?? null;
+  return { acquired: true, lease, error: null };
+}
+
+function isLockContention(error) {
+  return error?.status === 409 && LOCK_CONTENTION_CODES.has(error.info?.code);
+}
+
+function lockAcquisitionFailed(result) {
+  return !result.acquired || Boolean(result.error);
+}
+
+async function requestProjectLock(client, key, request) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await client._transport.acquireProjectLock(
+        encodeURIComponent(key),
+        { ttl_seconds: request.ttl },
+        client._generatedOptions('session', {
+          'X-Volcano-Lock-Token': request.token,
+          'X-Volcano-Request-Id': request.requestId,
+        }),
+      );
+      return { response, error: null };
+    } catch (error) {
+      lastError = normalizeLockError(error);
+      if (lastError.status != null && lastError.status !== 503) {
+        break;
+      }
+    }
+  }
+  return { response: null, error: lastError };
+}
+
 class ProjectLocksApi {
   constructor(client) {
     this.client = client;
@@ -609,33 +671,12 @@ class ProjectLocksApi {
     const token = options.token || crypto.randomUUID();
     const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null, fencingToken: null };
-    let response;
-    let requestError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        response = await this.client._transport.acquireProjectLock(
-          encodeURIComponent(key),
-          { ttl_seconds: ttl },
-          this.client._generatedOptions('session', {
-            'X-Volcano-Lock-Token': token,
-            'X-Volcano-Request-Id': requestId,
-          }),
-        );
-        requestError = null;
-        break;
-      } catch (error) {
-        requestError = error instanceof Error ? error : new Error('Lock acquisition failed');
-        if (requestError.status != null && requestError.status !== 503) {
-          break;
-        }
-      }
-    }
+    const request = { ttl, token, requestId };
+    const { response, error: requestError } = await requestProjectLock(this.client, key, request);
     if (response) {
-      lease.expiresAt = response.data.expires_at;
-      lease.fencingToken = response.data.fencing_token ?? null;
-      return { acquired: true, lease, error: null };
+      return populateLease(lease, response);
     }
-    if (requestError?.status === 409 && LOCK_CONTENTION_CODES.has(requestError.info?.code)) {
+    if (isLockContention(requestError)) {
       return { acquired: false, lease: null, error: null };
     }
     return { acquired: false, lease, error: requestError };
@@ -715,7 +756,7 @@ class ProjectLocksApi {
       token: options.token,
       requestId: options.requestId,
     });
-    if (!acquired.acquired || acquired.error) {
+    if (lockAcquisitionFailed(acquired)) {
       return { acquired: acquired.acquired, data: null, error: acquired.error };
     }
 
@@ -801,26 +842,279 @@ function validateLease(key, lease) {
   }
 }
 
+function validateVolcanoConfig(config) {
+  if (!config.anonKey) {
+    throw new Error('anonKey is required. Get your anon key from project settings.');
+  }
+  if (config.anonKey.startsWith('sk-') && isBrowser()) {
+    throw new Error(
+      '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
+        'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
+        'Use an anon key (ak-*) for browser/client-side applications. ' +
+        'Service keys should only be used in secure server-side environments. ' +
+        'See: https://docs.volcano.hosting/security/keys',
+    );
+  }
+}
+
+function initializeClientSession(client, config) {
+  if (config.accessToken) {
+    client.accessToken = config.accessToken;
+    client.refreshToken = config.refreshToken || null;
+    return;
+  }
+  client.accessToken = client._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
+  client.refreshToken = client._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+  client._pendingUrlAuthNotify = client._consumeSessionFromUrl();
+  if (client._hasOAuthCallbackInUrl()) {
+    client._oauthExchangePromise = client._consumeOAuthCodeFromUrl();
+  }
+}
+
+function createAuthFacade(client) {
+  return {
+    signUp: client.signUp.bind(client),
+    signIn: client.signIn.bind(client),
+    signOut: client.signOut.bind(client),
+    getUser: client.getUser.bind(client),
+    updateUser: client.updateUser.bind(client),
+    refreshSession: client.refreshSession.bind(client),
+    onAuthStateChange: client.onAuthStateChange.bind(client),
+    user: () => client.currentUser,
+    signUpAnonymous: client.signUpAnonymous.bind(client),
+    convertAnonymous: client.convertAnonymous.bind(client),
+    confirmEmail: client.confirmEmail.bind(client),
+    resendConfirmation: client.resendConfirmation.bind(client),
+    forgotPassword: client.forgotPassword.bind(client),
+    resetPassword: client.resetPassword.bind(client),
+    requestEmailChange: client.requestEmailChange.bind(client),
+    confirmEmailChange: client.confirmEmailChange.bind(client),
+    cancelEmailChange: client.cancelEmailChange.bind(client),
+    getHostedAuthUrl: client.getHostedAuthUrl.bind(client),
+    signInWithHostedAuth: client.signInWithHostedAuth.bind(client),
+    signInWithOAuth: client.signInWithOAuth.bind(client),
+    signInWithGoogle: client.signInWithGoogle.bind(client),
+    signInWithGitHub: client.signInWithGitHub.bind(client),
+    signInWithMicrosoft: client.signInWithMicrosoft.bind(client),
+    signInWithApple: client.signInWithApple.bind(client),
+    linkOAuthProvider: client.linkOAuthProvider.bind(client),
+    unlinkOAuthProvider: client.unlinkOAuthProvider.bind(client),
+    getLinkedOAuthProviders: client.getLinkedOAuthProviders.bind(client),
+    refreshOAuthToken: client.refreshOAuthToken.bind(client),
+    getOAuthProviderToken: client.getOAuthProviderToken.bind(client),
+    callOAuthAPI: client.callOAuthAPI.bind(client),
+    getSessions: client.getSessions.bind(client),
+    deleteSession: client.deleteSession.bind(client),
+    deleteAllOtherSessions: client.deleteAllOtherSessions.bind(client),
+  };
+}
+
+function initializeClientFacades(client) {
+  client.auth = createAuthFacade(client);
+  client.functions = { invoke: client.invokeFunction.bind(client) };
+  client.logs = {
+    search: client.searchLogs.bind(client),
+    activity: client.getLogActivity.bind(client),
+  };
+  client.storage = { from: client.storageBucket.bind(client) };
+  client.locks = new ProjectLocksApi(client);
+}
+
+function failedRequest(error, status = null, data = null) {
+  return { ok: false, status, error, data };
+}
+
+function successfulRequest(response, data) {
+  return { ok: true, status: response.status, data, error: null };
+}
+
+function shouldRefreshSession(response, retryFailure) {
+  return response.status === 401 && retryFailure === null;
+}
+
+function missingSessionFailure(retryFailure) {
+  return retryFailure || failedRequest(new Error('No active session'));
+}
+
+async function sendAuthenticatedRequest(client, url, fetchOptions) {
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      {
+        ...fetchOptions,
+        headers: {
+          Authorization: `Bearer ${client.accessToken}`,
+          'Content-Type': 'application/json',
+          ...fetchOptions.headers,
+        },
+      },
+      client.timeout,
+    );
+    return { response, data: await safeJsonParse(response), error: null };
+  } catch (error) {
+    const requestError = error instanceof Error ? error : new Error('Request failed');
+    return { response: null, data: null, error: requestError };
+  }
+}
+
+async function authenticatedRequestAttempt(client, url, fetchOptions, retryFailure) {
+  const { response, data, error } = await sendAuthenticatedRequest(client, url, fetchOptions);
+  if (error) {
+    return { result: failedRequest(error), retryFailure };
+  }
+  if (response.ok) {
+    return { result: successfulRequest(response, data), retryFailure };
+  }
+  if (!shouldRefreshSession(response, retryFailure)) {
+    const result = failedRequest(apiRequestError(response, data), response.status, data);
+    return { result, retryFailure };
+  }
+  const failure = failedRequest(new Error('Session expired'), response.status, data);
+  if (!client.refreshToken) {
+    return { result: failure, retryFailure: failure };
+  }
+  await client.refreshSession();
+  return { result: null, retryFailure: failure };
+}
+
+function validateOAuthRedirect(url) {
+  for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
+    if (url.searchParams.has(key)) {
+      throw new Error(`OAuth redirectTo must not contain the reserved "${key}" query parameter`);
+    }
+  }
+}
+
+function appendOAuthState(redirectURL, nonce) {
+  const transportURL = new URL(redirectURL);
+  const separator = transportURL.search ? '&' : '?';
+  transportURL.search = `${transportURL.search}${separator}vh_state=${encodeURIComponent(nonce)}`;
+  return transportURL.toString();
+}
+
+function navigateBrowser(url) {
+  try {
+    if (window.location && typeof window.location.assign === 'function') {
+      window.location.assign(url);
+    } else {
+      window.location.href = url;
+    }
+  } catch (error) {
+    const message = String((error && error.message) || error || '');
+    if (!message.includes('Not implemented: navigation')) {
+      throw error;
+    }
+  }
+}
+
+function validateFunctionResolution(data) {
+  const functionId = sanitizeFunctionIdentifierForHost(data?.function_id);
+  if (!functionId) {
+    throw new Error('Resolve response missing valid function_id');
+  }
+  const ttlSeconds = Number(data?.cache_ttl_seconds);
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error('Resolve response missing valid cache_ttl_seconds');
+  }
+  return { functionId, ttlSeconds };
+}
+
+function invocationFailure(error) {
+  return { data: null, status: null, headers: {}, version: null, error };
+}
+
+function invocationSystemFailure(response, data, headers) {
+  const fallback = `Invoke request failed with status ${response.status}`;
+  const message = data && typeof data === 'object' && data.error ? data.error : fallback;
+  return {
+    data: null,
+    status: response.status,
+    headers,
+    version: null,
+    error: new VolcanoSystemError(message, { status: response.status }),
+  };
+}
+
+function transportSystemFailure(error) {
+  if (error instanceof VolcanoSystemError) {
+    return invocationFailure(error);
+  }
+  const message = error instanceof Error ? error.message : 'Request failed';
+  return invocationFailure(new VolcanoSystemError(message, { cause: error }));
+}
+
+function shouldRefreshInvocation(response, allowRefresh, versionHeader) {
+  return response.status === 401 && allowRefresh && !versionHeader;
+}
+
+function isInvocationPlatformFailure(response, versionHeader) {
+  return !response.ok && !versionHeader;
+}
+
+function isInvalidFunctionName(functionName) {
+  return typeof functionName !== 'string' || functionName === '';
+}
+
+function noSessionInvocationError(oauthExchangeError) {
+  return oauthExchangeError || new Error('No active session');
+}
+
+function readOAuthCallback() {
+  try {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code') || '';
+    const providerError = url.searchParams.get('error') || '';
+    const state = url.searchParams.get('state') || '';
+    if (!hasOAuthCallbackValues(code, providerError, state)) {
+      return null;
+    }
+    return {
+      url,
+      code,
+      state,
+      providerError,
+      providerErrorDescription: url.searchParams.get('error_description') || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hasOAuthCallbackValues(code, providerError, state) {
+  return Boolean(state) && Boolean(code || providerError);
+}
+
+function signupAcknowledgement(data) {
+  return {
+    confirmationRequired: Boolean(data?.confirmation_required),
+    message: data?.message ?? null,
+  };
+}
+
+function shouldSignInAfterSignup(signInWhenAllowed, confirmationRequired) {
+  return signInWhenAllowed && !confirmationRequired;
+}
+
+function oauthCallbackError(callback, expectedState) {
+  if (!expectedState || callback.state !== expectedState) {
+    return new Error('OAuth callback state did not match');
+  }
+  if (!callback.providerError) {
+    return null;
+  }
+  const message =
+    callback.providerErrorDescription ||
+    `OAuth provider rejected sign-in: ${callback.providerError}`;
+  return new Error(message);
+}
+
 // ============================================================================
 // VolcanoAuth Class
 // ============================================================================
 
 class VolcanoAuth {
   constructor(config) {
-    if (!config.anonKey) {
-      throw new Error('anonKey is required. Get your anon key from project settings.');
-    }
-
-    // SECURITY: Throw hard error if service key is used client-side
-    if (config.anonKey.startsWith('sk-') && isBrowser()) {
-      throw new Error(
-        '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
-          'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
-          'Use an anon key (ak-*) for browser/client-side applications. ' +
-          'Service keys should only be used in secure server-side environments. ' +
-          'See: https://docs.volcano.hosting/security/keys',
-      );
-    }
+    validateVolcanoConfig(config);
 
     this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
     this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
@@ -845,82 +1139,8 @@ class VolcanoAuth {
     this._functionResolveState = getSharedFunctionResolveState();
     this._transport = (config.transportFactory || (() => GENERATED_TRANSPORT))(this);
 
-    // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
-    if (config.accessToken) {
-      this.accessToken = config.accessToken;
-      this.refreshToken = config.refreshToken || null;
-    } else {
-      // Client-side use: Restore from localStorage if available
-      this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
-      this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-      // Adopt a managed hosted-auth redirect session from the URL fragment if
-      // present, so the client is authenticated at construction time — exactly
-      // like a signIn() result or a localStorage-restored session. A fresh
-      // redirect token takes precedence over any stale stored session.
-      this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
-    }
-    if (!config.accessToken && this._hasOAuthCallbackInUrl()) {
-      this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
-    }
-
-    // Sub-objects for organization
-    this.auth = {
-      signUp: this.signUp.bind(this),
-      signIn: this.signIn.bind(this),
-      signOut: this.signOut.bind(this),
-      getUser: this.getUser.bind(this),
-      updateUser: this.updateUser.bind(this),
-      refreshSession: this.refreshSession.bind(this),
-      onAuthStateChange: this.onAuthStateChange.bind(this),
-      user: () => this.currentUser,
-      // Anonymous user methods
-      signUpAnonymous: this.signUpAnonymous.bind(this),
-      convertAnonymous: this.convertAnonymous.bind(this),
-      // Email confirmation methods
-      confirmEmail: this.confirmEmail.bind(this),
-      resendConfirmation: this.resendConfirmation.bind(this),
-      // Password recovery methods
-      forgotPassword: this.forgotPassword.bind(this),
-      resetPassword: this.resetPassword.bind(this),
-      // Email change methods
-      requestEmailChange: this.requestEmailChange.bind(this),
-      confirmEmailChange: this.confirmEmailChange.bind(this),
-      cancelEmailChange: this.cancelEmailChange.bind(this),
-      // Managed hosted auth pages
-      getHostedAuthUrl: this.getHostedAuthUrl.bind(this),
-      signInWithHostedAuth: this.signInWithHostedAuth.bind(this),
-      // OAuth methods
-      signInWithOAuth: this.signInWithOAuth.bind(this),
-      signInWithGoogle: this.signInWithGoogle.bind(this),
-      signInWithGitHub: this.signInWithGitHub.bind(this),
-      signInWithMicrosoft: this.signInWithMicrosoft.bind(this),
-      signInWithApple: this.signInWithApple.bind(this),
-      linkOAuthProvider: this.linkOAuthProvider.bind(this),
-      unlinkOAuthProvider: this.unlinkOAuthProvider.bind(this),
-      getLinkedOAuthProviders: this.getLinkedOAuthProviders.bind(this),
-      refreshOAuthToken: this.refreshOAuthToken.bind(this),
-      getOAuthProviderToken: this.getOAuthProviderToken.bind(this),
-      callOAuthAPI: this.callOAuthAPI.bind(this),
-      // Session management methods
-      getSessions: this.getSessions.bind(this),
-      deleteSession: this.deleteSession.bind(this),
-      deleteAllOtherSessions: this.deleteAllOtherSessions.bind(this),
-    };
-
-    this.functions = {
-      invoke: this.invokeFunction.bind(this),
-    };
-
-    this.logs = {
-      search: this.searchLogs.bind(this),
-      activity: this.getLogActivity.bind(this),
-    };
-
-    this.storage = {
-      from: this.storageBucket.bind(this),
-    };
-
-    this.locks = new ProjectLocksApi(this);
+    initializeClientSession(this, config);
+    initializeClientFacades(this);
   }
 
   // ========================================================================
@@ -995,71 +1215,14 @@ class VolcanoAuth {
 
     for (;;) {
       if (!this.accessToken) {
-        if (retryFailure) {
-          return retryFailure;
-        }
-        return {
-          ok: false,
-          status: null,
-          error: new Error('No active session'),
-          data: null,
-        };
+        return missingSessionFailure(retryFailure);
       }
 
-      try {
-        const response = await fetchWithTimeout(
-          url,
-          {
-            ...fetchOptions,
-            headers: {
-              Authorization: `Bearer ${this.accessToken}`,
-              'Content-Type': 'application/json',
-              ...fetchOptions.headers,
-            },
-          },
-          this.timeout,
-        );
-
-        const data = await safeJsonParse(response);
-
-        if (!response.ok) {
-          // Try token refresh once on 401. retryFailure is lexical state, so
-          // callers cannot bypass the retry boundary through request options.
-          if (response.status === 401 && !retryFailure) {
-            retryFailure = {
-              ok: false,
-              status: response.status,
-              error: new Error('Session expired'),
-              data,
-            };
-            if (!this.refreshToken) {
-              return retryFailure;
-            }
-            await this.refreshSession();
-            continue;
-          }
-          return {
-            ok: false,
-            status: response.status,
-            error: apiRequestError(response, data),
-            data,
-          };
-        }
-
-        return {
-          ok: true,
-          status: response.status,
-          data,
-          error: null,
-        };
-      } catch (error) {
-        return {
-          ok: false,
-          status: null,
-          error: error instanceof Error ? error : new Error('Request failed'),
-          data: null,
-        };
+      const attempt = await authenticatedRequestAttempt(this, url, fetchOptions, retryFailure);
+      if (attempt.result) {
+        return attempt.result;
       }
+      retryFailure = attempt.retryFailure;
     }
   }
 
@@ -1158,6 +1321,31 @@ class VolcanoAuth {
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
+  async _fetchFunctionResolution(hostLabel, cacheKey) {
+    const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
+    const result = await this._authFetch(resolvePath, { method: 'GET' });
+    if (!result.ok) {
+      if (result.status === 404) {
+        this._functionResolveState.cache.set(cacheKey, {
+          functionId: null,
+          error: 'function not found',
+          expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
+        });
+        pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+      }
+      throw result.error || new Error('Failed to resolve function');
+    }
+
+    const resolution = validateFunctionResolution(result.data);
+    this._functionResolveState.cache.set(cacheKey, {
+      functionId: resolution.functionId,
+      error: null,
+      expiresAt: Date.now() + resolution.ttlSeconds * 1000,
+    });
+    pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+    return resolution.functionId;
+  }
+
   async _resolveFunctionIdByName(functionName) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
@@ -1185,40 +1373,7 @@ class VolcanoAuth {
       return inFlight;
     }
 
-    const pending = (async () => {
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      const result = await this._authFetch(resolvePath, { method: 'GET' });
-      if (!result.ok) {
-        if (result.status === 404) {
-          this._functionResolveState.cache.set(cacheKey, {
-            functionId: null,
-            error: 'function not found',
-            expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
-          });
-          pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        }
-        throw result.error || new Error('Failed to resolve function');
-      }
-
-      const resolvedId = sanitizeFunctionIdentifierForHost(result.data && result.data.function_id);
-      if (!resolvedId) {
-        throw new Error('Resolve response missing valid function_id');
-      }
-
-      const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
-      if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
-        throw new Error('Resolve response missing valid cache_ttl_seconds');
-      }
-      const ttlSeconds = ttlRaw;
-
-      this._functionResolveState.cache.set(cacheKey, {
-        functionId: resolvedId,
-        error: null,
-        expiresAt: Date.now() + ttlSeconds * 1000,
-      });
-      pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-      return resolvedId;
-    })();
+    const pending = this._fetchFunctionResolution(hostLabel, cacheKey);
 
     this._functionResolveState.inFlight.set(cacheKey, pending);
     try {
@@ -1277,15 +1432,30 @@ class VolcanoAuth {
   }
 
   insert(table, values) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
+    return new MutationBuilder(this, {
+      table,
+      databaseName: this._currentDatabaseName,
+      operation: 'insert',
+      values,
+    });
   }
 
   update(table, values) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
+    return new MutationBuilder(this, {
+      table,
+      databaseName: this._currentDatabaseName,
+      operation: 'update',
+      values,
+    });
   }
 
   delete(table) {
-    return new MutationBuilder(this, table, this._currentDatabaseName, 'delete', null);
+    return new MutationBuilder(this, {
+      table,
+      databaseName: this._currentDatabaseName,
+      operation: 'delete',
+      values: null,
+    });
   }
 
   // ========================================================================
@@ -1313,15 +1483,14 @@ class VolcanoAuth {
     // Session-less signup (VOL-309): the server returns a uniform acknowledgement
     // with no user object and no session tokens — identical for a new account and
     // an already-registered email, so it cannot be used to enumerate addresses.
-    const confirmationRequired = Boolean(result.data?.confirmation_required);
-    const message = result.data?.message ?? null;
+    const { confirmationRequired, message } = signupAcknowledgement(result.data);
 
     // Opt-in convenience: when the project does not require email confirmation the
     // account is usable immediately, so establish a session with a follow-up signIn
     // using the same credentials. Off by default so signUp mirrors the server's
     // session-less contract unless the caller asks for auto sign-in. If the follow-up
     // signIn fails, its error is surfaced while the account still exists server-side.
-    if (signInWhenAllowed && !confirmationRequired) {
+    if (shouldSignInAfterSignup(signInWhenAllowed, confirmationRequired)) {
       const signInResult = await this.signIn({ email, password });
       return {
         user: signInResult.user,
@@ -1651,38 +1820,21 @@ class VolcanoAuth {
 
     const redirectBase = this._resolveOAuthRedirectTarget(options.redirectTo);
     const redirectTarget = new URL(redirectBase);
-    for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
-      if (redirectTarget.searchParams.has(key)) {
-        throw new Error(`OAuth redirectTo must not contain the reserved "${key}" query parameter`);
-      }
-    }
+    validateOAuthRedirect(redirectTarget);
     const redirectURL = redirectTarget.toString();
     this._storeAuthState(nonce, redirectURL);
     // Keep the nonce in the legacy location during the backend rollout. New
     // servers remove this reserved transport parameter before exact redirect
     // matching; older servers echo it in their token-fragment response.
-    const transportRedirectURL = new URL(redirectURL);
-    const separator = transportRedirectURL.search ? '&' : '?';
-    transportRedirectURL.search = `${transportRedirectURL.search}${separator}vh_state=${encodeURIComponent(nonce)}`;
+    const transportRedirectURL = appendOAuthState(redirectURL, nonce);
 
     const oauthUrl =
       `${this.apiUrl}/auth/oauth/${provider}/authorize` +
       `?anon_key=${encodeURIComponent(this.anonKey)}` +
-      `&redirect_url=${encodeURIComponent(transportRedirectURL.toString())}` +
+      `&redirect_url=${encodeURIComponent(transportRedirectURL)}` +
       `&client_state=${encodeURIComponent(nonce)}` +
       `&response_mode=code`;
-    try {
-      if (window.location && typeof window.location.assign === 'function') {
-        window.location.assign(oauthUrl);
-      } else {
-        window.location.href = oauthUrl;
-      }
-    } catch (err) {
-      const message = String((err && err.message) || err || '');
-      if (!message.includes('Not implemented: navigation')) {
-        throw err;
-      }
-    }
+    navigateBrowser(oauthUrl);
     return oauthUrl;
   }
 
@@ -1720,18 +1872,7 @@ class VolcanoAuth {
   // Redirect the browser to the managed hosted-auth pages (stores the nonce).
   signInWithHostedAuth(options = {}) {
     const url = this.getHostedAuthUrl(options);
-    try {
-      if (window.location && typeof window.location.assign === 'function') {
-        window.location.assign(url);
-      } else {
-        window.location.href = url;
-      }
-    } catch (err) {
-      const message = String((err && err.message) || err || '');
-      if (!message.includes('Not implemented: navigation')) {
-        throw err;
-      }
-    }
+    navigateBrowser(url);
     return url;
   }
 
@@ -1912,160 +2053,92 @@ class VolcanoAuth {
   // Function Invocation
   // ========================================================================
 
-  async invokeFunction(functionName, payload = {}) {
-    if (!functionName || typeof functionName !== 'string') {
+  async _invokeOnce(url, payload, allowRefresh) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ payload }),
+        },
+        this.timeout,
+      );
+      const versionHeader = getHeaderValue(response, 'x-volcano-version');
+      if (shouldRefreshInvocation(response, allowRefresh, versionHeader)) {
+        const refreshed = await this.refreshSession();
+        if (!refreshed.error) {
+          return this._invokeOnce(url, payload, false);
+        }
+      }
+
+      const data = await parseResponseBody(response);
+      const headers = responseHeadersToObject(response);
+      if (isInvocationPlatformFailure(response, versionHeader)) {
+        return invocationSystemFailure(response, data, headers);
+      }
       return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: new Error('functionName must be a non-empty string'),
+        data,
+        status: response.status,
+        headers,
+        version: versionHeader || null,
+        error: null,
       };
+    } catch (error) {
+      return transportSystemFailure(error);
+    }
+  }
+
+  async _resolveInvokeUrl(functionName) {
+    const functionId = await this._resolveFunctionIdByName(functionName);
+    return this._getFunctionInvokeUrl(functionId);
+  }
+
+  async _retryStaleFunction(functionName, payload) {
+    this._clearFunctionResolveCache(functionName);
+    try {
+      const url = await this._resolveInvokeUrl(functionName);
+      return this._invokeOnce(url, payload, true);
+    } catch (error) {
+      const resolutionError =
+        error instanceof Error ? error : new Error('Failed to resolve function');
+      return invocationFailure(resolutionError);
+    }
+  }
+
+  async invokeFunction(functionName, payload = {}) {
+    if (isInvalidFunctionName(functionName)) {
+      return invocationFailure(new Error('functionName must be a non-empty string'));
     }
     await this._completeOAuthExchange();
     if (!this.accessToken) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: this._oauthExchangeError || new Error('No active session'),
-      };
+      return invocationFailure(noSessionInvocationError(this._oauthExchangeError));
     }
     if (!this.functionInvocationBase) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: new Error(
+      return invocationFailure(
+        new Error(
           'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
         ),
-      };
+      );
     }
 
-    let resolvedFunctionId;
-    try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
-    } catch (error) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: error instanceof Error ? error : new Error('Failed to resolve function'),
-      };
-    }
-
+    const normalizedName = functionName.trim();
     let invokeUrl;
     try {
-      invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
+      invokeUrl = await this._resolveInvokeUrl(normalizedName);
     } catch (error) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: error instanceof Error ? error : new Error('Invalid function identifier'),
-      };
+      const resolutionError =
+        error instanceof Error ? error : new Error('Failed to resolve function');
+      return invocationFailure(resolutionError);
     }
 
-    const invokeOnce = async (url, allowRefresh) => {
-      try {
-        const response = await fetchWithTimeout(
-          url,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${this.accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            // Wrap in { payload } to match the invoke API contract
-            // (FunctionInvocationRequest). Sending the raw payload leaves the
-            // server's req.Payload empty, so the function only receives
-            // __volcano_auth and never the caller's fields.
-            body: JSON.stringify({ payload }),
-          },
-          this.timeout,
-        );
-
-        const versionHeader = getHeaderValue(response, 'x-volcano-version');
-        if (response.status === 401 && allowRefresh && !versionHeader) {
-          const refreshed = await this.refreshSession();
-          if (!refreshed.error) {
-            return invokeOnce(url, false);
-          }
-        }
-
-        const data = await parseResponseBody(response);
-        const headers = responseHeadersToObject(response);
-        const version = versionHeader || null;
-
-        // A non-2xx response with no version header never reached a running
-        // function — the platform blocked it (failed/provisioning deploy,
-        // gateway down, etc.). Surface it as a system error, distinct from a
-        // function's own error response (which comes back as `data`).
-        //
-        // This split is load-bearing on a gateway invariant: `x-volcano-version`
-        // must be set ONLY by the function runtime after dispatch (never by the
-        // gateway pre-dispatch), and must be CORS-exposed
-        // (`Access-Control-Expose-Headers: x-volcano-version`) on the invoke
-        // domain — otherwise a browser can't read it and a healthy function's
-        // own 4xx would be misread as a system error.
-        if (!response.ok && !versionHeader) {
-          const message =
-            data && typeof data === 'object' && data.error
-              ? data.error
-              : `Invoke request failed with status ${response.status}`;
-          return {
-            data: null,
-            status: response.status,
-            headers,
-            version,
-            error: new VolcanoSystemError(message, { status: response.status }),
-          };
-        }
-
-        return { data, status: response.status, headers, version, error: null };
-      } catch (error) {
-        // Transport failures (network down, timeout, DNS) are also platform-level.
-        return {
-          data: null,
-          status: null,
-          headers: {},
-          version: null,
-          error:
-            error instanceof VolcanoSystemError
-              ? error
-              : new VolcanoSystemError(error instanceof Error ? error.message : 'Request failed', {
-                  cause: error,
-                }),
-        };
-      }
-    };
-
-    let result = await invokeOnce(invokeUrl, true);
-
-    // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing. (invokeOnce
-    // returns no `ok` field, so gate on status alone.)
+    const result = await this._invokeOnce(invokeUrl, payload, true);
     if (result.status === 404) {
-      this._clearFunctionResolveCache(functionName.trim());
-      try {
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
-        invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
-        result = await invokeOnce(invokeUrl, true);
-      } catch (error) {
-        return {
-          data: null,
-          status: null,
-          headers: {},
-          version: null,
-          error: error instanceof Error ? error : new Error('Failed to resolve function'),
-        };
-      }
+      return this._retryStaleFunction(normalizedName, payload);
     }
-
     return result;
   }
 
@@ -2136,38 +2209,24 @@ class VolcanoAuth {
   }
 
   async _consumeOAuthCodeFromUrl() {
-    let callbackURL;
-    try {
-      callbackURL = new URL(window.location.href);
-    } catch {
-      return false;
-    }
-    const code = callbackURL.searchParams.get('code') || '';
-    const providerError = callbackURL.searchParams.get('error') || '';
-    const providerErrorDescription = callbackURL.searchParams.get('error_description') || '';
-    const urlState = callbackURL.searchParams.get('state') || '';
-    if ((!code && !providerError) || !urlState) {
+    const callback = readOAuthCallback();
+    if (!callback) {
       return false;
     }
 
     const expectedState = this._takeAuthState();
     const storedRedirectURL = this._takeAuthRedirectURL();
-    this._stripOAuthQueryFromUrl(callbackURL);
-    if (!expectedState || urlState !== expectedState) {
-      this._oauthExchangeError = new Error('OAuth callback state did not match');
-      return false;
-    }
-    if (providerError) {
-      this._oauthExchangeError = new Error(
-        providerErrorDescription || `OAuth provider rejected sign-in: ${providerError}`,
-      );
+    this._stripOAuthQueryFromUrl(callback.url);
+    const callbackError = oauthCallbackError(callback, expectedState);
+    if (callbackError) {
+      this._oauthExchangeError = callbackError;
       return false;
     }
     const redirectURL =
-      storedRedirectURL || `${callbackURL.origin}${callbackURL.pathname}${callbackURL.search}`;
+      storedRedirectURL || `${callback.url.origin}${callback.url.pathname}${callback.url.search}`;
     const result = await this._generatedRequest(() =>
       this._transport.authOAuthExchange(
-        { code, redirect_url: redirectURL },
+        { code: callback.code, redirect_url: redirectURL },
         this._generatedOptions('anon'),
       ),
     );
@@ -2233,6 +2292,32 @@ class VolcanoAuth {
     }
   }
 
+  _readSessionParams() {
+    try {
+      return new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    } catch {
+      return null;
+    }
+  }
+
+  _sessionStateMatches(params) {
+    const expectedNonce = this._takeAuthState();
+    this._takeAuthRedirectURL();
+    const urlState = params.get('state') || '';
+    return Boolean(expectedNonce) && urlState !== '' && urlState === expectedNonce;
+  }
+
+  _storeRedirectSession(params, accessToken) {
+    this.accessToken = accessToken;
+    this.refreshToken = params.get('refresh_token') || null;
+    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
+    if (this.refreshToken) {
+      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    } else {
+      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    }
+  }
+
   /**
    * Adopt a session handed off by the managed hosted auth pages. After a
    * successful managed login/signup the user is redirected to the configured
@@ -2252,10 +2337,8 @@ class VolcanoAuth {
       return false;
     }
 
-    let params;
-    try {
-      params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
-    } catch {
+    const params = this._readSessionParams();
+    if (!params) {
       return false;
     }
 
@@ -2269,10 +2352,7 @@ class VolcanoAuth {
     // one-time nonce before redirecting; the hosted page and OAuth callback echo
     // it back as `state`. Reject (and scrub) any fragment whose `state` does not
     // match the stored nonce — e.g. an attacker-crafted #access_token link.
-    const expectedNonce = this._takeAuthState();
-    this._takeAuthRedirectURL();
-    const urlState = params.get('state') || '';
-    if (!expectedNonce || urlState === '' || urlState !== expectedNonce) {
+    if (!this._sessionStateMatches(params)) {
       // Unsolicited or mismatched session: do not authenticate. Scrub the tokens
       // from the URL so they don't linger, and mark as handled so we don't loop.
       this._urlSessionConsumed = true;
@@ -2280,21 +2360,12 @@ class VolcanoAuth {
       return false;
     }
 
-    const refreshToken = params.get('refresh_token');
-
     // The redirect hand-off is a complete session and fully replaces any
     // previously stored one. Adopt its refresh token verbatim — or clear a
     // stale stored token when the hand-off carries none — so we never pair this
     // access token with a different session's refresh token (which could
     // otherwise refresh into the wrong account).
-    this.accessToken = accessToken;
-    this.refreshToken = refreshToken || null;
-    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    if (this.refreshToken) {
-      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
-    } else {
-      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-    }
+    this._storeRedirectSession(params, accessToken);
 
     this._urlSessionConsumed = true;
     this._stripAuthHashFromUrl(params);
@@ -2558,6 +2629,25 @@ const FilterMixin = {
 // QueryBuilder - For SELECT operations
 // ============================================================================
 
+function buildSelectRequest(query) {
+  return {
+    table: query.table,
+    ...(query.selectColumns.length > 0 ? { select: query.selectColumns } : {}),
+    ...(query.filters.length > 0 ? { filters: query.filters } : {}),
+    ...(query.orderClauses.length > 0 ? { order: query.orderClauses } : {}),
+    ...(query.limitValue !== null ? { limit: query.limitValue } : {}),
+    ...(query.offsetValue !== null ? { offset: query.offsetValue } : {}),
+  };
+}
+
+function buildMutationRequest(mutation) {
+  return {
+    table: mutation.table,
+    ...(mutation.values ? { values: mutation.values } : {}),
+    ...(mutation.filters.length > 0 ? { filters: mutation.filters } : {}),
+  };
+}
+
 class QueryBuilder {
   constructor(volcanoAuth, table, databaseName) {
     this.volcanoAuth = volcanoAuth;
@@ -2612,22 +2702,7 @@ class QueryBuilder {
       return errorResult('Database name not set. Use .database(databaseName) first.', { count: 0 });
     }
 
-    const requestBody = { table: this.table };
-    if (this.selectColumns.length > 0) {
-      requestBody.select = this.selectColumns;
-    }
-    if (this.filters.length > 0) {
-      requestBody.filters = this.filters;
-    }
-    if (this.orderClauses.length > 0) {
-      requestBody.order = this.orderClauses;
-    }
-    if (this.limitValue !== null) {
-      requestBody.limit = this.limitValue;
-    }
-    if (this.offsetValue !== null) {
-      requestBody.offset = this.offsetValue;
-    }
+    const requestBody = buildSelectRequest(this);
 
     try {
       const response = await this.volcanoAuth._transport.queryDatabaseSelect(
@@ -2658,12 +2733,12 @@ Object.assign(QueryBuilder.prototype, FilterMixin);
 // ============================================================================
 
 class MutationBuilder {
-  constructor(volcanoAuth, table, databaseName, operation, values) {
+  constructor(volcanoAuth, mutation) {
     this.volcanoAuth = volcanoAuth;
-    this.table = table;
-    this.databaseName = databaseName;
-    this.operation = operation;
-    this.values = values;
+    this.table = mutation.table;
+    this.databaseName = mutation.databaseName;
+    this.operation = mutation.operation;
+    this.values = mutation.values;
     this.filters = [];
   }
 
@@ -2679,13 +2754,7 @@ class MutationBuilder {
       return errorResult('Database name not set. Use .database(databaseName) first.');
     }
 
-    const requestBody = { table: this.table };
-    if (this.values) {
-      requestBody.values = this.values;
-    }
-    if (this.filters.length > 0) {
-      requestBody.filters = this.filters;
-    }
+    const requestBody = buildMutationRequest(this);
 
     try {
       const response = await fetchWithAuthRetry(
@@ -2725,6 +2794,86 @@ Object.assign(MutationBuilder.prototype, FilterMixin);
 // ============================================================================
 // StorageFileApi - For storage operations on a specific bucket
 // ============================================================================
+
+async function parseBlobStorageResponse(response) {
+  if (!response.ok) {
+    const errorData = await safeJsonParse(response);
+    return { data: null, error: new Error(errorData.error || 'Request failed') };
+  }
+  return { data: await response.blob(), error: null };
+}
+
+async function parseStorageResponse(response, responseType) {
+  if (responseType === 'blob') {
+    return parseBlobStorageResponse(response);
+  }
+  const data = await safeJsonParse(response);
+  return response.ok
+    ? { data, error: null }
+    : { data: null, error: new Error(data.error || 'Request failed') };
+}
+
+function createUploadFile(fileBody, path, contentType) {
+  if (fileBody instanceof File) {
+    return fileBody;
+  }
+  if (fileBody instanceof Blob || fileBody instanceof ArrayBuffer) {
+    const fileName = path.split('/').pop() || 'file';
+    return new File([fileBody], fileName, { type: contentType || 'application/octet-stream' });
+  }
+  return null;
+}
+
+function buildStorageListParams(prefix, options) {
+  const params = new URLSearchParams();
+  if (prefix) {
+    params.set('prefix', prefix);
+  }
+  if (options.limit) {
+    params.set('limit', String(options.limit));
+  }
+  if (options.cursor) {
+    params.set('cursor', options.cursor);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function resumableContentType(fileBody, configuredType) {
+  if (configuredType) {
+    return configuredType;
+  }
+  if (fileBody instanceof File && fileBody.type) {
+    return fileBody.type;
+  }
+  return 'application/octet-stream';
+}
+
+async function abortFailedUpload(storage, path, sessionId, partError) {
+  const { error: abortError } = await storage.abortUploadSession(path, sessionId);
+  if (abortError) {
+    console.warn(`[Storage] Failed to abort upload session ${sessionId}:`, abortError.message);
+  }
+  return { data: null, error: partError };
+}
+
+async function uploadSessionParts(storage, path, upload) {
+  const { fileBody, session, onProgress } = upload;
+  const sessionId = session.session_id;
+  for (let partNumber = 1; partNumber <= session.total_parts; partNumber += 1) {
+    const start = (partNumber - 1) * session.part_size;
+    const end = Math.min(start + session.part_size, fileBody.size);
+    const partData = fileBody.slice(start, end);
+    const { error } = await storage.uploadPart(path, sessionId, partNumber, partData);
+    if (error) {
+      return abortFailedUpload(storage, path, sessionId, error);
+    }
+    if (onProgress) {
+      onProgress(end, fileBody.size);
+    }
+  }
+  return storage.completeUploadSession(path, sessionId);
+}
 
 class StorageFileApi {
   constructor(volcanoAuth, bucketName) {
@@ -2772,24 +2921,7 @@ class StorageFileApi {
   async _storageRequest(url, options = {}) {
     try {
       const response = await fetchWithAuthRetry(this.volcanoAuth, url, options);
-
-      // For blob responses (downloads), handle separately
-      if (options.responseType === 'blob') {
-        if (!response.ok) {
-          const errorData = await safeJsonParse(response);
-          return { data: null, error: new Error(errorData.error || 'Request failed') };
-        }
-        const blob = await response.blob();
-        return { data: blob, error: null };
-      }
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return { data: null, error: new Error(data.error || 'Request failed') };
-      }
-
-      return { data, error: null };
+      return parseStorageResponse(response, options.responseType);
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error('Request failed') };
     }
@@ -2805,14 +2937,8 @@ class StorageFileApi {
     }
 
     try {
-      let file;
-
-      if (fileBody instanceof File) {
-        file = fileBody;
-      } else if (fileBody instanceof Blob || fileBody instanceof ArrayBuffer) {
-        const contentType = options.contentType || 'application/octet-stream';
-        file = new File([fileBody], path.split('/').pop() || 'file', { type: contentType });
-      } else {
+      const file = createUploadFile(fileBody, path, options.contentType);
+      if (!file) {
         return errorResult('Invalid file body type. Expected File, Blob, or ArrayBuffer.');
       }
 
@@ -2863,19 +2989,9 @@ class StorageFileApi {
       return { ...authError, nextCursor: null };
     }
 
-    const params = new URLSearchParams();
-    if (prefix) {
-      params.set('prefix', prefix);
-    }
-    if (options.limit) {
-      params.set('limit', String(options.limit));
-    }
-    if (options.cursor) {
-      params.set('cursor', options.cursor);
-    }
-
-    const queryString = params.toString();
-    const url = `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}${queryString ? `?${queryString}` : ''}`;
+    const query = buildStorageListParams(prefix, options);
+    const bucket = encodeURIComponent(this.bucketName);
+    const url = `${this.volcanoAuth.apiUrl}/storage/${bucket}${query}`;
 
     const result = await this._storageRequest(url, {
       method: 'GET',
@@ -3107,10 +3223,7 @@ class StorageFileApi {
     }
 
     const totalSize = fileBody.size;
-    const contentType =
-      options.contentType ||
-      (fileBody instanceof File ? fileBody.type : 'application/octet-stream') ||
-      'application/octet-stream';
+    const contentType = resumableContentType(fileBody, options.contentType);
     const partSize = options.partSize || DEFAULT_UPLOAD_PART_SIZE;
     const onProgress = options.onProgress;
 
@@ -3125,36 +3238,7 @@ class StorageFileApi {
         return { data: null, error: sessionError };
       }
 
-      const sessionId = session.session_id;
-      const totalParts = session.total_parts;
-      const actualPartSize = session.part_size;
-
-      let uploaded = 0;
-      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const start = (partNumber - 1) * actualPartSize;
-        const end = Math.min(start + actualPartSize, totalSize);
-        const partData = fileBody.slice(start, end);
-
-        const { error: partError } = await this.uploadPart(path, sessionId, partNumber, partData);
-
-        if (partError) {
-          const { error: abortError } = await this.abortUploadSession(path, sessionId);
-          if (abortError) {
-            console.warn(
-              `[Storage] Failed to abort upload session ${sessionId}:`,
-              abortError.message,
-            );
-          }
-          return { data: null, error: partError };
-        }
-
-        uploaded = end;
-        if (onProgress) {
-          onProgress(uploaded, totalSize);
-        }
-      }
-
-      return this.completeUploadSession(path, sessionId);
+      return uploadSessionParts(this, path, { fileBody, session, onProgress });
     } catch (error) {
       return {
         data: null,

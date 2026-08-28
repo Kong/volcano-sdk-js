@@ -2034,38 +2034,41 @@ describe('SDK E2E Integration Tests', () => {
 
     test('insert() - inserts multiple records', async () => {
       // Insert more test data
-      await dbVolcano.insert('sdk_test_products', {
-        name: 'Test Product 2',
-        category: 'electronics',
-        price: 149.99,
-        quantity: 5,
-        is_active: true,
-      });
+      const insertions = await Promise.all([
+        dbVolcano.insert('sdk_test_products', {
+          name: 'Test Product 2',
+          category: 'electronics',
+          price: 149.99,
+          quantity: 5,
+          is_active: true,
+        }),
 
-      await dbVolcano.insert('sdk_test_products', {
-        name: 'Test Product 3',
-        category: 'clothing',
-        price: 29.99,
-        quantity: 100,
-        is_active: true,
-      });
+        dbVolcano.insert('sdk_test_products', {
+          name: 'Test Product 3',
+          category: 'clothing',
+          price: 29.99,
+          quantity: 100,
+          is_active: true,
+        }),
 
-      await dbVolcano.insert('sdk_test_products', {
-        name: 'Inactive Product',
-        category: 'clothing',
-        price: 19.99,
-        quantity: 0,
-        is_active: false,
-      });
+        dbVolcano.insert('sdk_test_products', {
+          name: 'Inactive Product',
+          category: 'clothing',
+          price: 19.99,
+          quantity: 0,
+          is_active: false,
+        }),
 
-      await dbVolcano.insert('sdk_test_products', {
-        name: 'Expensive Item',
-        category: 'luxury',
-        price: 999.99,
-        quantity: 2,
-        is_active: true,
-      });
+        dbVolcano.insert('sdk_test_products', {
+          name: 'Expensive Item',
+          category: 'luxury',
+          price: 999.99,
+          quantity: 2,
+          is_active: true,
+        }),
+      ]);
 
+      expect(insertions.map(({ error }) => error)).toEqual([null, null, null, null]);
       console.log('  [ok] Multiple records inserted');
     });
 

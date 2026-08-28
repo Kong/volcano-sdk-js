@@ -3,27 +3,22 @@ const { randomBytes } = require('node:crypto');
 const { VolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 
+const ERROR_CATEGORIES = new Map([
+  [400, 'validation error'],
+  [401, 'authentication error'],
+  [403, 'authentication error'],
+  [404, 'not found'],
+  [409, 'conflict'],
+  [422, 'validation error'],
+  [429, 'rate limited'],
+]);
+
 function classifyError(error) {
   const status = error?.status ?? error?.response?.status;
-  if (status === 401 || status === 403) {
-    return 'authentication error';
-  }
-  if (status === 400 || status === 422) {
-    return 'validation error';
-  }
-  if (status === 404) {
-    return 'not found';
-  }
-  if (status === 409) {
-    return 'conflict';
-  }
-  if (status === 429) {
-    return 'rate limited';
-  }
-  if (status >= 500 && status <= 599) {
-    return 'server error';
-  }
-  return 'transport error';
+  return (
+    ERROR_CATEGORIES.get(status) ??
+    (Math.trunc(status / 100) === 5 ? 'server error' : 'transport error')
+  );
 }
 
 function recordOutcome(world, data, error) {
@@ -128,4 +123,4 @@ class ContractWorld {
   }
 }
 
-module.exports = { classifyError, ContractWorld, recordOutcome };
+module.exports = { ContractWorld, recordOutcome };

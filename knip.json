@@ -1,0 +1,32 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["src/generated/**", "src/generated-runtime/**"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/index.d.ts",
+        "src/realtime.d.ts",
+        "src/next/middleware.d.ts",
+        "scripts/*.mjs",
+        "*.config.{js,cjs,mjs}",
+        "__tests__/**/*.test.js",
+        "__tests__/integration/setup.js",
+        "test/types/*.ts"
+      ],
+      "project": [
+        "src/**/*.{js,ts}",
+        "scripts/**/*.mjs",
+        "__tests__/**/*.js",
+        "test/types/*.ts",
+        "*.config.{js,cjs,mjs}"
+      ]
+    },
+    "examples/nextjs-notes-app": {
+      "entry": ["src/app/**/page.js", "*.config.js"],
+      "project": ["src/**/*.{js,css}", "*.config.js"],
+      "paths": {
+        "@/*": ["src/*"]
+      }
+    }
+  }
+}

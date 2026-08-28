@@ -92,10 +92,3 @@ export const volcano = new VolcanoAuth({
 if (config.databaseName) {
   volcano.database(config.databaseName);
 }
-
-// ---------------------------------------------------------------------------
-// EXPORTS
-// ---------------------------------------------------------------------------
-
-// Default export for convenience
-export default volcano;

@@ -120,6 +120,18 @@ async function waitFor(condition, timeout = 5000, interval = 100) {
   return false;
 }
 
+async function assertApiRunning() {
+  try {
+    const health = await fetch(`${API_URL}/health`);
+    if (!health.ok) {
+      throw new Error('Health check failed');
+    }
+    console.log('[ok] Volcano API server is running');
+  } catch {
+    throw new Error(`Volcano API server is not running at ${API_URL}. Please start with: make run`);
+  }
+}
+
 describe('Realtime Capabilities E2E Tests', () => {
   // Test infrastructure
   let platformUser;
@@ -148,15 +160,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     console.log('='.repeat(60) + '\n');
 
     // 1. Verify server is running
-    try {
-      const health = await fetch(`${API_URL}/health`);
-      if (!health.ok) throw new Error('Health check failed');
-      console.log('[ok] Volcano API server is running');
-    } catch {
-      throw new Error(
-        `Volcano API server is not running at ${API_URL}. Please start with: make run`,
-      );
-    }
+    await assertApiRunning();
 
     // 2. Create platform user
     platformUser = await mgmtFetch('/users', {
@@ -526,8 +530,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const channel = realtime.channel('broadcast-send-test');
       await channel.subscribe();
 
-      // Should not throw
-      await channel.send({ event: 'test', data: 'hello' });
+      await expect(channel.send({ event: 'test', data: 'hello' })).resolves.toBeUndefined();
 
       channel.unsubscribe();
     });

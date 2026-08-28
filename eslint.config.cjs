@@ -130,9 +130,15 @@ module.exports = [
     },
     rules: {
       'array-callback-return': ['error', { checkForEach: true }],
+      complexity: ['error', { max: 8, variant: 'classic' }],
       curly: ['error', 'all'],
       'dot-notation': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'max-depth': ['error', 3],
+      'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
+      'max-nested-callbacks': ['error', 3],
+      'max-params': ['error', 4],
+      'max-statements': ['error', 30],
       'no-console': ['error', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': 'error',
       'no-else-return': ['error', { allowElseIf: false }],
@@ -151,6 +157,7 @@ module.exports = [
       'object-shorthand': ['error', 'always', { avoidExplicitReturnArrows: true }],
       'prefer-const': ['error', { destructuring: 'all' }],
       'prefer-template': 'error',
+      'no-warning-comments': ['error', { terms: ['todo', 'fixme', 'xxx'], location: 'anywhere' }],
 
       'import-x/no-unresolved': ['error', { commonjs: true, ignore: ['^@/'] }],
       'n/no-deprecated-api': 'error',
@@ -173,15 +180,15 @@ module.exports = [
       ],
 
       'sonarjs/class-name': 'off',
-      'sonarjs/cognitive-complexity': 'off',
-      'sonarjs/fixme-tag': 'off',
+      'sonarjs/cognitive-complexity': ['error', 8],
+      'sonarjs/fixme-tag': 'error',
       'sonarjs/function-name': 'off',
       'sonarjs/no-commented-code': 'off',
       'sonarjs/no-duplicate-string': 'off',
       'sonarjs/no-hardcoded-ip': 'off',
-      'sonarjs/no-nested-conditional': 'off',
-      'sonarjs/no-nested-template-literals': 'off',
-      'sonarjs/todo-tag': 'off',
+      'sonarjs/no-nested-conditional': 'error',
+      'sonarjs/no-nested-template-literals': 'error',
+      'sonarjs/todo-tag': 'error',
       'sonarjs/variable-name': 'off',
       'unicorn/catch-error-name': 'off',
       'unicorn/filename-case': 'off',
@@ -204,16 +211,24 @@ module.exports = [
   },
   {
     files: testFiles,
+    plugins: {
+      sonarjs: sonarPlugin,
+    },
     rules: {
+      complexity: ['error', { max: 10, variant: 'classic' }],
+      'jest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectPure'] }],
+      'jest/max-nested-describe': ['error', { max: 3 }],
       'jest/no-done-callback': 'off',
       'jest/no-export': 'off',
       'jest/no-standalone-expect': 'off',
       'no-console': 'off',
       'no-empty': 'off',
+      'max-depth': ['error', 3],
       'promise/always-return': 'off',
       'promise/catch-or-return': 'off',
       'promise/no-callback-in-promise': 'off',
       'promise/param-names': 'off',
+      'sonarjs/cognitive-complexity': ['error', 10],
     },
   },
   {
@@ -227,7 +242,12 @@ module.exports = [
   {
     files: exampleFiles,
     rules: {
+      // JSX markup inflates classic branch and line counts without adding
+      // imperative control flow. Cognitive complexity and statement limits
+      // remain strict for example application logic.
+      complexity: ['error', { max: 15, variant: 'classic' }],
       'import-x/no-unresolved': 'off',
+      'max-lines-per-function': 'off',
       'no-alert': 'off',
       'react-hooks/set-state-in-effect': 'off',
     },

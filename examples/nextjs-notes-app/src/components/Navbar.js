@@ -10,6 +10,70 @@
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 
+function UserSummary({ isAnonymous, email }) {
+  if (isAnonymous) {
+    return (
+      <span className="flex items-center">
+        <span className="w-2 h-2 bg-yellow-400 rounded-full mr-2" />
+        Guest User
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center">
+      <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
+      {email}
+    </span>
+  );
+}
+
+function NavigationLinks({ user, isAnonymous, signOut, loading }) {
+  if (loading) {
+    return <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />;
+  }
+  if (!user) {
+    return (
+      <>
+        <Link
+          href="/auth/signin"
+          className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+        >
+          Sign In
+        </Link>
+        <Link
+          href="/auth/signup"
+          className="bg-volcano-600 hover:bg-volcano-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+        >
+          Sign Up
+        </Link>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Link
+        href="/dashboard"
+        className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+      >
+        Dashboard
+      </Link>
+      <div className="flex items-center space-x-3">
+        <div className="text-sm text-gray-500">
+          <UserSummary isAnonymous={isAnonymous} email={user.email} />
+        </div>
+        <button
+          onClick={signOut}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+        >
+          Sign Out
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function Navbar() {
   const { user, isAnonymous, signOut, loading } = useAuth();
 
@@ -27,61 +91,12 @@ export function Navbar() {
 
           {/* Navigation Links */}
           <div className="flex items-center space-x-4">
-            {loading ? (
-              // Loading skeleton
-              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
-            ) : user ? (
-              // Authenticated user
-              <>
-                <Link
-                  href="/dashboard"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Dashboard
-                </Link>
-
-                <div className="flex items-center space-x-3">
-                  {/* User info */}
-                  <div className="text-sm text-gray-500">
-                    {isAnonymous ? (
-                      <span className="flex items-center">
-                        <span className="w-2 h-2 bg-yellow-400 rounded-full mr-2" />
-                        Guest User
-                      </span>
-                    ) : (
-                      <span className="flex items-center">
-                        <span className="w-2 h-2 bg-green-400 rounded-full mr-2" />
-                        {user.email}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Sign out button */}
-                  <button
-                    onClick={signOut}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </>
-            ) : (
-              // Not authenticated
-              <>
-                <Link
-                  href="/auth/signin"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="bg-volcano-600 hover:bg-volcano-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                >
-                  Sign Up
-                </Link>
-              </>
-            )}
+            <NavigationLinks
+              user={user}
+              isAnonymous={isAnonymous}
+              signOut={signOut}
+              loading={loading}
+            />
           </div>
         </div>
       </div>

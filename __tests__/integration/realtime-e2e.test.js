@@ -653,8 +653,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
         promises.push(channel.send({ event: 'test', count: i }));
       }
 
-      // Should not throw
-      await Promise.all(promises);
+      await expect(Promise.all(promises)).resolves.toHaveLength(10);
 
       channel.unsubscribe();
     });

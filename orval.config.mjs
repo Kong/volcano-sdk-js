@@ -4,7 +4,7 @@ export default defineConfig({
   volcano: {
     hooks: {
       afterAllFilesWrite:
-        'openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write',
+        'pnpm generate:openapi:types && prettier src/generated/openapi.d.ts --write',
     },
     input: {
       parserOptions: {

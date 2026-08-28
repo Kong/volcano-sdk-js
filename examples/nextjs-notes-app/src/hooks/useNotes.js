@@ -310,5 +310,3 @@ export function useNotes() {
     deleteNote,
   };
 }
-
-export default useNotes;

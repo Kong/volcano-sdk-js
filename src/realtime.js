@@ -92,6 +92,32 @@ async function loadWebSocket() {
   }
 }
 
+function validateRealtimeConfig(config) {
+  if (!config.apiUrl) {
+    throw new Error('apiUrl is required');
+  }
+  if (config.anonKey === undefined) {
+    throw new Error('anonKey is required');
+  }
+}
+
+function realtimeFetchConfig(config = {}) {
+  return {
+    batchWindowMs: config.batchWindowMs || 20,
+    maxBatchSize: config.maxBatchSize || 50,
+    enabled: config.enabled !== false,
+  };
+}
+
+function deleteNotificationRecord(data) {
+  if (data.old_record !== undefined) {
+    return data.old_record;
+  }
+  if (data.id !== undefined) {
+    return { id: data.id };
+  }
+}
+
 /**
  * VolcanoRealtime - Main realtime client
  *
@@ -117,14 +143,7 @@ class VolcanoRealtime {
    * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage
    */
   constructor(config) {
-    if (!config.apiUrl) {
-      throw new Error('apiUrl is required');
-    }
-    // anonKey is optional for service role keys (they contain project ID)
-    // But we need either anonKey or accessToken
-    if (config.anonKey === undefined) {
-      throw new Error('anonKey is required');
-    }
+    validateRealtimeConfig(config);
 
     this.apiUrl = config.apiUrl.replace(/\/$/, ''); // Remove trailing slash
     this.anonKey = config.anonKey || ''; // Allow empty string for service keys
@@ -144,11 +163,7 @@ class VolcanoRealtime {
 
     // Auto-fetch support (Phase 3)
     this._volcanoClient = config.volcanoClient || null;
-    this._fetchConfig = {
-      batchWindowMs: config.fetchConfig?.batchWindowMs || 20,
-      maxBatchSize: config.fetchConfig?.maxBatchSize || 50,
-      enabled: config.fetchConfig?.enabled !== false,
-    };
+    this._fetchConfig = realtimeFetchConfig(config.fetchConfig);
 
     // Database name for auto-fetch queries (optional)
     this._databaseName = config.databaseName || null;
@@ -222,6 +237,71 @@ class VolcanoRealtime {
     }
   }
 
+  _tokenProvider() {
+    if (!this.getToken) {
+      return;
+    }
+    return async () => {
+      const token = await this.getToken();
+      this.accessToken = token;
+      return token;
+    };
+  }
+
+  _createClientHandlers() {
+    return {
+      connected: (ctx) => {
+        this._connected = true;
+        this._onConnect.forEach((callback) => {
+          callback(ctx);
+        });
+      },
+      disconnected: (ctx) => {
+        this._connected = false;
+        this._onDisconnect.forEach((callback) => {
+          callback(ctx);
+        });
+      },
+      error: (ctx) =>
+        this._onError.forEach((callback) => {
+          callback(ctx);
+        }),
+      publication: (ctx) => this._handleServerPublication(ctx),
+      join: (ctx) => this._handleServerJoin(ctx),
+      leave: (ctx) => this._handleServerLeave(ctx),
+      subscribed: (ctx) => this._handleServerSubscribed(ctx),
+    };
+  }
+
+  _registerClientHandlers() {
+    for (const [event, handler] of Object.entries(this._clientHandlers)) {
+      this._client.on(event, handler);
+    }
+  }
+
+  _waitForConnection() {
+    return new Promise((resolve, reject) => {
+      const client = this._client;
+      const timeout = setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      function cleanup() {
+        clearTimeout(timeout);
+        client.off('connected', onConnected);
+        client.off('error', onError);
+      }
+      function onConnected() {
+        cleanup();
+        resolve();
+      }
+      function onError(ctx) {
+        cleanup();
+        reject(new Error(ctx.error?.message || 'Connection failed'));
+      }
+      client.on('connected', onConnected);
+      client.on('error', onError);
+      client.connect();
+    });
+  }
+
   async _doConnect() {
     const CentrifugeClient = await loadCentrifuge();
     const WebSocket = this._webSocket || (await loadWebSocket());
@@ -230,85 +310,15 @@ class VolcanoRealtime {
 
     this._client = new CentrifugeClient(wsUrl, {
       token: this.accessToken,
-      getToken: this.getToken
-        ? async () => {
-            const token = await this.getToken();
-            this.accessToken = token;
-            return token;
-          }
-        : undefined,
+      getToken: this._tokenProvider(),
       debug: false,
       websocket: WebSocket,
     });
 
     // Set up event handlers (store references for cleanup)
-    this._clientHandlers = {
-      connected: (ctx) => {
-        this._connected = true;
-        this._onConnect.forEach((cb) => {
-          cb(ctx);
-        });
-      },
-      disconnected: (ctx) => {
-        this._connected = false;
-        this._onDisconnect.forEach((cb) => {
-          cb(ctx);
-        });
-      },
-      error: (ctx) => {
-        this._onError.forEach((cb) => {
-          cb(ctx);
-        });
-      },
-      publication: (ctx) => {
-        this._handleServerPublication(ctx);
-      },
-      join: (ctx) => {
-        this._handleServerJoin(ctx);
-      },
-      leave: (ctx) => {
-        this._handleServerLeave(ctx);
-      },
-      subscribed: (ctx) => {
-        this._handleServerSubscribed(ctx);
-      },
-    };
-
-    this._client.on('connected', this._clientHandlers.connected);
-    this._client.on('disconnected', this._clientHandlers.disconnected);
-    this._client.on('error', this._clientHandlers.error);
-    this._client.on('publication', this._clientHandlers.publication);
-    this._client.on('join', this._clientHandlers.join);
-    this._client.on('leave', this._clientHandlers.leave);
-    this._client.on('subscribed', this._clientHandlers.subscribed);
-
-    // Connect and wait for connected event
-    return new Promise((resolve, reject) => {
-      const client = this._client;
-      const timeout = setTimeout(() => {
-        reject(new Error('Connection timeout'));
-      }, 10000);
-
-      function cleanupConnectionListeners() {
-        clearTimeout(timeout);
-        client.off('connected', onConnected);
-        client.off('error', onError);
-      }
-
-      function onConnected() {
-        cleanupConnectionListeners();
-        resolve();
-      }
-
-      function onError(ctx) {
-        cleanupConnectionListeners();
-        reject(new Error(ctx.error?.message || 'Connection failed'));
-      }
-
-      client.on('connected', onConnected);
-      client.on('error', onError);
-      client.connect();
-    });
+    this._clientHandlers = this._createClientHandlers();
+    this._registerClientHandlers();
+    return this._waitForConnection();
   }
 
   /**
@@ -561,6 +571,64 @@ class VolcanoRealtime {
   }
 }
 
+function takePendingFetch(channel, schema, table) {
+  const tableKey = `${schema}.${table}`;
+  const batch = channel._pendingFetches.get(tableKey);
+  if (!batch || batch.ids.size === 0) {
+    return null;
+  }
+  if (batch.timer) {
+    clearTimeout(batch.timer);
+  }
+  channel._pendingFetches.delete(tableKey);
+  return { ids: Array.from(batch.ids.keys()), callbacks: new Map(batch.ids) };
+}
+
+function hasDatabaseQueryApi(volcanoClient) {
+  return Boolean(volcanoClient?.from) && typeof volcanoClient.from === 'function';
+}
+
+function configuredDatabaseName(realtime, volcanoClient) {
+  return realtime.getDatabaseName?.() || volcanoClient._currentDatabaseName || null;
+}
+
+function resolveDatabaseClient(realtime, volcanoClient) {
+  if (!hasDatabaseQueryApi(volcanoClient)) {
+    throw new Error('volcanoClient.from not available');
+  }
+  const databaseName = configuredDatabaseName(realtime, volcanoClient);
+  if (databaseName) {
+    if (typeof volcanoClient.database !== 'function') {
+      throw new TypeError('volcanoClient.database not available');
+    }
+    return volcanoClient.database(databaseName);
+  }
+  if (typeof volcanoClient.database === 'function') {
+    throw new TypeError(
+      'Database name not set. Call volcanoClient.database(name) or pass databaseName to VolcanoRealtime.',
+    );
+  }
+  return volcanoClient;
+}
+
+function rejectFetchCallbacks(callbacks, error) {
+  for (const callback of callbacks.values()) {
+    callback.reject(error);
+  }
+}
+
+function resolveFetchCallbacks(callbacks, records, table) {
+  const recordMap = new Map((records || []).map((record) => [String(record.id), record]));
+  for (const [id, callback] of callbacks) {
+    const record = recordMap.get(id);
+    if (record) {
+      callback.resolve(record);
+    } else {
+      callback.reject(new Error(`Record not found or access denied: ${table}:${id}`));
+    }
+  }
+}
+
 /**
  * RealtimeChannel - Represents a subscription to a realtime channel
  */
@@ -595,6 +663,62 @@ class RealtimeChannel {
     return this._name;
   }
 
+  _registerPublicationHandler() {
+    this._eventHandlers.publication = (ctx) => {
+      const event = ctx.data?.event || 'message';
+      const callbacks = this._callbacks.get(event) || [];
+      callbacks.forEach((callback) => {
+        callback(ctx.data, ctx);
+      });
+      const wildcardCallbacks = this._callbacks.get('*') || [];
+      wildcardCallbacks.forEach((callback) => {
+        callback(ctx.data, ctx);
+      });
+    };
+    this._subscription.on('publication', this._eventHandlers.publication);
+  }
+
+  async _refreshPresence() {
+    this._presenceTimeoutId = null;
+    try {
+      const client = this._realtime.getClient();
+      if (!client || !this._subscription) {
+        return;
+      }
+      const presence = await client.presence(this._name);
+      if (!presence?.clients) {
+        return;
+      }
+      this._presenceState = Object.fromEntries(Object.entries(presence.clients));
+      this._triggerPresenceSync();
+    } catch {
+      // Presence may not be available immediately after subscription.
+    }
+  }
+
+  _registerPresenceHandlers() {
+    this._eventHandlers.presence = (ctx) => {
+      this._updatePresenceState(ctx);
+      this._triggerPresenceSync();
+    };
+    this._eventHandlers.join = (ctx) => {
+      this._presenceState[ctx.info.client] = ctx.info.data;
+      this._triggerPresenceSync();
+      this._triggerEvent('join', ctx.info);
+    };
+    this._eventHandlers.leave = (ctx) => {
+      delete this._presenceState[ctx.info.client];
+      this._triggerPresenceSync();
+      this._triggerEvent('leave', ctx.info);
+    };
+    this._eventHandlers.subscribed = () => {
+      this._presenceTimeoutId = setTimeout(() => this._refreshPresence(), 150);
+    };
+    for (const event of ['presence', 'join', 'leave', 'subscribed']) {
+      this._subscription.on(event, this._eventHandlers[event]);
+    }
+  }
+
   /**
    * Subscribe to the channel
    */
@@ -616,121 +740,69 @@ class RealtimeChannel {
       recover: true,
     });
 
-    // Set up message handler (store reference for cleanup)
-    this._eventHandlers.publication = (ctx) => {
-      const event = ctx.data?.event || 'message';
-      const callbacks = this._callbacks.get(event) || [];
-      callbacks.forEach((cb) => {
-        cb(ctx.data, ctx);
-      });
-
-      // Also trigger wildcard listeners
-      const wildcardCallbacks = this._callbacks.get('*') || [];
-      wildcardCallbacks.forEach((cb) => {
-        cb(ctx.data, ctx);
-      });
-    };
-    this._subscription.on('publication', this._eventHandlers.publication);
+    this._registerPublicationHandler();
 
     // Set up presence handlers for presence channels
     if (this._type === 'presence') {
-      this._eventHandlers.presence = (ctx) => {
-        this._updatePresenceState(ctx);
-        this._triggerPresenceSync();
-      };
-      this._subscription.on('presence', this._eventHandlers.presence);
-
-      this._eventHandlers.join = (ctx) => {
-        this._presenceState[ctx.info.client] = ctx.info.data;
-        this._triggerPresenceSync();
-        this._triggerEvent('join', ctx.info);
-      };
-      this._subscription.on('join', this._eventHandlers.join);
-
-      this._eventHandlers.leave = (ctx) => {
-        delete this._presenceState[ctx.info.client];
-        this._triggerPresenceSync();
-        this._triggerEvent('leave', ctx.info);
-      };
-      this._subscription.on('leave', this._eventHandlers.leave);
-
-      // After subscribing, immediately fetch current presence for late joiners
-      // For server-side subscriptions, use client.presence() not subscription.presence()
-      this._eventHandlers.subscribed = async () => {
-        // Small delay to ensure subscription is fully active
-        this._presenceTimeoutId = setTimeout(async () => {
-          this._presenceTimeoutId = null;
-          try {
-            const client = this._realtime.getClient();
-            if (client && this._subscription) {
-              // Use client-level presence() for server-side subscriptions
-              const presence = await client.presence(this._name);
-
-              // Centrifuge returns presence data in `clients` field
-              if (presence && presence.clients) {
-                this._presenceState = {};
-                for (const [clientId, info] of Object.entries(presence.clients)) {
-                  this._presenceState[clientId] = info;
-                }
-                this._triggerPresenceSync();
-              }
-            }
-          } catch {
-            // Ignore errors - presence might not be available yet
-          }
-        }, 150);
-      };
-      this._subscription.on('subscribed', this._eventHandlers.subscribed);
+      this._registerPresenceHandlers();
     }
 
     await this._subscription.subscribe();
+  }
+
+  _clearPresenceTimer() {
+    if (this._presenceTimeoutId) {
+      clearTimeout(this._presenceTimeoutId);
+      this._presenceTimeoutId = null;
+    }
+  }
+
+  _rejectPendingFetches() {
+    for (const batch of this._pendingFetches.values()) {
+      if (batch.timer) {
+        clearTimeout(batch.timer);
+      }
+      for (const { reject } of batch.ids.values()) {
+        reject(new Error('Channel unsubscribed'));
+      }
+    }
+    this._pendingFetches.clear();
+  }
+
+  _removeSubscriptionHandlers() {
+    for (const [event, handler] of Object.entries(this._eventHandlers)) {
+      try {
+        this._subscription.off(event, handler);
+      } catch {
+        // Listener may already be removed.
+      }
+    }
+    this._eventHandlers = {};
+  }
+
+  _removeClientSubscription() {
+    const client = this._realtime.getClient();
+    if (!client) {
+      return;
+    }
+    try {
+      client.removeSubscription(this._subscription);
+    } catch {
+      // Subscription may already be removed.
+    }
   }
 
   /**
    * Unsubscribe from the channel
    */
   unsubscribe() {
-    // Cancel pending presence fetch timeout
-    if (this._presenceTimeoutId) {
-      clearTimeout(this._presenceTimeoutId);
-      this._presenceTimeoutId = null;
-    }
-
-    // Clear all pending fetch timers to prevent memory leaks
-    if (this._pendingFetches) {
-      for (const batch of this._pendingFetches.values()) {
-        if (batch.timer) {
-          clearTimeout(batch.timer);
-        }
-        // Reject any pending promises
-        for (const { reject } of batch.ids.values()) {
-          reject(new Error('Channel unsubscribed'));
-        }
-      }
-      this._pendingFetches.clear();
-    }
+    this._clearPresenceTimer();
+    this._rejectPendingFetches();
 
     if (this._subscription) {
-      // Remove event listeners before unsubscribing
-      for (const [event, handler] of Object.entries(this._eventHandlers)) {
-        try {
-          this._subscription.off(event, handler);
-        } catch {
-          // Ignore errors if listener already removed
-        }
-      }
-      this._eventHandlers = {};
-
+      this._removeSubscriptionHandlers();
       this._subscription.unsubscribe();
-      // Also remove from Centrifuge client registry to allow re-subscription
-      const client = this._realtime.getClient();
-      if (client) {
-        try {
-          client.removeSubscription(this._subscription);
-        } catch {
-          // Ignore errors if subscription already removed
-        }
-      }
+      this._removeClientSubscription();
       this._subscription = null;
     }
     this._callbacks.clear();
@@ -765,12 +837,7 @@ class RealtimeChannel {
     // DELETE notifications may include old_record, deliver immediately
     if (data.type === 'DELETE') {
       // Convert lightweight DELETE to full format for backward compatibility
-      const oldRecord =
-        data.old_record !== undefined
-          ? data.old_record
-          : data.id !== undefined
-            ? { id: data.id }
-            : undefined;
+      const oldRecord = deleteNotificationRecord(data);
       const fullPayload = {
         type: data.type,
         schema: data.schema,
@@ -861,79 +928,26 @@ class RealtimeChannel {
    * @param {string} table - Table name
    */
   async _flushFetch(schema, table) {
-    const tableKey = `${schema}.${table}`;
-    const batch = this._pendingFetches.get(tableKey);
-
-    if (!batch || batch.ids.size === 0) {
+    const pending = takePendingFetch(this, schema, table);
+    if (!pending) {
       return;
     }
 
-    // Clear timer and remove from pending
-    if (batch.timer) {
-      clearTimeout(batch.timer);
-    }
-    this._pendingFetches.delete(tableKey);
-
-    // Get all IDs to fetch
-    const idsToFetch = Array.from(batch.ids.keys());
-    const callbacks = new Map(batch.ids);
-
     try {
       const volcanoClient = this._realtime.getVolcanoClient();
-
-      if (!volcanoClient?.from || typeof volcanoClient.from !== 'function') {
-        throw new Error('volcanoClient.from not available');
-      }
-
-      const databaseName =
-        this._realtime.getDatabaseName?.() || volcanoClient._currentDatabaseName || null;
-      let dbClient = volcanoClient;
-      if (databaseName) {
-        if (typeof volcanoClient.database !== 'function') {
-          throw new TypeError('volcanoClient.database not available');
-        }
-        dbClient = volcanoClient.database(databaseName);
-      } else if (typeof volcanoClient.database === 'function') {
-        throw new TypeError(
-          'Database name not set. Call volcanoClient.database(name) or pass databaseName to VolcanoRealtime.',
-        );
-      }
-
+      const dbClient = resolveDatabaseClient(this._realtime, volcanoClient);
       const tableName = schema && schema !== 'public' ? `${schema}.${table}` : table;
-
-      // Fetch all records in a single query using IN clause
-      // Assumes primary key column is 'id' - this is a common convention
-      const { data, error } = await dbClient.from(tableName).select('*').in('id', idsToFetch);
-
+      const { data, error } = await dbClient.from(tableName).select('*').in('id', pending.ids);
       if (error) {
-        // Reject all pending callbacks
-        for (const cb of callbacks.values()) {
-          cb.reject(new Error(error.message || 'Database fetch failed'));
-        }
+        rejectFetchCallbacks(
+          pending.callbacks,
+          new Error(error.message || 'Database fetch failed'),
+        );
         return;
       }
-
-      // Build a map of id -> record
-      const recordMap = new Map();
-      for (const record of data || []) {
-        recordMap.set(String(record.id), record);
-      }
-
-      // Resolve callbacks
-      for (const [id, cb] of callbacks) {
-        const record = recordMap.get(id);
-        if (record) {
-          cb.resolve(record);
-        } else {
-          // Record not found - could be RLS denial or row deleted
-          cb.reject(new Error(`Record not found or access denied: ${table}:${id}`));
-        }
-      }
-    } catch (err) {
-      // Reject all pending callbacks on error
-      for (const cb of callbacks.values()) {
-        cb.reject(err);
-      }
+      resolveFetchCallbacks(pending.callbacks, data, table);
+    } catch (error) {
+      rejectFetchCallbacks(pending.callbacks, error);
     }
   }
 
