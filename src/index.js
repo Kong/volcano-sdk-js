@@ -1091,8 +1091,15 @@ function noSessionInvocationError(oauthExchangeError) {
 
 const PROVIDER_NOT_LINKED_CODE = 'provider_not_linked';
 
+function isProviderNotLinkedError(error) {
+  return (
+    error?.code === PROVIDER_NOT_LINKED_CODE ||
+    (!error?.code && /not linked/i.test(error?.message || ''))
+  );
+}
+
 function isProviderSessionFailure(result) {
-  return !result.ok && result.status === 401 && result.error?.code !== PROVIDER_NOT_LINKED_CODE;
+  return !result.ok && result.status === 401 && !isProviderNotLinkedError(result.error);
 }
 
 function providerSessionExpiredResult() {

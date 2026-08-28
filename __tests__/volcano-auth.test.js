@@ -2350,6 +2350,22 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
     });
 
+    it('preserves schema-valid provider errors that omit the optional code', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      volcano.refreshToken = 'refresh-token';
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Provider is not linked' }),
+      });
+
+      const result = await volcano.auth.callOAuthAPI('github', { endpoint: '/user' });
+
+      expect(result.error.message).toBe('Provider is not linked');
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('clears an access-only expired session for provider API calls', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       volcano.refreshToken = null;
