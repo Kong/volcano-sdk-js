@@ -2476,6 +2476,11 @@ describe('VolcanoAuth', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
+          status: 200,
+          json: () => Promise.resolve({ user: { id: 'user-123', email: 'primary@example.com' } }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
           status: 204,
           json: () => Promise.resolve({}),
         });
@@ -2489,10 +2494,12 @@ describe('VolcanoAuth', () => {
       expect(methods).toEqual({ methods: [method], error: null });
       expect(promoted).toEqual({ method, error: null });
       expect(unlinked).toEqual({ error: null });
+      expect(volcano.currentUser.email).toBe('primary@example.com');
       expect(fetch.mock.calls.map(([url]) => url)).toEqual([
         'https://api.test.com/auth/user/identities',
         'https://api.test.com/auth/user/methods',
         `https://api.test.com/auth/user/methods/${method.id}/promote`,
+        'https://api.test.com/auth/user',
         `https://api.test.com/auth/user/identities/${identity.id}`,
       ]);
     });

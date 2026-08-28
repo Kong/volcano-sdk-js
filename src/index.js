@@ -2151,7 +2151,11 @@ class VolcanoAuth {
     const result = await this._generatedSessionRequest(() =>
       this._transport.authPromoteMethod(methodId, this._generatedOptions('session')),
     );
-    return result.ok ? { method: result.data, error: null } : { method: null, error: result.error };
+    if (!result.ok) {
+      return { method: null, error: result.error };
+    }
+    await this.getUser();
+    return { method: result.data, error: null };
   }
 
   async _retryProviderCall(request) {
