@@ -1752,7 +1752,12 @@ class VolcanoAuth {
     if (!result.ok) {
       return { token: null, error: result.error };
     }
-    const responseError = requiredTextPayloadError(result.data, ['token', 'user_id', 'token_id']);
+    const responseError = requiredTextPayloadError(result.data, [
+      'token',
+      'user_id',
+      'token_id',
+      'expires_at',
+    ]);
     return responseError
       ? { token: null, error: responseError }
       : { token: result.data, error: null };

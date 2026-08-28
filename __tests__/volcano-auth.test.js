@@ -2700,7 +2700,7 @@ describe('VolcanoAuth', () => {
       expect(platformResult).toEqual({ token: platform, error: null });
     });
 
-    it.each(['token', 'user_id', 'token_id'])(
+    it.each(['token', 'user_id', 'token_id', 'expires_at'])(
       'rejects a platform response with an empty %s',
       async (field) => {
         volcano.accessToken = TEST_ACCESS_TOKEN;
