@@ -10,9 +10,12 @@ import {
   authGetMySessions,
   authGetUser,
   authLinkOAuthProvider,
+  authListIdentities,
+  authListMethods,
   authListOAuthProviders,
   authLogout,
   authOAuthExchange,
+  authPromoteMethod,
   authRefresh,
   authRequestEmailChange,
   authResendConfirmation,
@@ -20,6 +23,7 @@ import {
   authSignin,
   authSignup,
   authSignupAnonymous,
+  authUnlinkIdentity,
   authUnlinkOAuthProvider,
   authUpdateUser,
   callOAuthProviderAPI,
@@ -129,9 +133,12 @@ const GENERATED_TRANSPORT = {
   authGetMySessions,
   authGetUser,
   authLinkOAuthProvider,
+  authListIdentities,
+  authListMethods,
   authListOAuthProviders,
   authLogout,
   authOAuthExchange,
+  authPromoteMethod,
   authRefresh,
   authRequestEmailChange,
   authResendConfirmation,
@@ -140,6 +147,7 @@ const GENERATED_TRANSPORT = {
   authSignup,
   authSignupAnonymous,
   authUnlinkOAuthProvider,
+  authUnlinkIdentity,
   authUpdateUser,
   callOAuthProviderAPI,
   downloadStorageObject,
@@ -933,6 +941,10 @@ function createAuthFacade(client) {
     refreshOAuthToken: client.refreshOAuthToken.bind(client),
     getOAuthProviderToken: client.getOAuthProviderToken.bind(client),
     callOAuthAPI: client.callOAuthAPI.bind(client),
+    listIdentities: client.listIdentities.bind(client),
+    unlinkIdentity: client.unlinkIdentity.bind(client),
+    listMethods: client.listMethods.bind(client),
+    promoteMethod: client.promoteMethod.bind(client),
     getSessions: client.getSessions.bind(client),
     deleteSession: client.deleteSession.bind(client),
     deleteAllOtherSessions: client.deleteAllOtherSessions.bind(client),
@@ -2108,6 +2120,38 @@ class VolcanoAuth {
       return { data: null, error: result.error };
     }
     return { data: result.data.data, error: null };
+  }
+
+  async listIdentities() {
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authListIdentities(this._generatedOptions('session')),
+    );
+    return result.ok
+      ? { identities: result.data.identities, error: null }
+      : { identities: null, error: result.error };
+  }
+
+  async unlinkIdentity(identityId) {
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authUnlinkIdentity(identityId, this._generatedOptions('session')),
+    );
+    return { error: result.error };
+  }
+
+  async listMethods() {
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authListMethods(this._generatedOptions('session')),
+    );
+    return result.ok
+      ? { methods: result.data.methods, error: null }
+      : { methods: null, error: result.error };
+  }
+
+  async promoteMethod(methodId) {
+    const result = await this._generatedSessionRequest(() =>
+      this._transport.authPromoteMethod(methodId, this._generatedOptions('session')),
+    );
+    return result.ok ? { method: result.data, error: null } : { method: null, error: result.error };
   }
 
   async _retryProviderCall(request) {

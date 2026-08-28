@@ -1,5 +1,7 @@
 import type {
   Auth,
+  AuthIdentity,
+  AuthMethod,
   AuthResponse,
   AuthStateCallback,
   ConvertAnonymousOptions,
@@ -129,6 +131,27 @@ type _CallOAuthAPI = Assert<
   HasSignature<
     Auth['callOAuthAPI'],
     (provider: OAuthProviderName, params: OAuthAPIParams) => Promise<OAuthAPIResponse>
+  >
+>;
+type _ListIdentities = Assert<
+  HasSignature<
+    Auth['listIdentities'],
+    () => Promise<{ identities: AuthIdentity[] | null; error: Error | null }>
+  >
+>;
+type _UnlinkIdentity = Assert<
+  HasSignature<Auth['unlinkIdentity'], (identityId: string) => Promise<{ error: Error | null }>>
+>;
+type _ListMethods = Assert<
+  HasSignature<
+    Auth['listMethods'],
+    () => Promise<{ methods: AuthMethod[] | null; error: Error | null }>
+  >
+>;
+type _PromoteMethod = Assert<
+  HasSignature<
+    Auth['promoteMethod'],
+    (methodId: string) => Promise<{ method: AuthMethod | null; error: Error | null }>
   >
 >;
 type _GetSessions = Assert<

@@ -154,6 +154,12 @@ describe('VolcanoAuth', () => {
       expect(typeof volcano.auth.getOAuthProviderToken).toBe('function');
       expect(typeof volcano.auth.callOAuthAPI).toBe('function');
 
+      // Identity management
+      expect(typeof volcano.auth.listIdentities).toBe('function');
+      expect(typeof volcano.auth.unlinkIdentity).toBe('function');
+      expect(typeof volcano.auth.listMethods).toBe('function');
+      expect(typeof volcano.auth.promoteMethod).toBe('function');
+
       // Session management
       expect(typeof volcano.auth.getSessions).toBe('function');
       expect(typeof volcano.auth.deleteSession).toBe('function');
@@ -2429,6 +2435,66 @@ describe('VolcanoAuth', () => {
 
       expect(result).toEqual({ data: { login: 'octocat' }, error: null });
       expect(volcano.accessToken).toBe('rotated-access');
+    });
+  });
+
+  describe('Identity Management', () => {
+    it('lists, promotes, and unlinks identities through the stable auth facade', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+      const identity = {
+        id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+        email: 'user@example.com',
+        email_verified: true,
+        is_primary: true,
+        created_at: '2026-08-27T12:00:00Z',
+      };
+      const method = {
+        id: '7f518a4b-407b-4121-907b-d72a2c7c1ac6',
+        type: 'oauth',
+        provider: 'github',
+        identity_id: identity.id,
+        email: identity.email,
+        is_primary: true,
+        created_at: '2026-08-27T12:00:00Z',
+        updated_at: '2026-08-28T12:00:00Z',
+      };
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ identities: [identity] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ methods: [method] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(method),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          json: () => Promise.resolve({}),
+        });
+
+      const identities = await volcano.auth.listIdentities();
+      const methods = await volcano.auth.listMethods();
+      const promoted = await volcano.auth.promoteMethod(method.id);
+      const unlinked = await volcano.auth.unlinkIdentity(identity.id);
+
+      expect(identities).toEqual({ identities: [identity], error: null });
+      expect(methods).toEqual({ methods: [method], error: null });
+      expect(promoted).toEqual({ method, error: null });
+      expect(unlinked).toEqual({ error: null });
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        'https://api.test.com/auth/user/identities',
+        'https://api.test.com/auth/user/methods',
+        `https://api.test.com/auth/user/methods/${method.id}/promote`,
+        `https://api.test.com/auth/user/identities/${identity.id}`,
+      ]);
     });
   });
 

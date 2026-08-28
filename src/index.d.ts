@@ -218,6 +218,28 @@ export interface OAuthProvider {
   updated_at: string;
 }
 
+export interface AuthIdentity {
+  id: string;
+  email: string;
+  email_verified: boolean;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export type AuthMethodType = 'password' | 'oauth' | 'anonymous';
+
+export interface AuthMethod {
+  id: string;
+  type: AuthMethodType;
+  provider?: string;
+  identity_id: string;
+  email: string;
+  is_primary: boolean;
+  last_used_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LinkProviderResponse {
   authorization_url: string;
 }
@@ -329,6 +351,16 @@ export interface Auth {
   getOAuthProviderToken(provider: OAuthProviderName): Promise<OAuthTokenResponse>;
   /** Call OAuth provider API on behalf of user. Throws if provider is invalid. */
   callOAuthAPI(provider: OAuthProviderName, params: OAuthAPIParams): Promise<OAuthAPIResponse>;
+
+  // Identity and sign-in method management
+  /** List verified email identities owned by the current user. */
+  listIdentities(): Promise<{ identities: AuthIdentity[] | null; error: Error | null }>;
+  /** Unlink a non-primary identity from the current user. */
+  unlinkIdentity(identityId: string): Promise<{ error: Error | null }>;
+  /** List sign-in methods owned by the current user. */
+  listMethods(): Promise<{ methods: AuthMethod[] | null; error: Error | null }>;
+  /** Make a sign-in method the account's primary method. */
+  promoteMethod(methodId: string): Promise<{ method: AuthMethod | null; error: Error | null }>;
 
   // Session management methods
   /** Get paginated sessions for the current user */

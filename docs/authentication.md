@@ -369,6 +369,32 @@ if (data) {
 
 Volcano automatically handles token refresh and passes the correct credentials to the provider.
 
+## Manage Identities and Sign-In Methods
+
+List the email identities and sign-in methods owned by the current account:
+
+```javascript
+const { identities, error: identityError } = await volcano.auth.listIdentities();
+const { methods, error: methodError } = await volcano.auth.listMethods();
+
+identities?.forEach((identity) => {
+  console.log(identity.email, identity.is_primary);
+});
+
+methods?.forEach((method) => {
+  console.log(method.type, method.provider, method.is_primary);
+});
+```
+
+Promote a sign-in method or unlink a non-primary identity by its ID:
+
+```javascript
+const { method, error: promoteError } = await volcano.auth.promoteMethod(methodId);
+const { error: unlinkError } = await volcano.auth.unlinkIdentity(identityId);
+```
+
+The API refuses to unlink a primary or last identity, or an identity whose removal would leave the account without a sign-in method.
+
 ## Anonymous Users
 
 Let users explore your app without creating an account, then convert them to full users later.
