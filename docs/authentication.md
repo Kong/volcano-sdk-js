@@ -583,6 +583,9 @@ if (!error) {
 }
 ```
 
+Deleting the current session also clears this client's local credentials and emits the signed-out
+auth state. Deleting another session keeps the current client signed in.
+
 ### Sign Out All Other Devices
 
 Keep only the current session active:

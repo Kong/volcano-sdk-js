@@ -2535,6 +2535,24 @@ describe('VolcanoAuth', () => {
       expect(volcano.refreshToken).toBeNull();
     });
 
+    it('clears local auth when directly deleting the session identified by the access token', async () => {
+      volcano.accessToken = createTestJwtToken('project-123', {
+        session_id: 'current-session',
+      });
+      volcano.refreshToken = 'refresh-token';
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.deleteSession('current-session');
+
+      expect(result.error).toBeNull();
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+    });
+
     it('clears local auth when deleting the current session retries after refresh', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       volcano.refreshToken = 'refresh-token';

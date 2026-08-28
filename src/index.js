@@ -452,6 +452,25 @@ function extractRequiredProjectIdFromToken(token) {
   return payload.project_id.trim();
 }
 
+function extractSessionIdFromToken(token) {
+  if (!token || typeof token !== 'string') {
+    return null;
+  }
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(decodeBase64Url(parts[1]));
+    if (typeof payload?.session_id !== 'string') {
+      return null;
+    }
+    return payload.session_id.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function isIPv4Address(hostname) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
 }
@@ -2111,7 +2130,9 @@ class VolcanoAuth {
   }
 
   async deleteSession(sessionId) {
-    const deletesCurrentSession = this._currentDeviceSessionIds.has(sessionId);
+    const currentSessionId = extractSessionIdFromToken(this.accessToken);
+    const deletesCurrentSession =
+      currentSessionId === sessionId || this._currentDeviceSessionIds.has(sessionId);
     const result = await this._generatedSessionRequest(() =>
       this._transport.authDeleteMySession(
         encodeURIComponent(sessionId),
