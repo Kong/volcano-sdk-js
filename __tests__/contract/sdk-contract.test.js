@@ -108,6 +108,8 @@ autoBindSteps(features, [
     });
 
     then('the current user belongs to the contract user', () => {
+      expect(context.world.lastOutcome).toMatchObject({ ok: true });
+      expect(context.world.lastOutcome.value.user.id).toBe(context.world.fixture.user_id);
       expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
     });
 
@@ -215,14 +217,14 @@ autoBindSteps(features, [
       'the client is signed in as the confirmed contract user on multiple sessions',
       async () => {
         const world = startScenario(context);
-        await world.authenticate();
+        await world.createCredentialedUser();
         world.secondaryClient = new VolcanoClient({
           apiUrl: world.fixture.api_url,
           anonKey: world.fixture.anon_key,
         });
         const result = await world.secondaryClient.auth.signIn({
-          email: world.fixture.user_email,
-          password: world.fixture.user_password,
+          email: world.uniqueEmail,
+          password: world.uniquePassword,
         });
         if (result.error) {
           throw result.error;

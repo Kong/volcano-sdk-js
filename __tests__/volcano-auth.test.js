@@ -458,6 +458,21 @@ describe('VolcanoAuth', () => {
       expect(result.user.id).toBe('user-123');
       expect(volcano.accessToken).toBe('new-access-token');
     });
+
+    it('preserves the session-expired error when refresh is unavailable', async () => {
+      volcano.accessToken = 'expired-token';
+      volcano.refreshToken = null;
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Unauthorized' }),
+      });
+
+      const result = await volcano.auth.getUser();
+
+      expect(result.user).toBeNull();
+      expect(result.error.message).toBe('Session expired');
+    });
   });
 
   describe('Authentication - managed auth redirect (URL hash adoption)', () => {

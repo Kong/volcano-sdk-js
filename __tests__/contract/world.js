@@ -74,6 +74,21 @@ class ContractWorld {
     return result;
   }
 
+  async createCredentialedUser() {
+    const anonymous = await this.client.auth.signUpAnonymous();
+    if (anonymous.error) {
+      throw anonymous.error;
+    }
+    const converted = await this.client.auth.convertAnonymous({
+      email: this.uniqueEmail,
+      password: this.uniquePassword,
+    });
+    if (converted.error) {
+      throw converted.error;
+    }
+    return converted;
+  }
+
   async createRealtimeClients() {
     const signedIn = await this.authenticate();
     const config = {

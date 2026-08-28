@@ -521,6 +521,15 @@ function resolveFunctionInvocationBase(apiUrl) {
   }
 }
 
+function sessionExpiredResponse(response) {
+  return {
+    ok: false,
+    status: response.status,
+    headers: response.headers,
+    json: async () => ({ error: 'Session expired' }),
+  };
+}
+
 /**
  * Fetch with auth header and refresh retry on 401
  * @param {VolcanoAuth} volcanoAuth
@@ -548,6 +557,8 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
     const refreshed = await volcanoAuth.refreshSession();
     if (!refreshed.error) {
       response = await doFetch();
+    } else {
+      return sessionExpiredResponse(response);
     }
   }
 
