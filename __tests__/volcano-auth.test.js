@@ -293,6 +293,7 @@ describe('VolcanoAuth', () => {
       const session = completeSession();
       const accessTokenError = new Error('access token getter failed');
       Object.defineProperty(session, 'access_token', {
+        enumerable: true,
         get() {
           throw accessTokenError;
         },
@@ -303,6 +304,38 @@ describe('VolcanoAuth', () => {
         error: accessTokenError,
       });
       await expect(volcano.auth.getSession()).resolves.toEqual(previous);
+    });
+
+    it('adopts the cloned session snapshot when an accessor changes values', async () => {
+      const session = completeSession();
+      let accessTokenReads = 0;
+      Object.defineProperty(session, 'access_token', {
+        enumerable: true,
+        get() {
+          accessTokenReads += 1;
+          return accessTokenReads === 1 ? 'adopted-access-token' : ' ';
+        },
+      });
+
+      await expect(volcano.auth.setSession(session)).resolves.toEqual({
+        data: { session: completeSession() },
+        error: null,
+      });
+    });
+
+    it('clears a prior OAuth exchange error after adoption', async () => {
+      const session = completeSession();
+      volcano._oauthExchangeError = new Error('OAuth callback failed');
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: session.user }),
+      });
+
+      await expect(volcano.auth.setSession(session)).resolves.toEqual({
+        data: { session },
+        error: null,
+      });
+      await expect(volcano.initialize()).resolves.toEqual({ user: session.user, error: null });
     });
 
     it.each([

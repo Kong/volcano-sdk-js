@@ -1341,11 +1341,12 @@ class VolcanoAuth {
 
   setSession(session) {
     try {
-      const validationError = validateCompleteSession(session);
+      const ownedSession = cloneJsonValue(session);
+      const validationError = validateCompleteSession(ownedSession);
       if (validationError) {
         return Promise.resolve({ data: { session: null }, error: validationError });
       }
-      const ownedSession = cloneJsonValue(session);
+      this._oauthExchangeError = null;
       this.accessToken = ownedSession.access_token;
       this.refreshToken = ownedSession.refresh_token;
       this.currentUser = ownedSession.user;
