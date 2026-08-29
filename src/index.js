@@ -113,6 +113,15 @@ function isBrowser() {
   return typeof window !== 'undefined' && window.document !== undefined;
 }
 
+function cloneJsonValue(value) {
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(value);
+  }
+
+  const serializedValue = JSON.stringify(value);
+  return JSON.parse(serializedValue);
+}
+
 /**
  * Basic provider name sanitization - only alphanumeric and hyphens allowed
  * This is NOT validation (backend validates), just prevents URL injection
@@ -1297,7 +1306,7 @@ class VolcanoAuth {
       return Promise.resolve({ data: { session: null }, error: null });
     }
 
-    const user = this.currentUser === null ? null : structuredClone(this.currentUser);
+    const user = this.currentUser === null ? null : cloneJsonValue(this.currentUser);
     return Promise.resolve({
       data: {
         session: {
