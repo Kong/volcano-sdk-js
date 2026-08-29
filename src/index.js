@@ -819,7 +819,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    this._oauthExchangeGeneration = 0;
+    this._sessionAdoptionGeneration = 0;
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
@@ -1347,9 +1347,10 @@ class VolcanoAuth {
       if (validationError) {
         return Promise.resolve({ data: { session: null }, error: validationError });
       }
-      this._oauthExchangeGeneration += 1;
+      this._sessionAdoptionGeneration += 1;
       this._oauthExchangePromise = null;
       this._oauthExchangeError = null;
+      this._pendingUrlAuthNotify = false;
       this.accessToken = ownedSession.access_token;
       this.refreshToken = ownedSession.refresh_token;
       this.currentUser = ownedSession.user;
@@ -1426,11 +1427,17 @@ class VolcanoAuth {
       return { session: null, error: new Error('No refresh token') };
     }
 
+    const sessionAdoptionGeneration = this._sessionAdoptionGeneration;
+
     try {
       const result = await this._anonFetch('/auth/refresh', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: this.refreshToken }),
       });
+
+      if (sessionAdoptionGeneration !== this._sessionAdoptionGeneration) {
+        return { session: null, error: null };
+      }
 
       if (!result.ok) {
         this._clearSession();
@@ -1447,6 +1454,9 @@ class VolcanoAuth {
         error: null,
       };
     } catch (error) {
+      if (sessionAdoptionGeneration !== this._sessionAdoptionGeneration) {
+        return { session: null, error: null };
+      }
       this._clearSession();
       return { session: null, error: error instanceof Error ? error : new Error('Refresh failed') };
     }
@@ -2109,7 +2119,7 @@ class VolcanoAuth {
   }
 
   async _consumeOAuthCodeFromUrl() {
-    const oauthExchangeGeneration = this._oauthExchangeGeneration;
+    const sessionAdoptionGeneration = this._sessionAdoptionGeneration;
     let callbackURL;
     try {
       callbackURL = new URL(window.location.href);
@@ -2143,7 +2153,7 @@ class VolcanoAuth {
       method: 'POST',
       body: JSON.stringify({ code, redirect_url: redirectURL }),
     });
-    if (oauthExchangeGeneration !== this._oauthExchangeGeneration) {
+    if (sessionAdoptionGeneration !== this._sessionAdoptionGeneration) {
       return false;
     }
     if (!result.ok) {

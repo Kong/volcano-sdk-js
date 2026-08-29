@@ -234,8 +234,8 @@ export interface Auth {
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Read a detached snapshot of the locally held session without validating it. */
   getSession(): Promise<CurrentSessionResponse>;
-  /** Adopt a complete session into local memory without validating or persisting it. */
-  setSession(session: CompleteSession): Promise<CurrentSessionResponse>;
+  /** Adopt a session snapshot into local memory without persisting it; incomplete values return an error. */
+  setSession(session: CurrentSession): Promise<CurrentSessionResponse>;
   /** Sign out current user */
   signOut(): Promise<{ error: Error | null }>;
   /**

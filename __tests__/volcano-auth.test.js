@@ -338,6 +338,43 @@ describe('VolcanoAuth', () => {
       await expect(volcano.initialize()).resolves.toEqual({ user: session.user, error: null });
     });
 
+    it('does not let an in-flight refresh overwrite an adopted session', async () => {
+      volcano.accessToken = 'previous-access-token';
+      volcano.refreshToken = 'previous-refresh-token';
+      volcano.currentUser = { id: 'previous-user-id' };
+      let resolveRefresh;
+      global.fetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+      const refresh = volcano.auth.refreshSession();
+      await Promise.resolve();
+      const listener = jest.fn();
+      volcano.auth.onAuthStateChange(listener);
+      listener.mockClear();
+      localStorage.setItem.mockClear();
+      const session = completeSession();
+
+      await volcano.auth.setSession(session);
+      resolveRefresh({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'refreshed-access-token',
+            refresh_token: 'refreshed-refresh-token',
+            user: { id: 'refreshed-user-id' },
+          }),
+      });
+      await refresh;
+
+      await expect(volcano.auth.getSession()).resolves.toEqual({ data: { session }, error: null });
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['a null session', () => null],
       ['a non-object session', () => 'session'],
@@ -803,6 +840,31 @@ describe('VolcanoAuth', () => {
       // Subsequent getUser() calls must not re-fire the adoption callback.
       await v.auth.getUser();
       expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not announce a replaced redirect session after local adoption', async () => {
+      seedNonce();
+      window.location.hash =
+        '#access_token=redirect-access&refresh_token=redirect-refresh&token_type=bearer&expires_in=3600&state=' +
+        NONCE;
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const callback = jest.fn();
+      v.auth.onAuthStateChange(callback);
+      callback.mockClear();
+
+      await v.auth.setSession({
+        access_token: 'adopted-access',
+        refresh_token: 'adopted-refresh',
+        user: { id: 'adopted-user', email: 'adopted@example.com' },
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'adopted-user', email: 'adopted@example.com' } }),
+      });
+
+      await v.auth.getUser();
+
+      expect(callback).not.toHaveBeenCalled();
     });
 
     it('ignores a fragment that does not contain an access token', () => {

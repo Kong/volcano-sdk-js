@@ -11,14 +11,21 @@ type SetSessionParameter = Parameters<Auth['setSession']>[0];
 type _CompleteSessionCanBeAdopted = Assert<
   CompleteSession extends SetSessionParameter ? true : false
 >;
-type _NullRefreshTokenCannotBeAdopted = Assert<
-  Omit<CompleteSession, 'refresh_token'> & { refresh_token: null } extends SetSessionParameter
-    ? false
-    : true
->;
-type _NullUserCannotBeAdopted = Assert<
-  Omit<CompleteSession, 'user'> & { user: null } extends SetSessionParameter ? false : true
->;
+
+declare const sourceAuth: Auth;
+declare const targetAuth: Auth;
+
+async function adoptCurrentSession() {
+  const {
+    data: { session },
+  } = await sourceAuth.getSession();
+  if (!session || !session.refresh_token || !session.user) {
+    return;
+  }
+  await targetAuth.setSession(session);
+}
+
+void adoptCurrentSession;
 
 type SignupBody = OpenAPIOperations['authSignup']['requestBody']['content']['application/json'];
 type SignupMetadata = NonNullable<SignupBody['user_metadata']>;
