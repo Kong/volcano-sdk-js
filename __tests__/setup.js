@@ -1,4 +1,7 @@
 const { VolcanoAuth } = require('../src/index.js');
+const { deserialize, serialize } = require('node:v8');
+
+global.structuredClone ||= (value) => deserialize(serialize(value));
 
 // Mock fetch globally
 global.fetch = jest.fn();

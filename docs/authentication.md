@@ -110,6 +110,24 @@ This invalidates the refresh token on the server and clears local storage.
 
 ## Session Management
 
+### Read the Current Session
+
+Read a snapshot of the session already held by the client:
+
+```javascript
+const {
+  data: { session },
+  error,
+} = await volcano.auth.getSession();
+
+if (!error && session) {
+  console.log(session.user?.id);
+}
+```
+
+`getSession()` reads local SDK state. It does not refresh or validate the access token; use
+`getUser()` when server validation is required.
+
 ### Check Current User
 
 Get the current user synchronously (returns cached data):

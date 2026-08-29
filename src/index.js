@@ -819,6 +819,7 @@ class VolcanoAuth {
     this.auth = {
       signUp: this.signUp.bind(this),
       signIn: this.signIn.bind(this),
+      getSession: this.getSession.bind(this),
       signOut: this.signOut.bind(this),
       getUser: this.getUser.bind(this),
       updateUser: this.updateUser.bind(this),
@@ -1289,6 +1290,24 @@ class VolcanoAuth {
       },
       error: null,
     };
+  }
+
+  getSession() {
+    if (!this.accessToken) {
+      return Promise.resolve({ data: { session: null }, error: null });
+    }
+
+    const user = this.currentUser === null ? null : structuredClone(this.currentUser);
+    return Promise.resolve({
+      data: {
+        session: {
+          access_token: this.accessToken,
+          refresh_token: this.refreshToken,
+          user,
+        },
+      },
+      error: null,
+    });
   }
 
   async signOut() {
