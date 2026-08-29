@@ -133,6 +133,8 @@ if (!error && session) {
 Copy a complete session to a fresh client without a network request:
 
 ```javascript
+import { VolcanoAuth } from '@volcano.dev/sdk';
+
 const apiUrl = 'https://api.example.com';
 const anonKey = 'ak-your-anon-key';
 const sourceClient = new VolcanoAuth({ apiUrl, anonKey });

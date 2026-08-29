@@ -1340,12 +1340,11 @@ class VolcanoAuth {
   }
 
   setSession(session) {
-    const validationError = validateCompleteSession(session);
-    if (validationError) {
-      return Promise.resolve({ data: { session: null }, error: validationError });
-    }
-
     try {
+      const validationError = validateCompleteSession(session);
+      if (validationError) {
+        return Promise.resolve({ data: { session: null }, error: validationError });
+      }
       const ownedSession = cloneJsonValue(session);
       this.accessToken = ownedSession.access_token;
       this.refreshToken = ownedSession.refresh_token;

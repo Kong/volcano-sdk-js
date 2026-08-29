@@ -285,6 +285,26 @@ describe('VolcanoAuth', () => {
       });
     });
 
+    it('returns an error envelope and preserves the current session when an accessor throws', async () => {
+      volcano.accessToken = 'previous-access-token';
+      volcano.refreshToken = 'previous-refresh-token';
+      volcano.currentUser = completeSession().user;
+      const previous = await volcano.auth.getSession();
+      const session = completeSession();
+      const accessTokenError = new Error('access token getter failed');
+      Object.defineProperty(session, 'access_token', {
+        get() {
+          throw accessTokenError;
+        },
+      });
+
+      await expect(volcano.auth.setSession(session)).resolves.toEqual({
+        data: { session: null },
+        error: accessTokenError,
+      });
+      await expect(volcano.auth.getSession()).resolves.toEqual(previous);
+    });
+
     it.each([
       ['a null session', () => null],
       ['a non-object session', () => 'session'],
