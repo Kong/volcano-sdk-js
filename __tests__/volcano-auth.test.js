@@ -117,6 +117,7 @@ describe('VolcanoAuth', () => {
       // Core auth
       expect(typeof volcano.auth.signUp).toBe('function');
       expect(typeof volcano.auth.signIn).toBe('function');
+      expect(typeof volcano.auth.getSession).toBe('function');
       expect(typeof volcano.auth.signOut).toBe('function');
       expect(typeof volcano.auth.getUser).toBe('function');
       expect(typeof volcano.auth.updateUser).toBe('function');
@@ -169,6 +170,64 @@ describe('VolcanoAuth', () => {
 
     it('should return null when not authenticated', () => {
       expect(volcano.auth.user()).toBeNull();
+    });
+  });
+
+  describe('auth.getSession()', () => {
+    it('returns an empty successful result without a session or request', async () => {
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: null },
+        error: null,
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('returns a detached snapshot of the established session', async () => {
+      const user = {
+        id: 'user-123',
+        email: 'test@example.com',
+        user_metadata: { theme: 'dark' },
+        created_at: '2026-08-28T00:00:00Z',
+        updated_at: '2026-08-28T00:00:00Z',
+      };
+      volcano.accessToken = 'access-token';
+      volcano.refreshToken = 'refresh-token';
+      volcano.currentUser = user;
+
+      const first = await volcano.auth.getSession();
+      first.data.session.access_token = 'changed';
+      first.data.session.user.user_metadata.theme = 'light';
+      const second = await volcano.auth.getSession();
+
+      expect(second).toEqual({
+        data: {
+          session: {
+            access_token: 'access-token',
+            refresh_token: 'refresh-token',
+            user,
+          },
+        },
+        error: null,
+      });
+      expect(volcano.accessToken).toBe('access-token');
+      expect(volcano.currentUser.user_metadata.theme).toBe('dark');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('allows an access-token-only session', async () => {
+      const client = new VolcanoAuth({ ...config, accessToken: 'access-token' });
+
+      await expect(client.auth.getSession()).resolves.toEqual({
+        data: {
+          session: {
+            access_token: 'access-token',
+            refresh_token: null,
+            user: null,
+          },
+        },
+        error: null,
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 

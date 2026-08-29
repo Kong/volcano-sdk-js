@@ -62,6 +62,17 @@ export interface Session {
   expires_in: number;
 }
 
+export interface CurrentSession {
+  access_token: string;
+  refresh_token: string | null;
+  user: User | null;
+}
+
+export interface CurrentSessionResponse {
+  data: { session: CurrentSession | null };
+  error: Error | null;
+}
+
 export interface SignUpOptions {
   email: string;
   password: string;
@@ -216,6 +227,8 @@ export interface Auth {
   signUp(options: SignUpOptions): Promise<SignUpResponse>;
   /** Sign in existing user */
   signIn(options: SignInOptions): Promise<AuthResponse>;
+  /** Read a detached snapshot of the locally held session without validating it. */
+  getSession(): Promise<CurrentSessionResponse>;
   /** Sign out current user */
   signOut(): Promise<{ error: Error | null }>;
   /**

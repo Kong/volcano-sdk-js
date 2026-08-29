@@ -113,6 +113,15 @@ function isBrowser() {
   return typeof window !== 'undefined' && window.document !== undefined;
 }
 
+function cloneJsonValue(value) {
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(value);
+  }
+
+  const serializedValue = JSON.stringify(value);
+  return JSON.parse(serializedValue);
+}
+
 /**
  * Basic provider name sanitization - only alphanumeric and hyphens allowed
  * This is NOT validation (backend validates), just prevents URL injection
@@ -819,6 +828,7 @@ class VolcanoAuth {
     this.auth = {
       signUp: this.signUp.bind(this),
       signIn: this.signIn.bind(this),
+      getSession: this.getSession.bind(this),
       signOut: this.signOut.bind(this),
       getUser: this.getUser.bind(this),
       updateUser: this.updateUser.bind(this),
@@ -1289,6 +1299,24 @@ class VolcanoAuth {
       },
       error: null,
     };
+  }
+
+  getSession() {
+    if (!this.accessToken) {
+      return Promise.resolve({ data: { session: null }, error: null });
+    }
+
+    const user = this.currentUser === null ? null : cloneJsonValue(this.currentUser);
+    return Promise.resolve({
+      data: {
+        session: {
+          access_token: this.accessToken,
+          refresh_token: this.refreshToken,
+          user,
+        },
+      },
+      error: null,
+    });
   }
 
   async signOut() {

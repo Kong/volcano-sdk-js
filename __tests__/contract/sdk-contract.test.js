@@ -54,6 +54,12 @@ autoBindSteps(features, [
       recordOutcome(context.world, result, result.error);
     });
 
+    when('the client reads the current session', async () => {
+      const result = await context.world.client.auth.getSession();
+      const session = result.data.session;
+      recordOutcome(context.world, { session, user: session?.user ?? null }, result.error);
+    });
+
     then('the SDK operation succeeds', () => {
       expect(context.world.lastOutcome).toMatchObject({ ok: true });
     });
