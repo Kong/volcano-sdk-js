@@ -1370,6 +1370,53 @@ describe('VolcanoAuth', () => {
       });
     });
 
+    it('does not let an in-flight exchange overwrite an adopted session', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      let resolveExchange;
+      global.fetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveExchange = resolve;
+          }),
+      );
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const exchange = v._oauthExchangePromise;
+      const listener = jest.fn();
+      v.auth.onAuthStateChange(listener);
+      listener.mockClear();
+      localStorage.setItem.mockClear();
+      const adoptedSession = {
+        access_token: 'adopted-access',
+        refresh_token: 'adopted-refresh',
+        user: { id: 'adopted-user', email: 'adopted@example.com' },
+      };
+
+      await expect(v.auth.setSession(adoptedSession)).resolves.toEqual({
+        data: { session: adoptedSession },
+        error: null,
+      });
+      resolveExchange({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com' },
+          }),
+      });
+      await exchange;
+
+      await expect(v.auth.getSession()).resolves.toEqual({
+        data: { session: adoptedSession },
+        error: null,
+      });
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('waits for an in-flight exchange before signing out', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());

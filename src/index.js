@@ -819,6 +819,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
+    this._oauthExchangeGeneration = 0;
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
@@ -1346,6 +1347,8 @@ class VolcanoAuth {
       if (validationError) {
         return Promise.resolve({ data: { session: null }, error: validationError });
       }
+      this._oauthExchangeGeneration += 1;
+      this._oauthExchangePromise = null;
       this._oauthExchangeError = null;
       this.accessToken = ownedSession.access_token;
       this.refreshToken = ownedSession.refresh_token;
@@ -2106,6 +2109,7 @@ class VolcanoAuth {
   }
 
   async _consumeOAuthCodeFromUrl() {
+    const oauthExchangeGeneration = this._oauthExchangeGeneration;
     let callbackURL;
     try {
       callbackURL = new URL(window.location.href);
@@ -2139,6 +2143,9 @@ class VolcanoAuth {
       method: 'POST',
       body: JSON.stringify({ code, redirect_url: redirectURL }),
     });
+    if (oauthExchangeGeneration !== this._oauthExchangeGeneration) {
+      return false;
+    }
     if (!result.ok) {
       this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
       return false;
