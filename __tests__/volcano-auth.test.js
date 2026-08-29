@@ -231,6 +231,116 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - local session adoption', () => {
+    function completeSession() {
+      return {
+        access_token: 'adopted-access-token',
+        refresh_token: 'adopted-refresh-token',
+        user: {
+          id: 'adopted-user-id',
+          email: 'adopted@example.com',
+          user_metadata: { preferences: { theme: 'dark' } },
+          app_metadata: { roles: ['member'] },
+          created_at: '2026-08-28T00:00:00Z',
+          updated_at: '2026-08-28T00:00:00Z',
+        },
+      };
+    }
+
+    it('adopts a complete session into an empty client', async () => {
+      const session = completeSession();
+
+      await expect(volcano.auth.setSession(session)).resolves.toEqual({
+        data: { session },
+        error: null,
+      });
+    });
+
+    it('owns a deep copy of an adopted session', async () => {
+      const session = completeSession();
+
+      await volcano.auth.setSession(session);
+      session.access_token = 'changed-access-token';
+      session.user.id = 'changed-user-id';
+      session.user.user_metadata.preferences.theme = 'light';
+      session.user.app_metadata.roles.push('admin');
+
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: completeSession() },
+        error: null,
+      });
+    });
+
+    it('replaces the current session', async () => {
+      volcano.accessToken = 'previous-access-token';
+      volcano.refreshToken = 'previous-refresh-token';
+      volcano.currentUser = completeSession().user;
+      const session = completeSession();
+
+      await volcano.auth.setSession(session);
+
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session },
+        error: null,
+      });
+    });
+
+    it.each([
+      ['a null session', () => null],
+      ['a non-object session', () => 'session'],
+      ['an array session', () => []],
+      ['an empty access token', () => ({ ...completeSession(), access_token: ' ' })],
+      [
+        'a missing refresh token',
+        () => {
+          const session = completeSession();
+          delete session.refresh_token;
+          return session;
+        },
+      ],
+      ['an empty refresh token', () => ({ ...completeSession(), refresh_token: '' })],
+      ['a null user', () => ({ ...completeSession(), user: null })],
+      [
+        'a missing user ID',
+        () => {
+          const session = completeSession();
+          delete session.user.id;
+          return session;
+        },
+      ],
+      [
+        'an empty user ID',
+        () => ({ ...completeSession(), user: { ...completeSession().user, id: ' ' } }),
+      ],
+    ])(
+      'returns an error envelope and preserves the current session for %s',
+      async (_name, invalidSession) => {
+        volcano.accessToken = 'previous-access-token';
+        volcano.refreshToken = 'previous-refresh-token';
+        volcano.currentUser = completeSession().user;
+        const previous = await volcano.auth.getSession();
+
+        await expect(volcano.auth.setSession(invalidSession())).resolves.toEqual({
+          data: { session: null },
+          error: expect.any(TypeError),
+        });
+        await expect(volcano.auth.getSession()).resolves.toEqual(previous);
+      },
+    );
+
+    it('does not fetch, persist, or notify listeners', async () => {
+      const listener = jest.fn();
+      volcano.auth.onAuthStateChange(listener);
+      listener.mockClear();
+
+      await volcano.auth.setSession(completeSession());
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Authentication - signUp', () => {
     it('should acknowledge a session-less signup without issuing a session', async () => {
       // Session-less signup (VOL-309): the server returns an acknowledgement only.

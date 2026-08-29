@@ -128,6 +128,35 @@ if (!error && session) {
 `getSession()` reads local SDK state. It does not refresh or validate the access token; use
 `getUser()` when server validation is required.
 
+### Adopt a Session Locally
+
+Copy a complete session to a fresh client without a network request:
+
+```javascript
+const apiUrl = 'https://api.example.com';
+const anonKey = 'ak-your-anon-key';
+const sourceClient = new VolcanoAuth({ apiUrl, anonKey });
+const freshClient = new VolcanoAuth({ apiUrl, anonKey });
+const { error: signInError } = await sourceClient.auth.signIn({
+  email: 'alice@example.com',
+  password: 'secure-password-123',
+});
+
+if (signInError) throw signInError;
+const {
+  data: { session },
+  error: readError,
+} = await sourceClient.auth.getSession();
+
+if (readError || !session) throw readError ?? new Error('No session to adopt');
+
+const { error } = await freshClient.auth.setSession(session);
+if (error) throw error;
+```
+
+`setSession()` validates the session structure and updates only in-memory client state. It does
+not validate the session with the server, persist it, or notify auth listeners.
+
 ### Check Current User
 
 Get the current user synchronously (returns cached data):
