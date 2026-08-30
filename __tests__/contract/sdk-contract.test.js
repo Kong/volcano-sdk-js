@@ -92,6 +92,36 @@ autoBindSteps(features, [
       );
     });
 
+    when('the client signs out', async () => {
+      const current = await context.world.client.auth.getSession();
+      context.world.signedOutSession = current.data.session;
+      const result = await context.world.client.auth.signOut();
+      recordOutcome(context.world, null, result.error);
+    });
+
+    then('the current session is empty', async () => {
+      const current = await context.world.client.auth.getSession();
+      expect(current).toEqual({ data: { session: null }, error: null });
+    });
+
+    when('a fresh client tries to refresh the signed-out session', async () => {
+      const target = new VolcanoClient({
+        apiUrl: context.world.fixture.api_url,
+        anonKey: context.world.fixture.anon_key,
+      });
+      await target.auth.setSession(context.world.signedOutSession);
+      context.world.client = target;
+      const result = await target.auth.refreshSession();
+      recordOutcome(context.world, null, result.error);
+    });
+
+    then('the SDK operation fails with an authentication error', () => {
+      expect(context.world.lastOutcome).toEqual({
+        ok: false,
+        category: 'authentication error',
+      });
+    });
+
     then('the SDK operation succeeds', () => {
       expect(context.world.lastOutcome).toMatchObject({ ok: true });
     });
