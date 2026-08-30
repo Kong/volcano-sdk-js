@@ -37,6 +37,7 @@ class ContractWorld {
   constructor(fixture) {
     this.fixture = fixture;
     this.lastOutcome = null;
+    this.previousSession = null;
     this.client = new VolcanoClient({
       apiUrl: fixture.api_url,
       anonKey: fixture.anon_key,
