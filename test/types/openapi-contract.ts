@@ -1,5 +1,5 @@
 import type { OpenAPIComponents, OpenAPIOperations } from '../../src/index.js';
-import { AuthRefreshDiscardedError } from '../../src/index.js';
+import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
 
 type Assert<T extends true> = T;
 
@@ -68,5 +68,13 @@ if (AuthRefreshDiscardedError.is(refreshError)) {
   const code: 'auth_refresh_discarded' = refreshError.code;
   const status: 409 = refreshError.status;
   const name: 'AuthRefreshDiscardedError' = refreshError.name;
+  void [code, status, name];
+}
+
+declare const sessionChangedError: unknown;
+if (AuthSessionChangedError.is(sessionChangedError)) {
+  const code: 'auth_session_changed' = sessionChangedError.code;
+  const status: 409 = sessionChangedError.status;
+  const name: 'AuthSessionChangedError' = sessionChangedError.name;
   void [code, status, name];
 }

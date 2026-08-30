@@ -146,6 +146,28 @@ if (AuthRefreshDiscardedError.is(error)) {
 }
 ```
 
+Other auth operations return `AuthSessionChangedError` when a newer logical session wins before
+their result can be committed. Treat the current session as authoritative instead of reporting the
+stale transition as successful:
+
+```javascript
+import { AuthSessionChangedError } from '@volcano.dev/sdk';
+
+const { user, error } = await volcano.auth.signIn({
+  email: 'alice@example.com',
+  password: process.env.VOLCANO_PASSWORD,
+});
+
+if (AuthSessionChangedError.is(error)) {
+  const { data } = await volcano.auth.getSession();
+  console.log('Another auth operation established:', data.session);
+} else if (error) {
+  console.error('Sign-in failed:', error.message);
+} else {
+  console.log('Signed in as:', user.email);
+}
+```
+
 ## Database Errors
 
 ### Query Errors

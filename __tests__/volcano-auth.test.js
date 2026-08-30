@@ -1,4 +1,8 @@
-const { AuthRefreshDiscardedError, VolcanoAuth } = require('../src/index.js');
+const {
+  AuthRefreshDiscardedError,
+  AuthSessionChangedError,
+  VolcanoAuth,
+} = require('../src/index.js');
 
 function createDeferred() {
   let resolve;
@@ -388,6 +392,93 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - signIn', () => {
+    it('discards a sign-in response after another session wins', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      const callback = jest.fn();
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const signIn = volcano.auth.signIn({ email: 'old@example.com', password: 'password123' });
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      callback.mockClear();
+      localStorage.setItem.mockClear();
+      localStorage.removeItem.mockClear();
+      response.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access',
+            refresh_token: 'stale-refresh',
+            expires_in: 3600,
+            user: { id: 'stale-user' },
+          }),
+      });
+
+      const result = await signIn;
+
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.accessToken).toBe('replacement-access');
+      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(localStorage.removeItem).not.toHaveBeenCalled();
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('lets only the first of two concurrent sign-ins establish a session', async () => {
+      const firstResponse = createDeferred();
+      const secondResponse = createDeferred();
+      global.fetch
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockReturnValueOnce(secondResponse.promise);
+
+      const first = volcano.auth.signIn({ email: 'first@example.com', password: 'password123' });
+      const second = volcano.auth.signIn({ email: 'second@example.com', password: 'password123' });
+      await Promise.resolve();
+      firstResponse.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'first-access',
+            refresh_token: 'first-refresh',
+            expires_in: 3600,
+            user: { id: 'first-user' },
+          }),
+      });
+      await expect(first).resolves.toEqual(
+        expect.objectContaining({ user: { id: 'first-user' }, error: null }),
+      );
+      secondResponse.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'second-access',
+            refresh_token: 'second-refresh',
+            expires_in: 3600,
+            user: { id: 'second-user' },
+          }),
+      });
+
+      const secondResult = await second;
+
+      expect(secondResult.user).toBeNull();
+      expect(secondResult.session).toBeNull();
+      expect(AuthSessionChangedError.is(secondResult.error)).toBe(true);
+      expect(volcano.accessToken).toBe('first-access');
+      expect(volcano.currentUser).toEqual({ id: 'first-user' });
+    });
+
     it('should sign in user successfully', async () => {
       const mockResponse = {
         user: { id: 'user-123', email: 'test@example.com' },
@@ -452,6 +543,35 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - signOut', () => {
+    it('does not clear a session established while sign-out is pending', async () => {
+      const response = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'old-user' },
+      });
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const signOut = volcano.auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await signOut;
+
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+        refresh_token: 'old-refresh',
+      });
+      expect(volcano.accessToken).toBe('replacement-access');
+      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+    });
+
     it('should clear session on signout', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       volcano.refreshToken = 'test-refresh';
@@ -1095,6 +1215,71 @@ describe('VolcanoAuth', () => {
     afterEach(() => {
       window.history.replaceState(null, '', '/');
       window.sessionStorage.clear();
+    });
+
+    it('discards a successful code exchange after another session wins', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      await requestStarted.promise;
+      v._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access',
+            refresh_token: 'stale-refresh',
+            user: { id: 'stale-user' },
+          }),
+      });
+
+      await v._completeOAuthExchange();
+
+      expect(v.accessToken).toBe('replacement-access');
+      expect(v.currentUser).toEqual({ id: 'replacement-user' });
+      expect(v._oauthExchangeError).toBeNull();
+    });
+
+    it('does not retain a stale code exchange failure after another session wins', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      await requestStarted.promise;
+      v._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        json: () => Promise.resolve({ error: 'stale exchange failed' }),
+      });
+
+      await v._completeOAuthExchange();
+
+      expect(v.accessToken).toBe('replacement-access');
+      expect(v.currentUser).toEqual({ id: 'replacement-user' });
+      expect(v._oauthExchangeError).toBeNull();
     });
 
     it('exchanges a matching one-time callback code and strips it from the URL', async () => {
@@ -1924,6 +2109,37 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Anonymous Authentication', () => {
+    it('discards an anonymous signup after another session wins', async () => {
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const signup = volcano.auth.signUpAnonymous();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access',
+            refresh_token: 'stale-refresh',
+            expires_in: 3600,
+            user: { id: 'stale-anonymous', is_anonymous: true },
+          }),
+      });
+
+      const result = await signup;
+
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.accessToken).toBe('replacement-access');
+      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+    });
+
     it('should sign up anonymous user', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
