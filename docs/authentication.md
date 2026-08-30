@@ -107,6 +107,10 @@ if (!error) {
 ```
 
 This invalidates the refresh token on the server and clears local storage.
+Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
+the SDK still clears the captured local session and returns the error so the application can report
+it. The cleared session no longer contains the refresh token needed to retry revocation. A session
+established while sign-out is pending remains current.
 
 ## Session Management
 

@@ -123,7 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const volcano = getVolcano();
-    await volcano.auth.signOut();
+    const { error } = await volcano.auth.signOut();
+    if (error) throw error;
   }, []);
 
   return (

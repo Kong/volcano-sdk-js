@@ -1436,20 +1436,26 @@ class VolcanoAuth {
   async signOut() {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
+    let logoutError = null;
     if (context.refreshToken) {
-      try {
-        await this._anonFetch('/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refresh_token: context.refreshToken }),
-        });
-      } catch (err) {
-        console.warn('[VolcanoAuth] Logout request failed:', err.message);
-      }
+      const result = await this._anonFetch('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: context.refreshToken }),
+      });
+      logoutError = result.error;
     }
     if (!this._clearSession(context.generation)) {
-      return { error: new AuthSessionChangedError() };
+      const sessionChangedError = new AuthSessionChangedError();
+      if (logoutError) {
+        Object.defineProperty(sessionChangedError, 'cause', {
+          configurable: true,
+          value: logoutError,
+          writable: true,
+        });
+      }
+      return { error: sessionChangedError };
     }
-    return { error: null };
+    return { error: logoutError };
   }
 
   async getUser() {

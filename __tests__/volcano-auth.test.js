@@ -763,6 +763,32 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - signOut', () => {
+    it('succeeds without a session or network request', async () => {
+      await expect(volcano.auth.signOut()).resolves.toEqual({ error: null });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('clears the session and surfaces a revocation server failure', async () => {
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'old-user' },
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: 'Logout unavailable' }),
+      });
+
+      const result = await volcano.auth.signOut();
+
+      expect(result.error).toMatchObject({ message: 'Logout unavailable', status: 503 });
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: null },
+        error: null,
+      });
+    });
+
     it('does not clear a session established while sign-out is pending', async () => {
       const response = createDeferred();
       volcano._setSession({
@@ -790,6 +816,36 @@ describe('VolcanoAuth', () => {
       });
       expect(volcano.accessToken).toBe('replacement-access');
       expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+    });
+
+    it('preserves a revocation failure when the session changes', async () => {
+      const response = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'old-user' },
+      });
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const signOut = volcano.auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: 'Logout unavailable' }),
+      });
+
+      const result = await signOut;
+
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(result.error.cause).toMatchObject({ message: 'Logout unavailable', status: 503 });
+      expect(volcano.accessToken).toBe('replacement-access');
     });
 
     it('should clear session on signout', async () => {
