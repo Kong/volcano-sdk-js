@@ -891,6 +891,68 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - current user writer guards', () => {
+    it.each([
+      ['getUser', (client) => client.auth.getUser(), true],
+      ['updateUser', (client) => client.auth.updateUser({ metadata: { name: 'stale' } }), false],
+      [
+        'convertAnonymous',
+        (client) =>
+          client.auth.convertAnonymous({
+            email: 'converted@example.com',
+            password: 'password123',
+          }),
+        false,
+      ],
+      [
+        'confirmEmailChange',
+        (client) => client.auth.confirmEmailChange('stale-email-change-token'),
+        false,
+      ],
+    ])('discards a stale %s response', async (_name, invoke, tracksRedirectNotification) => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      const callback = jest.fn();
+      volcano._setSession({
+        access_token: 'access-a',
+        refresh_token: 'refresh-a',
+        user: { id: 'user-a' },
+      });
+      volcano.auth.onAuthStateChange(callback);
+      callback.mockClear();
+      if (tracksRedirectNotification) {
+        volcano._pendingUrlAuthNotify = true;
+      }
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const operation = invoke(volcano);
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: 'access-b',
+        refresh_token: 'refresh-b',
+        user: { id: 'user-b' },
+      });
+      callback.mockClear();
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ user: { id: 'stale-user-a' } }),
+      });
+
+      const result = await operation;
+
+      expect(result.user).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser).toEqual({ id: 'user-b' });
+      expect(volcano.accessToken).toBe('access-b');
+      expect(callback).not.toHaveBeenCalled();
+      expect(volcano._pendingUrlAuthNotify).toBe(false);
+    });
+  });
+
   describe('Authentication - managed auth redirect (URL hash adoption)', () => {
     // These run under jsdom, so drive the real window/location/history.
     const NONCE = 'rp-nonce-abc123';

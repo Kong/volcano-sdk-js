@@ -125,7 +125,7 @@ preserved.
 Handle a discarded successful result with `AuthRefreshDiscardedError.is`:
 
 ```javascript
-import { AuthRefreshDiscardedError, VolcanoAuth } from '@volcano.dev/sdk';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoAuth } from '@volcano.dev/sdk';
 
 const volcano = new VolcanoAuth({
   apiUrl: 'https://api.volcano.dev',
@@ -139,6 +139,11 @@ if (AuthRefreshDiscardedError.is(error)) {
   // or ask the user to retry; do not automatically replay a mutation.
   const { data } = await volcano.auth.getSession();
   console.log('Current session:', data.session);
+} else if (AuthSessionChangedError.is(error)) {
+  // The user response belongs to a session that was replaced while the
+  // request was pending.
+  const { data } = await volcano.auth.getSession();
+  console.log('Current session:', data.session);
 } else if (error) {
   console.error('Unable to load the user:', error.message);
 } else {
@@ -146,9 +151,9 @@ if (AuthRefreshDiscardedError.is(error)) {
 }
 ```
 
-Other auth operations return `AuthSessionChangedError` when a newer logical session wins before
-their result can be committed. Treat the current session as authoritative instead of reporting the
-stale transition as successful:
+`getUser()` and other auth operations return `AuthSessionChangedError` when a newer logical session
+wins before their result can be committed. Treat the current session as authoritative instead of
+reporting the stale transition as successful:
 
 ```javascript
 import { AuthSessionChangedError } from '@volcano.dev/sdk';

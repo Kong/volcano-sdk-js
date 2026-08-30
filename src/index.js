@@ -984,18 +984,27 @@ class VolcanoAuth {
    * @private
    */
   async _authFetch(path, options = {}) {
+    const { result } = await this._authFetchWithContext(path, options);
+    return result;
+  }
+
+  async _authFetchWithContext(path, options = {}) {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
     if (!context.accessToken) {
       return {
-        ok: false,
-        status: null,
-        error: this._oauthExchangeError || new Error('No active session'),
-        data: null,
+        result: {
+          ok: false,
+          status: null,
+          error: this._oauthExchangeError || new Error('No active session'),
+          data: null,
+        },
+        context,
       };
     }
 
-    return this._authFetchUrl(`${this.apiUrl}${path}`, options);
+    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, options);
+    return { result, context };
   }
 
   async _authFetchUrl(url, fetchOptions = {}) {
@@ -1402,10 +1411,13 @@ class VolcanoAuth {
     // (tokens in the URL fragment) so callers only ever need getUser().
     const adoptedFromUrl = this._consumeSessionFromUrl();
 
-    const result = await this._authFetch('/auth/user');
+    const { result, context } = await this._authFetchWithContext('/auth/user');
 
     if (!result.ok) {
       return { user: null, error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { user: null, error: new AuthSessionChangedError() };
     }
 
     this.currentUser = result.data.user;
@@ -1420,13 +1432,16 @@ class VolcanoAuth {
   }
 
   async updateUser({ password, metadata }) {
-    const result = await this._authFetch('/auth/user', {
+    const { result, context } = await this._authFetchWithContext('/auth/user', {
       method: 'PUT',
       body: JSON.stringify({ password, user_metadata: metadata }),
     });
 
     if (!result.ok) {
       return { user: null, error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { user: null, error: new AuthSessionChangedError() };
     }
 
     this.currentUser = result.data.user;
@@ -1565,13 +1580,16 @@ class VolcanoAuth {
   }
 
   async convertAnonymous({ email, password, metadata = {} }) {
-    const result = await this._authFetch('/auth/user/convert-anonymous', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/convert-anonymous', {
       method: 'POST',
       body: JSON.stringify({ email, password, user_metadata: metadata }),
     });
 
     if (!result.ok) {
       return { user: null, error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { user: null, error: new AuthSessionChangedError() };
     }
 
     this.currentUser = result.data.user;
@@ -1656,13 +1674,19 @@ class VolcanoAuth {
   }
 
   async confirmEmailChange(emailChangeToken) {
-    const result = await this._authFetch('/auth/user/confirm-email-change', {
-      method: 'POST',
-      body: JSON.stringify({ email_change_token: emailChangeToken }),
-    });
+    const { result, context } = await this._authFetchWithContext(
+      '/auth/user/confirm-email-change',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email_change_token: emailChangeToken }),
+      },
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { user: null, error: new AuthSessionChangedError() };
     }
 
     this.currentUser = result.data.user;
@@ -2162,6 +2186,7 @@ class VolcanoAuth {
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
+    this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -2179,6 +2204,7 @@ class VolcanoAuth {
     this.accessToken = data.access_token;
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
+    this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -2197,6 +2223,7 @@ class VolcanoAuth {
     this.refreshToken = null;
     this.currentUser = null;
     this._sessionGeneration += 1;
+    this._pendingUrlAuthNotify = false;
 
     this._removeStorageItem(STORAGE_KEY_ACCESS_TOKEN);
     this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
