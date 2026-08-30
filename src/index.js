@@ -2186,6 +2186,7 @@ class VolcanoAuth {
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
+    this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -2203,6 +2204,7 @@ class VolcanoAuth {
     this.accessToken = data.access_token;
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
+    this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -2221,6 +2223,7 @@ class VolcanoAuth {
     this.refreshToken = null;
     this.currentUser = null;
     this._sessionGeneration += 1;
+    this._pendingUrlAuthNotify = false;
 
     this._removeStorageItem(STORAGE_KEY_ACCESS_TOKEN);
     this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);

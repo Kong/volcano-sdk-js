@@ -949,7 +949,7 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser).toEqual({ id: 'user-b' });
       expect(volcano.accessToken).toBe('access-b');
       expect(callback).not.toHaveBeenCalled();
-      expect(volcano._pendingUrlAuthNotify).toBe(tracksRedirectNotification);
+      expect(volcano._pendingUrlAuthNotify).toBe(false);
     });
   });
 
