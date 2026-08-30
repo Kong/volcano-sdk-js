@@ -111,6 +111,41 @@ if (error) {
 }
 ```
 
+### Concurrent Session Changes
+
+The SDK coordinates concurrent refresh attempts for the same session. If a sign-in, sign-out, or
+other auth operation replaces that session before a refresh can commit, the SDK keeps the newer
+session and does not replay the original request under it.
+
+`AuthRefreshDiscardedError` identifies a successful refresh result that the SDK discarded, or a
+request that detected the replacement before starting refresh. If the old refresh request itself
+fails, its original refresh or request error may be returned instead; the newer session is still
+preserved.
+
+Handle a discarded successful result with `AuthRefreshDiscardedError.is`:
+
+```javascript
+import { AuthRefreshDiscardedError, VolcanoAuth } from '@volcano.dev/sdk';
+
+const volcano = new VolcanoAuth({
+  apiUrl: 'https://api.volcano.dev',
+  anonKey: process.env.VOLCANO_ANON_KEY,
+});
+
+const { user, error } = await volcano.auth.getUser();
+
+if (AuthRefreshDiscardedError.is(error)) {
+  // Auth state changed while this request was pending. Read the current state
+  // or ask the user to retry; do not automatically replay a mutation.
+  const { data } = await volcano.auth.getSession();
+  console.log('Current session:', data.session);
+} else if (error) {
+  console.error('Unable to load the user:', error.message);
+} else {
+  console.log('Signed in as:', user.email);
+}
+```
+
 ## Database Errors
 
 ### Query Errors

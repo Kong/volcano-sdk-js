@@ -403,6 +403,17 @@ export class VolcanoSystemError extends Error {
   static is(err: unknown): err is VolcanoSystemError;
 }
 
+/**
+ * A refresh completed after another auth operation replaced or cleared the
+ * session. The SDK discards the stale result and does not replay the request.
+ */
+export class AuthRefreshDiscardedError extends Error {
+  readonly name: 'AuthRefreshDiscardedError';
+  readonly code: 'auth_refresh_discarded';
+  readonly status: 409;
+  static is(error: unknown): error is AuthRefreshDiscardedError;
+}
+
 // ============================================================================
 // Logs Types
 // ============================================================================

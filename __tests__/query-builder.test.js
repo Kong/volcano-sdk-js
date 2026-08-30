@@ -1,4 +1,14 @@
-const { VolcanoAuth } = require('../src/index.js');
+const { AuthRefreshDiscardedError, VolcanoAuth } = require('../src/index.js');
+
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('QueryBuilder', () => {
   const config = {
@@ -206,6 +216,70 @@ describe('QueryBuilder', () => {
       expect(result.error).toBeNull();
       expect(result.data).toEqual([{ id: 1 }]);
       expect(volcano.accessToken).toBe('new-access-token');
+    });
+
+    it('preserves an access-token-only session after a 401', async () => {
+      volcano.accessToken = 'server-access-token';
+      volcano.refreshToken = null;
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Token expired' }),
+      });
+
+      const result = await volcano.from('posts').execute();
+
+      expect(result.error).toBeDefined();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(volcano.accessToken).toBe('server-access-token');
+      expect(volcano.refreshToken).toBeNull();
+    });
+
+    it('does not replay a query after its refresh is superseded', async () => {
+      const refreshResponse = createDeferred();
+      const refreshStarted = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Token expired' }),
+        })
+        .mockImplementationOnce(() => {
+          refreshStarted.resolve();
+          return refreshResponse.promise;
+        });
+
+      const query = volcano.from('posts').execute();
+      await refreshStarted.promise;
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'user-2' },
+      });
+      refreshResponse.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access',
+            refresh_token: 'stale-refresh',
+            user: { id: 'user-1' },
+            expires_in: 3600,
+          }),
+      });
+
+      const result = await query;
+
+      expect(result.data).toBeNull();
+      expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(volcano.accessToken).toBe('replacement-access');
+      expect(volcano.currentUser).toEqual({ id: 'user-2' });
     });
 
     it('should return error when not authenticated', async () => {
