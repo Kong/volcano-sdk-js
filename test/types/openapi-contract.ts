@@ -1,4 +1,5 @@
 import type { OpenAPIComponents, OpenAPIOperations } from '../../src/index.js';
+import { AuthRefreshDiscardedError } from '../../src/index.js';
 
 type Assert<T extends true> = T;
 
@@ -61,3 +62,11 @@ type LogSearchEventStructuredShape = Omit<LogSearchEventShape, 'body'> & {
 type _LogSearchEventBodyKeepsJsonTypes = Assert<
   LogSearchEventStructuredShape extends LogSearchEvent ? true : false
 >;
+
+declare const refreshError: unknown;
+if (AuthRefreshDiscardedError.is(refreshError)) {
+  const code: 'auth_refresh_discarded' = refreshError.code;
+  const status: 409 = refreshError.status;
+  const name: 'AuthRefreshDiscardedError' = refreshError.name;
+  void [code, status, name];
+}
