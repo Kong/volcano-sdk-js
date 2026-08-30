@@ -1269,13 +1269,19 @@ class VolcanoAuth {
       const data = await safeJsonParse(response);
 
       if (!response.ok) {
-        return { ok: false, error: new Error(data.error || 'Request failed'), data };
+        return {
+          ok: false,
+          status: response.status,
+          error: apiRequestError(response, data),
+          data,
+        };
       }
 
-      return { ok: true, data, error: null };
+      return { ok: true, status: response.status, data, error: null };
     } catch (error) {
       return {
         ok: false,
+        status: null,
         error: error instanceof Error ? error : new Error('Request failed'),
         data: null,
       };
@@ -1543,7 +1549,9 @@ class VolcanoAuth {
       });
 
       if (!result.ok) {
-        this._clearSession(context.generation);
+        if (result.status === 401 || result.status === 403) {
+          this._clearSession(context.generation);
+        }
         return { session: null, error: result.error };
       }
 
@@ -1562,7 +1570,6 @@ class VolcanoAuth {
         error: null,
       };
     } catch (error) {
-      this._clearSession(context.generation);
       return { session: null, error: error instanceof Error ? error : new Error('Refresh failed') };
     }
   }

@@ -227,15 +227,25 @@ This callback fires immediately with the current state, then again whenever the 
 
 ### Manual Token Refresh
 
-Tokens are refreshed automatically, but you can trigger a manual refresh:
+Refresh the current session with its refresh token:
 
 ```javascript
 const { session, error } = await volcano.auth.refreshSession();
 
-if (session) {
+if (error) {
+  console.error('Refresh failed:', error.message);
+} else {
   console.log('Token refreshed, expires in', session.expires_in, 'seconds');
 }
 ```
+
+On success, `refreshSession()` returns the refreshed token fields in the existing
+`{ session, error }` response and replaces the client's current session. Read the full snapshot,
+including its user, with `getSession()`.
+
+If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. A transport
+error or server failure leaves the current session unchanged so the application can retry. A late
+refresh response never replaces a newer session.
 
 ## Hosted Auth Pages (Managed Login)
 

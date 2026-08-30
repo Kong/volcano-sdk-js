@@ -2205,8 +2205,35 @@ describe('VolcanoAuth', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
+    it('preserves the current session after a refresh server failure', async () => {
+      const established = {
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'user-1' },
+      };
+      volcano._setSession(established);
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: 'Refresh unavailable' }),
+      });
+
+      const result = await volcano.auth.refreshSession();
+
+      expect(result.session).toBeNull();
+      expect(result.error).toMatchObject({ message: 'Refresh unavailable', status: 503 });
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: established },
+        error: null,
+      });
+    });
+
     it('should refresh session successfully', async () => {
-      volcano.refreshToken = 'valid-refresh';
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'valid-refresh',
+        user: { id: 'user-123', email: 'alice@example.com' },
+      });
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
@@ -2214,6 +2241,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'new-access',
             refresh_token: 'new-refresh',
+            user: { id: 'user-123', email: 'alice@example.com' },
             expires_in: 3600,
           }),
       });
@@ -2226,6 +2254,16 @@ describe('VolcanoAuth', () => {
       expect(result.error).toBeNull();
       expect(volcano.accessToken).toBe('new-access');
       expect(volcano.refreshToken).toBe('new-refresh');
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: {
+          session: {
+            access_token: 'new-access',
+            refresh_token: 'new-refresh',
+            user: { id: 'user-123', email: 'alice@example.com' },
+          },
+        },
+        error: null,
+      });
     });
 
     it('should return error when no refresh token', async () => {

@@ -73,6 +73,25 @@ autoBindSteps(features, [
       recordOutcome(context.world, { session, user: session?.user ?? null }, result.error);
     });
 
+    when('the client refreshes the current session', async () => {
+      const before = await context.world.client.auth.getSession();
+      context.world.previousSession = before.data.session;
+      const refreshed = await context.world.client.auth.refreshSession();
+      if (refreshed.error) {
+        recordOutcome(context.world, null, refreshed.error);
+        return;
+      }
+      const current = await context.world.client.auth.getSession();
+      const session = current.data.session;
+      recordOutcome(context.world, { session, user: session?.user ?? null }, current.error);
+    });
+
+    then('the refreshed session replaces the previous credentials', () => {
+      expect(context.world.lastOutcome.value.session.refresh_token).not.toBe(
+        context.world.previousSession.refresh_token,
+      );
+    });
+
     then('the SDK operation succeeds', () => {
       expect(context.world.lastOutcome).toMatchObject({ ok: true });
     });
