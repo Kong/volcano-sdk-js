@@ -1,7 +1,40 @@
-import type { OpenAPIComponents, OpenAPIOperations } from '../../src/index.js';
+import type {
+  Auth,
+  CompleteSession,
+  OpenAPIComponents,
+  OpenAPIOperations,
+} from '../../src/index.js';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
 
 type Assert<T extends true> = T;
+
+type SetSessionParameter = Parameters<Auth['setSession']>[0];
+type _CompleteSessionCanBeAdopted = Assert<
+  CompleteSession extends SetSessionParameter ? true : false
+>;
+type _SetSessionRejectsNullRefreshToken = Assert<
+  null extends SetSessionParameter['refresh_token'] ? false : true
+>;
+type _SetSessionRejectsNullUser = Assert<null extends SetSessionParameter['user'] ? false : true>;
+
+declare const sourceAuth: Auth;
+declare const targetAuth: Auth;
+
+async function adoptCurrentSession() {
+  const {
+    data: { session },
+  } = await sourceAuth.getSession();
+  if (!session?.refresh_token || !session.user) {
+    return;
+  }
+  await targetAuth.setSession({
+    ...session,
+    refresh_token: session.refresh_token,
+    user: session.user,
+  });
+}
+
+void adoptCurrentSession;
 
 type SignupBody = OpenAPIOperations['authSignup']['requestBody']['content']['application/json'];
 type SignupMetadata = NonNullable<SignupBody['user_metadata']>;

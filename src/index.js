@@ -122,6 +122,25 @@ function cloneJsonValue(value) {
   return JSON.parse(serializedValue);
 }
 
+function validateCompleteSession(session) {
+  if (!session || typeof session !== 'object' || Array.isArray(session)) {
+    return new TypeError('Session must be an object');
+  }
+  if (typeof session.access_token !== 'string' || session.access_token.trim() === '') {
+    return new TypeError('Session access_token must be a non-empty string');
+  }
+  if (typeof session.refresh_token !== 'string' || session.refresh_token.trim() === '') {
+    return new TypeError('Session refresh_token must be a non-empty string');
+  }
+  if (!session.user || typeof session.user !== 'object' || Array.isArray(session.user)) {
+    return new TypeError('Session user must be an object');
+  }
+  if (typeof session.user.id !== 'string' || session.user.id.trim() === '') {
+    return new TypeError('Session user ID must be a non-empty string');
+  }
+  return null;
+}
+
 /**
  * Basic provider name sanitization - only alphanumeric and hyphens allowed
  * This is NOT validation (backend validates), just prevents URL injection
@@ -874,6 +893,7 @@ class VolcanoAuth {
       signUp: this.signUp.bind(this),
       signIn: this.signIn.bind(this),
       getSession: this.getSession.bind(this),
+      setSession: this.setSession.bind(this),
       signOut: this.signOut.bind(this),
       getUser: this.getUser.bind(this),
       updateUser: this.updateUser.bind(this),
@@ -1385,6 +1405,26 @@ class VolcanoAuth {
       },
       error: null,
     });
+  }
+
+  setSession(session) {
+    let ownedSession;
+    try {
+      ownedSession = cloneJsonValue(session);
+    } catch {
+      return Promise.resolve({
+        data: { session: null },
+        error: new TypeError('Session must be cloneable'),
+      });
+    }
+
+    const validationError = validateCompleteSession(ownedSession);
+    if (validationError) {
+      return Promise.resolve({ data: { session: null }, error: validationError });
+    }
+
+    this._adoptSessionInMemory(ownedSession);
+    return this.getSession();
   }
 
   async signOut() {
@@ -2170,6 +2210,15 @@ class VolcanoAuth {
       accessToken: this.accessToken,
       refreshToken: this.refreshToken,
     });
+  }
+
+  _adoptSessionInMemory(session) {
+    this._sessionGeneration += 1;
+    this._oauthExchangeError = null;
+    this._pendingUrlAuthNotify = false;
+    this.accessToken = session.access_token;
+    this.refreshToken = session.refresh_token;
+    this.currentUser = session.user;
   }
 
   _isAuthContextCurrent(context) {

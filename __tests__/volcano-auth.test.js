@@ -170,6 +170,7 @@ describe('VolcanoAuth', () => {
       expect(typeof volcano.auth.callOAuthAPI).toBe('function');
 
       // Session management
+      expect(typeof volcano.auth.setSession).toBe('function');
       expect(typeof volcano.auth.getSessions).toBe('function');
       expect(typeof volcano.auth.deleteSession).toBe('function');
       expect(typeof volcano.auth.deleteAllOtherSessions).toBe('function');
@@ -242,6 +243,225 @@ describe('VolcanoAuth', () => {
         error: null,
       });
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Authentication - local session adoption', () => {
+    function completeSession() {
+      return {
+        access_token: 'adopted-access-token',
+        refresh_token: 'adopted-refresh-token',
+        user: {
+          id: 'adopted-user-id',
+          email: 'adopted@example.com',
+          user_metadata: { preferences: { theme: 'dark' } },
+          created_at: '2026-08-28T00:00:00Z',
+          updated_at: '2026-08-28T00:00:00Z',
+        },
+      };
+    }
+
+    async function deferRequest(invoke) {
+      const response = createDeferred();
+      const started = createDeferred();
+      global.fetch.mockImplementationOnce(() => {
+        started.resolve();
+        return response.promise;
+      });
+      const operation = invoke();
+      await started.promise;
+      return { operation, response };
+    }
+
+    async function expectAdoptedSession() {
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: completeSession() },
+        error: null,
+      });
+    }
+
+    it('adopts a complete session into an empty client', async () => {
+      const session = completeSession();
+
+      await expect(volcano.auth.setSession(session)).resolves.toEqual({
+        data: { session },
+        error: null,
+      });
+      await expectAdoptedSession();
+    });
+
+    it('replaces an existing session', async () => {
+      volcano._setSession({
+        access_token: 'previous-access-token',
+        refresh_token: 'previous-refresh-token',
+        user: { id: 'previous-user-id' },
+      });
+
+      await volcano.auth.setSession(completeSession());
+
+      await expectAdoptedSession();
+    });
+
+    it('owns the supplied session and returned snapshot deeply', async () => {
+      const session = completeSession();
+      const result = await volcano.auth.setSession(session);
+
+      session.access_token = 'mutated-input-token';
+      session.user.id = 'mutated-input-user';
+      session.user.user_metadata.preferences.theme = 'light';
+      result.data.session.refresh_token = 'mutated-result-token';
+      result.data.session.user.user_metadata.preferences.theme = 'blue';
+
+      await expectAdoptedSession();
+    });
+
+    it.each([
+      ['a null session', () => null],
+      ['a non-object session', () => 'session'],
+      ['an array session', () => []],
+      ['an empty access token', () => ({ ...completeSession(), access_token: ' ' })],
+      [
+        'a missing refresh token',
+        () => {
+          const session = completeSession();
+          delete session.refresh_token;
+          return session;
+        },
+      ],
+      ['an empty refresh token', () => ({ ...completeSession(), refresh_token: '' })],
+      ['a null user', () => ({ ...completeSession(), user: null })],
+      [
+        'a missing user ID',
+        () => {
+          const session = completeSession();
+          delete session.user.id;
+          return session;
+        },
+      ],
+      [
+        'an empty user ID',
+        () => ({ ...completeSession(), user: { ...completeSession().user, id: ' ' } }),
+      ],
+      [
+        'an unclonable session',
+        () => {
+          const session = completeSession();
+          Object.defineProperty(session, 'access_token', {
+            enumerable: true,
+            get() {
+              throw new Error('access token getter failed');
+            },
+          });
+          return session;
+        },
+      ],
+    ])('rejects %s without replacing the current session', async (_name, invalidSession) => {
+      await volcano.auth.setSession(completeSession());
+      const previous = await volcano.auth.getSession();
+
+      await expect(volcano.auth.setSession(invalidSession())).resolves.toEqual({
+        data: { session: null },
+        error: expect.any(TypeError),
+      });
+      await expect(volcano.auth.getSession()).resolves.toEqual(previous);
+    });
+
+    it('does not fetch, persist, remove storage, or notify listeners', async () => {
+      const listener = jest.fn();
+      volcano.auth.onAuthStateChange(listener);
+      listener.mockClear();
+
+      await volcano.auth.setSession(completeSession());
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(localStorage.removeItem).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('supersedes an already-running sign-in', async () => {
+      const { operation, response } = await deferRequest(() =>
+        volcano.auth.signIn({ email: 'stale@example.com', password: 'password123' }),
+      );
+
+      await volcano.auth.setSession(completeSession());
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access-token',
+            refresh_token: 'stale-refresh-token',
+            user: { id: 'stale-user-id' },
+          }),
+      });
+
+      const result = await operation;
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      await expectAdoptedSession();
+    });
+
+    it('supersedes an already-running refresh', async () => {
+      volcano._setSession({
+        access_token: 'previous-access-token',
+        refresh_token: 'previous-refresh-token',
+        user: { id: 'previous-user-id' },
+      });
+      const { operation, response } = await deferRequest(() => volcano.auth.refreshSession());
+
+      await volcano.auth.setSession(completeSession());
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            access_token: 'stale-access-token',
+            refresh_token: 'stale-refresh-token',
+            user: { id: 'stale-user-id' },
+          }),
+      });
+
+      const result = await operation;
+      expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
+      await expectAdoptedSession();
+    });
+
+    it('supersedes an already-running sign-out', async () => {
+      volcano._setSession({
+        access_token: 'previous-access-token',
+        refresh_token: 'previous-refresh-token',
+        user: { id: 'previous-user-id' },
+      });
+      const { operation, response } = await deferRequest(() => volcano.auth.signOut());
+
+      await volcano.auth.setSession(completeSession());
+      response.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+
+      const result = await operation;
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      await expectAdoptedSession();
+    });
+
+    it('supersedes an already-running user update', async () => {
+      volcano._setSession({
+        access_token: 'previous-access-token',
+        refresh_token: 'previous-refresh-token',
+        user: { id: 'previous-user-id' },
+      });
+      const { operation, response } = await deferRequest(() =>
+        volcano.auth.updateUser({ metadata: { name: 'stale' } }),
+      );
+
+      await volcano.auth.setSession(completeSession());
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ user: { id: 'stale-user-id' } }),
+      });
+
+      const result = await operation;
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      await expectAdoptedSession();
     });
   });
 
