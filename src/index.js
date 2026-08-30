@@ -1445,7 +1445,15 @@ class VolcanoAuth {
       logoutError = result.error;
     }
     if (!this._clearSession(context.generation)) {
-      return { error: new AuthSessionChangedError() };
+      const sessionChangedError = new AuthSessionChangedError();
+      if (logoutError) {
+        Object.defineProperty(sessionChangedError, 'cause', {
+          configurable: true,
+          value: logoutError,
+          writable: true,
+        });
+      }
+      return { error: sessionChangedError };
     }
     return { error: logoutError };
   }

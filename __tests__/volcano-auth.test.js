@@ -818,6 +818,36 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
     });
 
+    it('preserves a revocation failure when the session changes', async () => {
+      const response = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'old-user' },
+      });
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const signOut = volcano.auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({ error: 'Logout unavailable' }),
+      });
+
+      const result = await signOut;
+
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(result.error.cause).toMatchObject({ message: 'Logout unavailable', status: 503 });
+      expect(volcano.accessToken).toBe('replacement-access');
+    });
+
     it('should clear session on signout', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       volcano.refreshToken = 'test-refresh';
