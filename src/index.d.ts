@@ -68,6 +68,11 @@ export interface CurrentSession {
   user: User | null;
 }
 
+export interface CompleteSession extends CurrentSession {
+  refresh_token: string;
+  user: User;
+}
+
 export interface CurrentSessionResponse {
   data: { session: CurrentSession | null };
   error: Error | null;
@@ -229,6 +234,8 @@ export interface Auth {
   signIn(options: SignInOptions): Promise<AuthResponse>;
   /** Read a detached snapshot of the locally held session without validating it. */
   getSession(): Promise<CurrentSessionResponse>;
+  /** Adopt a complete session into local memory without network, storage, or listener effects. */
+  setSession(session: CompleteSession): Promise<CurrentSessionResponse>;
   /** Sign out current user */
   signOut(): Promise<{ error: Error | null }>;
   /**

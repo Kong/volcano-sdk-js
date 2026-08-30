@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
+const { VolcanoClient } = require('../../src/index.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
 
 function absoluteEnvironmentPath(name) {
@@ -57,6 +58,18 @@ autoBindSteps(features, [
     when('the client reads the current session', async () => {
       const result = await context.world.client.auth.getSession();
       const session = result.data.session;
+      recordOutcome(context.world, { session, user: session?.user ?? null }, result.error);
+    });
+
+    when('a fresh client adopts the current session', async () => {
+      const source = await context.world.client.auth.getSession();
+      const target = new VolcanoClient({
+        apiUrl: context.world.fixture.api_url,
+        anonKey: context.world.fixture.anon_key,
+      });
+      const result = await target.auth.setSession(source.data.session);
+      const session = result.data.session;
+      context.world.client = target;
       recordOutcome(context.world, { session, user: session?.user ?? null }, result.error);
     });
 

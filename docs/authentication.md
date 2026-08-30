@@ -128,6 +128,32 @@ if (!error && session) {
 `getSession()` reads local SDK state. It does not refresh or validate the access token; use
 `getUser()` when server validation is required.
 
+### Adopt an Existing Session
+
+Copy a complete session into another client:
+
+```javascript
+const {
+  data: { session: sourceSession },
+} = await source.auth.getSession();
+
+if (sourceSession?.refresh_token && sourceSession.user) {
+  const { data, error } = await target.auth.setSession({
+    ...sourceSession,
+    refresh_token: sourceSession.refresh_token,
+    user: sourceSession.user,
+  });
+
+  if (!error) {
+    console.log(data.session.user.id);
+  }
+}
+```
+
+`setSession()` validates and copies the supplied session into the target client's memory. It does
+not contact Volcano, persist tokens, or notify auth listeners. Call it again after creating a new
+client or reloading the page.
+
 ### Check Current User
 
 Get the current user synchronously (returns cached data):
