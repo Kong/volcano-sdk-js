@@ -584,6 +584,64 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBe('new-access');
     });
 
+    it('reuses a completed refresh for a delayed request from the same session', async () => {
+      const delayedResponse = createDeferred();
+      let userRequests = 0;
+      let refreshRequests = 0;
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'shared-refresh',
+        user: { id: 'user-1' },
+      });
+      global.fetch.mockImplementation((url) => {
+        if (url.endsWith('/auth/refresh')) {
+          refreshRequests += 1;
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                access_token: 'new-access',
+                refresh_token: 'new-refresh',
+                user: { id: 'user-1' },
+                expires_in: 3600,
+              }),
+          });
+        }
+
+        userRequests += 1;
+        if (userRequests === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: () => Promise.resolve({ error: 'Token expired' }),
+          });
+        }
+        if (userRequests === 2) {
+          return delayedResponse.promise;
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ user: { id: 'user-1' } }),
+        });
+      });
+
+      const first = volcano.auth.getUser();
+      const delayed = volcano.auth.getUser();
+      await expect(first).resolves.toEqual({ user: { id: 'user-1' }, error: null });
+      delayedResponse.resolve({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Token expired' }),
+      });
+
+      await expect(delayed).resolves.toEqual({ user: { id: 'user-1' }, error: null });
+      expect(refreshRequests).toBe(1);
+      expect(userRequests).toBe(4);
+      expect(volcano.accessToken).toBe('new-access');
+    });
+
     it('does not replay a request after its refresh is superseded', async () => {
       const refreshResponse = createDeferred();
       const refreshStarted = createDeferred();

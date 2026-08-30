@@ -512,7 +512,7 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
       if (!volcanoAuth._isAuthContextCurrent(context)) {
         throw new AuthRefreshDiscardedError();
       }
-      response = await doFetch(refreshed.session.access_token);
+      response = await doFetch(volcanoAuth.accessToken);
     }
   }
 
@@ -1046,7 +1046,7 @@ class VolcanoAuth {
                 data: null,
               };
             }
-            accessToken = refreshed.session.access_token;
+            accessToken = this.accessToken;
             continue;
           }
           return {
@@ -1436,8 +1436,11 @@ class VolcanoAuth {
   }
 
   async _refreshSessionForContext(context) {
-    if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
+    if (!this._isAuthContextCurrent(context)) {
       return { session: null, error: new AuthRefreshDiscardedError() };
+    }
+    if (context.refreshToken !== this.refreshToken) {
+      return { session: null, error: null };
     }
     if (!context.refreshToken) {
       return { session: null, error: new Error('No refresh token') };
@@ -2029,7 +2032,7 @@ class VolcanoAuth {
                 error,
               };
             }
-            return invokeOnce(url, false, context, refreshed.session.access_token);
+            return invokeOnce(url, false, context, this.accessToken);
           }
         }
 
@@ -2376,6 +2379,7 @@ class VolcanoAuth {
     // otherwise refresh into the wrong account).
     this.accessToken = accessToken;
     this.refreshToken = refreshToken || null;
+    this._sessionGeneration += 1;
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
       this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
