@@ -114,10 +114,15 @@ if (error) {
 ### Concurrent Session Changes
 
 The SDK coordinates concurrent refresh attempts for the same session. If a sign-in, sign-out, or
-other auth operation replaces that session while a refresh is pending, the SDK keeps the newer
+other auth operation replaces that session before a refresh can commit, the SDK keeps the newer
 session and does not replay the original request under it.
 
-Handle that case with `AuthRefreshDiscardedError.is`:
+`AuthRefreshDiscardedError` identifies a successful refresh result that the SDK discarded, or a
+request that detected the replacement before starting refresh. If the old refresh request itself
+fails, its original refresh or request error may be returned instead; the newer session is still
+preserved.
+
+Handle a discarded successful result with `AuthRefreshDiscardedError.is`:
 
 ```javascript
 import { AuthRefreshDiscardedError, VolcanoAuth } from '@volcano.dev/sdk';
