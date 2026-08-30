@@ -38,6 +38,7 @@ class ContractWorld {
     this.fixture = fixture;
     this.lastOutcome = null;
     this.previousSession = null;
+    this.refreshedSession = null;
     this.signedOutSession = null;
     this.client = new VolcanoClient({
       apiUrl: fixture.api_url,
