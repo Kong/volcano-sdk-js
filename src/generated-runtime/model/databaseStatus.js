@@ -11,5 +11,6 @@ export const DatabaseStatus = {
     provisioning: 'provisioning',
     active: 'active',
     failed: 'failed',
+    restoring: 'restoring',
     deleting: 'deleting',
 };

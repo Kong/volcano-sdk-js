@@ -39,6 +39,7 @@ import type {
   AuthOAuthAuthorizeParams,
   AuthOAuthCallbackParams,
   AuthOAuthExchangeBody,
+  AuthPageAppearanceResponse,
   AuthPasswordPolicy,
   AuthPlatformExchangeBody,
   AuthRefreshBody,
@@ -66,8 +67,10 @@ import type {
   ConfigureAuthMethodsBody,
   ConnectProjectGitRequest,
   CreateAnonKeyBody,
+  CreateDatabaseBackupRequest,
   CreateDatabaseBranchRequest,
   CreateDatabaseRequest,
+  CreateDatabaseRestoreRequest,
   CreateEmailTemplateRequest,
   CreateFrontendBody,
   CreateFrontendCustomDomainRequest,
@@ -81,22 +84,30 @@ import type {
   CreateStoragePolicyRequest,
   CreateVariableRequest,
   Database,
+  DatabaseBackup,
+  DatabaseBackupList,
+  DatabaseBackupSchedule,
   DatabaseBranch,
   DatabaseBranchList,
+  DatabaseBranchQueryUnavailableResponse,
   DatabaseDeleteRequest,
   DatabaseInsertRequest,
   DatabaseQueryCapExceededResponse,
   DatabaseQueryPerformanceResponse,
   DatabaseQueryResult,
+  DatabaseRestore,
+  DatabaseRestoreList,
   DatabaseSelectRequest,
   DatabaseStats,
   DatabaseUpdateRequest,
   DeleteDatabase202,
+  DeleteDatabaseBackup200,
   DeleteDatabaseBranch202,
   DeleteOAuthConfigParams,
   DeviceAuthorizationResponse,
   EmailTemplate,
   Error,
+  ExportProjectSourceRequest,
   Frontend,
   FrontendCustomDomainResponse,
   FrontendUsageHistoryResponse,
@@ -178,6 +189,8 @@ import type {
   PaginatedStorageBuckets,
   PaginatedVariables,
   PlatformExchangeResponse,
+  PreviewAuthPageRequest,
+  PreviewAuthPageResponse,
   Project,
   ProjectConfig,
   ProjectConfigApplyResult,
@@ -195,6 +208,8 @@ import type {
   ProjectLockState,
   ProjectMetricsQueryRequest,
   ProjectMetricsQueryResponse,
+  ProjectSourceExport,
+  ProjectSourceExportState,
   ProjectUsageResponse,
   RealtimeConfig,
   RealtimeStats,
@@ -222,6 +237,8 @@ import type {
   UnbanUserResponse,
   UpdateAuthConfigRequest,
   UpdateAuthHostedPageRequest,
+  UpdateAuthPageLayoutRequest,
+  UpdateAuthPageThemeRequest,
   UpdateDatabaseBranchRequest,
   UpdateDatabaseTypeRequest,
   UpdateEmailTemplateRequest,
@@ -2028,6 +2045,273 @@ return volcanoFetch<applyProjectConfigResponse>(getApplyProjectConfigUrl(id,para
 
 
 
+export type getProjectSourceExportResponse200 = {
+  data: ProjectSourceExportState
+  status: 200
+}
+
+export type getProjectSourceExportResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getProjectSourceExportResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getProjectSourceExportResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getProjectSourceExportResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type getProjectSourceExportResponse501 = {
+  data: Error
+  status: 501
+}
+
+export type getProjectSourceExportResponseSuccess = (getProjectSourceExportResponse200) & {
+  headers: Headers;
+};
+export type getProjectSourceExportResponseError = (getProjectSourceExportResponse401 | getProjectSourceExportResponse403 | getProjectSourceExportResponse404 | getProjectSourceExportResponse500 | getProjectSourceExportResponse501) & {
+  headers: Headers;
+};
+
+export type getProjectSourceExportResponse = (getProjectSourceExportResponseSuccess | getProjectSourceExportResponseError)
+
+export const getGetProjectSourceExportUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/source-export`
+}
+
+/**
+ * Volcano stores the source of the functions and frontend it runs for a
+ * project. This reports whether that source has been written to the
+ * connected repository, and whether the repository has taken over as the
+ * project's source of truth.
+ *
+ * `mode` is `platform`, `git_exporting`, `git_pending`, or `git`. Export
+ * enters `git_exporting` before reading stored source. GitHub's signed
+ * push event confirms that the initial commit reached the production
+ * branch. That push or a newer production push changes the mode to
+ * `git_pending` when it starts a deployment. `exported_at` records that
+ * transition.
+ *
+ * A successful Git run completes the transition when it matches the
+ * recorded repository, production branch, and root directory and actually
+ * dispatches every recorded resource. Ordinary production-branch pushes
+ * deploy without changing a platform-managed project's source ownership.
+ * @summary Report the project's source-of-truth state
+ */
+export const getProjectSourceExport = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getProjectSourceExportResponse> => {
+
+  return volcanoFetch<getProjectSourceExportResponse>(getGetProjectSourceExportUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportProjectSourceResponse201 = {
+  data: ProjectSourceExport
+  status: 201
+}
+
+export type exportProjectSourceResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type exportProjectSourceResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type exportProjectSourceResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type exportProjectSourceResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type exportProjectSourceResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type exportProjectSourceResponse422 = {
+  data: Error
+  status: 422
+}
+
+export type exportProjectSourceResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type exportProjectSourceResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type exportProjectSourceResponse501 = {
+  data: Error
+  status: 501
+}
+
+export type exportProjectSourceResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type exportProjectSourceResponseSuccess = (exportProjectSourceResponse201) & {
+  headers: Headers;
+};
+export type exportProjectSourceResponseError = (exportProjectSourceResponse400 | exportProjectSourceResponse401 | exportProjectSourceResponse403 | exportProjectSourceResponse404 | exportProjectSourceResponse409 | exportProjectSourceResponse422 | exportProjectSourceResponse429 | exportProjectSourceResponse500 | exportProjectSourceResponse501 | exportProjectSourceResponse503) & {
+  headers: Headers;
+};
+
+export type exportProjectSourceResponse = (exportProjectSourceResponseSuccess | exportProjectSourceResponseError)
+
+export const getExportProjectSourceUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/source-export`
+}
+
+/**
+ * Creates the first commit in the connected repository and pushes it
+ * directly to the configured production branch. The push enters the
+ * ordinary Git auto-deploy flow. Direct source writes remain frozen until
+ * that deployment succeeds and the repository becomes the source of truth.
+ *
+ * The caller confirms the production branch shown before export. Starting
+ * export pins that branch: later GitHub default-branch changes do not
+ * repoint the project. If the configured branch changed after the caller
+ * read it, the request fails without exporting so the caller can show and
+ * confirm the new value.
+ *
+ * The response lists what the export could not carry: resources with no
+ * successful deployment to take source from (`skipped`), and things no
+ * export can hand back (`omitted`) — migrations, which Volcano stores no
+ * copy of, and credential-shaped files, which are left for their owner to
+ * add.
+ *
+ * Requires a connected repository with no commits or branches, and runs
+ * once. Volcano never creates the repository. If GitHub did not confirm
+ * the push, retrying creates the same commit and adopts it when it already
+ * reached the repository.
+ * @summary Initialize an empty repository with a project's stored source
+ */
+export const exportProjectSource = async (id: string,
+    exportProjectSourceRequest: ExportProjectSourceRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<exportProjectSourceResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<exportProjectSourceResponse>(getExportProjectSourceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(exportProjectSourceRequest)
+  }
+);}
+
+
+
+export type cancelProjectSourceExportResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelProjectSourceExportResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type cancelProjectSourceExportResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type cancelProjectSourceExportResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type cancelProjectSourceExportResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type cancelProjectSourceExportResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type cancelProjectSourceExportResponse501 = {
+  data: Error
+  status: 501
+}
+
+export type cancelProjectSourceExportResponseSuccess = (cancelProjectSourceExportResponse204) & {
+  headers: Headers;
+};
+export type cancelProjectSourceExportResponseError = (cancelProjectSourceExportResponse401 | cancelProjectSourceExportResponse403 | cancelProjectSourceExportResponse404 | cancelProjectSourceExportResponse409 | cancelProjectSourceExportResponse500 | cancelProjectSourceExportResponse501) & {
+  headers: Headers;
+};
+
+export type cancelProjectSourceExportResponse = (cancelProjectSourceExportResponseSuccess | cancelProjectSourceExportResponseError)
+
+export const getCancelProjectSourceExportUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/source-export`
+}
+
+/**
+ * Restores platform source writes while the project is in
+ * `git_exporting` or `git_pending`. If Volcano reserved or deployed the
+ * root commit, export remains consumed and cannot be run again. The
+ * connected repository and any commit already pushed to it are unchanged.
+ * @summary Cancel an incomplete source export
+ */
+export const cancelProjectSourceExport = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<cancelProjectSourceExportResponse> => {
+
+  return volcanoFetch<cancelProjectSourceExportResponse>(getCancelProjectSourceExportUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
 export type setProjectGitProductionBranchResponse200 = {
   data: ProjectGitConnection
   status: 200
@@ -2053,6 +2337,11 @@ export type setProjectGitProductionBranchResponse404 = {
   status: 404
 }
 
+export type setProjectGitProductionBranchResponse409 = {
+  data: Error
+  status: 409
+}
+
 export type setProjectGitProductionBranchResponse500 = {
   data: Error
   status: 500
@@ -2061,7 +2350,7 @@ export type setProjectGitProductionBranchResponse500 = {
 export type setProjectGitProductionBranchResponseSuccess = (setProjectGitProductionBranchResponse200) & {
   headers: Headers;
 };
-export type setProjectGitProductionBranchResponseError = (setProjectGitProductionBranchResponse400 | setProjectGitProductionBranchResponse401 | setProjectGitProductionBranchResponse403 | setProjectGitProductionBranchResponse404 | setProjectGitProductionBranchResponse500) & {
+export type setProjectGitProductionBranchResponseError = (setProjectGitProductionBranchResponse400 | setProjectGitProductionBranchResponse401 | setProjectGitProductionBranchResponse403 | setProjectGitProductionBranchResponse404 | setProjectGitProductionBranchResponse409 | setProjectGitProductionBranchResponse500) & {
   headers: Headers;
 };
 
@@ -2194,6 +2483,11 @@ export type connectProjectGitResponse404 = {
   status: 404
 }
 
+export type connectProjectGitResponse409 = {
+  data: Error
+  status: 409
+}
+
 export type connectProjectGitResponse500 = {
   data: Error
   status: 500
@@ -2207,7 +2501,7 @@ export type connectProjectGitResponse503 = {
 export type connectProjectGitResponseSuccess = (connectProjectGitResponse200) & {
   headers: Headers;
 };
-export type connectProjectGitResponseError = (connectProjectGitResponse400 | connectProjectGitResponse401 | connectProjectGitResponse403 | connectProjectGitResponse404 | connectProjectGitResponse500 | connectProjectGitResponse503) & {
+export type connectProjectGitResponseError = (connectProjectGitResponse400 | connectProjectGitResponse401 | connectProjectGitResponse403 | connectProjectGitResponse404 | connectProjectGitResponse409 | connectProjectGitResponse500 | connectProjectGitResponse503) & {
   headers: Headers;
 };
 
@@ -2272,6 +2566,11 @@ export type disconnectProjectGitResponse404 = {
   status: 404
 }
 
+export type disconnectProjectGitResponse409 = {
+  data: Error
+  status: 409
+}
+
 export type disconnectProjectGitResponse500 = {
   data: Error
   status: 500
@@ -2280,7 +2579,7 @@ export type disconnectProjectGitResponse500 = {
 export type disconnectProjectGitResponseSuccess = (disconnectProjectGitResponse204) & {
   headers: Headers;
 };
-export type disconnectProjectGitResponseError = (disconnectProjectGitResponse401 | disconnectProjectGitResponse403 | disconnectProjectGitResponse404 | disconnectProjectGitResponse500) & {
+export type disconnectProjectGitResponseError = (disconnectProjectGitResponse401 | disconnectProjectGitResponse403 | disconnectProjectGitResponse404 | disconnectProjectGitResponse409 | disconnectProjectGitResponse500) & {
   headers: Headers;
 };
 
@@ -2393,6 +2692,11 @@ export type updateProjectGitDeploySettingsResponse404 = {
   status: 404
 }
 
+export type updateProjectGitDeploySettingsResponse409 = {
+  data: Error
+  status: 409
+}
+
 export type updateProjectGitDeploySettingsResponse500 = {
   data: Error
   status: 500
@@ -2401,7 +2705,7 @@ export type updateProjectGitDeploySettingsResponse500 = {
 export type updateProjectGitDeploySettingsResponseSuccess = (updateProjectGitDeploySettingsResponse200) & {
   headers: Headers;
 };
-export type updateProjectGitDeploySettingsResponseError = (updateProjectGitDeploySettingsResponse400 | updateProjectGitDeploySettingsResponse401 | updateProjectGitDeploySettingsResponse403 | updateProjectGitDeploySettingsResponse404 | updateProjectGitDeploySettingsResponse500) & {
+export type updateProjectGitDeploySettingsResponseError = (updateProjectGitDeploySettingsResponse400 | updateProjectGitDeploySettingsResponse401 | updateProjectGitDeploySettingsResponse403 | updateProjectGitDeploySettingsResponse404 | updateProjectGitDeploySettingsResponse409 | updateProjectGitDeploySettingsResponse500) & {
   headers: Headers;
 };
 
@@ -2983,6 +3287,18 @@ formData.append(`runtime`, createFunctionBody.runtime);
 if(createFunctionBody.handler !== undefined) {
  formData.append(`handler`, createFunctionBody.handler);
  }
+if(createFunctionBody.is_public !== undefined) {
+ formData.append(`is_public`, createFunctionBody.is_public.toString())
+ }
+if(createFunctionBody.invocation_mode !== undefined) {
+ formData.append(`invocation_mode`, createFunctionBody.invocation_mode);
+ }
+if(createFunctionBody.http_auth_mode !== undefined) {
+ formData.append(`http_auth_mode`, createFunctionBody.http_auth_mode);
+ }
+if(createFunctionBody.openapi_spec !== undefined) {
+ formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
+ }
 
   return volcanoFetch<createFunctionResponse>(getCreateFunctionUrl(id),
   {
@@ -3230,9 +3546,16 @@ export const getInvokeFunctionUrl = (functionId: string,) => {
  * - Function receives payload only (no `__volcano_auth`)
  *
  * **Transport and CORS:**
- * - Direct invocation endpoint is intended for `http://api.<domain>/functions/{functionId}/invoke`
- * - DNS invocation endpoint is `https://{functionId}.functions.<domain>/`
- * - CORS preflight for invocation allows only `POST, OPTIONS`
+ * - This operation is the authenticated direct RPC endpoint and always uses the
+ *   POST `{payload: ...}` contract, including for functions whose DNS ingress is
+ *   configured in HTTP mode.
+ * - The geo-routed DNS ingress is `https://{functionId}.functions.<domain>/`.
+ * - RPC-mode DNS ingress accepts POST at `/`. HTTP-mode DNS ingress accepts GET,
+ *   HEAD, POST, PUT, PATCH, and DELETE at `/` and nested paths.
+ * - Direct and RPC-mode CORS preflight advertises `POST, OPTIONS`. HTTP-mode DNS
+ *   preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
+ * - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
+ *   direct operation always requires a Volcano credential.
  * @summary Invoke a function
  */
 export const invokeFunction = async (functionId: string,
@@ -4939,7 +5262,8 @@ export const getCreateDatabaseUrl = (id: string,) => {
 
 /**
  * Creates a serverless PostgreSQL database in the project.
- * Each project can contain up to 100 databases. Requests over this cap return 403.
+ * Each project can hold 1 database on Free and up to 10,000 on Pro.
+ * Requests over the plan's cap return 403.
  * @summary Create a new serverless PostgreSQL database
  */
 export const createDatabase = async (id: string,
@@ -5010,12 +5334,29 @@ export type deleteDatabaseResponse204 = {
   status: 204
 }
 
+export type deleteDatabaseResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDatabaseResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type deleteDatabaseResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type deleteDatabaseResponseSuccess = (deleteDatabaseResponse202 | deleteDatabaseResponse204) & {
   headers: Headers;
 };
-;
+export type deleteDatabaseResponseError = (deleteDatabaseResponse404 | deleteDatabaseResponse409 | deleteDatabaseResponse503) & {
+  headers: Headers;
+};
 
-export type deleteDatabaseResponse = (deleteDatabaseResponseSuccess)
+export type deleteDatabaseResponse = (deleteDatabaseResponseSuccess | deleteDatabaseResponseError)
 
 export const getDeleteDatabaseUrl = (id: string,
     databaseName: string,) => {
@@ -5484,7 +5825,9 @@ export const getResetDatabaseBranchPasswordUrl = (id: string,
 /**
  * Issues a new password for the branch and invalidates the previous
  * connection string. Existing connections are not interrupted; new ones
- * must use the returned string.
+ * must use the returned string. Proxies pick the rotation up within a few
+ * seconds, so the previous password can still open new connections until
+ * then.
  *
  * The parent database's credentials are untouched.
  * @summary Rotate a branch's password
@@ -5504,17 +5847,652 @@ export const resetDatabaseBranchPassword = async (id: string,
 
 
 
+export type listDatabaseBackupsResponse200 = {
+  data: DatabaseBackupList
+  status: 200
+}
+
+export type listDatabaseBackupsResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listDatabaseBackupsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDatabaseBackupsResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type listDatabaseBackupsResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDatabaseBackupsResponseSuccess = (listDatabaseBackupsResponse200) & {
+  headers: Headers;
+};
+export type listDatabaseBackupsResponseError = (listDatabaseBackupsResponse403 | listDatabaseBackupsResponse404 | listDatabaseBackupsResponse409 | listDatabaseBackupsResponse503) & {
+  headers: Headers;
+};
+
+export type listDatabaseBackupsResponse = (listDatabaseBackupsResponseSuccess | listDatabaseBackupsResponseError)
+
+export const getListDatabaseBackupsUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backups`
+}
+
+/**
+ * Returns every backup of the database, newest first, together with the
+ * window a point-in-time restore may target.
+ *
+ * Both backups you took and backups the schedule produced are listed;
+ * `source` tells them apart. Only manual backups count against the plan's
+ * backup allowance.
+ * @summary List a database's backups
+ */
+export const listDatabaseBackups = async (id: string,
+    databaseName: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDatabaseBackupsResponse> => {
+
+  return volcanoFetch<listDatabaseBackupsResponse>(getListDatabaseBackupsUrl(id,databaseName),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createDatabaseBackupResponse201 = {
+  data: DatabaseBackup
+  status: 201
+}
+
+export type createDatabaseBackupResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createDatabaseBackupResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createDatabaseBackupResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type createDatabaseBackupResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createDatabaseBackupResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type createDatabaseBackupResponseSuccess = (createDatabaseBackupResponse201) & {
+  headers: Headers;
+};
+export type createDatabaseBackupResponseError = (createDatabaseBackupResponse400 | createDatabaseBackupResponse403 | createDatabaseBackupResponse404 | createDatabaseBackupResponse409 | createDatabaseBackupResponse503) & {
+  headers: Headers;
+};
+
+export type createDatabaseBackupResponse = (createDatabaseBackupResponseSuccess | createDatabaseBackupResponseError)
+
+export const getCreateDatabaseBackupUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backups`
+}
+
+/**
+ * Captures the database as it is now. The backup is available immediately;
+ * its `size_bytes` appears once the storage provider has costed it.
+ *
+ * Backups are rate-limited to one per minute per database, and capped by
+ * the owner's plan.
+ * @summary Back up a database
+ */
+export const createDatabaseBackup = async (id: string,
+    databaseName: string,
+    createDatabaseBackupRequest: CreateDatabaseBackupRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createDatabaseBackupResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createDatabaseBackupResponse>(getCreateDatabaseBackupUrl(id,databaseName),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createDatabaseBackupRequest)
+  }
+);}
+
+
+
+export type getDatabaseBackupResponse200 = {
+  data: DatabaseBackup
+  status: 200
+}
+
+export type getDatabaseBackupResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getDatabaseBackupResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDatabaseBackupResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type getDatabaseBackupResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getDatabaseBackupResponseSuccess = (getDatabaseBackupResponse200) & {
+  headers: Headers;
+};
+export type getDatabaseBackupResponseError = (getDatabaseBackupResponse403 | getDatabaseBackupResponse404 | getDatabaseBackupResponse409 | getDatabaseBackupResponse503) & {
+  headers: Headers;
+};
+
+export type getDatabaseBackupResponse = (getDatabaseBackupResponseSuccess | getDatabaseBackupResponseError)
+
+export const getGetDatabaseBackupUrl = (id: string,
+    databaseName: string,
+    backupName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backups/${backupName}`
+}
+
+/**
+ * Returns one backup of the database.
+ * @summary Get a backup
+ */
+export const getDatabaseBackup = async (id: string,
+    databaseName: string,
+    backupName: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDatabaseBackupResponse> => {
+
+  return volcanoFetch<getDatabaseBackupResponse>(getGetDatabaseBackupUrl(id,databaseName,backupName),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteDatabaseBackupResponse200 = {
+  data: DeleteDatabaseBackup200
+  status: 200
+}
+
+export type deleteDatabaseBackupResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteDatabaseBackupResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDatabaseBackupResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type deleteDatabaseBackupResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type deleteDatabaseBackupResponseSuccess = (deleteDatabaseBackupResponse200) & {
+  headers: Headers;
+};
+export type deleteDatabaseBackupResponseError = (deleteDatabaseBackupResponse403 | deleteDatabaseBackupResponse404 | deleteDatabaseBackupResponse409 | deleteDatabaseBackupResponse503) & {
+  headers: Headers;
+};
+
+export type deleteDatabaseBackupResponse = (deleteDatabaseBackupResponseSuccess | deleteDatabaseBackupResponseError)
+
+export const getDeleteDatabaseBackupUrl = (id: string,
+    databaseName: string,
+    backupName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backups/${backupName}`
+}
+
+/**
+ * Deletes the backup and frees its storage. Scheduled backups can be
+ * deleted too. A backup that is already gone reports `404`, so a name
+ * that never existed and a name that no longer does read the same.
+ * Refused with `409` while the database is being restored.
+ * @summary Delete a backup
+ */
+export const deleteDatabaseBackup = async (id: string,
+    databaseName: string,
+    backupName: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteDatabaseBackupResponse> => {
+
+  return volcanoFetch<deleteDatabaseBackupResponse>(getDeleteDatabaseBackupUrl(id,databaseName,backupName),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getDatabaseBackupScheduleResponse200 = {
+  data: DatabaseBackupSchedule
+  status: 200
+}
+
+export type getDatabaseBackupScheduleResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getDatabaseBackupScheduleResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDatabaseBackupScheduleResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type getDatabaseBackupScheduleResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getDatabaseBackupScheduleResponseSuccess = (getDatabaseBackupScheduleResponse200) & {
+  headers: Headers;
+};
+export type getDatabaseBackupScheduleResponseError = (getDatabaseBackupScheduleResponse403 | getDatabaseBackupScheduleResponse404 | getDatabaseBackupScheduleResponse409 | getDatabaseBackupScheduleResponse503) & {
+  headers: Headers;
+};
+
+export type getDatabaseBackupScheduleResponse = (getDatabaseBackupScheduleResponseSuccess | getDatabaseBackupScheduleResponseError)
+
+export const getGetDatabaseBackupScheduleUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backup-schedule`
+}
+
+/**
+ * Returns the database's backup schedule. An empty list means no scheduled
+ * backups.
+ * @summary Get the automated backup schedule
+ */
+export const getDatabaseBackupSchedule = async (id: string,
+    databaseName: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDatabaseBackupScheduleResponse> => {
+
+  return volcanoFetch<getDatabaseBackupScheduleResponse>(getGetDatabaseBackupScheduleUrl(id,databaseName),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateDatabaseBackupScheduleResponse200 = {
+  data: DatabaseBackupSchedule
+  status: 200
+}
+
+export type updateDatabaseBackupScheduleResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateDatabaseBackupScheduleResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateDatabaseBackupScheduleResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateDatabaseBackupScheduleResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type updateDatabaseBackupScheduleResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type updateDatabaseBackupScheduleResponseSuccess = (updateDatabaseBackupScheduleResponse200) & {
+  headers: Headers;
+};
+export type updateDatabaseBackupScheduleResponseError = (updateDatabaseBackupScheduleResponse400 | updateDatabaseBackupScheduleResponse403 | updateDatabaseBackupScheduleResponse404 | updateDatabaseBackupScheduleResponse409 | updateDatabaseBackupScheduleResponse503) & {
+  headers: Headers;
+};
+
+export type updateDatabaseBackupScheduleResponse = (updateDatabaseBackupScheduleResponseSuccess | updateDatabaseBackupScheduleResponseError)
+
+export const getUpdateDatabaseBackupScheduleUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/backup-schedule`
+}
+
+/**
+ * Replaces the schedule wholesale. Send an empty `entries` list to stop
+ * scheduled backups.
+ *
+ * Scheduled backups do not count against the plan's backup allowance, but
+ * their retention is clamped to the plan's.
+ * @summary Replace the automated backup schedule
+ */
+export const updateDatabaseBackupSchedule = async (id: string,
+    databaseName: string,
+    databaseBackupSchedule: DatabaseBackupSchedule, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateDatabaseBackupScheduleResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateDatabaseBackupScheduleResponse>(getUpdateDatabaseBackupScheduleUrl(id,databaseName),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(databaseBackupSchedule)
+  }
+);}
+
+
+
+export type listDatabaseRestoresResponse200 = {
+  data: DatabaseRestoreList
+  status: 200
+}
+
+export type listDatabaseRestoresResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listDatabaseRestoresResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDatabaseRestoresResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type listDatabaseRestoresResponseSuccess = (listDatabaseRestoresResponse200) & {
+  headers: Headers;
+};
+export type listDatabaseRestoresResponseError = (listDatabaseRestoresResponse403 | listDatabaseRestoresResponse404 | listDatabaseRestoresResponse503) & {
+  headers: Headers;
+};
+
+export type listDatabaseRestoresResponse = (listDatabaseRestoresResponseSuccess | listDatabaseRestoresResponseError)
+
+export const getListDatabaseRestoresUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/restores`
+}
+
+/**
+ * Returns the database's restore history, newest first, capped at the 50
+ * most recent. There is no pagination: a database that has been restored
+ * more than 50 times keeps the older records but does not return them.
+ * @summary List a database's restores
+ */
+export const listDatabaseRestores = async (id: string,
+    databaseName: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDatabaseRestoresResponse> => {
+
+  return volcanoFetch<listDatabaseRestoresResponse>(getListDatabaseRestoresUrl(id,databaseName),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createDatabaseRestoreResponse202 = {
+  data: DatabaseRestore
+  status: 202
+}
+
+export type createDatabaseRestoreResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createDatabaseRestoreResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createDatabaseRestoreResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type createDatabaseRestoreResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createDatabaseRestoreResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type createDatabaseRestoreResponseSuccess = (createDatabaseRestoreResponse202) & {
+  headers: Headers;
+};
+export type createDatabaseRestoreResponseError = (createDatabaseRestoreResponse400 | createDatabaseRestoreResponse403 | createDatabaseRestoreResponse404 | createDatabaseRestoreResponse409 | createDatabaseRestoreResponse503) & {
+  headers: Headers;
+};
+
+export type createDatabaseRestoreResponse = (createDatabaseRestoreResponseSuccess | createDatabaseRestoreResponseError)
+
+export const getCreateDatabaseRestoreUrl = (id: string,
+    databaseName: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/restores`
+}
+
+/**
+ * Replaces the database's data, either with a named backup or with its
+ * state at a point in time. This is destructive: everything written after
+ * that point is discarded.
+ *
+ * Asynchronous: the response is `202` with the restore `pending` and the
+ * database `restoring`. The database does not accept connections until the
+ * restore reports `completed`; its connection string is unchanged
+ * throughout, so nothing holding it needs updating.
+ *
+ * Restores are in place. There is no way to restore into a second
+ * database, and a database's branches are never restored — they keep
+ * serving their own data, but resetting a branch from its parent is
+ * refused by the storage provider for up to 24 hours afterwards.
+ * @summary Restore a database
+ */
+export const createDatabaseRestore = async (id: string,
+    databaseName: string,
+    createDatabaseRestoreRequest: CreateDatabaseRestoreRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createDatabaseRestoreResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createDatabaseRestoreResponse>(getCreateDatabaseRestoreUrl(id,databaseName),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createDatabaseRestoreRequest)
+  }
+);}
+
+
+
+export type getDatabaseRestoreResponse200 = {
+  data: DatabaseRestore
+  status: 200
+}
+
+export type getDatabaseRestoreResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getDatabaseRestoreResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDatabaseRestoreResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getDatabaseRestoreResponseSuccess = (getDatabaseRestoreResponse200) & {
+  headers: Headers;
+};
+export type getDatabaseRestoreResponseError = (getDatabaseRestoreResponse403 | getDatabaseRestoreResponse404 | getDatabaseRestoreResponse503) & {
+  headers: Headers;
+};
+
+export type getDatabaseRestoreResponse = (getDatabaseRestoreResponseSuccess | getDatabaseRestoreResponseError)
+
+export const getGetDatabaseRestoreUrl = (id: string,
+    databaseName: string,
+    restoreId: string,) => {
+
+
+
+
+  return `/projects/${id}/databases/${databaseName}/restores/${restoreId}`
+}
+
+/**
+ * Returns the restore. Poll this after starting one; the database is
+ * connectable again once it reports `completed`.
+ * @summary Get a restore
+ */
+export const getDatabaseRestore = async (id: string,
+    databaseName: string,
+    restoreId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDatabaseRestoreResponse> => {
+
+  return volcanoFetch<getDatabaseRestoreResponse>(getGetDatabaseRestoreUrl(id,databaseName,restoreId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type resetDatabasePasswordResponse200 = {
   data: ResetDatabasePassword200
   status: 200
 }
 
+export type resetDatabasePasswordResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type resetDatabasePasswordResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type resetDatabasePasswordResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type resetDatabasePasswordResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type resetDatabasePasswordResponseSuccess = (resetDatabasePasswordResponse200) & {
   headers: Headers;
 };
-;
+export type resetDatabasePasswordResponseError = (resetDatabasePasswordResponse400 | resetDatabasePasswordResponse404 | resetDatabasePasswordResponse409 | resetDatabasePasswordResponse503) & {
+  headers: Headers;
+};
 
-export type resetDatabasePasswordResponse = (resetDatabasePasswordResponseSuccess)
+export type resetDatabasePasswordResponse = (resetDatabasePasswordResponseSuccess | resetDatabasePasswordResponseError)
 
 export const getResetDatabasePasswordUrl = (id: string,
     databaseName: string,) => {
@@ -5530,6 +6508,10 @@ export const getResetDatabasePasswordUrl = (id: string,
  * through pgproxy. This does not rotate or expose the internal owner password.
  * The returned password and connection string are the only client credentials that
  * will authenticate through pgproxy after reset.
+ *
+ * Existing connections are not interrupted; new ones must use the returned
+ * string. Proxies pick the rotation up within a few seconds, so the previous
+ * password can still open new connections until then.
  * @summary Reset database password
  */
 export const resetDatabasePassword = async (id: string,
@@ -5561,10 +6543,20 @@ export type updateDatabaseTypeResponse404 = {
   status: 404
 }
 
+export type updateDatabaseTypeResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type updateDatabaseTypeResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type updateDatabaseTypeResponseSuccess = (updateDatabaseTypeResponse200) & {
   headers: Headers;
 };
-export type updateDatabaseTypeResponseError = (updateDatabaseTypeResponse400 | updateDatabaseTypeResponse404) & {
+export type updateDatabaseTypeResponseError = (updateDatabaseTypeResponse400 | updateDatabaseTypeResponse404 | updateDatabaseTypeResponse409 | updateDatabaseTypeResponse503) & {
   headers: Headers;
 };
 
@@ -6088,10 +7080,15 @@ export type queryDatabaseBranchPingResponse429 = {
   status: 429
 }
 
+export type queryDatabaseBranchPingResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseBranchPingResponseSuccess = (queryDatabaseBranchPingResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseBranchPingResponseError = (queryDatabaseBranchPingResponse401 | queryDatabaseBranchPingResponse403 | queryDatabaseBranchPingResponse404 | queryDatabaseBranchPingResponse429) & {
+export type queryDatabaseBranchPingResponseError = (queryDatabaseBranchPingResponse401 | queryDatabaseBranchPingResponse403 | queryDatabaseBranchPingResponse404 | queryDatabaseBranchPingResponse429 | queryDatabaseBranchPingResponse503) & {
   headers: Headers;
 };
 
@@ -6166,10 +7163,15 @@ export type queryDatabaseBranchSelectResponse429 = {
   status: 429
 }
 
+export type queryDatabaseBranchSelectResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseBranchSelectResponseSuccess = (queryDatabaseBranchSelectResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseBranchSelectResponseError = (queryDatabaseBranchSelectResponse400 | queryDatabaseBranchSelectResponse401 | queryDatabaseBranchSelectResponse403 | queryDatabaseBranchSelectResponse404 | queryDatabaseBranchSelectResponse429) & {
+export type queryDatabaseBranchSelectResponseError = (queryDatabaseBranchSelectResponse400 | queryDatabaseBranchSelectResponse401 | queryDatabaseBranchSelectResponse403 | queryDatabaseBranchSelectResponse404 | queryDatabaseBranchSelectResponse429 | queryDatabaseBranchSelectResponse503) & {
   headers: Headers;
 };
 
@@ -6254,10 +7256,15 @@ export type queryDatabaseBranchInsertResponse429 = {
   status: 429
 }
 
+export type queryDatabaseBranchInsertResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseBranchInsertResponseSuccess = (queryDatabaseBranchInsertResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseBranchInsertResponseError = (queryDatabaseBranchInsertResponse400 | queryDatabaseBranchInsertResponse401 | queryDatabaseBranchInsertResponse403 | queryDatabaseBranchInsertResponse404 | queryDatabaseBranchInsertResponse429) & {
+export type queryDatabaseBranchInsertResponseError = (queryDatabaseBranchInsertResponse400 | queryDatabaseBranchInsertResponse401 | queryDatabaseBranchInsertResponse403 | queryDatabaseBranchInsertResponse404 | queryDatabaseBranchInsertResponse429 | queryDatabaseBranchInsertResponse503) & {
   headers: Headers;
 };
 
@@ -6338,10 +7345,15 @@ export type queryDatabaseBranchUpdateResponse429 = {
   status: 429
 }
 
+export type queryDatabaseBranchUpdateResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseBranchUpdateResponseSuccess = (queryDatabaseBranchUpdateResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseBranchUpdateResponseError = (queryDatabaseBranchUpdateResponse400 | queryDatabaseBranchUpdateResponse401 | queryDatabaseBranchUpdateResponse403 | queryDatabaseBranchUpdateResponse404 | queryDatabaseBranchUpdateResponse429) & {
+export type queryDatabaseBranchUpdateResponseError = (queryDatabaseBranchUpdateResponse400 | queryDatabaseBranchUpdateResponse401 | queryDatabaseBranchUpdateResponse403 | queryDatabaseBranchUpdateResponse404 | queryDatabaseBranchUpdateResponse429 | queryDatabaseBranchUpdateResponse503) & {
   headers: Headers;
 };
 
@@ -6423,10 +7435,15 @@ export type queryDatabaseBranchDeleteResponse429 = {
   status: 429
 }
 
+export type queryDatabaseBranchDeleteResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseBranchDeleteResponseSuccess = (queryDatabaseBranchDeleteResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseBranchDeleteResponseError = (queryDatabaseBranchDeleteResponse400 | queryDatabaseBranchDeleteResponse401 | queryDatabaseBranchDeleteResponse403 | queryDatabaseBranchDeleteResponse404 | queryDatabaseBranchDeleteResponse429) & {
+export type queryDatabaseBranchDeleteResponseError = (queryDatabaseBranchDeleteResponse400 | queryDatabaseBranchDeleteResponse401 | queryDatabaseBranchDeleteResponse403 | queryDatabaseBranchDeleteResponse404 | queryDatabaseBranchDeleteResponse429 | queryDatabaseBranchDeleteResponse503) & {
   headers: Headers;
 };
 
@@ -9212,6 +10229,401 @@ return volcanoFetch<updateAuthHostedPageResponse>(getUpdateAuthHostedPageUrl(id,
 
 
 
+export type getAuthPageAppearanceResponse200 = {
+  data: AuthPageAppearanceResponse
+  status: 200
+}
+
+export type getAuthPageAppearanceResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getAuthPageAppearanceResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getAuthPageAppearanceResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getAuthPageAppearanceResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type getAuthPageAppearanceResponseSuccess = (getAuthPageAppearanceResponse200) & {
+  headers: Headers;
+};
+export type getAuthPageAppearanceResponseError = (getAuthPageAppearanceResponse401 | getAuthPageAppearanceResponse403 | getAuthPageAppearanceResponse404 | getAuthPageAppearanceResponse500) & {
+  headers: Headers;
+};
+
+export type getAuthPageAppearanceResponse = (getAuthPageAppearanceResponseSuccess | getAuthPageAppearanceResponseError)
+
+export const getGetAuthPageAppearanceUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/appearance`
+}
+
+/**
+ * @summary Get managed auth page appearance
+ */
+export const getAuthPageAppearance = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getAuthPageAppearanceResponse> => {
+
+  return volcanoFetch<getAuthPageAppearanceResponse>(getGetAuthPageAppearanceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateAuthPageThemeResponse200 = {
+  data: UpdateAuthPageThemeRequest
+  status: 200
+}
+
+export type updateAuthPageThemeResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateAuthPageThemeResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateAuthPageThemeResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateAuthPageThemeResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateAuthPageThemeResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type updateAuthPageThemeResponseSuccess = (updateAuthPageThemeResponse200) & {
+  headers: Headers;
+};
+export type updateAuthPageThemeResponseError = (updateAuthPageThemeResponse400 | updateAuthPageThemeResponse401 | updateAuthPageThemeResponse403 | updateAuthPageThemeResponse404 | updateAuthPageThemeResponse500) & {
+  headers: Headers;
+};
+
+export type updateAuthPageThemeResponse = (updateAuthPageThemeResponseSuccess | updateAuthPageThemeResponseError)
+
+export const getUpdateAuthPageThemeUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/theme`
+}
+
+/**
+ * @summary Save the managed auth page theme
+ */
+export const updateAuthPageTheme = async (id: string,
+    updateAuthPageThemeRequest: UpdateAuthPageThemeRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateAuthPageThemeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateAuthPageThemeResponse>(getUpdateAuthPageThemeUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateAuthPageThemeRequest)
+  }
+);}
+
+
+
+export type deleteAuthPageThemeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAuthPageThemeResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteAuthPageThemeResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteAuthPageThemeResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteAuthPageThemeResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type deleteAuthPageThemeResponseSuccess = (deleteAuthPageThemeResponse204) & {
+  headers: Headers;
+};
+export type deleteAuthPageThemeResponseError = (deleteAuthPageThemeResponse401 | deleteAuthPageThemeResponse403 | deleteAuthPageThemeResponse404 | deleteAuthPageThemeResponse500) & {
+  headers: Headers;
+};
+
+export type deleteAuthPageThemeResponse = (deleteAuthPageThemeResponseSuccess | deleteAuthPageThemeResponseError)
+
+export const getDeleteAuthPageThemeUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/theme`
+}
+
+/**
+ * @summary Clear the managed auth page theme
+ */
+export const deleteAuthPageTheme = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteAuthPageThemeResponse> => {
+
+  return volcanoFetch<deleteAuthPageThemeResponse>(getDeleteAuthPageThemeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type updateAuthPageLayoutResponse200 = {
+  data: UpdateAuthPageLayoutRequest
+  status: 200
+}
+
+export type updateAuthPageLayoutResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateAuthPageLayoutResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateAuthPageLayoutResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateAuthPageLayoutResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateAuthPageLayoutResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type updateAuthPageLayoutResponseSuccess = (updateAuthPageLayoutResponse200) & {
+  headers: Headers;
+};
+export type updateAuthPageLayoutResponseError = (updateAuthPageLayoutResponse400 | updateAuthPageLayoutResponse401 | updateAuthPageLayoutResponse403 | updateAuthPageLayoutResponse404 | updateAuthPageLayoutResponse500) & {
+  headers: Headers;
+};
+
+export type updateAuthPageLayoutResponse = (updateAuthPageLayoutResponseSuccess | updateAuthPageLayoutResponseError)
+
+export const getUpdateAuthPageLayoutUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/layout`
+}
+
+/**
+ * @summary Save one managed auth page layout
+ */
+export const updateAuthPageLayout = async (id: string,
+    pageType: HostedAuthPageType,
+    updateAuthPageLayoutRequest: UpdateAuthPageLayoutRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateAuthPageLayoutResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateAuthPageLayoutResponse>(getUpdateAuthPageLayoutUrl(id,pageType),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateAuthPageLayoutRequest)
+  }
+);}
+
+
+
+export type deleteAuthPageLayoutResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAuthPageLayoutResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type deleteAuthPageLayoutResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteAuthPageLayoutResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteAuthPageLayoutResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteAuthPageLayoutResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type deleteAuthPageLayoutResponseSuccess = (deleteAuthPageLayoutResponse204) & {
+  headers: Headers;
+};
+export type deleteAuthPageLayoutResponseError = (deleteAuthPageLayoutResponse400 | deleteAuthPageLayoutResponse401 | deleteAuthPageLayoutResponse403 | deleteAuthPageLayoutResponse404 | deleteAuthPageLayoutResponse500) & {
+  headers: Headers;
+};
+
+export type deleteAuthPageLayoutResponse = (deleteAuthPageLayoutResponseSuccess | deleteAuthPageLayoutResponseError)
+
+export const getDeleteAuthPageLayoutUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/layout`
+}
+
+/**
+ * @summary Clear one managed auth page layout
+ */
+export const deleteAuthPageLayout = async (id: string,
+    pageType: HostedAuthPageType, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteAuthPageLayoutResponse> => {
+
+  return volcanoFetch<deleteAuthPageLayoutResponse>(getDeleteAuthPageLayoutUrl(id,pageType),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type previewAuthPageResponse200 = {
+  data: PreviewAuthPageResponse
+  status: 200
+}
+
+export type previewAuthPageResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type previewAuthPageResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type previewAuthPageResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type previewAuthPageResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type previewAuthPageResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type previewAuthPageResponseSuccess = (previewAuthPageResponse200) & {
+  headers: Headers;
+};
+export type previewAuthPageResponseError = (previewAuthPageResponse400 | previewAuthPageResponse401 | previewAuthPageResponse403 | previewAuthPageResponse404 | previewAuthPageResponse500) & {
+  headers: Headers;
+};
+
+export type previewAuthPageResponse = (previewAuthPageResponseSuccess | previewAuthPageResponseError)
+
+export const getPreviewAuthPageUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/preview`
+}
+
+/**
+ * @summary Preview an unsaved managed auth page appearance
+ */
+export const previewAuthPage = async (id: string,
+    pageType: HostedAuthPageType,
+    previewAuthPageRequest: PreviewAuthPageRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<previewAuthPageResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<previewAuthPageResponse>(getPreviewAuthPageUrl(id,pageType),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewAuthPageRequest)
+  }
+);}
+
+
+
 export type renderManagedAuthPageResponse200 = {
   data: string
   status: 200
@@ -9246,10 +10658,12 @@ export const getRenderManagedAuthPageUrl = (id: string,
 }
 
 /**
- * Public HTML endpoint for the managed reset-password page.
+ * Public HTML endpoint for signup, forgot-password, device approval,
+ * verify-email, and reset-password pages. Login uses the path without a
+ * page type.
  * Requires `Accept: text/html`.
  * Returns 404 when managed hosted pages are disabled for the project.
- * @summary Render managed reset-password page
+ * @summary Render a managed auth page
  */
 export const renderManagedAuthPage = async (id: string,
     pageType: HostedRenderablePageType, options?: Parameters<typeof volcanoFetch>[1]): Promise<renderManagedAuthPageResponse> => {
@@ -12274,6 +13688,12 @@ export const getUploadStorageObjectUrl = (bucketName: string,
  * **Complete Resumable Session:**
  * Complete a session after all parts are uploaded.
  * Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+ *
+ * **Resumable Session Ownership:**
+ * A session created with a user access token remains bound to that user. A session
+ * created with an anon key remains bound to that exact anon key. Reuse the same
+ * identity or anon key for part uploads, status, completion, and abort requests;
+ * an ownership mismatch returns `404`.
  * @summary Upload a file or create resumable session
  */
 export const uploadStorageObject = async (bucketName: string,
@@ -12340,6 +13760,7 @@ export const getUploadPartUrl = (bucketName: string,
  * - Maximum part size is 25MB
  * - Parts can be uploaded in any order
  * - Re-uploading a part overwrites the previous upload
+ * - Anonymous sessions must reuse the exact anon key that created the session
  * @summary Upload a part of a resumable upload
  */
 export const uploadPart = async (bucketName: string,
@@ -12424,6 +13845,7 @@ export const getDownloadStorageObjectUrl = (bucketName: string,
  *
  * **Session Status (with X-Upload-Session header):**
  * Returns the status of a resumable upload session, including which parts have been uploaded.
+ * Anonymous sessions must reuse the exact anon key that created the session.
  * @summary Download a file or get upload session status
  */
 export const downloadStorageObject = async (bucketName: string,
@@ -12486,6 +13908,7 @@ export const getDeleteStorageObjectUrl = (bucketName: string,
  *
  * **Abort Session (with X-Upload-Session header):**
  * Aborts a resumable upload session and cleans up any uploaded parts.
+ * Anonymous sessions must reuse the exact anon key that created the session.
  * @summary Delete a file or abort upload session
  */
 export const deleteStorageObject = async (bucketName: string,

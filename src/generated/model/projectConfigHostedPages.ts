@@ -16,4 +16,8 @@ import type { ProjectConfigHostedPage } from './projectConfigHostedPage';
 export interface ProjectConfigHostedPages {
   login?: ProjectConfigHostedPage;
   reset_password?: ProjectConfigHostedPage;
+  signup?: ProjectConfigHostedPage;
+  forgot_password?: ProjectConfigHostedPage;
+  device?: ProjectConfigHostedPage;
+  verify_email?: ProjectConfigHostedPage;
 }
