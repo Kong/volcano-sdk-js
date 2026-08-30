@@ -21,6 +21,7 @@ const featuresPath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FEATURES');
 const fixturePath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FIXTURE');
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 const features = loadFeatures(path.join(featuresPath, '*.feature'));
+const ACCESS_TOKEN_CLOCK_TICK_MS = 1_100;
 
 let activeWorld;
 
@@ -76,6 +77,7 @@ autoBindSteps(features, [
     when('the client refreshes the current session', async () => {
       const before = await context.world.client.auth.getSession();
       context.world.previousSession = before.data.session;
+      await new Promise((resolve) => setTimeout(resolve, ACCESS_TOKEN_CLOCK_TICK_MS));
       const refreshed = await context.world.client.auth.refreshSession();
       if (refreshed.error) {
         recordOutcome(context.world, null, refreshed.error);
@@ -89,6 +91,9 @@ autoBindSteps(features, [
 
     then('the refreshed session becomes current', () => {
       expect(context.world.refreshedSession).not.toBe(context.world.previousSession);
+      expect(context.world.refreshedSession.access_token).not.toBe(
+        context.world.previousSession.access_token,
+      );
       expect(context.world.lastOutcome.value.session).toMatchObject({
         access_token: context.world.refreshedSession.access_token,
         refresh_token: context.world.refreshedSession.refresh_token,
