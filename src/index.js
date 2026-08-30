@@ -977,10 +977,11 @@ class VolcanoAuth {
       };
     }
 
-    return this._authFetchUrl(`${this.apiUrl}${path}`, options, context);
+    return this._authFetchUrl(`${this.apiUrl}${path}`, options);
   }
 
-  async _authFetchUrl(url, fetchOptions = {}, context = this._captureAuthContext()) {
+  async _authFetchUrl(url, fetchOptions = {}) {
+    const context = this._captureAuthContext();
     let retryFailure = null;
     let accessToken = context.accessToken;
 
