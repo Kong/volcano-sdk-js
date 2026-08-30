@@ -74,6 +74,8 @@ autoBindSteps(features, [
     });
 
     when('the client refreshes the current session', async () => {
+      const before = await context.world.client.auth.getSession();
+      context.world.previousSession = before.data.session;
       const refreshed = await context.world.client.auth.refreshSession();
       if (refreshed.error) {
         recordOutcome(context.world, null, refreshed.error);
@@ -86,6 +88,7 @@ autoBindSteps(features, [
     });
 
     then('the refreshed session becomes current', () => {
+      expect(context.world.refreshedSession).not.toBe(context.world.previousSession);
       expect(context.world.lastOutcome.value.session).toMatchObject({
         access_token: context.world.refreshedSession.access_token,
         refresh_token: context.world.refreshedSession.refresh_token,

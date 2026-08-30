@@ -37,6 +37,7 @@ class ContractWorld {
   constructor(fixture) {
     this.fixture = fixture;
     this.lastOutcome = null;
+    this.previousSession = null;
     this.refreshedSession = null;
     this.signedOutSession = null;
     this.client = new VolcanoClient({
