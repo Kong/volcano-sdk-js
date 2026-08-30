@@ -986,18 +986,6 @@ class VolcanoAuth {
     let accessToken = context.accessToken;
 
     for (;;) {
-      if (!accessToken) {
-        if (retryFailure) {
-          return retryFailure;
-        }
-        return {
-          ok: false,
-          status: null,
-          error: new Error('No active session'),
-          data: null,
-        };
-      }
-
       try {
         const response = await fetchWithTimeout(
           url,

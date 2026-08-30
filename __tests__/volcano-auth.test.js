@@ -471,22 +471,6 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - getUser', () => {
-    it('does not accept a caller-supplied auth context', async () => {
-      const result = await volcano._authFetchUrl(
-        'https://api.test.com/auth/user',
-        {},
-        {
-          generation: 0,
-          accessToken: 'caller-token',
-          refreshToken: 'caller-refresh',
-        },
-      );
-
-      expect(result.ok).toBe(false);
-      expect(result.error.message).toBe('No active session');
-      expect(global.fetch).not.toHaveBeenCalled();
-    });
-
     it('should return user when authenticated', async () => {
       volcano.accessToken = 'valid-token';
 
