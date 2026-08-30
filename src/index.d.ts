@@ -414,6 +414,14 @@ export class AuthRefreshDiscardedError extends Error {
   static is(error: unknown): error is AuthRefreshDiscardedError;
 }
 
+/** A stale auth operation completed after another logical session won. */
+export class AuthSessionChangedError extends Error {
+  readonly name: 'AuthSessionChangedError';
+  readonly code: 'auth_session_changed';
+  readonly status: 409;
+  static is(error: unknown): error is AuthSessionChangedError;
+}
+
 // ============================================================================
 // Logs Types
 // ============================================================================

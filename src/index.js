@@ -266,6 +266,24 @@ class AuthRefreshDiscardedError extends Error {
 }
 AuthRefreshDiscardedError.prototype.name = 'AuthRefreshDiscardedError';
 
+class AuthSessionChangedError extends Error {
+  constructor() {
+    super('Auth operation discarded because the session changed');
+    Object.defineProperty(this, 'code', { value: 'auth_session_changed' });
+    Object.defineProperty(this, 'status', { value: 409 });
+  }
+
+  static is(error) {
+    return (
+      Boolean(error) &&
+      error.name === 'AuthSessionChangedError' &&
+      error.code === 'auth_session_changed' &&
+      error.status === 409
+    );
+  }
+}
+AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
+
 /**
  * Error raised when a function *invocation* fails at the platform layer rather
  * than inside the function's own code — the call reached (or tried to reach)
@@ -1313,6 +1331,7 @@ class VolcanoAuth {
   }
 
   async signIn({ email, password }) {
+    const expectedGeneration = this._sessionGeneration;
     let response;
     try {
       response = await this._transport.authSignin(
@@ -1327,7 +1346,9 @@ class VolcanoAuth {
       };
     }
 
-    this._setSession(response.data);
+    if (!this._setSession(response.data, expectedGeneration)) {
+      return { user: null, session: null, error: new AuthSessionChangedError() };
+    }
     return {
       user: response.data.user,
       session: {
@@ -1359,17 +1380,20 @@ class VolcanoAuth {
 
   async signOut() {
     await this._completeOAuthExchange();
-    if (this.refreshToken) {
+    const context = this._captureAuthContext();
+    if (context.refreshToken) {
       try {
         await this._anonFetch('/auth/logout', {
           method: 'POST',
-          body: JSON.stringify({ refresh_token: this.refreshToken }),
+          body: JSON.stringify({ refresh_token: context.refreshToken }),
         });
       } catch (err) {
         console.warn('[VolcanoAuth] Logout request failed:', err.message);
       }
     }
-    this._clearSession();
+    if (!this._clearSession(context.generation)) {
+      return { error: new AuthSessionChangedError() };
+    }
     return { error: null };
   }
 
@@ -1516,6 +1540,7 @@ class VolcanoAuth {
   // ========================================================================
 
   async signUpAnonymous(metadata = {}) {
+    const expectedGeneration = this._sessionGeneration;
     const result = await this._anonFetch('/auth/signup-anonymous', {
       method: 'POST',
       body: JSON.stringify({ user_metadata: metadata }),
@@ -1525,7 +1550,9 @@ class VolcanoAuth {
       return { user: null, session: null, error: result.error };
     }
 
-    this._setSession(result.data);
+    if (!this._setSession(result.data, expectedGeneration)) {
+      return { user: null, session: null, error: new AuthSessionChangedError() };
+    }
     return {
       user: result.data.user,
       session: {
@@ -2246,16 +2273,19 @@ class VolcanoAuth {
     }
     const redirectURL =
       storedRedirectURL || `${callbackURL.origin}${callbackURL.pathname}${callbackURL.search}`;
+    const expectedGeneration = this._sessionGeneration;
     const result = await this._anonFetch('/auth/oauth/exchange', {
       method: 'POST',
       body: JSON.stringify({ code, redirect_url: redirectURL }),
     });
+    if (expectedGeneration !== this._sessionGeneration) {
+      return false;
+    }
     if (!result.ok) {
       this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
       return false;
     }
-    this._setSession(result.data);
-    return true;
+    return this._setSession(result.data, expectedGeneration);
   }
 
   async _completeOAuthExchange() {
@@ -2366,8 +2396,16 @@ class VolcanoAuth {
     // stale stored token when the hand-off carries none — so we never pair this
     // access token with a different session's refresh token (which could
     // otherwise refresh into the wrong account).
+    this._replaceSessionFromUrl(accessToken, refreshToken);
+    this._urlSessionConsumed = true;
+    this._stripAuthHashFromUrl(params);
+    return true;
+  }
+
+  _replaceSessionFromUrl(accessToken, refreshToken) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken || null;
+    this.currentUser = null;
     this._sessionGeneration += 1;
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
@@ -2375,10 +2413,6 @@ class VolcanoAuth {
     } else {
       this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
     }
-
-    this._urlSessionConsumed = true;
-    this._stripAuthHashFromUrl(params);
-    return true;
   }
 
   /**
@@ -3281,6 +3315,7 @@ const VolcanoClient = VolcanoAuth;
 
 export {
   AuthRefreshDiscardedError,
+  AuthSessionChangedError,
   databaseConnectionString,
   isBrowser,
   loadRealtime,
