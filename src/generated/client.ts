@@ -57,6 +57,7 @@ import type {
   AuthUpdateUser200,
   AuthUpdateUserBody,
   AuthUser,
+  BadRequestResponse,
   BanAuthUserBody,
   BanUserResponse,
   BandwidthCapExceededResponse,
@@ -65,6 +66,7 @@ import type {
   CallOAuthProviderAPIBody,
   CompleteImportConnectParams,
   ConfigureAuthMethodsBody,
+  ConfigureFunctionCustomDomainRequest,
   ConnectProjectGitRequest,
   CreateAnonKeyBody,
   CreateDatabaseBackupRequest,
@@ -108,10 +110,12 @@ import type {
   EmailTemplate,
   Error,
   ExportProjectSourceRequest,
+  ForbiddenResponse,
   Frontend,
   FrontendCustomDomainResponse,
   FrontendUsageHistoryResponse,
   Function,
+  FunctionCustomDomainResponse,
   FunctionInvocationRequest,
   FunctionInvocationResponse,
   FunctionRegion,
@@ -142,6 +146,7 @@ import type {
   ImportConnectionsResponse,
   ImportProvider,
   ImportSourcesResponse,
+  InternalServerErrorResponse,
   ListAnonKeys200,
   ListAnonKeysParams,
   ListAuthUsersParams,
@@ -234,6 +239,7 @@ import type {
   SummarizeProjectDeploymentsParams,
   TestEmailRequest,
   TestEmailResponse,
+  UnauthorizedResponse,
   UnbanUserResponse,
   UpdateAuthConfigRequest,
   UpdateAuthHostedPageRequest,
@@ -3371,10 +3377,15 @@ export type updateFunctionResponse404 = {
   status: 404
 }
 
+export type updateFunctionResponse409 = {
+  data: Error
+  status: 409
+}
+
 export type updateFunctionResponseSuccess = (updateFunctionResponse200) & {
   headers: Headers;
 };
-export type updateFunctionResponseError = (updateFunctionResponse400 | updateFunctionResponse404) & {
+export type updateFunctionResponseError = (updateFunctionResponse400 | updateFunctionResponse404 | updateFunctionResponse409) & {
   headers: Headers;
 };
 
@@ -3390,6 +3401,9 @@ export const getUpdateFunctionUrl = (id: string,
 }
 
 /**
+ * Updates invocation settings without redeploying the function runtime. A function with a
+ * custom domain attached or detaching must remain public and in HTTP invocation mode until
+ * the domain has been fully detached.
  * @summary Update function settings
  */
 export const updateFunction = async (id: string,
@@ -4010,6 +4024,221 @@ export const listProjectSchedulers = async (id: string,
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getFunctionCustomDomainResponse200 = {
+  data: FunctionCustomDomainResponse | null
+  status: 200
+}
+
+export type getFunctionCustomDomainResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getFunctionCustomDomainResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getFunctionCustomDomainResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getFunctionCustomDomainResponse500 = {
+  data: InternalServerErrorResponse
+  status: 500
+}
+
+export type getFunctionCustomDomainResponseSuccess = (getFunctionCustomDomainResponse200) & {
+  headers: Headers;
+};
+export type getFunctionCustomDomainResponseError = (getFunctionCustomDomainResponse401 | getFunctionCustomDomainResponse403 | getFunctionCustomDomainResponse404 | getFunctionCustomDomainResponse500) & {
+  headers: Headers;
+};
+
+export type getFunctionCustomDomainResponse = (getFunctionCustomDomainResponseSuccess | getFunctionCustomDomainResponseError)
+
+export const getGetFunctionCustomDomainUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/functions/${functionId}/domain`
+}
+
+/**
+ * @summary Get a function custom domain
+ */
+export const getFunctionCustomDomain = async (id: string,
+    functionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getFunctionCustomDomainResponse> => {
+
+  return volcanoFetch<getFunctionCustomDomainResponse>(getGetFunctionCustomDomainUrl(id,functionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type configureFunctionCustomDomainResponse200 = {
+  data: FunctionCustomDomainResponse
+  status: 200
+}
+
+export type configureFunctionCustomDomainResponse201 = {
+  data: FunctionCustomDomainResponse
+  status: 201
+}
+
+export type configureFunctionCustomDomainResponse202 = {
+  data: FunctionCustomDomainResponse
+  status: 202
+}
+
+export type configureFunctionCustomDomainResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type configureFunctionCustomDomainResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type configureFunctionCustomDomainResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type configureFunctionCustomDomainResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type configureFunctionCustomDomainResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type configureFunctionCustomDomainResponse500 = {
+  data: InternalServerErrorResponse
+  status: 500
+}
+
+export type configureFunctionCustomDomainResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type configureFunctionCustomDomainResponseSuccess = (configureFunctionCustomDomainResponse200 | configureFunctionCustomDomainResponse201 | configureFunctionCustomDomainResponse202) & {
+  headers: Headers;
+};
+export type configureFunctionCustomDomainResponseError = (configureFunctionCustomDomainResponse400 | configureFunctionCustomDomainResponse401 | configureFunctionCustomDomainResponse403 | configureFunctionCustomDomainResponse404 | configureFunctionCustomDomainResponse409 | configureFunctionCustomDomainResponse500 | configureFunctionCustomDomainResponse503) & {
+  headers: Headers;
+};
+
+export type configureFunctionCustomDomainResponse = (configureFunctionCustomDomainResponseSuccess | configureFunctionCustomDomainResponseError)
+
+export const getConfigureFunctionCustomDomainUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/functions/${functionId}/domain`
+}
+
+/**
+ * PRO capability. The function must be public, active, and use HTTP invocation mode.
+ * Configuration and rotation preserve the function's HTTP authentication mode and stored
+ * OpenAPI document.
+ * @summary Configure or rotate a function custom domain
+ */
+export const configureFunctionCustomDomain = async (id: string,
+    functionId: string,
+    configureFunctionCustomDomainRequest: ConfigureFunctionCustomDomainRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<configureFunctionCustomDomainResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<configureFunctionCustomDomainResponse>(getConfigureFunctionCustomDomainUrl(id,functionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(configureFunctionCustomDomainRequest)
+  }
+);}
+
+
+
+export type deleteFunctionCustomDomainResponse202 = {
+  data: void
+  status: 202
+}
+
+export type deleteFunctionCustomDomainResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type deleteFunctionCustomDomainResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteFunctionCustomDomainResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteFunctionCustomDomainResponse500 = {
+  data: InternalServerErrorResponse
+  status: 500
+}
+
+export type deleteFunctionCustomDomainResponseSuccess = (deleteFunctionCustomDomainResponse202) & {
+  headers: Headers;
+};
+export type deleteFunctionCustomDomainResponseError = (deleteFunctionCustomDomainResponse401 | deleteFunctionCustomDomainResponse403 | deleteFunctionCustomDomainResponse404 | deleteFunctionCustomDomainResponse500) & {
+  headers: Headers;
+};
+
+export type deleteFunctionCustomDomainResponse = (deleteFunctionCustomDomainResponseSuccess | deleteFunctionCustomDomainResponseError)
+
+export const getDeleteFunctionCustomDomainUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/functions/${functionId}/domain`
+}
+
+/**
+ * @summary Detach a function custom domain
+ */
+export const deleteFunctionCustomDomain = async (id: string,
+    functionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteFunctionCustomDomainResponse> => {
+
+  return volcanoFetch<deleteFunctionCustomDomainResponse>(getDeleteFunctionCustomDomainUrl(id,functionId),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

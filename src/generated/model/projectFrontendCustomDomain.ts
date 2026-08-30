@@ -8,9 +8,13 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { FrontendCustomDomainResponse } from './frontendCustomDomainResponse';
+import type { ProjectCustomDomainTarget } from './projectCustomDomainTarget';
 import type { ProjectFrontendCustomDomainFrontend } from './projectFrontendCustomDomainFrontend';
+import type { ProjectFrontendCustomDomainTargetType } from './projectFrontendCustomDomainTargetType';
 
 export type ProjectFrontendCustomDomain = FrontendCustomDomainResponse & {
+  target_type: ProjectFrontendCustomDomainTargetType;
+  target: ProjectCustomDomainTarget;
   /**
      * The frontend this custom domain is attached to. Inlined to
      * avoid a second fetch from the project-scoped feed.

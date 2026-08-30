@@ -10,7 +10,8 @@
 
 /**
  * Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
- * `http` forwards HTTP request semantics to the function runtime.
+ * `http` forwards HTTP request semantics to the function runtime. A function with a custom
+ * domain attached or detaching cannot switch from `http` to `rpc` until detachment completes.
  */
 export type FunctionInvocationMode = typeof FunctionInvocationMode[keyof typeof FunctionInvocationMode];
 

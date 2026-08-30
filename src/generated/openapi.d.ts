@@ -861,7 +861,12 @@ export interface paths {
         delete: operations["deleteFunction"];
         options?: never;
         head?: never;
-        /** Update function settings */
+        /**
+         * Update function settings
+         * @description Updates invocation settings without redeploying the function runtime. A function with a
+         *     custom domain attached or detaching must remain public and in HTTP invocation mode until
+         *     the domain has been fully detached.
+         */
         patch: operations["updateFunction"];
         trace?: never;
     };
@@ -1095,6 +1100,30 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/functions/{functionId}/domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a function custom domain */
+        get: operations["getFunctionCustomDomain"];
+        put?: never;
+        /**
+         * Configure or rotate a function custom domain
+         * @description PRO capability. The function must be public, active, and use HTTP invocation mode.
+         *     Configuration and rotation preserve the function's HTTP authentication mode and stored
+         *     OpenAPI document.
+         */
+        post: operations["configureFunctionCustomDomain"];
+        /** Detach a function custom domain */
+        delete: operations["deleteFunctionCustomDomain"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4878,6 +4907,14 @@ export interface components {
             domain: string;
             tls: components["schemas"]["FrontendCustomDomainTLSConfig"];
         };
+        ConfigureFunctionCustomDomainRequest: {
+            /**
+             * @description Fully-qualified hostname only, without a scheme, port, or path.
+             * @example api.example.com
+             */
+            domain: string;
+            tls: components["schemas"]["FunctionCustomDomainTLSConfig"];
+        };
         CreateFunctionSchedulerRequest: {
             name: string;
             /** @default true */
@@ -4888,6 +4925,24 @@ export interface components {
             };
             /** @description Optional single explicit deployed region. If omitted, the scheduler chooses one deployed region and invokes according to the cron expression. */
             regions?: string[];
+        };
+        FunctionCustomDomainResponse: {
+            /** Format: uuid */
+            function_id: string;
+            domain: string;
+            /** @enum {string} */
+            tls_mode: "byoc";
+            /** @enum {string} */
+            domain_status: "pending_verification" | "provisioning" | "active" | "detaching" | "failed";
+            /** @enum {string} */
+            verification_status: "pending" | "verified" | "failed";
+            verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
+            required_routing_record?: components["schemas"]["FrontendDomainRoutingRecord"];
+            effective_urls: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         CreateOAuthConfigRequest: {
             /**
@@ -6176,7 +6231,8 @@ export interface components {
         };
         /**
          * @description Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
-         *     `http` forwards HTTP request semantics to the function runtime.
+         *     `http` forwards HTTP request semantics to the function runtime. A function with a custom
+         *     domain attached or detaching cannot switch from `http` to `rpc` until detachment completes.
          * @enum {string}
          */
         FunctionInvocationMode: "rpc" | "http";
@@ -6640,7 +6696,7 @@ export interface components {
             prev_cursor?: string;
         };
         PaginatedProjectCustomDomains: {
-            data: components["schemas"]["ProjectFrontendCustomDomain"][];
+            data: components["schemas"]["ProjectCustomDomain"][];
             /** @description Current page number (1-indexed) */
             page: number;
             /** @description Number of items per page */
@@ -7311,6 +7367,9 @@ export interface components {
             to: string;
         };
         ProjectFrontendCustomDomain: components["schemas"]["FrontendCustomDomainResponse"] & {
+            target: components["schemas"]["ProjectCustomDomainTarget"];
+            /** @enum {string} */
+            target_type: "frontend";
             /**
              * @description The frontend this custom domain is attached to. Inlined to
              *     avoid a second fetch from the project-scoped feed.
@@ -7320,7 +7379,30 @@ export interface components {
                 id: string;
                 name: string;
             };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            target_type: "frontend";
         };
+        ProjectFunctionCustomDomain: components["schemas"]["FunctionCustomDomainResponse"] & {
+            target: components["schemas"]["ProjectCustomDomainTarget"];
+            /** @enum {string} */
+            target_type: "function";
+            function: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            target_type: "function";
+        };
+        ProjectCustomDomain: components["schemas"]["ProjectFrontendCustomDomain"] | components["schemas"]["ProjectFunctionCustomDomain"];
         /** @description A Function or Frontend deployment attempt in a project-scoped feed. */
         ProjectDeployment: {
             /** Format: uuid */
@@ -8107,6 +8189,13 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ProjectCustomDomainTarget: {
+            /** @enum {string} */
+            type: "frontend" | "function";
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         /** @description Deployment log selector for deployable resources. */
         LogDeploymentRequestSelector: {
             /** @description Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources. */
@@ -8173,6 +8262,16 @@ export interface components {
              * @enum {string}
              */
             stage?: "compile" | "publish";
+        };
+        FunctionCustomDomainTLSConfig: {
+            /**
+             * @default byoc
+             * @enum {string}
+             */
+            mode: "byoc";
+            certificate_pem: string;
+            private_key_pem: string;
+            certificate_chain_pem?: string;
         };
         /** @description One WHERE condition. Conditions are combined with AND. */
         DatabaseQueryFilter: {
@@ -8275,6 +8374,42 @@ export interface components {
         };
     };
     responses: {
+        /** @description Bad request */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Unauthorized */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Forbidden */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Internal server error */
+        InternalServerError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /**
          * @description The platform user exceeded their billing-cycle bandwidth allowance (aggregate
          *     ingress + egress across owned projects). Enforcement is eventual:
@@ -11609,6 +11744,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Custom domain attached; the function must remain public and in HTTP mode */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     invokeFunction: {
@@ -12099,6 +12243,156 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionSchedulerListResponse"];
                 };
             };
+        };
+    };
+    getFunctionCustomDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Function ID */
+                functionId: components["parameters"]["FunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Function custom domain, or null when no assignment exists */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionCustomDomainResponse"] | null;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    configureFunctionCustomDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Function ID */
+                functionId: components["parameters"]["FunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigureFunctionCustomDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing identical assignment returned without change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionCustomDomainResponse"];
+                };
+            };
+            /** @description New domain assignment created with verification pending */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionCustomDomainResponse"];
+                };
+            };
+            /** @description TLS rotation has been staged */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionCustomDomainResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Hostname is claimed, the function already has another hostname, or the function is private or not in HTTP mode */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+            /** @description Capability is not enabled for this environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteFunctionCustomDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Function ID */
+                functionId: components["parameters"]["FunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain detach scheduled or already absent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
         };
     };
     listFunctionSchedulers: {

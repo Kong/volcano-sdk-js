@@ -7,10 +7,10 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-import type { ProjectFrontendCustomDomain } from './projectFrontendCustomDomain';
+import type { ProjectCustomDomain } from './projectCustomDomain';
 
 export interface PaginatedProjectCustomDomains {
-  data: ProjectFrontendCustomDomain[];
+  data: ProjectCustomDomain[];
   /** Current page number (1-indexed) */
   page: number;
   /** Number of items per page */

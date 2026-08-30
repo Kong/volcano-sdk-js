@@ -993,6 +993,9 @@ export const getUpdateFunctionUrl = (id, functionId) => {
     return `/projects/${id}/functions/${functionId}`;
 };
 /**
+ * Updates invocation settings without redeploying the function runtime. A function with a
+ * custom domain attached or detaching must remain public and in HTTP invocation mode until
+ * the domain has been fully detached.
  * @summary Update function settings
  */
 export const updateFunction = async (id, functionId, updateFunctionRequest, options) => {
@@ -1284,6 +1287,56 @@ export const listProjectSchedulers = async (id, params, options) => {
     return volcanoFetch(getListProjectSchedulersUrl(id, params), {
         ...options,
         method: 'GET'
+    });
+};
+export const getGetFunctionCustomDomainUrl = (id, functionId) => {
+    return `/projects/${id}/functions/${functionId}/domain`;
+};
+/**
+ * @summary Get a function custom domain
+ */
+export const getFunctionCustomDomain = async (id, functionId, options) => {
+    return volcanoFetch(getGetFunctionCustomDomainUrl(id, functionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getConfigureFunctionCustomDomainUrl = (id, functionId) => {
+    return `/projects/${id}/functions/${functionId}/domain`;
+};
+/**
+ * PRO capability. The function must be public, active, and use HTTP invocation mode.
+ * Configuration and rotation preserve the function's HTTP authentication mode and stored
+ * OpenAPI document.
+ * @summary Configure or rotate a function custom domain
+ */
+export const configureFunctionCustomDomain = async (id, functionId, configureFunctionCustomDomainRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getConfigureFunctionCustomDomainUrl(id, functionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(configureFunctionCustomDomainRequest)
+    });
+};
+export const getDeleteFunctionCustomDomainUrl = (id, functionId) => {
+    return `/projects/${id}/functions/${functionId}/domain`;
+};
+/**
+ * @summary Detach a function custom domain
+ */
+export const deleteFunctionCustomDomain = async (id, functionId, options) => {
+    return volcanoFetch(getDeleteFunctionCustomDomainUrl(id, functionId), {
+        ...options,
+        method: 'DELETE'
     });
 };
 ;
