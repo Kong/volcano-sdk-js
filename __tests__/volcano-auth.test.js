@@ -818,6 +818,98 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
     });
 
+    it('does not clear a rotated session refreshed while sign-out is pending', async () => {
+      const logoutResponse = createDeferred();
+      const refreshResponse = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockReturnValueOnce(logoutResponse.promise)
+        .mockReturnValueOnce(refreshResponse.promise);
+
+      const signOut = volcano.auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+      const refresh = volcano.auth.refreshSession();
+      await Promise.resolve();
+      await Promise.resolve();
+      refreshResponse.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'refreshed-access',
+            refresh_token: 'rotated-refresh',
+            user: { id: 'user-1' },
+            expires_in: 3600,
+          }),
+      });
+
+      await expect(refresh).resolves.toMatchObject({
+        session: { access_token: 'refreshed-access' },
+        error: null,
+      });
+      logoutResponse.resolve({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await signOut;
+
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: {
+          session: {
+            access_token: 'refreshed-access',
+            refresh_token: 'rotated-refresh',
+            user: { id: 'user-1' },
+          },
+        },
+        error: null,
+      });
+    });
+
+    it('clears a refreshed session when sign-out revoked its reused refresh token', async () => {
+      const logoutResponse = createDeferred();
+      const refreshResponse = createDeferred();
+      volcano._setSession({
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockReturnValueOnce(logoutResponse.promise)
+        .mockReturnValueOnce(refreshResponse.promise);
+
+      const signOut = volcano.auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+      const refresh = volcano.auth.refreshSession();
+      await Promise.resolve();
+      await Promise.resolve();
+      refreshResponse.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: 'refreshed-access',
+            refresh_token: 'old-refresh',
+            user: { id: 'user-1' },
+            expires_in: 3600,
+          }),
+      });
+
+      await expect(refresh).resolves.toMatchObject({
+        session: { access_token: 'refreshed-access' },
+        error: null,
+      });
+      logoutResponse.resolve({ ok: true, json: () => Promise.resolve({}) });
+
+      await expect(signOut).resolves.toEqual({ error: null });
+      await expect(volcano.auth.getSession()).resolves.toEqual({
+        data: { session: null },
+        error: null,
+      });
+    });
+
     it('preserves a revocation failure when the session changes', async () => {
       const response = createDeferred();
       volcano._setSession({

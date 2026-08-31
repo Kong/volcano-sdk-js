@@ -153,7 +153,8 @@ if (AuthRefreshDiscardedError.is(error)) {
 
 `getUser()` and other auth operations return `AuthSessionChangedError` when a newer logical session
 wins before their result can be committed. Treat the current session as authoritative instead of
-reporting the stale transition as successful:
+reporting the stale transition as successful. This includes `signOut()` when a concurrent refresh
+rotates the refresh token; the rotated session remains current:
 
 ```javascript
 import { AuthSessionChangedError } from '@volcano.dev/sdk';

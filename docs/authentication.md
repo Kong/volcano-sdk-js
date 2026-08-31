@@ -112,6 +112,11 @@ the SDK still clears the captured local session and returns the error so the app
 it. The cleared session no longer contains the refresh token needed to retry revocation. A session
 established while sign-out is pending remains current.
 
+If a concurrent refresh rotates the refresh token before sign-out completes, the rotated session
+remains current and `signOut()` returns `AuthSessionChangedError`. Read the current session before
+deciding whether to retry. If the refresh reuses the token that sign-out revoked, the SDK clears the
+session normally.
+
 ## Session Management
 
 ### Read the Current Session
