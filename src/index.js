@@ -1444,7 +1444,7 @@ class VolcanoAuth {
       });
       logoutError = result.error;
     }
-    if (!this._clearSession(context.generation)) {
+    if (!this._clearSession(context)) {
       const sessionChangedError = new AuthSessionChangedError();
       if (logoutError) {
         Object.defineProperty(sessionChangedError, 'cause', {
@@ -1556,7 +1556,7 @@ class VolcanoAuth {
 
       if (!result.ok) {
         if (result.status === 401 || result.status === 403) {
-          this._clearSession(context.generation);
+          this._clearSession(context);
         }
         return { session: null, error: result.error };
       }
@@ -2275,8 +2275,8 @@ class VolcanoAuth {
     return true;
   }
 
-  _clearSession(expectedGeneration = this._sessionGeneration) {
-    if (expectedGeneration !== this._sessionGeneration) {
+  _clearSession(context) {
+    if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
       return false;
     }
 
