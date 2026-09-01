@@ -57,10 +57,19 @@ interface VolcanoAuthConfig {
 ### User
 
 ```typescript
+type UserStatus = 'active' | 'banned' | 'deleted';
+
 interface User {
   id: string;
+  project_id?: string;
   email: string;
+  email_confirmed?: boolean;
   user_metadata?: Record<string, JsonValue>;
+  app_metadata?: Record<string, JsonValue>;
+  avatar_url?: string;
+  status?: UserStatus;
+  banned_until?: string | null;
+  last_sign_in_at?: string;
   created_at: string;
   updated_at: string;
 }

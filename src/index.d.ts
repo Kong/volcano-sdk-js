@@ -48,10 +48,19 @@ export type JsonValue =
 /** User metadata object */
 export type UserMetadata = Record<string, JsonValue>;
 
+export type UserStatus = 'active' | 'banned' | 'deleted';
+
 export interface User {
   id: string;
+  project_id?: string;
   email: string;
+  email_confirmed?: boolean;
   user_metadata?: UserMetadata;
+  app_metadata?: UserMetadata;
+  avatar_url?: string;
+  status?: UserStatus;
+  banned_until?: string | null;
+  last_sign_in_at?: string;
   created_at: string;
   updated_at: string;
 }
