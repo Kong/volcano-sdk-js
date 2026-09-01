@@ -3618,7 +3618,10 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            data: { repos: ['repo1', 'repo2'] },
+            provider: 'github',
+            endpoint: '/user/repos',
+            status_code: 200,
+            data: ['repo1', 'repo2'],
           }),
       });
 
@@ -3627,7 +3630,7 @@ describe('VolcanoAuth', () => {
         method: 'GET',
       });
 
-      expect(result.data).toEqual({ repos: ['repo1', 'repo2'] });
+      expect(result.data).toEqual(['repo1', 'repo2']);
       expect(result.error).toBeNull();
 
       const requestBody = JSON.parse(fetch.mock.calls[0][1].body);

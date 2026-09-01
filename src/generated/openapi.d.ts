@@ -3284,7 +3284,7 @@ export interface paths {
          *     - GitHub repositories: `/user/repos`
          *     - Microsoft Graph profile: `/me`
          *
-         *     The response is the raw JSON response from the provider's API.
+         *     The response wraps the provider's raw JSON value with request metadata.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -17053,7 +17053,12 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: unknown;
+                        /** @enum {string} */
+                        provider: "google" | "github" | "microsoft" | "apple";
+                        endpoint: string;
+                        status_code: number;
+                        /** @description Raw JSON value returned by the OAuth provider's API */
+                        data: unknown;
                     };
                 };
             };

@@ -77,8 +77,14 @@ type OAuthBody = NonNullable<OAuthRequest['body']>;
 type OAuthResponse =
   OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
 type _OAuthBodyAcceptsProperties = Assert<{ visibility: string } extends OAuthBody ? true : false>;
-type _OAuthResponseAcceptsProperties = Assert<
-  { login: string } extends OAuthResponse ? true : false
+type OAuthResponseShape = {
+  provider: 'github';
+  endpoint: string;
+  status_code: number;
+  data: unknown;
+};
+type _OAuthResponseUsesHostingEnvelope = Assert<
+  OAuthResponseShape extends OAuthResponse ? true : false
 >;
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
