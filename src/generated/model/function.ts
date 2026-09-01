@@ -7,6 +7,9 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
+import type { FunctionInvocationMode } from './functionInvocationMode';
+import type { FunctionOpenapiSpec } from './functionOpenapiSpec';
 import type { FunctionStatus } from './functionStatus';
 
 export interface Function {
@@ -26,6 +29,15 @@ export interface Function {
      * - `true`: anon keys with `functions.invoke` can invoke
      */
   is_public: boolean;
+  invocation_mode: FunctionInvocationMode;
+  http_auth_mode: FunctionHTTPAuthMode;
+  /**
+     * Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode function.
+     * @nullable
+     */
+  openapi_spec: FunctionOpenapiSpec;
+  /** Whether OpenAPI metadata is configured; list responses omit the document itself. */
+  has_openapi_spec: boolean;
   aws_function_arn?: string;
   /** Canonical GeoDNS endpoint URL for invoking this function (always HTTPS) */
   invoke_url?: string;

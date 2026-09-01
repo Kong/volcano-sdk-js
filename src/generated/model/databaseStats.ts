@@ -12,9 +12,10 @@ import type { DatabaseStatsGranularity } from './databaseStatsGranularity';
 
 export interface DatabaseStats {
   /**
-     * On-disk size right now, in bytes: the database itself plus every
-     * branch's divergence from it. This is the figure the storage
-     * allowance is enforced against. `branches` breaks it down.
+     * On-disk size right now, in bytes: the database itself, plus every
+     * branch's divergence from it, plus what its backups cost to hold. This
+     * is the figure the storage allowance is enforced against. `branches`
+     * and `backup_storage_bytes` break it down.
      * @minimum 0
      */
   current_storage_bytes: number;
@@ -29,6 +30,21 @@ export interface DatabaseStats {
      * parent contributes nothing.
      */
   branches?: DatabaseBranchStorage[];
+  /**
+     * What this database's backups contribute to `current_storage_bytes`.
+     *
+     * A backup taken on request is charged as a full copy of the database
+     * as it was at that moment, so two backups of a 2 GB database are 4 GB.
+     * A backup schedule is charged its first snapshot in full and each
+     * later one only for the storage it adds. Deleting a backup releases
+     * its storage immediately.
+     *
+     * Sampled from the provider rather than measured live, so it can lag a
+     * change by a few minutes, and a backup taken seconds ago may not be
+     * costed yet. Zero on a plan without backups.
+     * @minimum 0
+     */
+  backup_storage_bytes: number;
   /** Total storage used in bytes (data + WAL) */
   storage_bytes: number;
   /** Total data written in bytes */
