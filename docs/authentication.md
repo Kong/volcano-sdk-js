@@ -486,6 +486,8 @@ if (error) {
 }
 ```
 
+Confirmation does not sign in the confirmed account or change an unrelated local session.
+
 ### Resend Confirmation Email
 
 If the user didn't receive the email:

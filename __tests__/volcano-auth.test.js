@@ -2726,6 +2726,21 @@ describe('VolcanoAuth', () => {
       expect(result.error).toBeNull();
     });
 
+    it('should accept email confirmation without a message or session change', async () => {
+      volcano.accessToken = 'unrelated-access-token';
+      volcano.refreshToken = 'unrelated-refresh-token';
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.confirmEmail('confirmation-token');
+
+      expect(result).toEqual({ message: null, error: null });
+      expect(volcano.accessToken).toBe('unrelated-access-token');
+      expect(volcano.refreshToken).toBe('unrelated-refresh-token');
+    });
+
     it('should return error on confirm email failure', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: false,

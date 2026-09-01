@@ -1663,7 +1663,7 @@ class VolcanoAuth {
     if (!result.ok) {
       return { message: null, error: result.error };
     }
-    return { message: result.data.message, error: null };
+    return { message: result.data?.message ?? null, error: null };
   }
 
   async resendConfirmation(email) {
