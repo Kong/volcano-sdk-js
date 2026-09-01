@@ -2779,7 +2779,7 @@ describe('VolcanoAuth', () => {
       });
     });
 
-    it('should accept a password reset acknowledgement without a message', async () => {
+    it('should accept a password reset request acknowledgement without a message', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({}),
@@ -2813,6 +2813,24 @@ describe('VolcanoAuth', () => {
       });
 
       expect(result.message).toBe('Password reset successful');
+    });
+
+    it('should accept a password reset completion without a message', async () => {
+      volcano.accessToken = 'unrelated-access-token';
+      volcano.refreshToken = 'unrelated-refresh-token';
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.resetPassword({
+        token: 'reset-token',
+        newPassword: 'newpassword123',
+      });
+
+      expect(result).toEqual({ message: null, error: null });
+      expect(volcano.accessToken).toBe('unrelated-access-token');
+      expect(volcano.refreshToken).toBe('unrelated-refresh-token');
     });
 
     it('should return error on forgotPassword failure', async () => {

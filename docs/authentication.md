@@ -534,6 +534,10 @@ if (error) {
 }
 ```
 
+Resetting the password revokes the recovered account's existing sessions and does not sign it in.
+The client keeps any unrelated local session unchanged; sign in with the new password when the reset
+flow completes.
+
 ## Email Change
 
 ### Request Email Change
