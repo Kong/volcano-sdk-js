@@ -3485,6 +3485,30 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should not acknowledge specific-session deletion for a replaced session', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.deleteSession('session-123');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({ ok: true, status: 204, json: () => Promise.resolve({}) });
+
+      const result = await request;
+
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
     it('should return error on deleteSession failure', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
