@@ -3674,6 +3674,63 @@ describe('VolcanoAuth', () => {
       expect(result.data).toBeNull();
       expect(result.error.message).toBe('Insufficient scope');
     });
+
+    it('should reject an obsolete OAuth provider API result', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.callOAuthAPI('github', { endpoint: '/user/repos' });
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: { repos: ['obsolete'] } }),
+      });
+
+      const result = await request;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should prefer a session-change error when an obsolete provider API request fails', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.callOAuthAPI('github', { endpoint: '/user/repos' });
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'old session rejected' }),
+      });
+
+      const result = await request;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
   });
 
   describe('Session Management', () => {

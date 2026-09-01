@@ -453,6 +453,8 @@ if (data) {
 ```
 
 Volcano automatically handles token refresh and passes the correct credentials to the provider.
+The response is discarded with `AuthSessionChangedError` if the active session changes while the
+request is in flight.
 
 ## Anonymous Users
 

@@ -2019,10 +2019,17 @@ class VolcanoAuth {
 
   async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/call-api`, {
-      method: 'POST',
-      body: JSON.stringify({ endpoint, method, body }),
-    });
+    const { result, context } = await this._authFetchWithContext(
+      `/auth/oauth/${provider}/call-api`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ endpoint, method, body }),
+      },
+    );
+
+    if (!this._isAuthContextCurrent(context)) {
+      return { data: null, error: new AuthSessionChangedError() };
+    }
 
     if (!result.ok) {
       return { data: null, error: result.error };
