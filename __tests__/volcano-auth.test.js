@@ -2915,6 +2915,46 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Email Change', () => {
+    it('should not return an email-change acknowledgement for a replaced session', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.requestEmailChange('new@example.com');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await request;
+
+      expect(result.message).toBeNull();
+      expect(result.newEmail).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should accept an acknowledgement without optional fields', async () => {
+      volcano.accessToken = 'valid-token';
+      global.fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await volcano.auth.requestEmailChange('new@example.com');
+
+      expect(result).toEqual({
+        message: null,
+        newEmail: null,
+        emailChangeToken: undefined,
+        error: null,
+      });
+    });
+
     it('should request email change', async () => {
       volcano.accessToken = 'valid-token';
 
