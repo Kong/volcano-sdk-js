@@ -657,6 +657,12 @@ if (!error) {
 }
 ```
 
+The request uses the current access token. Deleting that token's own session clears local
+credentials, including when the request outcome is uncertain; deleting another session preserves
+them. If another authentication operation replaces the session before deletion finishes, the method
+returns an `AuthSessionChangedError` instead of clearing the replacement or acknowledging a stale
+result.
+
 ### Sign Out All Other Devices
 
 Keep only the current session active:

@@ -447,6 +447,30 @@ function extractRequiredProjectIdFromToken(token) {
   return payload.project_id.trim();
 }
 
+function extractSessionIdFromToken(token) {
+  if (!token || typeof token !== 'string') {
+    return null;
+  }
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return null;
+  }
+  try {
+    const sessionId = JSON.parse(decodeBase64Url(parts[1]))?.session_id;
+    return typeof sessionId === 'string' && sessionId.trim() !== '' ? sessionId.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionIdsEqual(left, right) {
+  return (
+    typeof left === 'string' &&
+    typeof right === 'string' &&
+    left.toLowerCase() === right.toLowerCase()
+  );
+}
+
 function isIPv4Address(hostname) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
 }
@@ -2016,12 +2040,36 @@ class VolcanoAuth {
   }
 
   async deleteSession(sessionId) {
-    const result = await this._authFetch(`/auth/user/sessions/${encodeURIComponent(sessionId)}`, {
-      method: 'DELETE',
-    });
+    const { result, context } = await this._authFetchWithContext(
+      `/auth/user/sessions/${encodeURIComponent(sessionId)}`,
+      {
+        method: 'DELETE',
+      },
+    );
 
+    const deletesCurrentSession = sessionIdsEqual(
+      extractSessionIdFromToken(context.accessToken),
+      sessionId,
+    );
+    if (deletesCurrentSession && (result.ok || result.status === null)) {
+      if (!this._clearSessionAtGeneration(context.generation)) {
+        const sessionChangedError = new AuthSessionChangedError();
+        if (result.error) {
+          Object.defineProperty(sessionChangedError, 'cause', {
+            configurable: true,
+            value: result.error,
+            writable: true,
+          });
+        }
+        return { error: sessionChangedError };
+      }
+      return { error: result.error };
+    }
     if (!result.ok) {
       return { error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { error: new AuthSessionChangedError() };
     }
     return { error: null };
   }
@@ -2296,6 +2344,14 @@ class VolcanoAuth {
 
   _clearSession(context) {
     if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
+      return false;
+    }
+
+    return this._clearSessionAtGeneration(context.generation);
+  }
+
+  _clearSessionAtGeneration(generation) {
+    if (generation !== this._sessionGeneration) {
       return false;
     }
 
