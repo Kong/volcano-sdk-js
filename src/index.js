@@ -1720,7 +1720,7 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const result = await this._authFetch('/auth/user/change-email', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', {
       method: 'POST',
       body: JSON.stringify({ new_email: newEmail }),
     });
@@ -1728,10 +1728,13 @@ class VolcanoAuth {
     if (!result.ok) {
       return { message: null, newEmail: null, error: result.error };
     }
+    if (!this._isAuthContextCurrent(context)) {
+      return { message: null, newEmail: null, error: new AuthSessionChangedError() };
+    }
     return {
-      message: result.data.message,
-      newEmail: result.data.new_email,
-      emailChangeToken: result.data.email_change_token,
+      message: result.data?.message ?? null,
+      newEmail: result.data?.new_email ?? null,
+      emailChangeToken: result.data?.email_change_token,
       error: null,
     };
   }
