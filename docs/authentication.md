@@ -669,6 +669,10 @@ if (!error) {
 }
 ```
 
+The current session remains active. If another authentication operation replaces it before a
+successful deletion finishes, the method returns an `AuthSessionChangedError` and leaves the newer
+session untouched.
+
 ## Security Best Practices
 
 ### Protect Service Keys

@@ -2027,12 +2027,15 @@ class VolcanoAuth {
   }
 
   async deleteAllOtherSessions() {
-    const result = await this._authFetch('/auth/user/sessions', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/sessions', {
       method: 'DELETE',
     });
 
     if (!result.ok) {
       return { error: result.error };
+    }
+    if (!this._isAuthContextCurrent(context)) {
+      return { error: new AuthSessionChangedError() };
     }
     return { error: null };
   }
