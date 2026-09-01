@@ -502,7 +502,7 @@ if (!error) {
 
 ### Request Password Reset
 
-Send a password reset email to the user:
+Request a password reset email. Volcano sends it when transactional email is configured:
 
 ```javascript
 const { message, error } = await volcano.auth.resetPasswordForEmail('alice@example.com');

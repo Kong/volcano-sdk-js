@@ -2779,6 +2779,17 @@ describe('VolcanoAuth', () => {
       });
     });
 
+    it('should accept a password reset acknowledgement without a message', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.resetPasswordForEmail('test@example.com');
+
+      expect(result).toEqual({ message: null, error: null });
+    });
+
     it('should request password reset', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
