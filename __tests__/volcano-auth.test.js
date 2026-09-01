@@ -3513,7 +3513,7 @@ describe('VolcanoAuth', () => {
     });
 
     it('should clear local state after deleting the current session', async () => {
-      const sessionId = '00000000-0000-4000-8000-000000000099';
+      const sessionId = '00000000-0000-4000-8000-0000000000ab';
       volcano._setSession({
         access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
           session_id: sessionId,
@@ -3526,6 +3526,67 @@ describe('VolcanoAuth', () => {
         status: 204,
         json: () => Promise.resolve({}),
       });
+
+      const result = await volcano.auth.deleteSession(sessionId.toUpperCase());
+
+      expect(result.error).toBeNull();
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+      expect(volcano.currentUser).toBeNull();
+    });
+
+    it('should clear the current session when its deletion response is lost', async () => {
+      const sessionId = '00000000-0000-4000-8000-000000000099';
+      volcano._setSession({
+        access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+          session_id: sessionId,
+        }),
+        refresh_token: 'current-refresh',
+        user: { id: 'current-user' },
+      });
+      global.fetch.mockRejectedValueOnce(new Error('connection lost'));
+
+      const result = await volcano.auth.deleteSession(sessionId);
+
+      expect(result.error.message).toBe('connection lost');
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+      expect(volcano.currentUser).toBeNull();
+    });
+
+    it('should clear a refreshed current session after deletion', async () => {
+      const sessionId = '00000000-0000-4000-8000-000000000099';
+      volcano._setSession({
+        access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+          session_id: sessionId,
+        }),
+        refresh_token: 'old-refresh',
+        user: { id: 'current-user' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+                session_id: sessionId,
+              }),
+              refresh_token: 'new-refresh',
+              user: { id: 'current-user' },
+              expires_in: 3600,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 204,
+          json: () => Promise.resolve({}),
+        });
 
       const result = await volcano.auth.deleteSession(sessionId);
 

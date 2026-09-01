@@ -463,6 +463,14 @@ function extractSessionIdFromToken(token) {
   }
 }
 
+function sessionIdsEqual(left, right) {
+  return (
+    typeof left === 'string' &&
+    typeof right === 'string' &&
+    left.toLowerCase() === right.toLowerCase()
+  );
+}
+
 function isIPv4Address(hostname) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
 }
@@ -2039,11 +2047,26 @@ class VolcanoAuth {
       },
     );
 
-    if (!result.ok) {
+    const deletesCurrentSession = sessionIdsEqual(
+      extractSessionIdFromToken(context.accessToken),
+      sessionId,
+    );
+    if (deletesCurrentSession) {
+      if (!this._clearSessionAtGeneration(context.generation)) {
+        const sessionChangedError = new AuthSessionChangedError();
+        if (result.error) {
+          Object.defineProperty(sessionChangedError, 'cause', {
+            configurable: true,
+            value: result.error,
+            writable: true,
+          });
+        }
+        return { error: sessionChangedError };
+      }
       return { error: result.error };
     }
-    if (extractSessionIdFromToken(context.accessToken) === sessionId) {
-      return { error: this._clearSession(context) ? null : new AuthSessionChangedError() };
+    if (!result.ok) {
+      return { error: result.error };
     }
     if (!this._isAuthContextCurrent(context)) {
       return { error: new AuthSessionChangedError() };
@@ -2321,6 +2344,14 @@ class VolcanoAuth {
 
   _clearSession(context) {
     if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
+      return false;
+    }
+
+    return this._clearSessionAtGeneration(context.generation);
+  }
+
+  _clearSessionAtGeneration(generation) {
+    if (generation !== this._sessionGeneration) {
       return false;
     }
 
