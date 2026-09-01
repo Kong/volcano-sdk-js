@@ -425,6 +425,15 @@ const { provider, expiresIn, error } = await volcano.auth.getOAuthProviderToken(
 This method returns provider and expiry metadata, not the credential. Volcano refreshes an expired
 token on the server. A stale result returns `AuthSessionChangedError`.
 
+Refresh a provider token explicitly when the application needs a new validity window:
+
+```javascript
+const { provider, expiresIn, error } = await volcano.auth.refreshOAuthToken('github');
+```
+
+The refresh credential and new access token remain on the server. A stale result returns
+`AuthSessionChangedError`.
+
 ### Access Provider APIs
 
 After OAuth sign-in, you can make authenticated requests to the provider's API:

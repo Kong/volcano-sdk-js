@@ -3451,6 +3451,68 @@ describe('VolcanoAuth', () => {
       expect(result.error.message).toBe('Refresh not supported');
     });
 
+    it('should reject an obsolete OAuth provider refresh result', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.refreshOAuthToken('google');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            message: 'Provider token refreshed successfully',
+            provider: 'google',
+            expires_in: 3600,
+          }),
+      });
+
+      const result = await request;
+
+      expect(result.message).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should prefer a session-change error when an obsolete provider refresh fails', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.refreshOAuthToken('google');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'old session rejected' }),
+      });
+
+      const result = await request;
+
+      expect(result.message).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
     it('should get OAuth provider token', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 

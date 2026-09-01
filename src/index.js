@@ -1967,9 +1967,21 @@ class VolcanoAuth {
 
   async refreshOAuthToken(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/refresh-token`, {
-      method: 'POST',
-    });
+    const { result, context } = await this._authFetchWithContext(
+      `/auth/oauth/${provider}/refresh-token`,
+      {
+        method: 'POST',
+      },
+    );
+
+    if (!this._isAuthContextCurrent(context)) {
+      return {
+        message: null,
+        provider: null,
+        expiresIn: null,
+        error: new AuthSessionChangedError(),
+      };
+    }
 
     if (!result.ok) {
       return { message: null, provider: null, expiresIn: null, error: result.error };
