@@ -2019,16 +2019,6 @@ class VolcanoAuth {
     const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
     const { result, context } = await this._authFetchWithContext(url);
 
-    if (!result.ok) {
-      return {
-        sessions: null,
-        total: 0,
-        page: 1,
-        limit: DEFAULT_SESSIONS_LIMIT,
-        total_pages: 0,
-        error: result.error,
-      };
-    }
     if (!this._isAuthContextCurrent(context)) {
       return {
         sessions: null,
@@ -2037,6 +2027,16 @@ class VolcanoAuth {
         limit: DEFAULT_SESSIONS_LIMIT,
         total_pages: 0,
         error: new AuthSessionChangedError(),
+      };
+    }
+    if (!result.ok) {
+      return {
+        sessions: null,
+        total: 0,
+        page: 1,
+        limit: DEFAULT_SESSIONS_LIMIT,
+        total_pages: 0,
+        error: result.error,
       };
     }
     return {

@@ -3494,6 +3494,35 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser.id).toBe('replacement-user');
     });
 
+    it('should prefer a session-change error from a replaced request that fails', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.getSessions();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: 'old session rejected' }),
+      });
+
+      const result = await request;
+
+      expect(result.sessions).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
     it('should return error when not authenticated for getSessions', async () => {
       volcano.accessToken = null;
 
