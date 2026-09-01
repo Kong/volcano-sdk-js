@@ -379,6 +379,9 @@ if (error) {
 window.location.href = data.authorization_url;
 ```
 
+The result is discarded with `AuthSessionChangedError` if the active session changes while the
+request is in flight.
+
 ### Unlink OAuth Provider
 
 Remove an OAuth provider from an account:

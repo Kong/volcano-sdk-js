@@ -1925,10 +1925,13 @@ class VolcanoAuth {
 
   async linkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/link`, {
+    const { result, context } = await this._authFetchWithContext(`/auth/oauth/${provider}/link`, {
       method: 'POST',
     });
 
+    if (!this._isAuthContextCurrent(context)) {
+      return { data: null, error: new AuthSessionChangedError() };
+    }
     if (!result.ok) {
       return { data: null, error: result.error };
     }

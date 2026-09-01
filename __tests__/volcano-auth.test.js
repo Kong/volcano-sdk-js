@@ -3275,6 +3275,63 @@ describe('VolcanoAuth', () => {
       expect(error).toBeDefined();
     });
 
+    it('should discard an OAuth link URL from a replaced local session', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.linkOAuthProvider('google');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () => Promise.resolve({ authorization_url: 'https://accounts.example/link' }),
+      });
+
+      const result = await request;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should prefer a session-change error when an obsolete OAuth link request fails', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.linkOAuthProvider('google');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'old session rejected' }),
+      });
+
+      const result = await request;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
     it('should unlink OAuth provider', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
