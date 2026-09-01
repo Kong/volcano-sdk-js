@@ -394,6 +394,9 @@ if (!error) {
 }
 ```
 
+The result is discarded with `AuthSessionChangedError` if the active session changes while the
+request is in flight.
+
 ### List Linked Providers
 
 See which OAuth providers are connected to the current account:
