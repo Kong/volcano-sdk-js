@@ -669,6 +669,11 @@ if (!error) {
 }
 ```
 
+The session whose access token authorizes the request remains active. Do not replace the client's
+session while this request is in flight: the server may revoke that replacement as an "other"
+session. If replacement occurs, the method returns an `AuthSessionChangedError` instead of
+acknowledging a stale result.
+
 ## Security Best Practices
 
 ### Protect Service Keys
