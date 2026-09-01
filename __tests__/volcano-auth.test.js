@@ -3486,15 +3486,18 @@ describe('VolcanoAuth', () => {
     });
 
     it('should not acknowledge specific-session deletion for a replaced session', async () => {
+      const sessionId = 'session-123';
       volcano._setSession({
-        access_token: 'original-access',
+        access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+          session_id: sessionId,
+        }),
         refresh_token: 'original-refresh',
         user: { id: 'original-user' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
 
-      const request = volcano.auth.deleteSession('session-123');
+      const request = volcano.auth.deleteSession(sessionId);
       await Promise.resolve();
       volcano._setSession({
         access_token: 'replacement-access',
@@ -3507,6 +3510,29 @@ describe('VolcanoAuth', () => {
 
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
       expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should clear local state after deleting the current session', async () => {
+      const sessionId = '00000000-0000-4000-8000-000000000099';
+      volcano._setSession({
+        access_token: createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+          session_id: sessionId,
+        }),
+        refresh_token: 'current-refresh',
+        user: { id: 'current-user' },
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.deleteSession(sessionId);
+
+      expect(result.error).toBeNull();
+      expect(volcano.accessToken).toBeNull();
+      expect(volcano.refreshToken).toBeNull();
+      expect(volcano.currentUser).toBeNull();
     });
 
     it('should return error on deleteSession failure', async () => {

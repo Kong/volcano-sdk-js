@@ -657,9 +657,10 @@ if (!error) {
 }
 ```
 
-The request uses the current access token and does not change local session state. If another
-authentication operation replaces the session before deletion finishes, the method returns an
-`AuthSessionChangedError` instead of acknowledging a stale result.
+The request uses the current access token. Deleting that token's own session clears local
+credentials; deleting another session preserves them. If another authentication operation replaces
+the session before deletion finishes, the method returns an `AuthSessionChangedError` instead of
+clearing the replacement or acknowledging a stale result.
 
 ### Sign Out All Other Devices
 
