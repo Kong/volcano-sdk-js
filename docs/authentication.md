@@ -669,9 +669,10 @@ if (!error) {
 }
 ```
 
-The current session remains active. If another authentication operation replaces it before a
-successful deletion finishes, the method returns an `AuthSessionChangedError` and leaves the newer
-session untouched.
+The session whose access token authorizes the request remains active. Do not replace the client's
+session while this request is in flight: the server may revoke that replacement as an "other"
+session. If replacement occurs, the method returns an `AuthSessionChangedError` instead of
+acknowledging a stale result.
 
 ## Security Best Practices
 
