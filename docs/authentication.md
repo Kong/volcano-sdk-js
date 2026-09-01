@@ -645,6 +645,10 @@ if (sessions) {
 }
 ```
 
+`getSessions()` uses offset pagination and defaults to page `1` with `20` sessions per page.
+The response is rejected with `AuthSessionChangedError` if another authentication operation
+replaces the local session while the request is in flight.
+
 ### Revoke a Session
 
 Sign out from a specific device:

@@ -2017,8 +2017,18 @@ class VolcanoAuth {
 
     const queryString = params.toString();
     const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const result = await this._authFetch(url);
+    const { result, context } = await this._authFetchWithContext(url);
 
+    if (!this._isAuthContextCurrent(context)) {
+      return {
+        sessions: null,
+        total: 0,
+        page: 1,
+        limit: DEFAULT_SESSIONS_LIMIT,
+        total_pages: 0,
+        error: new AuthSessionChangedError(),
+      };
+    }
     if (!result.ok) {
       return {
         sessions: null,
