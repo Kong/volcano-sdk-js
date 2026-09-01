@@ -559,10 +559,10 @@ if (!error) {
 }
 ```
 
-If another authentication operation replaces the active session before this request finishes, the
-method returns an `AuthSessionChangedError` and leaves the newer session untouched. The server may
-still have started the email change for the original account, so handle this result separately from
-a rejected request.
+If another authentication operation replaces the active session before a successful acknowledgement
+arrives, the method returns an `AuthSessionChangedError` and leaves the newer session untouched. The
+server may still have started the email change for the original account, so handle this result
+separately from a rejected request.
 
 ### Confirm Email Change
 
