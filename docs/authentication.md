@@ -500,6 +500,9 @@ if (!error) {
 }
 ```
 
+The response does not reveal whether the account exists or is already confirmed. Delivery occurs
+only for an existing unconfirmed account when transactional email is configured.
+
 ## Password Recovery
 
 ### Request Password Reset
