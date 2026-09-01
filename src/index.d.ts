@@ -270,7 +270,9 @@ export interface Auth {
   user(): User | null;
 
   // Anonymous user methods
-  /** Sign up as anonymous user (no email/password required) */
+  /** Sign in as an anonymous user (no email/password required). */
+  signInAnonymously(metadata?: UserMetadata): Promise<AuthResponse>;
+  /** @deprecated Use signInAnonymously instead. */
   signUpAnonymous(metadata?: UserMetadata): Promise<AuthResponse>;
   /** Convert anonymous user to authenticated user */
   convertAnonymous(options: ConvertAnonymousOptions): Promise<UserResponse>;
