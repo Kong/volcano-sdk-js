@@ -414,6 +414,17 @@ if (providers) {
 The result is discarded with `AuthSessionChangedError` if the active session changes while the
 request is in flight.
 
+### Check Provider Token Status
+
+Check whether Volcano has a valid server-held provider token:
+
+```javascript
+const { provider, expiresIn, error } = await volcano.auth.getOAuthProviderToken('github');
+```
+
+This method returns provider and expiry metadata, not the credential. Volcano refreshes an expired
+token on the server. A stale result returns `AuthSessionChangedError`.
+
 ### Access Provider APIs
 
 After OAuth sign-in, you can make authenticated requests to the provider's API:
