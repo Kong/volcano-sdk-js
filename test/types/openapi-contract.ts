@@ -7,6 +7,7 @@ import type {
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
 
 type Assert<T extends true> = T;
+type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
 type SetSessionParameter = Parameters<Auth['setSession']>[0];
 type _CompleteSessionCanBeAdopted = Assert<
@@ -77,9 +78,13 @@ type OAuthBody = NonNullable<OAuthRequest['body']>;
 type OAuthResponse =
   OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
 type _OAuthBodyAcceptsProperties = Assert<{ visibility: string } extends OAuthBody ? true : false>;
-type _OAuthResponseAcceptsProperties = Assert<
-  { login: string } extends OAuthResponse ? true : false
->;
+type OAuthResponseShape = {
+  provider: 'google' | 'github' | 'microsoft' | 'apple';
+  endpoint: string;
+  status_code: number;
+  data: unknown;
+};
+type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {

@@ -3757,7 +3757,7 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - GitHub repositories: `/user/repos`
  * - Microsoft Graph profile: `/me`
  *
- * The response is the raw JSON response from the provider's API.
+ * The response wraps the provider's raw JSON value with request metadata.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {
