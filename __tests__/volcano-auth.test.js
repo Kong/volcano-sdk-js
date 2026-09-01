@@ -2765,6 +2765,21 @@ describe('VolcanoAuth', () => {
       expect(result.error).toBeNull();
     });
 
+    it('should accept a message-less resend without changing the session', async () => {
+      volcano.accessToken = 'unrelated-access-token';
+      volcano.refreshToken = 'unrelated-refresh-token';
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await volcano.auth.resendConfirmation('test@example.com');
+
+      expect(result).toEqual({ message: null, error: null });
+      expect(volcano.accessToken).toBe('unrelated-access-token');
+      expect(volcano.refreshToken).toBe('unrelated-refresh-token');
+    });
+
     it('should return error on resend confirmation failure', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: false,
