@@ -3036,6 +3036,43 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should not acknowledge cancellation for a replaced session', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.cancelEmailChange();
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user' },
+      });
+      response.resolve({
+        ok: true,
+        json: () => Promise.resolve({ message: 'Email change cancelled' }),
+      });
+
+      const result = await request;
+
+      expect(result.message).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser.id).toBe('replacement-user');
+    });
+
+    it('should accept a cancellation acknowledgement without a message', async () => {
+      volcano.accessToken = 'valid-token';
+      global.fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      const result = await volcano.auth.cancelEmailChange();
+
+      expect(result).toEqual({ message: null, error: null });
+    });
+
     it('should return error on cancel email change failure', async () => {
       volcano.accessToken = 'valid-token';
 

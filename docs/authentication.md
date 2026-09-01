@@ -590,6 +590,10 @@ if (!error) {
 }
 ```
 
+If another authentication operation replaces the active session before a successful cancellation
+arrives, the method returns an `AuthSessionChangedError` and leaves the newer session untouched. The
+server may still have cancelled the pending change for the original account.
+
 ## Update User Profile
 
 Modify the current user's password or metadata:
