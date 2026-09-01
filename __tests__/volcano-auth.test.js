@@ -3003,6 +3003,37 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser.email).toBe('new@example.com');
     });
 
+    it('should not apply a confirmation response to a replaced session', async () => {
+      volcano._setSession({
+        access_token: 'original-access',
+        refresh_token: 'original-refresh',
+        user: { id: 'original-user', email: 'old@example.com' },
+      });
+      const response = createDeferred();
+      global.fetch.mockReturnValueOnce(response.promise);
+
+      const request = volcano.auth.confirmEmailChange('change-token-123');
+      await Promise.resolve();
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'replacement-user', email: 'replacement@example.com' },
+      });
+      response.resolve({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 'original-user', email: 'new@example.com' } }),
+      });
+
+      const result = await request;
+
+      expect(result.user).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(volcano.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'replacement@example.com',
+      });
+    });
+
     it('should return error on confirm email change failure', async () => {
       volcano.accessToken = 'valid-token';
 
