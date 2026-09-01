@@ -1940,10 +1940,13 @@ class VolcanoAuth {
 
   async unlinkOAuthProvider(provider) {
     sanitizeProvider(provider);
-    const result = await this._authFetch(`/auth/oauth/${provider}/unlink`, {
+    const { result, context } = await this._authFetchWithContext(`/auth/oauth/${provider}/unlink`, {
       method: 'DELETE',
     });
 
+    if (!this._isAuthContextCurrent(context)) {
+      return { error: new AuthSessionChangedError() };
+    }
     if (!result.ok) {
       return { error: result.error };
     }
