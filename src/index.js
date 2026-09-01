@@ -907,6 +907,7 @@ class VolcanoAuth {
       confirmEmail: this.confirmEmail.bind(this),
       resendConfirmation: this.resendConfirmation.bind(this),
       // Password recovery methods
+      resetPasswordForEmail: this.resetPasswordForEmail.bind(this),
       forgotPassword: this.forgotPassword.bind(this),
       resetPassword: this.resetPassword.bind(this),
       // Email change methods
@@ -1690,7 +1691,11 @@ class VolcanoAuth {
     if (!result.ok) {
       return { message: null, error: result.error };
     }
-    return { message: result.data.message, error: null };
+    return { message: result.data?.message ?? null, error: null };
+  }
+
+  async resetPasswordForEmail(email) {
+    return this.forgotPassword(email);
   }
 
   async resetPassword({ token, newPassword }) {

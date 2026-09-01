@@ -282,7 +282,10 @@ export interface Auth {
   resendConfirmation(email: string): Promise<MessageResponse>;
 
   // Password recovery methods
+  /** Request a password reset email without revealing whether the account exists. */
+  resetPasswordForEmail(email: string): Promise<MessageResponse>;
   /** Request password reset - sends recovery token to email */
+  /** @deprecated Use resetPasswordForEmail. */
   forgotPassword(email: string): Promise<MessageResponse>;
   /** Reset password using recovery token from email */
   resetPassword(options: ResetPasswordOptions): Promise<MessageResponse>;
