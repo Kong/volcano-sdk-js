@@ -1948,8 +1948,11 @@ class VolcanoAuth {
   }
 
   async getLinkedOAuthProviders() {
-    const result = await this._authFetch('/auth/oauth/providers');
+    const { result, context } = await this._authFetchWithContext('/auth/oauth/providers');
 
+    if (!this._isAuthContextCurrent(context)) {
+      return { providers: null, error: new AuthSessionChangedError() };
+    }
     if (!result.ok) {
       return { providers: null, error: result.error };
     }

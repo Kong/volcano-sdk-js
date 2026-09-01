@@ -405,6 +405,9 @@ if (providers) {
 }
 ```
 
+The result is discarded with `AuthSessionChangedError` if the active session changes while the
+request is in flight.
+
 ### Access Provider APIs
 
 After OAuth sign-in, you can make authenticated requests to the provider's API:
