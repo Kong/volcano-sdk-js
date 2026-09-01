@@ -344,7 +344,7 @@ export interface Auth {
   unlinkOAuthProvider(provider: OAuthProviderName): Promise<{ error: Error | null }>;
   /** Get linked OAuth providers */
   getLinkedOAuthProviders(): Promise<{ providers: OAuthProvider[] | null; error: Error | null }>;
-  /** Refresh OAuth provider access token. Throws if provider is invalid. */
+  /** Refresh a server-held OAuth provider token and return status metadata. */
   refreshOAuthToken(provider: OAuthProviderName): Promise<OAuthTokenResponse>;
   /** Get server-held OAuth provider token status. Auto-refreshes if expired; never exposes the token. */
   getOAuthProviderToken(provider: OAuthProviderName): Promise<OAuthTokenResponse>;
