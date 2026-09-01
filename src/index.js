@@ -2051,7 +2051,7 @@ class VolcanoAuth {
       extractSessionIdFromToken(context.accessToken),
       sessionId,
     );
-    if (deletesCurrentSession) {
+    if (deletesCurrentSession && (result.ok || result.status === null)) {
       if (!this._clearSessionAtGeneration(context.generation)) {
         const sessionChangedError = new AuthSessionChangedError();
         if (result.error) {

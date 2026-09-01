@@ -3554,6 +3554,29 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser).toBeNull();
     });
 
+    it('should preserve the current session when deletion is rejected', async () => {
+      const sessionId = '00000000-0000-4000-8000-000000000099';
+      const accessToken = createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+        session_id: sessionId,
+      });
+      volcano._setSession({
+        access_token: accessToken,
+        refresh_token: null,
+        user: { id: 'current-user' },
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'expired' }),
+      });
+
+      const result = await volcano.auth.deleteSession(sessionId);
+
+      expect(result.error.message).toBe('Session expired');
+      expect(volcano.accessToken).toBe(accessToken);
+      expect(volcano.currentUser.id).toBe('current-user');
+    });
+
     it('should clear a refreshed current session after deletion', async () => {
       const sessionId = '00000000-0000-4000-8000-000000000099';
       volcano._setSession({
