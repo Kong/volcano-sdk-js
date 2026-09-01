@@ -578,6 +578,10 @@ if (user) {
 }
 ```
 
+The returned user reflects the confirmed address. If another authentication operation replaces the
+active session before a successful confirmation arrives, the method returns an
+`AuthSessionChangedError` and leaves the newer session's user untouched.
+
 ### Cancel Email Change
 
 If the user changes their mind:
