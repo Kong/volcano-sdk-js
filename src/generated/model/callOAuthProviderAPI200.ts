@@ -9,6 +9,9 @@
  */
 import type { CallOAuthProviderAPI200Provider } from './callOAuthProviderAPI200Provider';
 
+/**
+ * OAuth provider API response envelope
+ */
 export type CallOAuthProviderAPI200 = {
   provider: CallOAuthProviderAPI200Provider;
   endpoint: string;
