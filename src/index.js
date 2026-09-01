@@ -1760,14 +1760,17 @@ class VolcanoAuth {
   }
 
   async cancelEmailChange() {
-    const result = await this._authFetch('/auth/user/cancel-email-change', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/cancel-email-change', {
       method: 'DELETE',
     });
 
     if (!result.ok) {
       return { message: null, error: result.error };
     }
-    return { message: result.data.message, error: null };
+    if (!this._isAuthContextCurrent(context)) {
+      return { message: null, error: new AuthSessionChangedError() };
+    }
+    return { message: result.data?.message ?? null, error: null };
   }
 
   // ========================================================================
