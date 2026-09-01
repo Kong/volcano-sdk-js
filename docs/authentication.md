@@ -505,7 +505,7 @@ if (!error) {
 Send a password reset email to the user:
 
 ```javascript
-const { message, error } = await volcano.auth.forgotPassword('alice@example.com');
+const { message, error } = await volcano.auth.resetPasswordForEmail('alice@example.com');
 
 if (!error) {
   console.log('Password reset email sent');
@@ -513,6 +513,7 @@ if (!error) {
 ```
 
 For security, this always succeeds even if the email doesn't exist in your system.
+`forgotPassword()` remains available as a deprecated compatibility alias.
 
 ### Reset Password
 

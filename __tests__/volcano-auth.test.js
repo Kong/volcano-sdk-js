@@ -148,6 +148,7 @@ describe('VolcanoAuth', () => {
       expect(typeof volcano.auth.resendConfirmation).toBe('function');
 
       // Password recovery
+      expect(typeof volcano.auth.resetPasswordForEmail).toBe('function');
       expect(typeof volcano.auth.forgotPassword).toBe('function');
       expect(typeof volcano.auth.resetPassword).toBe('function');
 
@@ -2763,6 +2764,21 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Password Recovery', () => {
+    it('should request password reset with the Supabase-style method', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ message: 'Reset email sent' }),
+      });
+
+      const result = await volcano.auth.resetPasswordForEmail('test@example.com');
+
+      expect(result).toEqual({ message: 'Reset email sent', error: null });
+      expect(global.fetch.mock.calls[0][0]).toBe('https://api.test.com/auth/forgot-password');
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+        email: 'test@example.com',
+      });
+    });
+
     it('should request password reset', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,
