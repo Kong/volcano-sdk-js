@@ -901,6 +901,7 @@ class VolcanoAuth {
       onAuthStateChange: this.onAuthStateChange.bind(this),
       user: () => this.currentUser,
       // Anonymous user methods
+      signInAnonymously: this.signInAnonymously.bind(this),
       signUpAnonymous: this.signUpAnonymous.bind(this),
       convertAnonymous: this.convertAnonymous.bind(this),
       // Email confirmation methods
@@ -1608,7 +1609,7 @@ class VolcanoAuth {
   // Anonymous User Methods
   // ========================================================================
 
-  async signUpAnonymous(metadata = {}) {
+  async signInAnonymously(metadata = {}) {
     const expectedGeneration = this._sessionGeneration;
     const result = await this._anonFetch('/auth/signup-anonymous', {
       method: 'POST',
@@ -1631,6 +1632,10 @@ class VolcanoAuth {
       },
       error: null,
     };
+  }
+
+  async signUpAnonymous(metadata = {}) {
+    return this.signInAnonymously(metadata);
   }
 
   async convertAnonymous({ email, password, metadata = {} }) {

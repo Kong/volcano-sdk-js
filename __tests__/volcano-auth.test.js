@@ -140,6 +140,7 @@ describe('VolcanoAuth', () => {
       expect(typeof volcano.auth.user).toBe('function');
 
       // Anonymous
+      expect(typeof volcano.auth.signInAnonymously).toBe('function');
       expect(typeof volcano.auth.signUpAnonymous).toBe('function');
       expect(typeof volcano.auth.convertAnonymous).toBe('function');
 
@@ -2578,6 +2579,28 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Anonymous Authentication', () => {
+    it('should sign in anonymously through the preferred auth method', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: 'anon-123', is_anonymous: true },
+            access_token: 'anon-token',
+            refresh_token: 'anon-refresh',
+            expires_in: 3600,
+          }),
+      });
+
+      const result = await volcano.auth.signInAnonymously({ device: 'mobile' });
+
+      expect(result.user.is_anonymous).toBe(true);
+      expect(result.session.access_token).toBe('anon-token');
+      expect(result.error).toBeNull();
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+        user_metadata: { device: 'mobile' },
+      });
+    });
+
     it('discards an anonymous signup after another session wins', async () => {
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);

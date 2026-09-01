@@ -432,7 +432,7 @@ Let users explore your app without creating an account, then convert them to ful
 ### Create Anonymous User
 
 ```javascript
-const { user, session, error } = await volcano.auth.signUpAnonymous({
+const { user, session, error } = await volcano.auth.signInAnonymously({
   preferred_theme: 'dark',
 });
 
@@ -443,6 +443,8 @@ if (user) {
 ```
 
 Anonymous users get a unique ID and can store data, but they don't have an email address or password.
+They cannot recover the account after signing out unless they first convert it to a full account.
+`signUpAnonymous()` remains available as a compatibility alias.
 
 ### Convert to Full Account
 
