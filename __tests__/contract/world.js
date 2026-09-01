@@ -40,6 +40,7 @@ class ContractWorld {
     this.previousSession = null;
     this.refreshedSession = null;
     this.signedOutSession = null;
+    this.authStateUsers = [];
     this.client = new VolcanoClient({
       apiUrl: fixture.api_url,
       anonKey: fixture.anon_key,

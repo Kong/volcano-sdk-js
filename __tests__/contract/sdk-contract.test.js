@@ -48,6 +48,14 @@ autoBindSteps(features, [
       startScenario(context);
     });
 
+    given('the client listens for auth state changes', () => {
+      const { world } = context;
+      const unsubscribe = world.client.auth.onAuthStateChange((user) => {
+        world.authStateUsers.push(user);
+      });
+      world.cleanupCallbacks.push(unsubscribe);
+    });
+
     when("the client signs in with the contract user's credentials", async () => {
       const result = await context.world.client.auth.signIn({
         email: context.world.fixture.user_email,
@@ -137,6 +145,12 @@ autoBindSteps(features, [
     then('the current session belongs to the contract user', () => {
       expect(context.world.lastOutcome.value.user.id).toBe(context.world.fixture.user_id);
       expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
+    });
+
+    then('the auth-state listener observes the signed-in contract user', () => {
+      expect(context.world.authStateUsers).toContainEqual(
+        expect.objectContaining({ id: context.world.fixture.user_id }),
+      );
     });
 
     then('the current session exposes access and refresh tokens', () => {
