@@ -320,6 +320,38 @@ describe('project locks', () => {
     expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
   });
 
+  test('renew reports caller cancellation while reading the response body', async () => {
+    const controller = new AbortController();
+    const cancellation = new Error('renewal cancelled');
+    fetch.mockImplementationOnce(async (_url, options) => ({
+      ...response(200, {}),
+      json: () =>
+        new Promise((_resolve, reject) => {
+          if (options.signal.aborted) {
+            reject(options.signal.reason);
+            return;
+          }
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    }));
+    const lease = {
+      key: 'leader',
+      token: '00000000-0000-4000-8000-000000000010',
+      expiresAt: '2026-07-20T12:00:05Z',
+      fencingToken: 1,
+    };
+
+    const pending = volcano.locks.renew('leader', lease, { ttl: 5, signal: controller.signal });
+    await Promise.resolve();
+    controller.abort(cancellation);
+    const result = await pending;
+
+    expect(result.error).toBe(cancellation);
+    expect(result.lease.expiresAt).toBe('2026-07-20T12:00:05Z');
+  });
+
   test('withLock derives renewal cadence from elapsed ttl despite wall-clock skew', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));

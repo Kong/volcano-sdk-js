@@ -160,7 +160,7 @@ function sanitizeProvider(provider) {
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options
  * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
- * @param {(response: Response) => Promise<unknown>|unknown} [consume] - Optional response consumer
+ * @param {(response: Response, signal: AbortSignal) => Promise<unknown>|unknown} [consume] - Optional response consumer
  * @returns {Promise<unknown>}
  */
 async function fetchWithTimeout(
@@ -187,7 +187,7 @@ async function fetchWithTimeout(
       ...options,
       signal: controller.signal,
     });
-    return await consume(response);
+    return await consume(response, controller.signal);
   } catch (error) {
     if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
       throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
@@ -202,12 +202,19 @@ async function fetchWithTimeout(
 /**
  * Safely parse JSON from response, returns empty object on failure
  * @param {Response} response
+ * @param {AbortSignal} [signal]
  * @returns {Promise<Object>}
  */
-async function safeJsonParse(response) {
+async function safeJsonParse(response, signal) {
   try {
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason || error;
+    }
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
     return {};
   }
 }
@@ -1047,7 +1054,10 @@ class VolcanoAuth {
             },
           },
           this.timeout,
-          async (response) => ({ response, data: await safeJsonParse(response) }),
+          async (response, signal) => ({
+            response,
+            data: await safeJsonParse(response, signal),
+          }),
         );
 
         if (!response.ok) {

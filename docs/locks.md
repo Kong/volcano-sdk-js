@@ -59,12 +59,20 @@ For direct control:
 const acquired = await volcano.locks.acquire('migration', { ttl: 10 });
 if (!acquired.acquired || acquired.error) return acquired;
 
+const renewal = new AbortController();
 try {
-  await volcano.locks.renew('migration', acquired.lease, { ttl: 10 });
+  const renewed = await volcano.locks.renew('migration', acquired.lease, {
+    ttl: 10,
+    signal: renewal.signal,
+  });
+  if (renewed.error) throw renewed.error;
 } finally {
   await volcano.locks.release('migration', acquired.lease);
 }
 ```
+
+Abort `renewal` to cancel the in-flight renewal request. Cancellation is
+reported through `renewed.error`; the existing lease remains unchanged.
 
 ## Fencing token
 
