@@ -909,6 +909,11 @@ export interface ProjectLockAcquireOptions extends ProjectLockOptions {
   token?: string;
 }
 
+export interface ProjectLockRenewOptions extends ProjectLockOptions {
+  /** Cancels the in-flight renewal request. */
+  signal?: AbortSignal;
+}
+
 export interface ProjectLockState {
   /** False means an acquire would succeed now. */
   held: boolean;
@@ -939,7 +944,7 @@ export interface ProjectLocks {
   renew(
     key: string,
     lease: ProjectLockLease,
-    options: ProjectLockOptions,
+    options: ProjectLockRenewOptions,
   ): Promise<{ lease: ProjectLockLease; error: ProjectLockError | null }>;
   release(
     key: string,

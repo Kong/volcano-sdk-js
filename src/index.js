@@ -6,6 +6,7 @@ import {
   releaseProjectLock,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { lockRequestStart, LockSession } from './lock-session.js';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -88,7 +89,6 @@ const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
-const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 // Both codes mean the lock is unavailable right now rather than that the request
 // failed: another live holder, or this caller's own lapsed lease still inside
 // the takeover grace window.
@@ -160,37 +160,61 @@ function sanitizeProvider(provider) {
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options
  * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
- * @returns {Promise<Response>}
+ * @param {(response: Response, signal: AbortSignal) => Promise<unknown>|unknown} [consume] - Optional response consumer
+ * @returns {Promise<unknown>}
  */
-async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  consume = (response) => response,
+) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal.reason);
+  if (options.signal?.aborted) {
+    abortFromCaller();
+  } else {
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
     });
-    return response;
+    return await consume(response, controller.signal);
   } catch (error) {
-    if (error.name === 'AbortError') {
+    if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
       throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
 /**
  * Safely parse JSON from response, returns empty object on failure
  * @param {Response} response
+ * @param {AbortSignal} [signal]
  * @returns {Promise<Object>}
  */
-async function safeJsonParse(response) {
+async function safeJsonParse(response, signal) {
   try {
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason || error;
+    }
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
     return {};
   }
 }
@@ -698,6 +722,7 @@ class ProjectLocksApi {
         'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
       },
       body: JSON.stringify({ ttl_seconds: ttl }),
+      signal: options.signal,
     });
     if (!result.ok) {
       return { lease, error: result.error };
@@ -757,6 +782,7 @@ class ProjectLocksApi {
       throw new TypeError('callback must be a function');
     }
     const ttl = validateLockOptions(key, options);
+    const startedAt = lockRequestStart();
     const acquired = await this.acquire(key, {
       ttl,
       token: options.token,
@@ -766,48 +792,15 @@ class ProjectLocksApi {
       return { acquired: acquired.acquired, data: null, error: acquired.error };
     }
 
-    const controller = new AbortController();
-    let stopped = false;
-    let renewalError = null;
-    let timer;
-    let wakeTimer;
-    const renewalLoop = (async () => {
-      while (!stopped) {
-        const baseDelay = lockRenewalDelay(ttl, acquired.lease);
-        const jitter = baseDelay * 0.1 * (secureRandomUnit() * 2 - 1);
-        await new Promise((resolve) => {
-          wakeTimer = resolve;
-          timer = setTimeout(resolve, Math.max(1, baseDelay + jitter));
-        });
-        wakeTimer = null;
-        if (stopped) {
-          break;
-        }
-        const renewed = await this.renew(key, acquired.lease, { ttl });
-        if (renewed.error) {
-          renewalError = renewed.error;
-          controller.abort(renewalError);
-          break;
-        }
-      }
-    })();
-
-    let data = null;
-    let callbackError = null;
-    let releaseError;
-    try {
-      data = await callback({ signal: controller.signal, lease: acquired.lease });
-    } catch (error) {
-      callbackError = error instanceof Error ? error : new Error(String(error));
-    } finally {
-      stopped = true;
-      clearTimeout(timer);
-      wakeTimer?.();
-      await renewalLoop;
-      const released = await this.release(key, acquired.lease);
-      releaseError = released.error;
-    }
-    return { acquired: true, data, error: renewalError || callbackError || releaseError };
+    const session = new LockSession({
+      locks: this,
+      key,
+      ttl,
+      lease: acquired.lease,
+      startedAt,
+      random: secureRandomUnit,
+    });
+    return { acquired: true, ...(await session.run(callback)) };
   }
 }
 
@@ -830,16 +823,6 @@ function secureRandomUnit() {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] / 0x1_0000_0000;
-}
-
-function lockRenewalDelay(ttl, lease) {
-  const ttlDelay = (ttl * 1000) / 3;
-  const expiresAt = Date.parse(lease.expiresAt);
-  if (!Number.isFinite(expiresAt)) {
-    return ttlDelay;
-  }
-  const remainingDelay = Math.max(1, (expiresAt - Date.now()) / 3);
-  return Math.min(ttlDelay, remainingDelay, MAX_LOCK_RENEWAL_DELAY_MS);
 }
 
 function validateLease(key, lease) {
@@ -1060,7 +1043,7 @@ class VolcanoAuth {
 
     for (;;) {
       try {
-        const response = await fetchWithTimeout(
+        const { response, data } = await fetchWithTimeout(
           url,
           {
             ...fetchOptions,
@@ -1071,9 +1054,11 @@ class VolcanoAuth {
             },
           },
           this.timeout,
+          async (response, signal) => ({
+            response,
+            data: await safeJsonParse(response, signal),
+          }),
         );
-
-        const data = await safeJsonParse(response);
 
         if (!response.ok) {
           // Try token refresh once on 401. retryFailure is lexical state, so
