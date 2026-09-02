@@ -36,6 +36,15 @@ async function authenticate(world) {
   world.client.database(world.fixture.database_name);
 }
 
+function registerDatabaseCleanup(world, operation) {
+  world.cleanupCallbacks.push(async () => {
+    const result = await operation();
+    if (result.error) {
+      throw result.error;
+    }
+  });
+}
+
 afterEach(async () => {
   const world = activeWorld;
   activeWorld = undefined;
@@ -183,6 +192,11 @@ autoBindSteps(features, [
     when('the client inserts its contract row', async () => {
       const row = context.world.fixture.mutation_rows.javascript.insert;
       const result = await context.world.client.insert(context.world.fixture.table_name, row);
+      if (!result.error) {
+        registerDatabaseCleanup(context.world, () =>
+          context.world.client.delete(context.world.fixture.table_name).eq('slug', row.slug),
+        );
+      }
       recordOutcome(context.world, result.data, result.error);
     });
 
@@ -196,6 +210,13 @@ autoBindSteps(features, [
       const result = await context.world.client
         .update(context.world.fixture.table_name, { value: row.after.value })
         .eq('slug', row.before.slug);
+      if (!result.error) {
+        registerDatabaseCleanup(context.world, () =>
+          context.world.client
+            .update(context.world.fixture.table_name, { value: row.before.value })
+            .eq('slug', row.before.slug),
+        );
+      }
       recordOutcome(context.world, result.data, result.error);
     });
 
@@ -209,6 +230,11 @@ autoBindSteps(features, [
       const result = await context.world.client
         .delete(context.world.fixture.table_name)
         .eq('slug', row.slug);
+      if (!result.error) {
+        registerDatabaseCleanup(context.world, () =>
+          context.world.client.insert(context.world.fixture.table_name, row),
+        );
+      }
       recordOutcome(context.world, result.data, result.error);
     });
 
