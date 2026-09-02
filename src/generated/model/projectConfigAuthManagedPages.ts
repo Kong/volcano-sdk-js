@@ -7,6 +7,7 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { ProjectConfigAuthPageAppearance } from './projectConfigAuthPageAppearance';
 import type { ProjectConfigAuthRedirects } from './projectConfigAuthRedirects';
 import type { ProjectConfigHostedPages } from './projectConfigHostedPages';
 
@@ -15,4 +16,5 @@ export interface ProjectConfigAuthManagedPages {
   enabled?: boolean;
   redirects?: ProjectConfigAuthRedirects;
   pages?: ProjectConfigHostedPages;
+  appearance?: ProjectConfigAuthPageAppearance;
 }

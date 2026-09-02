@@ -15,6 +15,21 @@ components:
         minLength: 1
         maxLength: 64
       description: Storage bucket name
+    BackupName:
+      name: backupName
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: |
+        Backup name, unique within the database, exactly as returned by the list
+        endpoint.
+
+        Deliberately looser than the names you can create: a backup made by a
+        schedule is named for you, so reading or deleting one accepts any name a
+        backup can have.
     BranchName:
       name: branchName
       in: path
@@ -185,6 +200,14 @@ components:
         type: string
         format: uuid
       description: Project ID
+    RestoreId:
+      name: restoreId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Database restore ID
     SchedulerId:
       name: schedulerId
       in: path

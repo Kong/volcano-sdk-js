@@ -98,13 +98,8 @@ type OAuthBody = NonNullable<OAuthRequest['body']>;
 type OAuthResponse =
   OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
 type _OAuthBodyAcceptsProperties = Assert<{ visibility: string } extends OAuthBody ? true : false>;
-type OAuthResponseShape = {
-  provider: 'google' | 'github' | 'microsoft' | 'apple';
-  endpoint: string;
-  status_code: number;
-  data: unknown;
-};
-type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
+type OAuthResponseShape = { [key: string]: unknown };
+type _OAuthResponseAllowsProviderPayload = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {

@@ -261,7 +261,9 @@ export const getListProjectsUrl = (params) => {
  * `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
  * `offset` past the cursor anchor. Supplying `limit` without `page`
  * selects cursor mode. `search` applies a case-insensitive project-name
- * filter in either mode. Sending `page` with `cursor` or `ending_before`,
+ * filter in either mode. `include` optionally expands each returned
+ * project with its Git connection and/or aggregate health summary using
+ * `git_connection` and `health`. Sending `page` with `cursor` or `ending_before`,
  * or sending both cursor directions, returns 400.
  * @summary List all projects for authenticated user
  */
@@ -521,6 +523,94 @@ export const applyProjectConfig = async (id, projectConfig, params, options) => 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
         body: JSON.stringify(projectConfig)
+    });
+};
+export const getGetProjectSourceExportUrl = (id) => {
+    return `/projects/${id}/source-export`;
+};
+/**
+ * Volcano stores the source of the functions and frontend it runs for a
+ * project. This reports whether that source has been written to the
+ * connected repository, and whether the repository has taken over as the
+ * project's source of truth.
+ *
+ * `mode` is `platform`, `git_exporting`, `git_pending`, or `git`. Export
+ * enters `git_exporting` before reading stored source. GitHub's signed
+ * push event confirms that the initial commit reached the production
+ * branch. That push or a newer production push changes the mode to
+ * `git_pending` when it starts a deployment. `exported_at` records that
+ * transition.
+ *
+ * A successful Git run completes the transition when it matches the
+ * recorded repository, production branch, and root directory and actually
+ * dispatches every recorded resource. Ordinary production-branch pushes
+ * deploy without changing a platform-managed project's source ownership.
+ * @summary Report the project's source-of-truth state
+ */
+export const getProjectSourceExport = async (id, options) => {
+    return volcanoFetch(getGetProjectSourceExportUrl(id), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getExportProjectSourceUrl = (id) => {
+    return `/projects/${id}/source-export`;
+};
+/**
+ * Creates the first commit in the connected repository and pushes it
+ * directly to the configured production branch. The push enters the
+ * ordinary Git auto-deploy flow. Direct source writes remain frozen until
+ * that deployment succeeds and the repository becomes the source of truth.
+ *
+ * The caller confirms the production branch shown before export. Starting
+ * export pins that branch: later GitHub default-branch changes do not
+ * repoint the project. If the configured branch changed after the caller
+ * read it, the request fails without exporting so the caller can show and
+ * confirm the new value.
+ *
+ * The response lists what the export could not carry: resources with no
+ * successful deployment to take source from (`skipped`), and things no
+ * export can hand back (`omitted`) — migrations, which Volcano stores no
+ * copy of, and credential-shaped files, which are left for their owner to
+ * add.
+ *
+ * Requires a connected repository with no commits or branches, and runs
+ * once. Volcano never creates the repository. If GitHub did not confirm
+ * the push, retrying creates the same commit and adopts it when it already
+ * reached the repository.
+ * @summary Initialize an empty repository with a project's stored source
+ */
+export const exportProjectSource = async (id, exportProjectSourceRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getExportProjectSourceUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(exportProjectSourceRequest)
+    });
+};
+export const getCancelProjectSourceExportUrl = (id) => {
+    return `/projects/${id}/source-export`;
+};
+/**
+ * Restores platform source writes while the project is in
+ * `git_exporting` or `git_pending`. If Volcano reserved or deployed the
+ * root commit, export remains consumed and cannot be run again. The
+ * connected repository and any commit already pushed to it are unchanged.
+ * @summary Cancel an incomplete source export
+ */
+export const cancelProjectSourceExport = async (id, options) => {
+    return volcanoFetch(getCancelProjectSourceExportUrl(id), {
+        ...options,
+        method: 'DELETE'
     });
 };
 export const getSetProjectGitProductionBranchUrl = (id) => {
@@ -871,6 +961,18 @@ export const createFunction = async (id, createFunctionBody, options) => {
     if (createFunctionBody.handler !== undefined) {
         formData.append(`handler`, createFunctionBody.handler);
     }
+    if (createFunctionBody.is_public !== undefined) {
+        formData.append(`is_public`, createFunctionBody.is_public.toString());
+    }
+    if (createFunctionBody.invocation_mode !== undefined) {
+        formData.append(`invocation_mode`, createFunctionBody.invocation_mode);
+    }
+    if (createFunctionBody.http_auth_mode !== undefined) {
+        formData.append(`http_auth_mode`, createFunctionBody.http_auth_mode);
+    }
+    if (createFunctionBody.openapi_spec !== undefined) {
+        formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
+    }
     return volcanoFetch(getCreateFunctionUrl(id), {
         ...options,
         method: 'POST',
@@ -958,9 +1060,16 @@ export const getInvokeFunctionUrl = (functionId) => {
  * - Function receives payload only (no `__volcano_auth`)
  *
  * **Transport and CORS:**
- * - Direct invocation endpoint is intended for `http://api.<domain>/functions/{functionId}/invoke`
- * - DNS invocation endpoint is `https://{functionId}.functions.<domain>/`
- * - CORS preflight for invocation allows only `POST, OPTIONS`
+ * - This operation is the authenticated direct RPC endpoint and always uses the
+ *   POST `{payload: ...}` contract, including for functions whose DNS ingress is
+ *   configured in HTTP mode.
+ * - The geo-routed DNS ingress is `https://{functionId}.functions.<domain>/`.
+ * - RPC-mode DNS ingress accepts POST at `/`. HTTP-mode DNS ingress accepts GET,
+ *   HEAD, POST, PUT, PATCH, and DELETE at `/` and nested paths.
+ * - Direct and RPC-mode CORS preflight advertises `POST, OPTIONS`. HTTP-mode DNS
+ *   preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
+ * - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
+ *   direct operation always requires a Volcano credential.
  * @summary Invoke a function
  */
 export const invokeFunction = async (functionId, functionInvocationRequest, options) => {
@@ -1333,7 +1442,7 @@ export const getCreateFrontendUrl = (id) => {
  * 22.x or 24.x. The Node.js runtime is inferred from
  * `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
  * The selected Node.js family must also satisfy the installed Next.js package's
- * `engines.node` constraint. Volcano tests Next 15.5.24 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.3 (`>=20.9.0`).
+ * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
  * Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
  * does not apply its own source archive size limit. After the final container images are
  * built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1576,7 +1685,8 @@ export const getCreateDatabaseUrl = (id) => {
 };
 /**
  * Creates a serverless PostgreSQL database in the project.
- * Each project can contain up to 100 databases. Requests over this cap return 403.
+ * Each project can hold 1 database on Free and up to 10,000 on Pro.
+ * Requests over the plan's cap return 403.
  * @summary Create a new serverless PostgreSQL database
  */
 export const createDatabase = async (id, createDatabaseRequest, options) => {
@@ -1609,7 +1719,6 @@ export const getDatabase = async (id, databaseName, options) => {
         method: 'GET'
     });
 };
-;
 export const getDeleteDatabaseUrl = (id, databaseName) => {
     return `/projects/${id}/databases/${databaseName}`;
 };
@@ -1769,7 +1878,9 @@ export const getResetDatabaseBranchPasswordUrl = (id, databaseName, branchName) 
 /**
  * Issues a new password for the branch and invalidates the previous
  * connection string. Existing connections are not interrupted; new ones
- * must use the returned string.
+ * must use the returned string. Proxies pick the rotation up within a few
+ * seconds, so the previous password can still open new connections until
+ * then.
  *
  * The parent database's credentials are untouched.
  * @summary Rotate a branch's password
@@ -1780,7 +1891,188 @@ export const resetDatabaseBranchPassword = async (id, databaseName, branchName, 
         method: 'POST'
     });
 };
-;
+export const getListDatabaseBackupsUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/backups`;
+};
+/**
+ * Returns every backup of the database, newest first, together with the
+ * window a point-in-time restore may target.
+ *
+ * Both backups you took and backups the schedule produced are listed;
+ * `source` tells them apart. Only manual backups count against the plan's
+ * backup allowance.
+ * @summary List a database's backups
+ */
+export const listDatabaseBackups = async (id, databaseName, options) => {
+    return volcanoFetch(getListDatabaseBackupsUrl(id, databaseName), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateDatabaseBackupUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/backups`;
+};
+/**
+ * Captures the database as it is now. The backup is available immediately;
+ * its `size_bytes` appears once the storage provider has costed it.
+ *
+ * Backups are rate-limited to one per minute per database, and capped by
+ * the owner's plan.
+ * @summary Back up a database
+ */
+export const createDatabaseBackup = async (id, databaseName, createDatabaseBackupRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getCreateDatabaseBackupUrl(id, databaseName), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createDatabaseBackupRequest)
+    });
+};
+export const getGetDatabaseBackupUrl = (id, databaseName, backupName) => {
+    return `/projects/${id}/databases/${databaseName}/backups/${backupName}`;
+};
+/**
+ * Returns one backup of the database.
+ * @summary Get a backup
+ */
+export const getDatabaseBackup = async (id, databaseName, backupName, options) => {
+    return volcanoFetch(getGetDatabaseBackupUrl(id, databaseName, backupName), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getDeleteDatabaseBackupUrl = (id, databaseName, backupName) => {
+    return `/projects/${id}/databases/${databaseName}/backups/${backupName}`;
+};
+/**
+ * Deletes the backup and frees its storage. Scheduled backups can be
+ * deleted too. A backup that is already gone reports `404`, so a name
+ * that never existed and a name that no longer does read the same.
+ * Refused with `409` while the database is being restored.
+ * @summary Delete a backup
+ */
+export const deleteDatabaseBackup = async (id, databaseName, backupName, options) => {
+    return volcanoFetch(getDeleteDatabaseBackupUrl(id, databaseName, backupName), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getGetDatabaseBackupScheduleUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/backup-schedule`;
+};
+/**
+ * Returns the database's backup schedule. An empty list means no scheduled
+ * backups.
+ * @summary Get the automated backup schedule
+ */
+export const getDatabaseBackupSchedule = async (id, databaseName, options) => {
+    return volcanoFetch(getGetDatabaseBackupScheduleUrl(id, databaseName), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getUpdateDatabaseBackupScheduleUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/backup-schedule`;
+};
+/**
+ * Replaces the schedule wholesale. Send an empty `entries` list to stop
+ * scheduled backups.
+ *
+ * Scheduled backups do not count against the plan's backup allowance, but
+ * their retention is clamped to the plan's.
+ * @summary Replace the automated backup schedule
+ */
+export const updateDatabaseBackupSchedule = async (id, databaseName, databaseBackupSchedule, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateDatabaseBackupScheduleUrl(id, databaseName), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(databaseBackupSchedule)
+    });
+};
+export const getListDatabaseRestoresUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/restores`;
+};
+/**
+ * Returns the database's restore history, newest first, capped at the 50
+ * most recent. There is no pagination: a database that has been restored
+ * more than 50 times keeps the older records but does not return them.
+ * @summary List a database's restores
+ */
+export const listDatabaseRestores = async (id, databaseName, options) => {
+    return volcanoFetch(getListDatabaseRestoresUrl(id, databaseName), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateDatabaseRestoreUrl = (id, databaseName) => {
+    return `/projects/${id}/databases/${databaseName}/restores`;
+};
+/**
+ * Replaces the database's data, either with a named backup or with its
+ * state at a point in time. This is destructive: everything written after
+ * that point is discarded.
+ *
+ * Asynchronous: the response is `202` with the restore `pending` and the
+ * database `restoring`. The database does not accept connections until the
+ * restore reports `completed`; its connection string is unchanged
+ * throughout, so nothing holding it needs updating.
+ *
+ * Restores are in place. There is no way to restore into a second
+ * database, and a database's branches are never restored — they keep
+ * serving their own data, but resetting a branch from its parent is
+ * refused by the storage provider for up to 24 hours afterwards.
+ * @summary Restore a database
+ */
+export const createDatabaseRestore = async (id, databaseName, createDatabaseRestoreRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getCreateDatabaseRestoreUrl(id, databaseName), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createDatabaseRestoreRequest)
+    });
+};
+export const getGetDatabaseRestoreUrl = (id, databaseName, restoreId) => {
+    return `/projects/${id}/databases/${databaseName}/restores/${restoreId}`;
+};
+/**
+ * Returns the restore. Poll this after starting one; the database is
+ * connectable again once it reports `completed`.
+ * @summary Get a restore
+ */
+export const getDatabaseRestore = async (id, databaseName, restoreId, options) => {
+    return volcanoFetch(getGetDatabaseRestoreUrl(id, databaseName, restoreId), {
+        ...options,
+        method: 'GET'
+    });
+};
 export const getResetDatabasePasswordUrl = (id, databaseName) => {
     return `/projects/${id}/databases/${databaseName}/reset-password`;
 };
@@ -1789,6 +2081,10 @@ export const getResetDatabasePasswordUrl = (id, databaseName) => {
  * through pgproxy. This does not rotate or expose the internal owner password.
  * The returned password and connection string are the only client credentials that
  * will authenticate through pgproxy after reset.
+ *
+ * Existing connections are not interrupted; new ones must use the returned
+ * string. Proxies pick the rotation up within a few seconds, so the previous
+ * password can still open new connections until then.
  * @summary Reset database password
  */
 export const resetDatabasePassword = async (id, databaseName, options) => {
@@ -3223,14 +3519,121 @@ export const updateAuthHostedPage = async (id, pageType, updateAuthHostedPageReq
         body: JSON.stringify(updateAuthHostedPageRequest)
     });
 };
+export const getGetAuthPageAppearanceUrl = (id) => {
+    return `/projects/${id}/auth/pages/appearance`;
+};
+/**
+ * @summary Get managed auth page appearance
+ */
+export const getAuthPageAppearance = async (id, options) => {
+    return volcanoFetch(getGetAuthPageAppearanceUrl(id), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getUpdateAuthPageThemeUrl = (id) => {
+    return `/projects/${id}/auth/pages/theme`;
+};
+/**
+ * @summary Save the managed auth page theme
+ */
+export const updateAuthPageTheme = async (id, updateAuthPageThemeRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateAuthPageThemeUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(updateAuthPageThemeRequest)
+    });
+};
+export const getDeleteAuthPageThemeUrl = (id) => {
+    return `/projects/${id}/auth/pages/theme`;
+};
+/**
+ * @summary Clear the managed auth page theme
+ */
+export const deleteAuthPageTheme = async (id, options) => {
+    return volcanoFetch(getDeleteAuthPageThemeUrl(id), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getUpdateAuthPageLayoutUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/layout`;
+};
+/**
+ * @summary Save one managed auth page layout
+ */
+export const updateAuthPageLayout = async (id, pageType, updateAuthPageLayoutRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateAuthPageLayoutUrl(id, pageType), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(updateAuthPageLayoutRequest)
+    });
+};
+export const getDeleteAuthPageLayoutUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/layout`;
+};
+/**
+ * @summary Clear one managed auth page layout
+ */
+export const deleteAuthPageLayout = async (id, pageType, options) => {
+    return volcanoFetch(getDeleteAuthPageLayoutUrl(id, pageType), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getPreviewAuthPageUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/preview`;
+};
+/**
+ * @summary Preview an unsaved managed auth page appearance
+ */
+export const previewAuthPage = async (id, pageType, previewAuthPageRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getPreviewAuthPageUrl(id, pageType), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(previewAuthPageRequest)
+    });
+};
 export const getRenderManagedAuthPageUrl = (id, pageType) => {
     return `/projects/${id}/auth/hosted/${pageType}`;
 };
 /**
- * Public HTML endpoint for the managed reset-password page.
+ * Public HTML endpoint for signup, forgot-password, device approval,
+ * verify-email, and reset-password pages. Login uses the path without a
+ * page type.
  * Requires `Accept: text/html`.
  * Returns 404 when managed hosted pages are disabled for the project.
- * @summary Render managed reset-password page
+ * @summary Render a managed auth page
  */
 export const renderManagedAuthPage = async (id, pageType, options) => {
     return volcanoFetch(getRenderManagedAuthPageUrl(id, pageType), {
@@ -3757,7 +4160,7 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - GitHub repositories: `/user/repos`
  * - Microsoft Graph profile: `/me`
  *
- * The response wraps the provider's raw JSON value with request metadata.
+ * The response is the raw JSON response from the provider's API.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {
@@ -4390,6 +4793,12 @@ export const getUploadStorageObjectUrl = (bucketName, path) => {
  * **Complete Resumable Session:**
  * Complete a session after all parts are uploaded.
  * Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+ *
+ * **Resumable Session Ownership:**
+ * A session created with a user access token remains bound to that user. A session
+ * created with an anon key remains bound to that exact anon key. Reuse the same
+ * identity or anon key for part uploads, status, completion, and abort requests;
+ * an ownership mismatch returns `404`.
  * @summary Upload a file or create resumable session
  */
 export const uploadStorageObject = async (bucketName, path, uploadStorageObjectBodyOne, options) => {
@@ -4413,6 +4822,7 @@ export const getUploadPartUrl = (bucketName, path) => {
  * - Maximum part size is 25MB
  * - Parts can be uploaded in any order
  * - Re-uploading a part overwrites the previous upload
+ * - Anonymous sessions must reuse the exact anon key that created the session
  * @summary Upload a part of a resumable upload
  */
 export const uploadPart = async (bucketName, path, uploadPartBody, options) => {
@@ -4443,6 +4853,7 @@ export const getDownloadStorageObjectUrl = (bucketName, path) => {
  *
  * **Session Status (with X-Upload-Session header):**
  * Returns the status of a resumable upload session, including which parts have been uploaded.
+ * Anonymous sessions must reuse the exact anon key that created the session.
  * @summary Download a file or get upload session status
  */
 export const downloadStorageObject = async (bucketName, path, options) => {
@@ -4462,6 +4873,7 @@ export const getDeleteStorageObjectUrl = (bucketName, path) => {
  *
  * **Abort Session (with X-Upload-Session header):**
  * Aborts a resumable upload session and cleans up any uploaded parts.
+ * Anonymous sessions must reuse the exact anon key that created the session.
  * @summary Delete a file or abort upload session
  */
 export const deleteStorageObject = async (bucketName, path, options) => {

@@ -9,7 +9,10 @@
  */
 
 /**
- * Database provisioning status
+ * Database status. `restoring` means a restore is replacing the
+ * database's data: it does not accept connections, and the operations
+ * that would race the restore are rejected until it finishes. Its
+ * branches keep serving throughout.
  */
 export type DatabaseStatus = typeof DatabaseStatus[keyof typeof DatabaseStatus];
 
@@ -18,5 +21,6 @@ export const DatabaseStatus = {
   provisioning: 'provisioning',
   active: 'active',
   failed: 'failed',
+  restoring: 'restoring',
   deleting: 'deleting',
 } as const;

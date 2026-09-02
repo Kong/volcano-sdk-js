@@ -7,6 +7,9 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
+import type { FunctionInvocationMode } from './functionInvocationMode';
+import type { ProjectConfigFunctionOpenapiSpec } from './projectConfigFunctionOpenapiSpec';
 import type { ProjectConfigScheduler } from './projectConfigScheduler';
 
 /**
@@ -20,5 +23,12 @@ export interface ProjectConfigFunction {
   name: string;
   /** Function visibility for anon-key invocation */
   public?: boolean;
+  invocation_mode?: FunctionInvocationMode;
+  http_auth_mode?: FunctionHTTPAuthMode;
+  /**
+     * OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function
+     * @nullable
+     */
+  openapi_spec?: ProjectConfigFunctionOpenapiSpec;
   schedulers?: ProjectConfigScheduler[];
 }
