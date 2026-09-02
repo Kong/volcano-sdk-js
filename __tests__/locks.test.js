@@ -237,6 +237,56 @@ describe('project locks', () => {
     expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
+  test('withLock cancels a preparatory renewal when the acquired lease expires', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
+    jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000d');
+    let finishRenewal;
+    fetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRenewal = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(response(204, {}));
+    const callback = jest.fn();
+
+    const pending = volcano.locks.withLock('leader', { ttl: 5 }, callback);
+    await jest.advanceTimersByTimeAsync(5000);
+    const renewalSignalWasAborted = fetch.mock.calls[1][1].signal.aborted;
+    finishRenewal(response(200, { expires_at: '2026-07-20T12:00:10Z' }));
+    const result = await pending;
+
+    expect(renewalSignalWasAborted).toBe(true);
+    expect(callback).not.toHaveBeenCalled();
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error.message).toBe('lock lease expired before renewal completed');
+  });
+
+  test('renew propagates caller cancellation to the request', async () => {
+    const controller = new AbortController();
+    fetch.mockImplementationOnce(() => new Promise(() => {}));
+    const lease = {
+      key: 'leader',
+      token: '00000000-0000-4000-8000-00000000000e',
+      expiresAt: '2026-07-20T12:00:05Z',
+      fencingToken: 1,
+    };
+
+    void volcano.locks.renew('leader', lease, { ttl: 5, signal: controller.signal });
+    await Promise.resolve();
+    controller.abort();
+
+    expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+
   test('withLock derives renewal cadence from elapsed ttl despite wall-clock skew', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));

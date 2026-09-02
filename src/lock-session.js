@@ -72,8 +72,18 @@ export class LockSession {
     if (this.renewalDelay() > 0) {
       return;
     }
+    this.scheduleExpiry();
     const startedAt = lockRequestStart();
-    const renewed = await this.locks.renew(this.key, this.lease, { ttl: this.ttl });
+    const controller = new AbortController();
+    this.renewalController = controller;
+    const renewed = await this.locks.renew(this.key, this.lease, {
+      ttl: this.ttl,
+      signal: controller.signal,
+    });
+    this.renewalController = null;
+    if (this.failure || this.stopped) {
+      return;
+    }
     if (renewed.error) {
       this.markLost(renewed.error);
       return;

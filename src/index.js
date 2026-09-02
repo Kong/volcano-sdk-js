@@ -164,7 +164,17 @@ function sanitizeProvider(provider) {
  */
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal.reason);
+  if (options.signal?.aborted) {
+    abortFromCaller();
+  } else {
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -173,12 +183,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
     });
     return response;
   } catch (error) {
-    if (error.name === 'AbortError') {
+    if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
       throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
