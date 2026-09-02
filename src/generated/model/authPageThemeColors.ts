@@ -7,11 +7,16 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const HostedAuthPageType = {
-    login: 'login',
-    signup: 'signup',
-    'forgot-password': 'forgot-password',
-    device: 'device',
-    'verify-email': 'verify-email',
-    'reset-password': 'reset-password',
-};
+
+export interface AuthPageThemeColors {
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  background: string;
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  surface: string;
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  text: string;
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  accent: string;
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  accent_text: string;
+}

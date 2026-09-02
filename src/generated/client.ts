@@ -39,6 +39,7 @@ import type {
   AuthOAuthAuthorizeParams,
   AuthOAuthCallbackParams,
   AuthOAuthExchangeBody,
+  AuthPageAppearanceResponse,
   AuthPasswordPolicy,
   AuthPlatformExchangeBody,
   AuthRefreshBody,
@@ -178,6 +179,8 @@ import type {
   PaginatedStorageBuckets,
   PaginatedVariables,
   PlatformExchangeResponse,
+  PreviewAuthPageRequest,
+  PreviewAuthPageResponse,
   Project,
   ProjectConfig,
   ProjectConfigApplyResult,
@@ -199,6 +202,7 @@ import type {
   RealtimeConfig,
   RealtimeStats,
   RefreshOAuthProviderToken200,
+  RenderAuthPagePreviewParams,
   RenderDefaultManagedAuthPageParams,
   ResetDatabasePassword200,
   ResolveFunctionForInvocationParams,
@@ -222,6 +226,8 @@ import type {
   UnbanUserResponse,
   UpdateAuthConfigRequest,
   UpdateAuthHostedPageRequest,
+  UpdateAuthPageLayoutRequest,
+  UpdateAuthPageThemeRequest,
   UpdateDatabaseBranchRequest,
   UpdateDatabaseTypeRequest,
   UpdateEmailTemplateRequest,
@@ -9212,6 +9218,463 @@ return volcanoFetch<updateAuthHostedPageResponse>(getUpdateAuthHostedPageUrl(id,
 
 
 
+export type getAuthPageAppearanceResponse200 = {
+  data: AuthPageAppearanceResponse
+  status: 200
+}
+
+export type getAuthPageAppearanceResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getAuthPageAppearanceResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getAuthPageAppearanceResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getAuthPageAppearanceResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type getAuthPageAppearanceResponseSuccess = (getAuthPageAppearanceResponse200) & {
+  headers: Headers;
+};
+export type getAuthPageAppearanceResponseError = (getAuthPageAppearanceResponse401 | getAuthPageAppearanceResponse403 | getAuthPageAppearanceResponse404 | getAuthPageAppearanceResponse500) & {
+  headers: Headers;
+};
+
+export type getAuthPageAppearanceResponse = (getAuthPageAppearanceResponseSuccess | getAuthPageAppearanceResponseError)
+
+export const getGetAuthPageAppearanceUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/appearance`
+}
+
+/**
+ * @summary Get managed auth page appearance
+ */
+export const getAuthPageAppearance = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getAuthPageAppearanceResponse> => {
+
+  return volcanoFetch<getAuthPageAppearanceResponse>(getGetAuthPageAppearanceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateAuthPageThemeResponse200 = {
+  data: UpdateAuthPageThemeRequest
+  status: 200
+}
+
+export type updateAuthPageThemeResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateAuthPageThemeResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateAuthPageThemeResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateAuthPageThemeResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateAuthPageThemeResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type updateAuthPageThemeResponseSuccess = (updateAuthPageThemeResponse200) & {
+  headers: Headers;
+};
+export type updateAuthPageThemeResponseError = (updateAuthPageThemeResponse400 | updateAuthPageThemeResponse401 | updateAuthPageThemeResponse403 | updateAuthPageThemeResponse404 | updateAuthPageThemeResponse500) & {
+  headers: Headers;
+};
+
+export type updateAuthPageThemeResponse = (updateAuthPageThemeResponseSuccess | updateAuthPageThemeResponseError)
+
+export const getUpdateAuthPageThemeUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/theme`
+}
+
+/**
+ * @summary Save the managed auth page theme
+ */
+export const updateAuthPageTheme = async (id: string,
+    updateAuthPageThemeRequest: UpdateAuthPageThemeRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateAuthPageThemeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateAuthPageThemeResponse>(getUpdateAuthPageThemeUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateAuthPageThemeRequest)
+  }
+);}
+
+
+
+export type deleteAuthPageThemeResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAuthPageThemeResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteAuthPageThemeResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteAuthPageThemeResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteAuthPageThemeResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type deleteAuthPageThemeResponseSuccess = (deleteAuthPageThemeResponse204) & {
+  headers: Headers;
+};
+export type deleteAuthPageThemeResponseError = (deleteAuthPageThemeResponse401 | deleteAuthPageThemeResponse403 | deleteAuthPageThemeResponse404 | deleteAuthPageThemeResponse500) & {
+  headers: Headers;
+};
+
+export type deleteAuthPageThemeResponse = (deleteAuthPageThemeResponseSuccess | deleteAuthPageThemeResponseError)
+
+export const getDeleteAuthPageThemeUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/theme`
+}
+
+/**
+ * @summary Clear the managed auth page theme
+ */
+export const deleteAuthPageTheme = async (id: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteAuthPageThemeResponse> => {
+
+  return volcanoFetch<deleteAuthPageThemeResponse>(getDeleteAuthPageThemeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type updateAuthPageLayoutResponse200 = {
+  data: UpdateAuthPageLayoutRequest
+  status: 200
+}
+
+export type updateAuthPageLayoutResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateAuthPageLayoutResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type updateAuthPageLayoutResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type updateAuthPageLayoutResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateAuthPageLayoutResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type updateAuthPageLayoutResponseSuccess = (updateAuthPageLayoutResponse200) & {
+  headers: Headers;
+};
+export type updateAuthPageLayoutResponseError = (updateAuthPageLayoutResponse400 | updateAuthPageLayoutResponse401 | updateAuthPageLayoutResponse403 | updateAuthPageLayoutResponse404 | updateAuthPageLayoutResponse500) & {
+  headers: Headers;
+};
+
+export type updateAuthPageLayoutResponse = (updateAuthPageLayoutResponseSuccess | updateAuthPageLayoutResponseError)
+
+export const getUpdateAuthPageLayoutUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/layout`
+}
+
+/**
+ * @summary Save one managed auth page layout
+ */
+export const updateAuthPageLayout = async (id: string,
+    pageType: HostedAuthPageType,
+    updateAuthPageLayoutRequest: UpdateAuthPageLayoutRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateAuthPageLayoutResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateAuthPageLayoutResponse>(getUpdateAuthPageLayoutUrl(id,pageType),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateAuthPageLayoutRequest)
+  }
+);}
+
+
+
+export type deleteAuthPageLayoutResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAuthPageLayoutResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type deleteAuthPageLayoutResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type deleteAuthPageLayoutResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type deleteAuthPageLayoutResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteAuthPageLayoutResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type deleteAuthPageLayoutResponseSuccess = (deleteAuthPageLayoutResponse204) & {
+  headers: Headers;
+};
+export type deleteAuthPageLayoutResponseError = (deleteAuthPageLayoutResponse400 | deleteAuthPageLayoutResponse401 | deleteAuthPageLayoutResponse403 | deleteAuthPageLayoutResponse404 | deleteAuthPageLayoutResponse500) & {
+  headers: Headers;
+};
+
+export type deleteAuthPageLayoutResponse = (deleteAuthPageLayoutResponseSuccess | deleteAuthPageLayoutResponseError)
+
+export const getDeleteAuthPageLayoutUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/layout`
+}
+
+/**
+ * @summary Clear one managed auth page layout
+ */
+export const deleteAuthPageLayout = async (id: string,
+    pageType: HostedAuthPageType, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteAuthPageLayoutResponse> => {
+
+  return volcanoFetch<deleteAuthPageLayoutResponse>(getDeleteAuthPageLayoutUrl(id,pageType),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type renderAuthPagePreviewResponse200 = {
+  data: string
+  status: 200
+}
+
+export type renderAuthPagePreviewResponse404 = {
+  data: string
+  status: 404
+}
+
+export type renderAuthPagePreviewResponse500 = {
+  data: string
+  status: 500
+}
+
+export type renderAuthPagePreviewResponseSuccess = (renderAuthPagePreviewResponse200) & {
+  headers: Headers;
+};
+export type renderAuthPagePreviewResponseError = (renderAuthPagePreviewResponse404 | renderAuthPagePreviewResponse500) & {
+  headers: Headers;
+};
+
+export type renderAuthPagePreviewResponse = (renderAuthPagePreviewResponseSuccess | renderAuthPagePreviewResponseError)
+
+export const getRenderAuthPagePreviewUrl = (id: string,
+    pageType: HostedAuthPageType,
+    params: RenderAuthPagePreviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/auth/pages/${pageType}/preview?${stringifiedParams}` : `/projects/${id}/auth/pages/${pageType}/preview`
+}
+
+/**
+ * Public HTML endpoint for a preview URL returned by the POST operation.
+ * The signed ticket contains the unsaved appearance, expires shortly, and
+ * runs the production page runtime against mocked authentication responses.
+ * @summary Render a short-lived managed auth page preview
+ */
+export const renderAuthPagePreview = async (id: string,
+    pageType: HostedAuthPageType,
+    params: RenderAuthPagePreviewParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<renderAuthPagePreviewResponse> => {
+
+  return volcanoFetch<renderAuthPagePreviewResponse>(getRenderAuthPagePreviewUrl(id,pageType,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type previewAuthPageResponse200 = {
+  data: PreviewAuthPageResponse
+  status: 200
+}
+
+export type previewAuthPageResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type previewAuthPageResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type previewAuthPageResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type previewAuthPageResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type previewAuthPageResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type previewAuthPageResponseSuccess = (previewAuthPageResponse200) & {
+  headers: Headers;
+};
+export type previewAuthPageResponseError = (previewAuthPageResponse400 | previewAuthPageResponse401 | previewAuthPageResponse403 | previewAuthPageResponse404 | previewAuthPageResponse500) & {
+  headers: Headers;
+};
+
+export type previewAuthPageResponse = (previewAuthPageResponseSuccess | previewAuthPageResponseError)
+
+export const getPreviewAuthPageUrl = (id: string,
+    pageType: HostedAuthPageType,) => {
+
+
+
+
+  return `/projects/${id}/auth/pages/${pageType}/preview`
+}
+
+/**
+ * @summary Preview an unsaved managed auth page appearance
+ */
+export const previewAuthPage = async (id: string,
+    pageType: HostedAuthPageType,
+    previewAuthPageRequest: PreviewAuthPageRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<previewAuthPageResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<previewAuthPageResponse>(getPreviewAuthPageUrl(id,pageType),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewAuthPageRequest)
+  }
+);}
+
+
+
 export type renderManagedAuthPageResponse200 = {
   data: string
   status: 200
@@ -9246,10 +9709,12 @@ export const getRenderManagedAuthPageUrl = (id: string,
 }
 
 /**
- * Public HTML endpoint for the managed reset-password page.
+ * Public HTML endpoint for signup, forgot-password, device approval,
+ * verify-email, and reset-password pages. Login uses the path without a
+ * page type.
  * Requires `Accept: text/html`.
  * Returns 404 when managed hosted pages are disabled for the project.
- * @summary Render managed reset-password page
+ * @summary Render a managed auth page
  */
 export const renderManagedAuthPage = async (id: string,
     pageType: HostedRenderablePageType, options?: Parameters<typeof volcanoFetch>[1]): Promise<renderManagedAuthPageResponse> => {
