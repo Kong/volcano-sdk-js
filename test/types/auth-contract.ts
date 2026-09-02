@@ -1,7 +1,10 @@
-import type { Auth, User, UserStatus } from '../../src/index.js';
+import type { Auth, ProjectLockLease, ProjectLocks, User, UserStatus } from '../../src/index.js';
 
 declare const user: User;
 declare const auth: Auth;
+declare const locks: ProjectLocks;
+declare const lease: ProjectLockLease;
+declare const signal: AbortSignal;
 
 const projectId: string | undefined = user.project_id;
 const emailConfirmed: boolean | undefined = user.email_confirmed;
@@ -13,3 +16,4 @@ const lastSignInAt: string | undefined = user.last_sign_in_at;
 
 void [projectId, emailConfirmed, appMetadata, avatarUrl, status, bannedUntil, lastSignInAt];
 void auth.resetPasswordForEmail('alice@example.com');
+void locks.renew('leader', lease, { ttl: 5, signal });

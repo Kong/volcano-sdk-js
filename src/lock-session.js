@@ -26,6 +26,9 @@ export class LeaseClock {
   }
 
   remaining() {
+    // Date.now catches suspension on platforms where performance.now pauses.
+    // A forward clock correction may shorten a lease; failing closed is safer
+    // than allowing guarded work to outlive its server-side ownership.
     return Math.max(
       0,
       Math.min(this.monotonicDeadline - performance.now(), this.wallDeadline - Date.now()),

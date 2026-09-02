@@ -270,6 +270,39 @@ describe('project locks', () => {
     expect(result.error.message).toBe('lock lease expired before renewal completed');
   });
 
+  test('withLock keeps preparatory cancellation active while reading the renewal body', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
+    jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000f');
+    let finishBody;
+    fetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+          }),
+      )
+      .mockImplementationOnce(async () => ({
+        ...response(200, {}),
+        json: () =>
+          new Promise((resolve) => {
+            finishBody = resolve;
+          }),
+      }))
+      .mockResolvedValueOnce(response(204, {}));
+    const callback = jest.fn();
+
+    const pending = volcano.locks.withLock('leader', { ttl: 5 }, callback);
+    await jest.advanceTimersByTimeAsync(5000);
+    const renewalSignalWasAborted = fetch.mock.calls[1][1].signal.aborted;
+    finishBody({ expires_at: '2026-07-20T12:00:10Z' });
+    const result = await pending;
+
+    expect(renewalSignalWasAborted).toBe(true);
+    expect(callback).not.toHaveBeenCalled();
+    expect(result.error.message).toBe('lock lease expired before renewal completed');
+  });
+
   test('renew propagates caller cancellation to the request', async () => {
     const controller = new AbortController();
     fetch.mockImplementationOnce(() => new Promise(() => {}));

@@ -160,9 +160,15 @@ function sanitizeProvider(provider) {
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options
  * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
- * @returns {Promise<Response>}
+ * @param {(response: Response) => Promise<unknown>|unknown} [consume] - Optional response consumer
+ * @returns {Promise<unknown>}
  */
-async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  consume = (response) => response,
+) {
   const controller = new AbortController();
   let timedOut = false;
   const abortFromCaller = () => controller.abort(options.signal.reason);
@@ -181,7 +187,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
       ...options,
       signal: controller.signal,
     });
-    return response;
+    return await consume(response);
   } catch (error) {
     if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
       throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
@@ -1030,7 +1036,7 @@ class VolcanoAuth {
 
     for (;;) {
       try {
-        const response = await fetchWithTimeout(
+        const { response, data } = await fetchWithTimeout(
           url,
           {
             ...fetchOptions,
@@ -1041,9 +1047,8 @@ class VolcanoAuth {
             },
           },
           this.timeout,
+          async (response) => ({ response, data: await safeJsonParse(response) }),
         );
-
-        const data = await safeJsonParse(response);
 
         if (!response.ok) {
           // Try token refresh once on 401. retryFailure is lexical state, so
