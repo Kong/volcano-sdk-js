@@ -820,11 +820,19 @@ describe('Storage', () => {
       const mockResponse = {
         session_id: 'sess-123',
         path: 'large-video.mp4',
-        status: 'pending',
+        status: 'uploading',
+        content_type: 'video/mp4',
+        total_size: 100 * 1024 * 1024,
+        part_size: 25 * 1024 * 1024,
         total_parts: 4,
-        uploaded_parts: 2,
-        missing_parts: [3, 4],
+        parts_uploaded: 2,
+        bytes_uploaded: 50 * 1024 * 1024,
+        parts: [
+          { part_number: 1, etag: 'etag-1', size: 25 * 1024 * 1024 },
+          { part_number: 2, etag: 'etag-2', size: 25 * 1024 * 1024 },
+        ],
         expires_at: '2026-01-30T00:00:00Z',
+        created_at: '2026-01-23T00:00:00Z',
       };
 
       global.fetch.mockResolvedValueOnce({

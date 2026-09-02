@@ -3,6 +3,7 @@ import type {
   CompleteSession,
   OpenAPIComponents,
   OpenAPIOperations,
+  UploadSessionStatusResponse,
 } from '../../src/index.js';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
 
@@ -64,6 +65,25 @@ type _StorageMimeTypesCanBeNull = Assert<
   null extends StorageBucket['allowed_mime_types'] ? true : false
 >;
 type _StorageOwnerCanBeNull = Assert<null extends StorageObject['owner_id'] ? true : false>;
+
+type UploadSessionStatus = NonNullable<UploadSessionStatusResponse['data']>;
+type UploadSessionStatusShape = {
+  session_id: string;
+  status: 'pending' | 'uploading' | 'completing' | 'completed' | 'aborted';
+  path: string;
+  content_type: string;
+  total_size: number;
+  part_size: number;
+  total_parts: number;
+  parts_uploaded: number;
+  bytes_uploaded: number;
+  parts: { part_number: number; etag: string; size: number }[];
+  expires_at: string;
+  created_at: string;
+};
+type _UploadSessionStatusMatchesHosting = Assert<
+  Equal<UploadSessionStatus, UploadSessionStatusShape>
+>;
 
 type InvocationPayload = NonNullable<
   OpenAPIComponents['schemas']['FunctionInvocationRequest']['payload']
