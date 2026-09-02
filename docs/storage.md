@@ -346,6 +346,7 @@ if (data) {
 ```
 
 **Note:** This constructs the URL locally and doesn't verify the file is actually public. Use `list()` or `updateVisibility()` to get the server-confirmed URL.
+The path must be a non-empty string and cannot contain `.` or `..` segments.
 
 ## Resumable Uploads
 
