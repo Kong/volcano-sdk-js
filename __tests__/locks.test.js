@@ -1,4 +1,5 @@
 const { VolcanoAuth } = require('../src/index.js');
+const { LeaseClock } = require('../src/lock-session.js');
 
 function response(status, body, headers = {}) {
   return {
@@ -209,7 +210,34 @@ describe('project locks', () => {
     expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
-  test('withLock shortens renewal cadence when the hard deadline clamps expiry', async () => {
+  test('withLock renews a slow acquisition before running the callback', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
+    jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000c');
+    fetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+          }),
+      )
+      .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:00:09Z' }))
+      .mockResolvedValueOnce(response(204, {}));
+    const methodsSeenByCallback = [];
+
+    const pending = volcano.locks.withLock('leader', { ttl: 5 }, async () => {
+      methodsSeenByCallback.push(...fetch.mock.calls.map((call) => call[1].method));
+      return 'completed';
+    });
+    await jest.advanceTimersByTimeAsync(4000);
+    const result = await pending;
+
+    expect(methodsSeenByCallback).toEqual(['POST', 'PATCH']);
+    expect(result).toEqual({ acquired: true, data: 'completed', error: null });
+    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
+  });
+
+  test('withLock derives renewal cadence from elapsed ttl despite wall-clock skew', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000007');
@@ -218,31 +246,71 @@ describe('project locks', () => {
       return values;
     });
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:01:00Z' }))
+      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T11:59:00Z' }))
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:01:00Z' }))
-      .mockResolvedValueOnce(
-        response(409, {
-          error: 'Lock ownership lost',
-          code: 'lock_ownership_lost',
-        }),
-      )
-      .mockResolvedValueOnce(response(409, { error: 'Lock ownership lost' }));
+      .mockResolvedValueOnce(response(204, {}));
 
-    const pending = volcano.locks.withLock('leader', { ttl: 60 }, ({ signal }) => {
+    let finish;
+    const pending = volcano.locks.withLock('leader', { ttl: 60 }, () => {
       return new Promise((resolve) => {
-        signal.addEventListener('abort', resolve, { once: true });
+        finish = resolve;
       });
     });
 
-    await jest.advanceTimersByTimeAsync(20 * 1000);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(1);
-    await jest.advanceTimersByTimeAsync(12 * 1000);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(1);
-    await jest.advanceTimersByTimeAsync(2 * 1000);
+    await jest.advanceTimersByTimeAsync(19_999);
+    const earlyRenewals = fetch.mock.calls.filter((call) => call[1].method === 'PATCH').length;
+    await jest.advanceTimersByTimeAsync(1);
+    const onTimeRenewals = fetch.mock.calls.filter((call) => call[1].method === 'PATCH').length;
+    finish('completed');
     const result = await pending;
 
+    expect(earlyRenewals).toBe(0);
+    expect(onTimeRenewals).toBe(1);
+    expect(result).toEqual({ acquired: true, data: 'completed', error: null });
+  });
+
+  test('withLock aborts at ttl and cleans up without waiting for a stalled renewal', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
+    jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000b');
+    jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
+      values[0] = 0x8000_0000;
+      return values;
+    });
+    let finishRenewal;
+    fetch
+      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:05Z' }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRenewal = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(response(204, {}));
+
+    let settled = false;
+    const pending = volcano.locks
+      .withLock('leader', { ttl: 5 }, ({ signal }) => {
+        return new Promise((resolve) => {
+          signal.addEventListener('abort', () => resolve('aborted'), { once: true });
+          setTimeout(() => resolve('not aborted'), 6000);
+        });
+      })
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+
+    await jest.advanceTimersByTimeAsync(6000);
+    const settledBeforeRenewal = settled;
+    finishRenewal(response(200, { expires_at: '2026-07-20T12:00:11Z' }));
+    const result = await pending;
+
+    expect(settledBeforeRenewal).toBe(true);
+    expect(result.data).toBe('aborted');
     expect(result.error).toBeInstanceOf(Error);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(2);
+    expect(result.error.message).toBe('lock lease expired before renewal completed');
+    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
   test('withLock caps long JavaScript timers at one day', async () => {
@@ -278,6 +346,20 @@ describe('project locks', () => {
 
     expect(result.error).toBeInstanceOf(Error);
     expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(1);
+  });
+
+  test('preserves the absolute acquisition deadline across renewals', () => {
+    jest.spyOn(global.performance, 'now').mockReturnValue(0);
+    jest.spyOn(Date, 'now').mockReturnValue(0);
+    const ttl = 7_776_000;
+    const clock = new LeaseClock(ttl, { monotonic: 0, wall: 0 });
+    const nearLimit = ttl * 1000 - 1000;
+
+    performance.now.mockReturnValue(nearLimit);
+    Date.now.mockReturnValue(nearLimit);
+    clock.reset({ monotonic: nearLimit, wall: nearLimit });
+
+    expect(clock.remaining()).toBe(1000);
   });
 
   // A renewal must not move the fencing token, or the guarded resource would

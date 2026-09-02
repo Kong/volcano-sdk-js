@@ -6,6 +6,7 @@ import {
   releaseProjectLock,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { lockRequestStart, LockSession } from './lock-session.js';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -88,7 +89,6 @@ const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
-const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 // Both codes mean the lock is unavailable right now rather than that the request
 // failed: another live holder, or this caller's own lapsed lease still inside
 // the takeover grace window.
@@ -698,6 +698,7 @@ class ProjectLocksApi {
         'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
       },
       body: JSON.stringify({ ttl_seconds: ttl }),
+      signal: options.signal,
     });
     if (!result.ok) {
       return { lease, error: result.error };
@@ -757,6 +758,7 @@ class ProjectLocksApi {
       throw new TypeError('callback must be a function');
     }
     const ttl = validateLockOptions(key, options);
+    const startedAt = lockRequestStart();
     const acquired = await this.acquire(key, {
       ttl,
       token: options.token,
@@ -766,48 +768,15 @@ class ProjectLocksApi {
       return { acquired: acquired.acquired, data: null, error: acquired.error };
     }
 
-    const controller = new AbortController();
-    let stopped = false;
-    let renewalError = null;
-    let timer;
-    let wakeTimer;
-    const renewalLoop = (async () => {
-      while (!stopped) {
-        const baseDelay = lockRenewalDelay(ttl, acquired.lease);
-        const jitter = baseDelay * 0.1 * (secureRandomUnit() * 2 - 1);
-        await new Promise((resolve) => {
-          wakeTimer = resolve;
-          timer = setTimeout(resolve, Math.max(1, baseDelay + jitter));
-        });
-        wakeTimer = null;
-        if (stopped) {
-          break;
-        }
-        const renewed = await this.renew(key, acquired.lease, { ttl });
-        if (renewed.error) {
-          renewalError = renewed.error;
-          controller.abort(renewalError);
-          break;
-        }
-      }
-    })();
-
-    let data = null;
-    let callbackError = null;
-    let releaseError;
-    try {
-      data = await callback({ signal: controller.signal, lease: acquired.lease });
-    } catch (error) {
-      callbackError = error instanceof Error ? error : new Error(String(error));
-    } finally {
-      stopped = true;
-      clearTimeout(timer);
-      wakeTimer?.();
-      await renewalLoop;
-      const released = await this.release(key, acquired.lease);
-      releaseError = released.error;
-    }
-    return { acquired: true, data, error: renewalError || callbackError || releaseError };
+    const session = new LockSession({
+      locks: this,
+      key,
+      ttl,
+      lease: acquired.lease,
+      startedAt,
+      random: secureRandomUnit,
+    });
+    return { acquired: true, ...(await session.run(callback)) };
   }
 }
 
@@ -830,16 +799,6 @@ function secureRandomUnit() {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] / 0x1_0000_0000;
-}
-
-function lockRenewalDelay(ttl, lease) {
-  const ttlDelay = (ttl * 1000) / 3;
-  const expiresAt = Date.parse(lease.expiresAt);
-  if (!Number.isFinite(expiresAt)) {
-    return ttlDelay;
-  }
-  const remainingDelay = Math.max(1, (expiresAt - Date.now()) / 3);
-  return Math.min(ttlDelay, remainingDelay, MAX_LOCK_RENEWAL_DELAY_MS);
 }
 
 function validateLease(key, lease) {

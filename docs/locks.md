@@ -26,7 +26,8 @@ if (!result.acquired) console.log('another function is leader');
 `withLock` renews near one-third of the TTL and releases in `finally`.
 Contention returns `{ acquired: false, error: null }`, whether another holder
 owns the lock or a previous lease of your own has lapsed. If renewal fails, the
-callback signal is aborted; callbacks must honor it.
+callback signal is aborted; callbacks must honor it. A stalled renewal also
+aborts the signal when the locally measured TTL elapses.
 
 For example, a scheduled function can skip work when another invocation is
 already the leader:
