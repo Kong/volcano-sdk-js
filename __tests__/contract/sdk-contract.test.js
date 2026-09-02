@@ -180,6 +180,43 @@ autoBindSteps(features, [
       expect(context.world.lastOutcome.value).toEqual([context.world.fixture.fixture_row]);
     });
 
+    when('the client inserts its contract row', async () => {
+      const row = context.world.fixture.mutation_rows.javascript.insert;
+      const result = await context.world.client.insert(context.world.fixture.table_name, row);
+      recordOutcome(context.world, result.data, result.error);
+    });
+
+    then('exactly the inserted contract row is returned', () => {
+      const row = context.world.fixture.mutation_rows.javascript.insert;
+      expect(context.world.lastOutcome.value).toEqual([row]);
+    });
+
+    when('the client updates its contract row', async () => {
+      const row = context.world.fixture.mutation_rows.javascript.update;
+      const result = await context.world.client
+        .update(context.world.fixture.table_name, { value: row.after.value })
+        .eq('slug', row.before.slug);
+      recordOutcome(context.world, result.data, result.error);
+    });
+
+    then('exactly the updated contract row is returned', () => {
+      const row = context.world.fixture.mutation_rows.javascript.update.after;
+      expect(context.world.lastOutcome.value).toEqual([row]);
+    });
+
+    when('the client deletes its contract row', async () => {
+      const row = context.world.fixture.mutation_rows.javascript.delete;
+      const result = await context.world.client
+        .delete(context.world.fixture.table_name)
+        .eq('slug', row.slug);
+      recordOutcome(context.world, result.data, result.error);
+    });
+
+    then('exactly the deleted contract row is returned', () => {
+      const row = context.world.fixture.mutation_rows.javascript.delete;
+      expect(context.world.lastOutcome.value).toEqual([row]);
+    });
+
     when('the client uploads and downloads the contract object', async () => {
       const bucket = context.world.client.storage.from(context.world.fixture.bucket_name);
       const upload = await bucket.upload(
