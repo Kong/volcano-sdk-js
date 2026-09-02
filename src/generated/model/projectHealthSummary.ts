@@ -7,4 +7,8 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export {};
+import type { ProjectHealthStatus } from './projectHealthStatus';
+
+export interface ProjectHealthSummary {
+  status: ProjectHealthStatus;
+}

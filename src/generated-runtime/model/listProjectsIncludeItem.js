@@ -7,13 +7,7 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-
-export type CallOAuthProviderAPI200Provider = typeof CallOAuthProviderAPI200Provider[keyof typeof CallOAuthProviderAPI200Provider];
-
-
-export const CallOAuthProviderAPI200Provider = {
-  google: 'google',
-  github: 'github',
-  microsoft: 'microsoft',
-  apple: 'apple',
-} as const;
+export const ListProjectsIncludeItem = {
+    git_connection: 'git_connection',
+    health: 'health',
+};

@@ -7,4 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export {};
+
+export type ListProjectsIncludeItem = typeof ListProjectsIncludeItem[keyof typeof ListProjectsIncludeItem];
+
+
+export const ListProjectsIncludeItem = {
+  git_connection: 'git_connection',
+  health: 'health',
+} as const;

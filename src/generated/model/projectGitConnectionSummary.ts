@@ -7,9 +7,12 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const CallOAuthProviderAPI200Provider = {
-    google: 'google',
-    github: 'github',
-    microsoft: 'microsoft',
-    apple: 'apple',
-};
+
+export interface ProjectGitConnectionSummary {
+  repo_installation_id: number;
+  repo_id: number;
+  repo_full_name: string;
+  root_directory: string;
+  production_branch: string;
+  updated_at: string;
+}

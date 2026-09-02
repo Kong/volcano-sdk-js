@@ -10,6 +10,7 @@
 import type { CursorParameter } from './cursorParameter';
 import type { EndingBeforeParameter } from './endingBeforeParameter';
 import type { LimitParameter } from './limitParameter';
+import type { ListProjectsIncludeItem } from './listProjectsIncludeItem';
 import type { OffsetParameter } from './offsetParameter';
 import type { PageParameter } from './pageParameter';
 import type { SearchParameter } from './searchParameter';
@@ -60,4 +61,8 @@ offset?: OffsetParameter;
  * @maxLength 256
  */
 search?: SearchParameter;
+/**
+ * Optional comma-separated project metadata expansions.
+ */
+include?: ListProjectsIncludeItem[];
 };
