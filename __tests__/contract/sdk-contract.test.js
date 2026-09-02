@@ -191,12 +191,10 @@ autoBindSteps(features, [
 
     when('the client inserts its contract row', async () => {
       const row = context.world.fixture.mutation_rows.javascript.insert;
+      registerDatabaseCleanup(context.world, () =>
+        context.world.client.delete(context.world.fixture.table_name).eq('slug', row.slug),
+      );
       const result = await context.world.client.insert(context.world.fixture.table_name, row);
-      if (!result.error) {
-        registerDatabaseCleanup(context.world, () =>
-          context.world.client.delete(context.world.fixture.table_name).eq('slug', row.slug),
-        );
-      }
       recordOutcome(context.world, result.data, result.error);
     });
 
@@ -207,16 +205,14 @@ autoBindSteps(features, [
 
     when('the client updates its contract row', async () => {
       const row = context.world.fixture.mutation_rows.javascript.update;
+      registerDatabaseCleanup(context.world, () =>
+        context.world.client
+          .update(context.world.fixture.table_name, { value: row.before.value })
+          .eq('slug', row.before.slug),
+      );
       const result = await context.world.client
         .update(context.world.fixture.table_name, { value: row.after.value })
         .eq('slug', row.before.slug);
-      if (!result.error) {
-        registerDatabaseCleanup(context.world, () =>
-          context.world.client
-            .update(context.world.fixture.table_name, { value: row.before.value })
-            .eq('slug', row.before.slug),
-        );
-      }
       recordOutcome(context.world, result.data, result.error);
     });
 
@@ -227,14 +223,17 @@ autoBindSteps(features, [
 
     when('the client deletes its contract row', async () => {
       const row = context.world.fixture.mutation_rows.javascript.delete;
+      registerDatabaseCleanup(context.world, async () => {
+        const removed = await context.world.client
+          .delete(context.world.fixture.table_name)
+          .eq('slug', row.slug);
+        return removed.error
+          ? removed
+          : context.world.client.insert(context.world.fixture.table_name, row);
+      });
       const result = await context.world.client
         .delete(context.world.fixture.table_name)
         .eq('slug', row.slug);
-      if (!result.error) {
-        registerDatabaseCleanup(context.world, () =>
-          context.world.client.insert(context.world.fixture.table_name, row),
-        );
-      }
       recordOutcome(context.world, result.data, result.error);
     });
 
