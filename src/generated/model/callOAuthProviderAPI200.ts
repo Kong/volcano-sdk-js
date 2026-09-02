@@ -7,19 +7,8 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-import type { CallOAuthProviderAPI200Provider } from './callOAuthProviderAPI200Provider';
 
 /**
- * OAuth provider API response envelope
+ * Raw response from the OAuth provider's API
  */
-export type CallOAuthProviderAPI200 = {
-  provider: CallOAuthProviderAPI200Provider;
-  endpoint: string;
-  /**
-     * @minimum 100
-     * @maximum 599
-     */
-  status_code: number;
-  /** Raw JSON value returned by the OAuth provider's API */
-  data: unknown;
-};
+export type CallOAuthProviderAPI200 = { [key: string]: unknown };

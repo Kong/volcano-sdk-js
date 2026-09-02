@@ -7,6 +7,8 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { ProjectGitConnectionSummary } from './projectGitConnectionSummary';
+import type { ProjectHealthSummary } from './projectHealthSummary';
 import type { ProjectPlan } from './projectPlan';
 import type { ProjectStatus } from './projectStatus';
 
@@ -34,6 +36,10 @@ export interface Project {
      * logo. The logo image is stored in the project's storage folder.
      */
   logo_url?: string;
+  /** Present for connected projects when `git_connection` is requested through the list endpoint's `include` parameter. */
+  git_connection?: ProjectGitConnectionSummary;
+  /** Present when `health` is requested through the list endpoint's `include` parameter. */
+  health?: ProjectHealthSummary;
   created_at: string;
   updated_at: string;
 }
