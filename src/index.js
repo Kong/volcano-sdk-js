@@ -3090,6 +3090,20 @@ class StorageFileApi {
   }
 
   /**
+   * Return a validation error for a path used in a public URL
+   * @private
+   */
+  _publicPathError(path) {
+    if (typeof path !== 'string' || path.length === 0) {
+      return 'Storage path must be a non-empty string';
+    }
+    if (path.split('/').some((segment) => segment === '.' || segment === '..')) {
+      return 'Public URL paths cannot contain dot segments';
+    }
+    return null;
+  }
+
+  /**
    * Make an authenticated storage request
    * @private
    */
@@ -3296,6 +3310,11 @@ class StorageFileApi {
    * Get the public URL for a file (only works for files with is_public=true)
    */
   getPublicUrl(path) {
+    const pathError = this._publicPathError(path);
+    if (pathError) {
+      return errorResult(pathError);
+    }
+
     try {
       const parts = this.volcanoAuth.anonKey.split('.');
       if (parts.length !== 3) {

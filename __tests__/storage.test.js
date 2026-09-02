@@ -566,6 +566,25 @@ describe('Storage', () => {
       expect(error).toBeNull();
       expect(data.publicUrl).toContain('/public/proj-123-456/');
     });
+
+    it.each([
+      ['an empty path', ''],
+      ['multiple paths', ['first.txt', 'second.txt']],
+    ])('should reject %s', (_description, path) => {
+      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+
+      expect(data).toBeNull();
+      expect(error.message).toBe('Storage path must be a non-empty string');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it.each(['.', 'avatars/../secret.txt'])('should reject dot segment path %s', (path) => {
+      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+
+      expect(data).toBeNull();
+      expect(error.message).toBe('Public URL paths cannot contain dot segments');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateVisibility()', () => {
