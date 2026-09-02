@@ -427,12 +427,16 @@ const { data: status } = await volcano.storage
   .from('uploads')
   .getUploadSession('large-video.mp4', sessionId);
 
-console.log(`${status.uploaded_parts}/${status.total_parts} parts uploaded`);
-console.log(`${status.uploaded_bytes}/${status.total_size} bytes`);
-console.log('Missing parts:', status.missing_parts);
+console.log(`${status.parts_uploaded}/${status.total_parts} parts uploaded`);
+console.log(`${status.bytes_uploaded}/${status.total_size} bytes`);
+const uploadedParts = new Set(status.parts.map((part) => part.part_number));
+const missingParts = Array.from({ length: status.total_parts }, (_, index) => index + 1).filter(
+  (partNumber) => !uploadedParts.has(partNumber),
+);
+console.log('Missing parts:', missingParts);
 
 // Upload only the missing parts
-for (const partNumber of status.missing_parts) {
+for (const partNumber of missingParts) {
   const start = (partNumber - 1) * status.part_size;
   const end = Math.min(start + status.part_size, file.size);
   const partData = file.slice(start, end);

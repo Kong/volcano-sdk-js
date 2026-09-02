@@ -682,13 +682,18 @@ export interface UploadSessionStatusResponse {
   data: {
     session_id: string;
     path: string;
-    status: 'pending' | 'completed' | 'aborted';
+    status: 'pending' | 'uploading' | 'completing' | 'completed' | 'aborted';
+    content_type: string;
     total_size: number;
     part_size: number;
     total_parts: number;
-    uploaded_parts: number;
-    uploaded_bytes: number;
-    missing_parts: number[];
+    parts_uploaded: number;
+    bytes_uploaded: number;
+    parts: {
+      part_number: number;
+      etag: string;
+      size: number;
+    }[];
     expires_at: string;
     created_at: string;
   } | null;
