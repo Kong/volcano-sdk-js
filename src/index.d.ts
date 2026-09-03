@@ -1079,7 +1079,9 @@ export interface DatabaseConnectionStringOptions {
  * - no `userId`  → `volcano_full_access` (admin, bypasses RLS)
  * - with `userId` → `volcano_user_access:{userId}` (RLS enforced)
  *
- * Throws if the base connection string is missing or not a valid URL.
+ * Throws if the base connection string is missing, lacks a PostgreSQL URI prefix,
+ * or contains malformed percent encoding. Connection details are validated by libpq.
+ * Hostless and multi-host libpq targets and unrelated query values are preserved.
  *
  * @example
  * ```typescript

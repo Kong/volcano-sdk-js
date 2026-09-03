@@ -382,6 +382,8 @@ const client = new Client({ connectionString: connStr });
 The proxy routes by the globally-unique username (`volcano_client_{id}`) that is
 already in `DATABASE_URL`; `application_name` only selects the access mode. Prefer
 `databaseConnectionString` over hand-building `application_name`.
+The helper preserves libpq connection syntax, including hostless and multi-host
+targets, and leaves unrelated query values unchanged.
 
 ### Connection Pooling
 
