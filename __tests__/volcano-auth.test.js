@@ -33,6 +33,9 @@ const TEST_ACCESS_TOKEN_PROJECT_B = createTestJwtToken('00000000-0000-0000-0000-
 const TEST_ACCESS_TOKEN_SHARED = createTestJwtToken('00000000-0000-0000-0000-000000000010');
 const TEST_ACCESS_TOKEN_SHARED_TWO = createTestJwtToken('00000000-0000-0000-0000-000000000011');
 const TEST_ACCESS_TOKEN = TEST_ACCESS_TOKEN_PROJECT_A;
+const TEST_ANON_KEY = `ak-${createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+  role: 'anon',
+})}`;
 
 describe('VolcanoAuth', () => {
   const config = {
@@ -2149,22 +2152,41 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('preserves a failed code exchange error for function invocation', async () => {
+    it('uses the anon key after a failed code exchange without clearing the auth error', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'invalid authorization code' }),
-      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          json: () => Promise.resolve({ error: 'invalid authorization code' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'public-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {},
+          json: () => Promise.resolve({ submitted: true }),
+        });
 
-      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
-      const result = await v.functions.invoke('my-function');
+      const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: TEST_ANON_KEY });
+      const result = await v.functions.invoke('public-function');
+      const initialization = await v.initialize();
 
-      expect(result.error).toEqual(
+      expect(result).toEqual(expect.objectContaining({ data: { submitted: true }, error: null }));
+      expect(initialization.error).toEqual(
         expect.objectContaining({ message: 'invalid authorization code' }),
       );
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -4276,6 +4298,317 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should invoke a public function with the anon key when signed out', async () => {
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: TEST_ANON_KEY,
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'public-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {},
+          json: () => Promise.resolve({ submitted: true }),
+        });
+
+      const result = await anonymousVolcano.functions.invoke('public-function', {
+        email: 'lead@example.com',
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.data).toEqual({ submitted: true });
+      expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=public-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+    });
+
+    it('should not refresh after an anon-key invocation gets a gateway 401', async () => {
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: TEST_ANON_KEY,
+      });
+      anonymousVolcano.refreshToken = 'stale-refresh-token';
+      const refresh = jest.spyOn(anonymousVolcano, '_refreshSessionForContext');
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'public-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          headers: {},
+          json: () => Promise.resolve({ error: 'Unauthorized' }),
+        });
+
+      const result = await anonymousVolcano.functions.invoke('public-function');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          data: null,
+          status: 401,
+          error: expect.objectContaining({ isSystemError: true }),
+        }),
+      );
+      expect(refresh).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects when a signed-in session clears during function resolution', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN,
+        refresh_token: 'refresh-token',
+        user: { id: 'user-1' },
+      });
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._clearSession(volcano._captureAuthContext());
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects when a signed-in session is replaced during function resolution', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=my-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
+          }),
+        }),
+      );
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
+    it('rejects when an anonymous caller signs in during function resolution', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: TEST_ANON_KEY,
+      });
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const invocation = anonymousVolcano.functions.invoke('public-function');
+      await requestStarted.promise;
+      anonymousVolcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'public-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=public-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+      expect(anonymousVolcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_A);
+    });
+
+    it('does not re-resolve a 404 under a replacement session', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return response.promise;
+        });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: false,
+        status: 404,
+        headers: {},
+        json: () => Promise.resolve({ error: 'Not found' }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
+    it('discards a successful invocation response after the session is replaced', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return response.promise;
+        });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ submitted: true }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
+          }),
+        }),
+      );
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
     it('returns a discarded refresh error without replaying under a replacement session', async () => {
       const refreshResponse = createDeferred();
       const refreshStarted = createDeferred();
@@ -4576,16 +4909,6 @@ describe('VolcanoAuth', () => {
       });
     });
 
-    it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
-
-      const { data, error } = await volcano.functions.invoke('my-function');
-
-      expect(data).toBeNull();
-      expect(error).toBeDefined();
-      expect(error.message).toBe('No active session');
-    });
-
     it('should reject invocation when access token is not a JWT', async () => {
       volcano.accessToken = 'not-a-jwt-token';
 
@@ -4594,6 +4917,20 @@ describe('VolcanoAuth', () => {
       expect(data).toBeNull();
       expect(error).toBeDefined();
       expect(error.message).toBe('accessToken must be a JWT with project_id claim');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('should identify an invalid anon key in function invocation errors', async () => {
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'not-a-jwt-token',
+      });
+
+      const { data, error } = await anonymousVolcano.functions.invoke('my-function', {});
+
+      expect(data).toBeNull();
+      expect(error).toBeDefined();
+      expect(error.message).toBe('anonKey must be a JWT with project_id claim');
       expect(fetch).not.toHaveBeenCalled();
     });
 

@@ -406,8 +406,8 @@ export interface Functions {
  * than inside the invoked function's own code. Detect with
  * `VolcanoSystemError.is(error)` (or `error?.isSystemError === true`) — prefer
  * either over `instanceof`, which can be `false` across duplicate SDK copies in
- * a bundle. Not raised for pre-flight / name-resolution failures (bad name, no
- * session, misconfigured apiUrl, function-not-found), which stay plain `Error`s.
+ * a bundle. Not raised for pre-flight / name-resolution failures (bad name,
+ * misconfigured apiUrl, function-not-found), which stay plain `Error`s.
  */
 export class VolcanoSystemError extends Error {
   readonly name: 'VolcanoSystemError';
