@@ -5591,6 +5591,139 @@ describe('VolcanoAuth', () => {
       expect(fetch).toHaveBeenCalledTimes(2);
     });
 
+    it('should validate each caller when a shared resolve request fails', async () => {
+      jest.clearAllMocks();
+      const sharedToken = TEST_ACCESS_TOKEN_SHARED_TWO;
+      const instanceA = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'ak-test-anon-key',
+        accessToken: sharedToken,
+      });
+      const instanceB = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'ak-test-anon-key',
+        accessToken: sharedToken,
+      });
+
+      const resolveStarted = createDeferred();
+      const resolveGate = createDeferred();
+      global.fetch.mockImplementationOnce(async () => {
+        resolveStarted.resolve();
+        await resolveGate.promise;
+        return {
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'Function not found' }),
+        };
+      });
+
+      const invokeA = instanceA.functions.invoke('missing-function');
+      const invokeB = instanceB.functions.invoke('missing-function');
+      await resolveStarted.promise;
+      instanceA._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-b' },
+      });
+      resolveGate.resolve();
+      const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
+
+      expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
+      expect(resultB.error).toEqual(expect.objectContaining({ message: 'Function not found' }));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should refresh a shared resolver 401 in each unchanged caller context', async () => {
+      jest.clearAllMocks();
+      const sharedToken = TEST_ACCESS_TOKEN_SHARED_TWO;
+      const refreshedToken = createTestJwtToken('00000000-0000-0000-0000-000000000011', {
+        session_id: 'refreshed-session',
+      });
+      const instanceA = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'ak-test-anon-key',
+        accessToken: sharedToken,
+        refreshToken: 'refresh-token-a',
+      });
+      const instanceB = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: 'ak-test-anon-key',
+        accessToken: sharedToken,
+        refreshToken: 'refresh-token-b',
+      });
+
+      const resolveStarted = createDeferred();
+      const resolveGate = createDeferred();
+      let resolveCalls = 0;
+      let refreshCalls = 0;
+      const refreshBodies = [];
+      global.fetch.mockImplementation(async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (requestUrl === 'https://api.test.com/functions/resolve?name=my-function') {
+          resolveCalls += 1;
+          if (resolveCalls === 1) {
+            resolveStarted.resolve();
+            await resolveGate.promise;
+            return {
+              ok: false,
+              status: 401,
+              json: () => Promise.resolve({ error: 'Token expired' }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                name: 'my-function',
+                function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                cache_ttl_seconds: 300,
+              }),
+          };
+        }
+        if (requestUrl === 'https://api.test.com/auth/refresh') {
+          refreshCalls += 1;
+          refreshBodies.push(JSON.parse(options.body));
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                access_token: refreshedToken,
+                refresh_token: 'rotated-refresh-token-b',
+                user: { id: 'user-b' },
+                expires_in: 3600,
+              }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: {},
+          json: () => Promise.resolve({ result: 'ok' }),
+        };
+      });
+
+      const invokeA = instanceA.functions.invoke('my-function');
+      const invokeB = instanceB.functions.invoke('my-function');
+      await resolveStarted.promise;
+      instanceA._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'replacement-refresh-token',
+        user: { id: 'replacement-user' },
+      });
+      resolveGate.resolve();
+      const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
+
+      expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
+      expect(resultB).toEqual(expect.objectContaining({ data: { result: 'ok' }, error: null }));
+      expect(instanceB.accessToken).toBe(refreshedToken);
+      expect(resolveCalls).toBe(2);
+      expect(refreshCalls).toBe(1);
+      expect(refreshBodies).toEqual([{ refresh_token: 'refresh-token-b' }]);
+      expect(fetch).toHaveBeenCalledTimes(4);
+    });
+
     it('should cap resolver cache size and evict oldest-expiring entries', async () => {
       jest.clearAllMocks();
       VolcanoAuth.__setFunctionResolveCacheMaxEntriesForTests(2);
