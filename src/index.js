@@ -1195,8 +1195,10 @@ class VolcanoAuth {
   }
 
   _functionResolveCacheKey(functionName, token, useAnonKey) {
-    const tokenName = useAnonKey ? 'anonKey' : 'accessToken';
-    const projectScope = extractRequiredProjectIdFromToken(token, tokenName);
+    if (useAnonKey) {
+      return `${this.apiUrl}|anon:${token}|${functionName}`;
+    }
+    const projectScope = extractRequiredProjectIdFromToken(token);
     return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
   }
 
