@@ -451,22 +451,22 @@ function clearSharedFunctionResolveStateForTests() {
   state.lastPruneAtMs = 0;
 }
 
-function extractRequiredProjectIdFromToken(token) {
+function extractRequiredProjectIdFromToken(token, tokenName = 'accessToken') {
   if (!token || typeof token !== 'string') {
     throw new Error('No active session');
   }
   const parts = token.split('.');
   if (parts.length !== 3) {
-    throw new Error('accessToken must be a JWT with project_id claim');
+    throw new Error(`${tokenName} must be a JWT with project_id claim`);
   }
   let payload;
   try {
     payload = JSON.parse(decodeBase64Url(parts[1]));
   } catch {
-    throw new Error('accessToken must be a valid JWT with project_id claim');
+    throw new Error(`${tokenName} must be a valid JWT with project_id claim`);
   }
   if (!payload || typeof payload.project_id !== 'string' || payload.project_id.trim() === '') {
-    throw new Error('accessToken missing project_id claim');
+    throw new Error(`${tokenName} missing project_id claim`);
   }
   return payload.project_id.trim();
 }
@@ -1178,7 +1178,8 @@ class VolcanoAuth {
 
   _functionResolveCacheKey(functionName, useAnonKey) {
     const token = useAnonKey ? this.anonKey : this.accessToken;
-    const projectScope = extractRequiredProjectIdFromToken(token);
+    const tokenName = useAnonKey ? 'anonKey' : 'accessToken';
+    const projectScope = extractRequiredProjectIdFromToken(token, tokenName);
     return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
   }
 
@@ -2136,15 +2137,6 @@ class VolcanoAuth {
       };
     }
     await this._completeOAuthExchange();
-    if (!this.accessToken && this._oauthExchangeError) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: this._oauthExchangeError,
-      };
-    }
     const useAnonKey = !this.accessToken;
     if (!this.functionInvocationBase) {
       return {
@@ -2185,6 +2177,10 @@ class VolcanoAuth {
     }
 
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
+      if (!accessToken) {
+        const error = new AuthSessionChangedError();
+        return { data: null, status: error.status, headers: {}, version: null, error };
+      }
       try {
         const response = await fetchWithTimeout(
           url,
