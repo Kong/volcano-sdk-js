@@ -635,6 +635,8 @@ function apiRequestError(response, data) {
 
 const FULL_ACCESS_APP_NAME = 'volcano_full_access';
 const USER_ACCESS_APP_NAME = 'volcano_user_access';
+const CONNECTION_URI_PREFIX = /^[a-z][a-z\d+.-]*:\/\//iu;
+const INVALID_PERCENT_ENCODING = /%(?![\da-f]{2})/iu;
 
 /**
  * Build a Postgres connection string for querying a Volcano database from inside
@@ -657,22 +659,28 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   if (typeof baseConnectionString !== 'string' || baseConnectionString === '') {
     throw new Error('databaseConnectionString: baseConnectionString (DATABASE_URL) is required');
   }
-  let url;
-  try {
-    url = new URL(baseConnectionString);
-  } catch {
+  const prefix = CONNECTION_URI_PREFIX.exec(baseConnectionString);
+  if (!prefix || INVALID_PERCENT_ENCODING.test(baseConnectionString)) {
     throw new Error('databaseConnectionString: baseConnectionString is not a valid connection URL');
   }
   const userId = options.userId == null ? '' : String(options.userId);
   const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
-  url.searchParams.set('application_name', appName);
-  // URLSearchParams encodes spaces as '+', but a Postgres connection URI is
-  // RFC3986 where '+' is a literal plus and a space must be '%20'. Some URI
-  // parsers (e.g. libpq) don't treat '+' as a space, so normalize to '%20'.
-  // Literal '+' in a value is already serialized as '%2B', so this only rewrites
-  // space encodings.
-  url.search = url.search.replaceAll('+', '%20');
-  return url.toString();
+  const userInfoEnd = baseConnectionString.indexOf('@', prefix[0].length);
+  const queryMarker = baseConnectionString.indexOf(
+    '?',
+    Math.max(prefix[0].length, userInfoEnd + 1),
+  );
+  const target =
+    queryMarker === -1 ? baseConnectionString : baseConnectionString.slice(0, queryMarker);
+  const rawQuery = queryMarker === -1 ? '' : baseConnectionString.slice(queryMarker + 1);
+  const parameters = rawQuery
+    .split('&')
+    .filter((parameter) => decodeURIComponent(parameter.split('=', 1)[0]) !== 'application_name');
+  while (parameters.at(-1) === '') {
+    parameters.pop();
+  }
+  parameters.push(`application_name=${encodeURIComponent(appName)}`);
+  return `${target}?${parameters.join('&')}`;
 }
 
 class ProjectLocksApi {

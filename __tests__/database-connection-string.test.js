@@ -83,6 +83,44 @@ describe('databaseConnectionString', () => {
     expect(url.searchParams.get('sslmode')).toBe('require');
   });
 
+  it('preserves the raw encoding of unrelated query values', () => {
+    const withOptions = `postgres://${USERNAME}:p@host:5432/db?options=-c+search_path%3Dapp&application_name=old`;
+
+    expect(databaseConnectionString(withOptions)).toBe(
+      `postgres://${USERNAME}:p@host:5432/db?options=-c+search_path%3Dapp&application_name=volcano_full_access`,
+    );
+  });
+
+  it('preserves the authority marker for a hostless Postgres URI', () => {
+    expect(databaseConnectionString('postgresql:///app')).toBe(
+      'postgresql:///app?application_name=volcano_full_access',
+    );
+  });
+
+  it('preserves libpq-compatible reserved characters in credentials', () => {
+    expect(databaseConnectionString('postgres://u:pa?ss#word@host/db')).toBe(
+      'postgres://u:pa?ss#word@host/db?application_name=volcano_full_access',
+    );
+  });
+
+  it('accepts a multi-host IPv6 Postgres URI', () => {
+    expect(databaseConnectionString('postgresql://[::1],[::2]/db')).toBe(
+      'postgresql://[::1],[::2]/db?application_name=volcano_full_access',
+    );
+  });
+
+  it('drops a trailing query separator before appending', () => {
+    expect(databaseConnectionString('postgresql://host/db?sslmode=require&')).toBe(
+      'postgresql://host/db?sslmode=require&application_name=volcano_full_access',
+    );
+  });
+
+  it('rejects malformed percent encoding', () => {
+    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(
+      /not a valid connection URL/,
+    );
+  });
+
   it('round-trips a userId containing characters that must be URL-encoded', () => {
     // Impersonation ids are usually UUIDs, but the proxy takes everything after
     // the first colon verbatim, so a value with reserved chars must survive.
