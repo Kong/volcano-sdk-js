@@ -1208,12 +1208,19 @@ class VolcanoAuth {
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
-  async _resolveFunctionIdByName(functionName, { authContext, token, useAnonKey }) {
+  async _resolveFunctionIdByName(
+    functionName,
+    { authContext, token, useAnonKey, allowRefresh = true },
+  ) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
         'functionName must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars',
       );
+    }
+
+    if (!this._isAuthContextCurrent(authContext)) {
+      throw new AuthSessionChangedError();
     }
 
     const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
@@ -1224,65 +1231,111 @@ class VolcanoAuth {
       if (cached.error) {
         throw new Error(cached.error);
       }
-      return cached.functionId;
+      return { functionId: cached.functionId, token };
     }
     if (cached) {
       this._functionResolveState.cache.delete(cacheKey);
     }
 
-    const inFlight = this._functionResolveState.inFlight.get(cacheKey);
-    if (inFlight) {
-      return inFlight;
+    let pending = this._functionResolveState.inFlight.get(cacheKey);
+    const ownsPending = !pending;
+    if (!pending) {
+      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
+      pending = (async () => {
+        // Share only the credentialed HTTP result. Session validation and 401
+        // refresh belong to each caller so one client's auth lifecycle cannot
+        // determine another client's result.
+        const result = await this._anonFetch(resolvePath, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!result.ok) {
+          if (result.status === 404) {
+            this._functionResolveState.cache.set(cacheKey, {
+              functionId: null,
+              error: 'function not found',
+              expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
+            });
+            pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+          }
+          return {
+            functionId: null,
+            error: result.error || new Error('Failed to resolve function'),
+            status: result.status,
+          };
+        }
+
+        const resolvedId = sanitizeFunctionIdentifierForHost(
+          result.data && result.data.function_id,
+        );
+        if (!resolvedId) {
+          throw new Error('Resolve response missing valid function_id');
+        }
+
+        const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
+        if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
+          throw new Error('Resolve response missing valid cache_ttl_seconds');
+        }
+        const ttlSeconds = ttlRaw;
+
+        this._functionResolveState.cache.set(cacheKey, {
+          functionId: resolvedId,
+          error: null,
+          expiresAt: Date.now() + ttlSeconds * 1000,
+        });
+        pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+        return { functionId: resolvedId, error: null, status: result.status };
+      })();
+
+      this._functionResolveState.inFlight.set(cacheKey, pending);
     }
 
-    const pending = (async () => {
-      if (!this._isAuthContextCurrent(authContext)) {
-        throw new AuthSessionChangedError();
-      }
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      const result = useAnonKey
-        ? await this._anonFetch(resolvePath, { method: 'GET' })
-        : await this._authFetchUrl(`${this.apiUrl}${resolvePath}`, { method: 'GET' });
-      if (!this._isAuthContextCurrent(authContext)) {
-        throw new AuthSessionChangedError();
-      }
-      if (!result.ok) {
-        if (result.status === 404) {
-          this._functionResolveState.cache.set(cacheKey, {
-            functionId: null,
-            error: 'function not found',
-            expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
-          });
-          pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        }
-        throw result.error || new Error('Failed to resolve function');
-      }
-
-      const resolvedId = sanitizeFunctionIdentifierForHost(result.data && result.data.function_id);
-      if (!resolvedId) {
-        throw new Error('Resolve response missing valid function_id');
-      }
-
-      const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
-      if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
-        throw new Error('Resolve response missing valid cache_ttl_seconds');
-      }
-      const ttlSeconds = ttlRaw;
-
-      this._functionResolveState.cache.set(cacheKey, {
-        functionId: resolvedId,
-        error: null,
-        expiresAt: Date.now() + ttlSeconds * 1000,
-      });
-      pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-      return resolvedId;
-    })();
-
-    this._functionResolveState.inFlight.set(cacheKey, pending);
     try {
-      return await pending;
+      let outcome;
+      try {
+        outcome = await pending;
+      } catch (error) {
+        if (!this._isAuthContextCurrent(authContext)) {
+          throw new AuthSessionChangedError();
+        }
+        throw error;
+      }
+      if (!this._isAuthContextCurrent(authContext)) {
+        throw new AuthSessionChangedError();
+      }
+
+      if (outcome.error) {
+        if (outcome.status === 401 && !useAnonKey && allowRefresh) {
+          const sessionExpiredError = new Error('Session expired');
+          if (!authContext.refreshToken) {
+            throw sessionExpiredError;
+          }
+          const refreshed = await this._refreshSessionForContext(authContext);
+          if (AuthRefreshDiscardedError.is(refreshed.error)) {
+            throw refreshed.error;
+          }
+          if (refreshed.error) {
+            throw sessionExpiredError;
+          }
+          if (!this._isAuthContextCurrent(authContext)) {
+            throw new AuthRefreshDiscardedError();
+          }
+          const refreshedContext = this._captureAuthContext();
+          return this._resolveFunctionIdByName(functionName, {
+            authContext: refreshedContext,
+            token: refreshedContext.accessToken,
+            useAnonKey,
+            allowRefresh: false,
+          });
+        }
+        throw outcome.error;
+      }
+
+      return { functionId: outcome.functionId, token };
     } finally {
-      this._functionResolveState.inFlight.delete(cacheKey);
+      if (ownsPending && this._functionResolveState.inFlight.get(cacheKey) === pending) {
+        this._functionResolveState.inFlight.delete(cacheKey);
+      }
     }
   }
 
@@ -2180,11 +2233,13 @@ class VolcanoAuth {
 
     let resolvedFunctionId;
     try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), {
+      const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
         authContext: resolutionContext,
         token: resolutionToken,
         useAnonKey,
       });
+      resolvedFunctionId = resolution.functionId;
+      resolutionToken = resolution.token;
     } catch (error) {
       return {
         data: null,
@@ -2323,11 +2378,12 @@ class VolcanoAuth {
       try {
         resolutionContext = this._captureAuthContext();
         resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), {
+        const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
           authContext: resolutionContext,
           token: resolutionToken,
           useAnonKey,
         });
+        resolvedFunctionId = resolution.functionId;
         invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
         invocationContext = this._captureAuthContext();
         if (!this._isAuthContextCurrent(operationContext)) {
