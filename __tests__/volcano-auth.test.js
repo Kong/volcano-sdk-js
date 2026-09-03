@@ -4451,6 +4451,15 @@ describe('VolcanoAuth', () => {
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=my-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
+          }),
+        }),
+      );
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
     });
 
