@@ -4920,18 +4920,28 @@ describe('VolcanoAuth', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('should identify an invalid anon key in function invocation errors', async () => {
+    it('should send the fixed local anon key to the function resolver', async () => {
+      const localAnonKey = 'ak-0000000000000000000000000000000000000000';
       const anonymousVolcano = new VolcanoAuth({
-        apiUrl: 'https://api.test.com',
-        anonKey: 'not-a-jwt-token',
+        apiUrl: 'http://localhost:8000',
+        anonKey: localAnonKey,
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ error: 'Function not found' }),
       });
 
       const { data, error } = await anonymousVolcano.functions.invoke('my-function', {});
 
       expect(data).toBeNull();
-      expect(error).toBeDefined();
-      expect(error.message).toBe('anonKey must be a JWT with project_id claim');
-      expect(fetch).not.toHaveBeenCalled();
+      expect(error).toEqual(expect.objectContaining({ message: 'Function not found' }));
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/functions/resolve?name=my-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${localAnonKey}` }),
+        }),
+      );
     });
 
     it('should reject invocation when JWT is missing project_id claim', async () => {
