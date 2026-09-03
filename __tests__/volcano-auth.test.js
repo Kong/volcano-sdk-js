@@ -4415,6 +4415,91 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects when a signed-in session is replaced during function resolution', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
+    it('does not re-resolve a 404 under a replacement session', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return response.promise;
+        });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: false,
+        status: 404,
+        headers: {},
+        json: () => Promise.resolve({ error: 'Not found' }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
     it('returns a discarded refresh error without replaying under a replacement session', async () => {
       const refreshResponse = createDeferred();
       const refreshStarted = createDeferred();

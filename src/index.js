@@ -327,6 +327,11 @@ class AuthSessionChangedError extends Error {
 }
 AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
 
+function authSessionChangedResult() {
+  const error = new AuthSessionChangedError();
+  return { data: null, status: error.status, headers: {}, version: null, error };
+}
+
 /**
  * Error raised when a function *invocation* fails at the platform layer rather
  * than inside the function's own code — the call reached (or tried to reach)
@@ -1176,20 +1181,19 @@ class VolcanoAuth {
     return `${this.functionInvocationBase.protocol}//${hostLabel}.${this.functionInvocationBase.domain}${portSegment}/`;
   }
 
-  _functionResolveCacheKey(functionName, useAnonKey) {
-    const token = useAnonKey ? this.anonKey : this.accessToken;
+  _functionResolveCacheKey(functionName, token, useAnonKey) {
     const tokenName = useAnonKey ? 'anonKey' : 'accessToken';
     const projectScope = extractRequiredProjectIdFromToken(token, tokenName);
     return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
   }
 
-  _clearFunctionResolveCache(functionName, useAnonKey) {
-    const cacheKey = this._functionResolveCacheKey(functionName, useAnonKey);
+  _clearFunctionResolveCache(functionName, token, useAnonKey) {
+    const cacheKey = this._functionResolveCacheKey(functionName, token, useAnonKey);
     this._functionResolveState.cache.delete(cacheKey);
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
-  async _resolveFunctionIdByName(functionName, useAnonKey) {
+  async _resolveFunctionIdByName(functionName, { authContext, token, useAnonKey }) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
@@ -1197,7 +1201,7 @@ class VolcanoAuth {
       );
     }
 
-    const cacheKey = this._functionResolveCacheKey(hostLabel, useAnonKey);
+    const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
     const cached = this._functionResolveState.cache.get(cacheKey);
@@ -1217,10 +1221,16 @@ class VolcanoAuth {
     }
 
     const pending = (async () => {
+      if (!this._isAuthContextCurrent(authContext)) {
+        throw new AuthSessionChangedError();
+      }
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
       const result = useAnonKey
         ? await this._anonFetch(resolvePath, { method: 'GET' })
-        : await this._authFetch(resolvePath, { method: 'GET' });
+        : await this._authFetchUrl(`${this.apiUrl}${resolvePath}`, { method: 'GET' });
+      if (!this._isAuthContextCurrent(authContext)) {
+        throw new AuthSessionChangedError();
+      }
       if (!result.ok) {
         if (result.status === 404) {
           this._functionResolveState.cache.set(cacheKey, {
@@ -2137,7 +2147,10 @@ class VolcanoAuth {
       };
     }
     await this._completeOAuthExchange();
-    const useAnonKey = !this.accessToken;
+    const operationContext = this._captureAuthContext();
+    const useAnonKey = !operationContext.accessToken;
+    let resolutionContext = operationContext;
+    let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
     if (!this.functionInvocationBase) {
       return {
         data: null,
@@ -2152,7 +2165,11 @@ class VolcanoAuth {
 
     let resolvedFunctionId;
     try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), useAnonKey);
+      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), {
+        authContext: resolutionContext,
+        token: resolutionToken,
+        useAnonKey,
+      });
     } catch (error) {
       return {
         data: null,
@@ -2274,6 +2291,9 @@ class VolcanoAuth {
     };
 
     let invocationContext = this._captureAuthContext();
+    if (!this._isAuthContextCurrent(operationContext)) {
+      return authSessionChangedResult();
+    }
     let token = useAnonKey ? this.anonKey : invocationContext.accessToken;
     let result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
 
@@ -2281,11 +2301,23 @@ class VolcanoAuth {
     // On 404, invalidate and resolve once more before failing. (invokeOnce
     // returns no `ok` field, so gate on status alone.)
     if (result.status === 404) {
-      this._clearFunctionResolveCache(functionName.trim(), useAnonKey);
+      if (!this._isAuthContextCurrent(operationContext)) {
+        return authSessionChangedResult();
+      }
+      this._clearFunctionResolveCache(functionName.trim(), resolutionToken, useAnonKey);
       try {
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), useAnonKey);
+        resolutionContext = this._captureAuthContext();
+        resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
+        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), {
+          authContext: resolutionContext,
+          token: resolutionToken,
+          useAnonKey,
+        });
         invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
         invocationContext = this._captureAuthContext();
+        if (!this._isAuthContextCurrent(operationContext)) {
+          return authSessionChangedResult();
+        }
         token = useAnonKey ? this.anonKey : invocationContext.accessToken;
         result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
       } catch (error) {
@@ -2299,6 +2331,12 @@ class VolcanoAuth {
       }
     }
 
+    if (
+      !this._isAuthContextCurrent(operationContext) &&
+      !AuthRefreshDiscardedError.is(result.error)
+    ) {
+      return authSessionChangedResult();
+    }
     return result;
   }
 
