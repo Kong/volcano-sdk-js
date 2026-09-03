@@ -69,7 +69,7 @@ const { data, status, headers, version, error } = await volcano.functions.invoke
 
 ## Authentication
 
-Functions automatically receive the authenticated user's context. The user's access token is passed to the function, which can:
+The SDK uses the user's access token when a user is signed in. The function receives the user's context and can:
 
 1. Verify the user's identity
 2. Query the database with Row-Level Security
@@ -82,6 +82,15 @@ await volcano.auth.signIn({ email: 'alice@example.com', password: '...' });
 // Function is called with Alice's identity
 const { data } = await volcano.functions.invoke('get-my-profile');
 // Returns Alice's profile data
+```
+
+When no user is signed in, the SDK uses the project's anon key. This works only for functions configured as public. Public invocations do not receive user context.
+
+```javascript
+const volcano = new VolcanoAuth({ anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY });
+const { data } = await volcano.functions.invoke('contact-form', {
+  email: 'lead@example.com',
+});
 ```
 
 ## Writing Functions

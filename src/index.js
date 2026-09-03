@@ -343,8 +343,8 @@ AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
  * NOT a system error, and therefore a plain `Error` (or not an error at all):
  * a running function's own non-2xx response (surfaced as `data` with `error`
  * null), and pre-flight / name-resolution failures — invalid function name,
- * no active session, misconfigured `apiUrl`, function-not-found — which stay
- * plain `Error`s since they are caller/config issues, not platform outages.
+ * misconfigured `apiUrl`, function-not-found — which stay plain `Error`s since
+ * they are caller/config issues, not platform outages.
  */
 class VolcanoSystemError extends Error {
   constructor(message, options = {}) {
@@ -1176,19 +1176,19 @@ class VolcanoAuth {
     return `${this.functionInvocationBase.protocol}//${hostLabel}.${this.functionInvocationBase.domain}${portSegment}/`;
   }
 
-  _functionResolveCacheKey(functionName) {
-    const projectScope = extractRequiredProjectIdFromToken(this.accessToken);
-    const tokenScope = this.accessToken;
-    return `${this.apiUrl}|project:${projectScope}|token:${tokenScope}|${functionName}`;
+  _functionResolveCacheKey(functionName, useAnonKey) {
+    const token = useAnonKey ? this.anonKey : this.accessToken;
+    const projectScope = extractRequiredProjectIdFromToken(token);
+    return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
   }
 
-  _clearFunctionResolveCache(functionName) {
-    const cacheKey = this._functionResolveCacheKey(functionName);
+  _clearFunctionResolveCache(functionName, useAnonKey) {
+    const cacheKey = this._functionResolveCacheKey(functionName, useAnonKey);
     this._functionResolveState.cache.delete(cacheKey);
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
-  async _resolveFunctionIdByName(functionName) {
+  async _resolveFunctionIdByName(functionName, useAnonKey) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
@@ -1196,7 +1196,7 @@ class VolcanoAuth {
       );
     }
 
-    const cacheKey = this._functionResolveCacheKey(hostLabel);
+    const cacheKey = this._functionResolveCacheKey(hostLabel, useAnonKey);
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
     const cached = this._functionResolveState.cache.get(cacheKey);
@@ -1217,7 +1217,9 @@ class VolcanoAuth {
 
     const pending = (async () => {
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      const result = await this._authFetch(resolvePath, { method: 'GET' });
+      const result = useAnonKey
+        ? await this._anonFetch(resolvePath, { method: 'GET' })
+        : await this._authFetch(resolvePath, { method: 'GET' });
       if (!result.ok) {
         if (result.status === 404) {
           this._functionResolveState.cache.set(cacheKey, {
@@ -2134,15 +2136,16 @@ class VolcanoAuth {
       };
     }
     await this._completeOAuthExchange();
-    if (!this.accessToken) {
+    if (!this.accessToken && this._oauthExchangeError) {
       return {
         data: null,
         status: null,
         headers: {},
         version: null,
-        error: this._oauthExchangeError || new Error('No active session'),
+        error: this._oauthExchangeError,
       };
     }
+    const useAnonKey = !this.accessToken;
     if (!this.functionInvocationBase) {
       return {
         data: null,
@@ -2157,7 +2160,7 @@ class VolcanoAuth {
 
     let resolvedFunctionId;
     try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), useAnonKey);
     } catch (error) {
       return {
         data: null,
@@ -2275,28 +2278,20 @@ class VolcanoAuth {
     };
 
     let invocationContext = this._captureAuthContext();
-    let result = await invokeOnce(
-      invokeUrl,
-      true,
-      invocationContext,
-      invocationContext.accessToken,
-    );
+    let token = useAnonKey ? this.anonKey : invocationContext.accessToken;
+    let result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
     // On 404, invalidate and resolve once more before failing. (invokeOnce
     // returns no `ok` field, so gate on status alone.)
     if (result.status === 404) {
-      this._clearFunctionResolveCache(functionName.trim());
+      this._clearFunctionResolveCache(functionName.trim(), useAnonKey);
       try {
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim(), useAnonKey);
         invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
         invocationContext = this._captureAuthContext();
-        result = await invokeOnce(
-          invokeUrl,
-          true,
-          invocationContext,
-          invocationContext.accessToken,
-        );
+        token = useAnonKey ? this.anonKey : invocationContext.accessToken;
+        result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
       } catch (error) {
         return {
           data: null,

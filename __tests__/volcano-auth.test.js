@@ -33,6 +33,9 @@ const TEST_ACCESS_TOKEN_PROJECT_B = createTestJwtToken('00000000-0000-0000-0000-
 const TEST_ACCESS_TOKEN_SHARED = createTestJwtToken('00000000-0000-0000-0000-000000000010');
 const TEST_ACCESS_TOKEN_SHARED_TWO = createTestJwtToken('00000000-0000-0000-0000-000000000011');
 const TEST_ACCESS_TOKEN = TEST_ACCESS_TOKEN_PROJECT_A;
+const TEST_ANON_KEY = `ak-${createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+  role: 'anon',
+})}`;
 
 describe('VolcanoAuth', () => {
   const config = {
@@ -4276,6 +4279,51 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should invoke a public function with the anon key when signed out', async () => {
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: TEST_ANON_KEY,
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'public-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {},
+          json: () => Promise.resolve({ submitted: true }),
+        });
+
+      const result = await anonymousVolcano.functions.invoke('public-function', {
+        email: 'lead@example.com',
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.data).toEqual({ submitted: true });
+      expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=public-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+    });
+
     it('returns a discarded refresh error without replaying under a replacement session', async () => {
       const refreshResponse = createDeferred();
       const refreshStarted = createDeferred();
@@ -4574,16 +4622,6 @@ describe('VolcanoAuth', () => {
         expect(result.error.message).toBe('Resolve response missing valid function_id');
         expect(fetch).toHaveBeenCalledTimes(1);
       });
-    });
-
-    it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
-
-      const { data, error } = await volcano.functions.invoke('my-function');
-
-      expect(data).toBeNull();
-      expect(error).toBeDefined();
-      expect(error.message).toBe('No active session');
     });
 
     it('should reject invocation when access token is not a JWT', async () => {
