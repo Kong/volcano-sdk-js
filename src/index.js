@@ -665,7 +665,12 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   }
   const userId = options.userId == null ? '' : String(options.userId);
   const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
-  const userInfoEnd = baseConnectionString.indexOf('@', prefix[0].length);
+  const authorityEnd = baseConnectionString.indexOf('/', prefix[0].length);
+  const possibleUserInfoEnd = baseConnectionString.indexOf('@', prefix[0].length);
+  const userInfoEnd =
+    possibleUserInfoEnd !== -1 && (authorityEnd === -1 || possibleUserInfoEnd < authorityEnd)
+      ? possibleUserInfoEnd
+      : -1;
   const queryMarker = baseConnectionString.indexOf(
     '?',
     Math.max(prefix[0].length, userInfoEnd + 1),

@@ -115,6 +115,12 @@ describe('databaseConnectionString', () => {
     );
   });
 
+  it('does not treat an at sign in a query value as user-info', () => {
+    expect(databaseConnectionString('postgresql://host/db?options=foo@bar')).toBe(
+      'postgresql://host/db?options=foo@bar&application_name=volcano_full_access',
+    );
+  });
+
   it('rejects malformed percent encoding', () => {
     expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(
       /not a valid connection URL/,
