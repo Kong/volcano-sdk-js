@@ -635,7 +635,7 @@ function apiRequestError(response, data) {
 
 const FULL_ACCESS_APP_NAME = 'volcano_full_access';
 const USER_ACCESS_APP_NAME = 'volcano_user_access';
-const CONNECTION_URI_PREFIX = /^[a-z][a-z\d+.-]*:\/\//iu;
+const CONNECTION_URI_PREFIX = /^postgres(?:ql)?:\/\//u;
 const INVALID_PERCENT_ENCODING = /%(?![\da-f]{2})/iu;
 
 /**

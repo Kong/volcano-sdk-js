@@ -71,6 +71,7 @@ describe('databaseConnectionString', () => {
     expect(() => databaseConnectionString('')).toThrow(/required/);
     expect(() => databaseConnectionString(null)).toThrow(/required/);
     expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
   });
 
   it('preserves unrelated query parameters (e.g. connect_timeout, channel_binding)', () => {
