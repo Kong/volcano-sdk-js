@@ -1201,6 +1201,10 @@ class VolcanoAuth {
       );
     }
 
+    if (!this._isAuthContextCurrent(authContext)) {
+      throw new AuthSessionChangedError();
+    }
+
     const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
@@ -1217,20 +1221,18 @@ class VolcanoAuth {
 
     const inFlight = this._functionResolveState.inFlight.get(cacheKey);
     if (inFlight) {
-      return inFlight;
-    }
-
-    const pending = (async () => {
+      const functionId = await inFlight;
       if (!this._isAuthContextCurrent(authContext)) {
         throw new AuthSessionChangedError();
       }
+      return functionId;
+    }
+
+    const pending = (async () => {
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
       const result = useAnonKey
         ? await this._anonFetch(resolvePath, { method: 'GET' })
         : await this._authFetchUrl(`${this.apiUrl}${resolvePath}`, { method: 'GET' });
-      if (!this._isAuthContextCurrent(authContext)) {
-        throw new AuthSessionChangedError();
-      }
       if (!result.ok) {
         if (result.status === 404) {
           this._functionResolveState.cache.set(cacheKey, {
@@ -1265,7 +1267,11 @@ class VolcanoAuth {
 
     this._functionResolveState.inFlight.set(cacheKey, pending);
     try {
-      return await pending;
+      const functionId = await pending;
+      if (!this._isAuthContextCurrent(authContext)) {
+        throw new AuthSessionChangedError();
+      }
+      return functionId;
     } finally {
       this._functionResolveState.inFlight.delete(cacheKey);
     }

@@ -5531,7 +5531,7 @@ describe('VolcanoAuth', () => {
       );
     });
 
-    it('should dedupe in-flight resolve requests across instances with same token', async () => {
+    it('should isolate auth context while deduping resolve requests across instances', async () => {
       jest.clearAllMocks();
       const sharedToken = TEST_ACCESS_TOKEN_SHARED_TWO;
       const instanceA = new VolcanoAuth({
@@ -5576,13 +5576,19 @@ describe('VolcanoAuth', () => {
 
       const invokeA = instanceA.functions.invoke('my-function', { call: 'a' });
       const invokeB = instanceB.functions.invoke('my-function', { call: 'b' });
+      await Promise.resolve();
+      instanceA._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-b' },
+      });
       releaseResolve();
       const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
 
-      expect(resultA.error).toBeNull();
+      expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
       expect(resultB.error).toBeNull();
       expect(resolveCalls).toBe(1);
-      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should cap resolver cache size and evict oldest-expiring entries', async () => {
