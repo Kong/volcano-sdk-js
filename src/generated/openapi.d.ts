@@ -4500,7 +4500,7 @@ export interface components {
              * @example app.example.com
              */
             domain: string;
-            tls: components["schemas"]["FrontendCustomDomainTLSConfig"];
+            tls: components["schemas"]["CreateFrontendCustomDomainTLSConfig"];
         };
         CreateFunctionSchedulerRequest: {
             name: string;
@@ -5387,26 +5387,10 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        FrontendCustomDomainResponse: {
-            domain: string;
-            /** @enum {string} */
-            tls_mode: "managed" | "byoc";
-            /** @enum {string} */
-            domain_status: "pending_verification" | "provisioning" | "active" | "detaching" | "failed" | "deleted";
-            /** @enum {string} */
-            verification_status: "pending" | "verified";
-            verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
-            required_routing_record?: components["schemas"]["FrontendDomainRoutingRecord"];
-            effective_urls: string[];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        FrontendCustomDomainTLSConfig: {
+        /** @description Use certificate material that you manage. */
+        BYOCFrontendCustomDomainTLSConfig: {
             /**
-             * @description BYOC is mandatory for custom domain creation.
-             * @default byoc
+             * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             mode: "byoc";
@@ -5415,6 +5399,37 @@ export interface components {
             /** @description Required. PEM-encoded private key. */
             private_key_pem: string;
             /** @description Optional PEM-encoded certificate chain. */
+            certificate_chain_pem?: string;
+        };
+        CreateFrontendCustomDomainTLSConfig: components["schemas"]["ManagedFrontendCustomDomainTLSConfig"] | components["schemas"]["BYOCFrontendCustomDomainTLSConfig"];
+        FrontendCustomDomainResponse: {
+            domain: string;
+            /** @enum {string} */
+            tls_mode: "managed" | "byoc";
+            /** @enum {string} */
+            domain_status: "pending_verification" | "provisioning" | "active" | "detaching" | "failed" | "deleted";
+            /** @enum {string} */
+            verification_status: "pending" | "verified" | "failed";
+            verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
+            required_routing_record?: components["schemas"]["FrontendDomainRoutingRecord"];
+            effective_urls: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @deprecated
+         * @description Deprecated compatibility model. Use BYOCFrontendCustomDomainTLSConfig.
+         */
+        FrontendCustomDomainTLSConfig: {
+            /**
+             * @default byoc
+             * @enum {string}
+             */
+            mode: "byoc";
+            certificate_pem: string;
+            private_key_pem: string;
             certificate_chain_pem?: string;
         };
         FrontendDeployment: {
@@ -5463,8 +5478,16 @@ export interface components {
             updated_at: string;
         };
         FrontendDomainRoutingRecord: {
-            /** @enum {string} */
+            /**
+             * @description Use this record type when the hostname is not the apex of your DNS zone.
+             * @enum {string}
+             */
             record_type: "CNAME";
+            /**
+             * @description At the apex of your DNS zone, use your provider's ALIAS, ANAME, or CNAME-flattening equivalent instead of a literal CNAME.
+             * @enum {string}
+             */
+            zone_apex_record_type: "ALIAS";
             name: string;
             value: string;
         };
@@ -5524,6 +5547,14 @@ export interface components {
             total_errors: number;
             /** Format: int64 */
             total_page_views: number;
+        };
+        /** @description Volcano issues and renews the certificate. Do not send certificate material. */
+        ManagedFrontendCustomDomainTLSConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "managed";
         };
         Function: {
             /** Format: uuid */
@@ -6409,16 +6440,14 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with BYOC TLS (PRO plan). `tls` is required when the
-         *     domain is first created and optional afterwards: providing new TLS
-         *     material for the same domain rotates the certificate in place (zero
-         *     downtime); omitting `tls` keeps the stored certificate. TLS material is
-         *     write-only and omitted from config export.
+         * @description Custom domain with managed or BYOC TLS (PRO plan). `tls` is required
+         *     when the domain is first created and optional afterwards. BYOC TLS
+         *     material is write-only and omitted from config export.
          */
         ProjectConfigCustomDomain: {
             /** @description Fully-qualified domain name (hostname only, no scheme/path) */
             domain: string;
-            tls?: components["schemas"]["FrontendCustomDomainTLSConfig"];
+            tls?: components["schemas"]["ProjectConfigFrontendCustomDomainTLSConfig"];
         };
         /**
          * @description Assertion-only entry for an existing database. No database property is
@@ -7384,6 +7413,27 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ManagedProjectConfigFrontendCustomDomainTLSConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "managed";
+        };
+        BYOCProjectConfigFrontendCustomDomainTLSConfig: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "byoc";
+            /** @description PEM-encoded certificate for BYOC create or rotation. Omitted from exports. */
+            certificate_pem?: string;
+            /** @description PEM-encoded private key for BYOC create or rotation. Omitted from exports. */
+            private_key_pem?: string;
+            /** @description Optional PEM-encoded certificate chain for BYOC. Omitted from exports. */
+            certificate_chain_pem?: string;
+        };
+        ProjectConfigFrontendCustomDomainTLSConfig: components["schemas"]["ManagedProjectConfigFrontendCustomDomainTLSConfig"] | components["schemas"]["BYOCProjectConfigFrontendCustomDomainTLSConfig"];
         DatabaseQueryPerformanceDatabase: {
             /** Format: uuid */
             id: string;

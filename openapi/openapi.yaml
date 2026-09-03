@@ -10646,6 +10646,10 @@ components:
         - installation_id
     Frontend:
       $ref: ./components/common/schemas.yaml#/components/schemas/Frontend
+    BYOCFrontendCustomDomainTLSConfig:
+      $ref: ./components/common/schemas.yaml#/components/schemas/BYOCFrontendCustomDomainTLSConfig
+    CreateFrontendCustomDomainTLSConfig:
+      $ref: ./components/common/schemas.yaml#/components/schemas/CreateFrontendCustomDomainTLSConfig
     FrontendCustomDomainResponse:
       $ref: ./components/common/schemas.yaml#/components/schemas/FrontendCustomDomainResponse
     FrontendCustomDomainTLSConfig:
@@ -10662,6 +10666,8 @@ components:
       $ref: ./components/common/schemas.yaml#/components/schemas/FrontendUsageData
     FrontendUsageHistoryResponse:
       $ref: ./components/common/schemas.yaml#/components/schemas/FrontendUsageHistoryResponse
+    ManagedFrontendCustomDomainTLSConfig:
+      $ref: ./components/common/schemas.yaml#/components/schemas/ManagedFrontendCustomDomainTLSConfig
     Function:
       $ref: ./components/common/schemas.yaml#/components/schemas/Function
     FunctionDeployment:

@@ -7,15 +7,17 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-import type { FrontendCustomDomainTLSConfigMode } from './frontendCustomDomainTLSConfigMode';
+import type { BYOCFrontendCustomDomainTLSConfigMode } from './bYOCFrontendCustomDomainTLSConfigMode';
 
 /**
- * Deprecated compatibility model. Use BYOCFrontendCustomDomainTLSConfig.
- * @deprecated
+ * Use certificate material that you manage.
  */
-export interface FrontendCustomDomainTLSConfig {
-  mode: FrontendCustomDomainTLSConfigMode;
+export interface BYOCFrontendCustomDomainTLSConfig {
+  mode: BYOCFrontendCustomDomainTLSConfigMode;
+  /** Required. PEM-encoded certificate. */
   certificate_pem: string;
+  /** Required. PEM-encoded private key. */
   private_key_pem: string;
+  /** Optional PEM-encoded certificate chain. */
   certificate_chain_pem?: string;
 }

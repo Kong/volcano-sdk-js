@@ -8,9 +8,13 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { FrontendDomainRoutingRecordRecordType } from './frontendDomainRoutingRecordRecordType';
+import type { FrontendDomainRoutingRecordZoneApexRecordType } from './frontendDomainRoutingRecordZoneApexRecordType';
 
 export interface FrontendDomainRoutingRecord {
+  /** Use this record type when the hostname is not the apex of your DNS zone. */
   record_type: FrontendDomainRoutingRecordRecordType;
+  /** At the apex of your DNS zone, use your provider's ALIAS, ANAME, or CNAME-flattening equivalent instead of a literal CNAME. */
+  zone_apex_record_type: FrontendDomainRoutingRecordZoneApexRecordType;
   name: string;
   value: string;
 }

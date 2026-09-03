@@ -8,6 +8,9 @@
  * OpenAPI spec version: 3.0.0
  */
 
+/**
+ * Use this record type when the hostname is not the apex of your DNS zone.
+ */
 export type FrontendDomainRoutingRecordRecordType = typeof FrontendDomainRoutingRecordRecordType[keyof typeof FrontendDomainRoutingRecordRecordType];
 
 

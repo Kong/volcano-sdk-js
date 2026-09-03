@@ -755,13 +755,14 @@ components:
         - text_body
     CreateFrontendCustomDomainRequest:
       type: object
+      additionalProperties: false
       properties:
         domain:
           type: string
           description: Fully-qualified domain name (hostname only, no scheme/path)
           example: app.example.com
         tls:
-          $ref: '#/components/schemas/FrontendCustomDomainTLSConfig'
+          $ref: '#/components/schemas/CreateFrontendCustomDomainTLSConfig'
       required:
         - domain
         - tls
@@ -2005,7 +2006,7 @@ components:
           enum: [pending_verification, provisioning, active, detaching, failed, deleted]
         verification_status:
           type: string
-          enum: [pending, verified]
+          enum: [pending, verified, failed]
         verification_records:
           type: array
           items:
@@ -2030,14 +2031,33 @@ components:
         - effective_urls
         - created_at
         - updated_at
-    FrontendCustomDomainTLSConfig:
+    CreateFrontendCustomDomainTLSConfig:
+      oneOf:
+        - $ref: '#/components/schemas/ManagedFrontendCustomDomainTLSConfig'
+        - $ref: '#/components/schemas/BYOCFrontendCustomDomainTLSConfig'
+      discriminator:
+        propertyName: mode
+        mapping:
+          managed: '#/components/schemas/ManagedFrontendCustomDomainTLSConfig'
+          byoc: '#/components/schemas/BYOCFrontendCustomDomainTLSConfig'
+    ManagedFrontendCustomDomainTLSConfig:
       type: object
+      description: Volcano issues and renews the certificate. Do not send certificate material.
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum: [managed]
+      required:
+        - mode
+    BYOCFrontendCustomDomainTLSConfig:
+      type: object
+      description: Use certificate material that you manage.
+      additionalProperties: false
       properties:
         mode:
           type: string
           enum: [byoc]
-          default: byoc
-          description: BYOC is mandatory for custom domain creation.
         certificate_pem:
           type: string
           description: Required. PEM-encoded certificate.
@@ -2051,6 +2071,72 @@ components:
         - mode
         - certificate_pem
         - private_key_pem
+    FrontendCustomDomainTLSConfig:
+      type: object
+      deprecated: true
+      description: Deprecated compatibility model. Use BYOCFrontendCustomDomainTLSConfig.
+      properties:
+        mode:
+          type: string
+          enum: [byoc]
+          default: byoc
+        certificate_pem:
+          type: string
+        private_key_pem:
+          type: string
+        certificate_chain_pem:
+          type: string
+      required:
+        - mode
+        - certificate_pem
+        - private_key_pem
+    ProjectConfigFrontendCustomDomainTLSConfig:
+      oneOf:
+        - $ref: '#/components/schemas/ManagedProjectConfigFrontendCustomDomainTLSConfig'
+        - $ref: '#/components/schemas/BYOCProjectConfigFrontendCustomDomainTLSConfig'
+      discriminator:
+        propertyName: mode
+        mapping:
+          managed: '#/components/schemas/ManagedProjectConfigFrontendCustomDomainTLSConfig'
+          byoc: '#/components/schemas/BYOCProjectConfigFrontendCustomDomainTLSConfig'
+    ManagedProjectConfigFrontendCustomDomainTLSConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum: [managed]
+      required:
+        - mode
+    BYOCProjectConfigFrontendCustomDomainTLSConfig:
+      type: object
+      additionalProperties: false
+      not:
+        anyOf:
+          - required: [certificate_pem]
+            not:
+              required: [private_key_pem]
+          - required: [private_key_pem]
+            not:
+              required: [certificate_pem]
+          - required: [certificate_chain_pem]
+            not:
+              required: [certificate_pem, private_key_pem]
+      properties:
+        mode:
+          type: string
+          enum: [byoc]
+        certificate_pem:
+          type: string
+          description: PEM-encoded certificate for BYOC create or rotation. Omitted from exports.
+        private_key_pem:
+          type: string
+          description: PEM-encoded private key for BYOC create or rotation. Omitted from exports.
+        certificate_chain_pem:
+          type: string
+          description: Optional PEM-encoded certificate chain for BYOC. Omitted from exports.
+      required:
+        - mode
     DeploymentPhase:
       type: object
       description: Timing and outcome for one normalized deployment pipeline phase.
@@ -2177,20 +2263,28 @@ components:
         - updated_at
     FrontendDomainRoutingRecord:
       type: object
+      additionalProperties: false
       properties:
         record_type:
           type: string
+          description: Use this record type when the hostname is not the apex of your DNS zone.
           enum: [CNAME]
+        zone_apex_record_type:
+          type: string
+          description: At the apex of your DNS zone, use your provider's ALIAS, ANAME, or CNAME-flattening equivalent instead of a literal CNAME.
+          enum: [ALIAS]
         name:
           type: string
         value:
           type: string
       required:
         - record_type
+        - zone_apex_record_type
         - name
         - value
     FrontendDomainVerificationRecord:
       type: object
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -4179,17 +4273,15 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Custom domain with BYOC TLS (PRO plan). `tls` is required when the
-        domain is first created and optional afterwards: providing new TLS
-        material for the same domain rotates the certificate in place (zero
-        downtime); omitting `tls` keeps the stored certificate. TLS material is
-        write-only and omitted from config export.
+        Custom domain with managed or BYOC TLS (PRO plan). `tls` is required
+        when the domain is first created and optional afterwards. BYOC TLS
+        material is write-only and omitted from config export.
       properties:
         domain:
           type: string
           description: Fully-qualified domain name (hostname only, no scheme/path)
         tls:
-          $ref: '#/components/schemas/FrontendCustomDomainTLSConfig'
+          $ref: '#/components/schemas/ProjectConfigFrontendCustomDomainTLSConfig'
       required:
         - domain
     ProjectConfigApplyResult:

@@ -7,10 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { ManagedFrontendCustomDomainTLSConfigMode } from './managedFrontendCustomDomainTLSConfigMode';
 
-export type FrontendCustomDomainTLSConfigMode = typeof FrontendCustomDomainTLSConfigMode[keyof typeof FrontendCustomDomainTLSConfigMode];
-
-
-export const FrontendCustomDomainTLSConfigMode = {
-  byoc: 'byoc',
-} as const;
+/**
+ * Volcano issues and renews the certificate. Do not send certificate material.
+ */
+export interface ManagedFrontendCustomDomainTLSConfig {
+  mode: ManagedFrontendCustomDomainTLSConfigMode;
+}

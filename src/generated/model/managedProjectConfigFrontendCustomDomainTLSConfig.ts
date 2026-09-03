@@ -7,10 +7,8 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { ManagedProjectConfigFrontendCustomDomainTLSConfigMode } from './managedProjectConfigFrontendCustomDomainTLSConfigMode';
 
-export type FrontendCustomDomainTLSConfigMode = typeof FrontendCustomDomainTLSConfigMode[keyof typeof FrontendCustomDomainTLSConfigMode];
-
-
-export const FrontendCustomDomainTLSConfigMode = {
-  byoc: 'byoc',
-} as const;
+export interface ManagedProjectConfigFrontendCustomDomainTLSConfig {
+  mode: ManagedProjectConfigFrontendCustomDomainTLSConfigMode;
+}

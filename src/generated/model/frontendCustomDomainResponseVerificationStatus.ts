@@ -14,4 +14,5 @@ export type FrontendCustomDomainResponseVerificationStatus = typeof FrontendCust
 export const FrontendCustomDomainResponseVerificationStatus = {
   pending: 'pending',
   verified: 'verified',
+  failed: 'failed',
 } as const;

@@ -10,4 +10,5 @@
 export const FrontendCustomDomainResponseVerificationStatus = {
     pending: 'pending',
     verified: 'verified',
+    failed: 'failed',
 };

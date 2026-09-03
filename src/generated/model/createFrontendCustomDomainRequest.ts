@@ -7,10 +7,10 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-import type { FrontendCustomDomainTLSConfig } from './frontendCustomDomainTLSConfig';
+import type { CreateFrontendCustomDomainTLSConfig } from './createFrontendCustomDomainTLSConfig';
 
 export interface CreateFrontendCustomDomainRequest {
   /** Fully-qualified domain name (hostname only, no scheme/path) */
   domain: string;
-  tls: FrontendCustomDomainTLSConfig;
+  tls: CreateFrontendCustomDomainTLSConfig;
 }
