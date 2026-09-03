@@ -4463,6 +4463,51 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
     });
 
+    it('rejects when an anonymous caller signs in during function resolution', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      const anonymousVolcano = new VolcanoAuth({
+        apiUrl: 'https://api.test.com',
+        anonKey: TEST_ANON_KEY,
+      });
+      global.fetch.mockImplementationOnce(() => {
+        requestStarted.resolve();
+        return response.promise;
+      });
+
+      const invocation = anonymousVolcano.functions.invoke('public-function');
+      await requestStarted.promise;
+      anonymousVolcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'public-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.test.com/functions/resolve?name=public-function',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
+        }),
+      );
+      expect(anonymousVolcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_A);
+    });
+
     it('does not re-resolve a 404 under a replacement session', async () => {
       const response = createDeferred();
       const requestStarted = createDeferred();
