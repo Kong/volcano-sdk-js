@@ -4554,6 +4554,61 @@ describe('VolcanoAuth', () => {
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
     });
 
+    it('discards a successful invocation response after the session is replaced', async () => {
+      const response = createDeferred();
+      const requestStarted = createDeferred();
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_A,
+        refresh_token: 'refresh-token-a',
+        user: { id: 'user-1' },
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return response.promise;
+        });
+
+      const invocation = volcano.functions.invoke('my-function');
+      await requestStarted.promise;
+      volcano._setSession({
+        access_token: TEST_ACCESS_TOKEN_PROJECT_B,
+        refresh_token: 'refresh-token-b',
+        user: { id: 'user-2' },
+      });
+      response.resolve({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ submitted: true }),
+      });
+
+      const result = await invocation;
+
+      expect(result.data).toBeNull();
+      expect(AuthSessionChangedError.is(result.error)).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
+          }),
+        }),
+      );
+      expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
+    });
+
     it('returns a discarded refresh error without replaying under a replacement session', async () => {
       const refreshResponse = createDeferred();
       const refreshStarted = createDeferred();
