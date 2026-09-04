@@ -712,6 +712,7 @@ class RealtimeChannel {
     } catch (error) {
       if (this._lifecycleVersion === lifecycleVersion) {
         this._paused = true;
+        this._subscription.unsubscribe();
       }
       throw error;
     }

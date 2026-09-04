@@ -138,6 +138,7 @@ describe('realtime subscription lifecycle', () => {
     const channel = createRealtime(() => subscription).channel('room-1');
     await expect(channel.subscribe()).rejects.toThrow('timeout');
 
+    expect(subscription.state).toBe('unsubscribed');
     subscription.state = 'subscribed';
 
     await expect(channel.send({ event: 'message' })).rejects.toThrow('Channel not subscribed');
