@@ -442,7 +442,7 @@ class VolcanoRealtime {
 
     const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
-    if (channel && channel._type === 'presence') {
+    if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
         channel._presenceState[ctx.info.client] = ctx.info;
@@ -464,7 +464,7 @@ class VolcanoRealtime {
 
     const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
-    if (channel && channel._type === 'presence') {
+    if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
         delete channel._presenceState[ctx.info.client];
@@ -488,7 +488,7 @@ class VolcanoRealtime {
     const channel = this._channels.get(sdkChannel);
 
     // For presence channels, populate initial state from subscribe response
-    if (channel && channel._type === 'presence' && ctx.data) {
+    if (channel && channel._type === 'presence' && !channel._paused && ctx.data) {
       // data contains initial presence information
       if (ctx.data.presence) {
         channel._presenceState = {};
@@ -639,12 +639,18 @@ class RealtimeChannel {
     // Set up presence handlers for presence channels
     if (this._type === 'presence') {
       this._eventHandlers.presence = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         this._updatePresenceState(ctx);
         this._triggerPresenceSync();
       };
       this._subscription.on('presence', this._eventHandlers.presence);
 
       this._eventHandlers.join = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         this._presenceState[ctx.info.client] = ctx.info.data;
         this._triggerPresenceSync();
         this._triggerEvent('join', ctx.info);
@@ -652,6 +658,9 @@ class RealtimeChannel {
       this._subscription.on('join', this._eventHandlers.join);
 
       this._eventHandlers.leave = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         delete this._presenceState[ctx.info.client];
         this._triggerPresenceSync();
         this._triggerEvent('leave', ctx.info);
@@ -661,6 +670,10 @@ class RealtimeChannel {
       // After subscribing, immediately fetch current presence for late joiners
       // For server-side subscriptions, use client.presence() not subscription.presence()
       this._eventHandlers.subscribed = async () => {
+        if (this._paused) {
+          return;
+        }
+        const lifecycleVersion = this._lifecycleVersion;
         // Small delay to ensure subscription is fully active
         this._presenceTimeoutId = setTimeout(async () => {
           this._presenceTimeoutId = null;
@@ -671,7 +684,7 @@ class RealtimeChannel {
               const presence = await client.presence(this._name);
 
               // Centrifuge returns presence data in `clients` field
-              if (presence && presence.clients) {
+              if (presence?.clients && this._canDeliver(lifecycleVersion)) {
                 this._presenceState = {};
                 for (const [clientId, info] of Object.entries(presence.clients)) {
                   this._presenceState[clientId] = info;
@@ -1032,7 +1045,7 @@ class RealtimeChannel {
       throw new Error('send() is only available for broadcast channels');
     }
 
-    if (!this._subscription || this._subscription.state !== 'subscribed') {
+    if (this._paused || !this._subscription || this._subscription.state !== 'subscribed') {
       throw new Error('Channel not subscribed');
     }
 

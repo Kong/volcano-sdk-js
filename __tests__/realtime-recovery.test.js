@@ -132,6 +132,18 @@ describe('realtime subscription lifecycle', () => {
     expect(subscription.publish).not.toHaveBeenCalled();
   });
 
+  test('a channel that timed out cannot send after Centrifuge connects late', async () => {
+    const subscription = createSubscription();
+    subscription.ready.mockRejectedValue(new Error('timeout'));
+    const channel = createRealtime(() => subscription).channel('room-1');
+    await expect(channel.subscribe()).rejects.toThrow('timeout');
+
+    subscription.state = 'subscribed';
+
+    await expect(channel.send({ event: 'message' })).rejects.toThrow('Channel not subscribed');
+    expect(subscription.publish).not.toHaveBeenCalled();
+  });
+
   test('a paused channel suppresses an in-flight lightweight result', async () => {
     const subscription = createSubscription();
     const realtime = createRealtime(() => subscription);
@@ -174,6 +186,59 @@ describe('realtime subscription lifecycle', () => {
     expect(onInsert).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  test('a paused presence channel ignores subscription and server events', async () => {
+    const subscription = createSubscription();
+    const realtime = createRealtime(() => subscription);
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    const onJoin = jest.fn();
+    const onSync = jest.fn();
+    channel.on('join', onJoin);
+    channel.onPresenceSync(onSync);
+    await channel.subscribe();
+
+    channel.unsubscribe();
+    subscription.emit('presence', { clients: { client1: { data: { online: true } } } });
+    subscription.emit('join', { info: { client: 'client1', data: { online: true } } });
+    realtime._handleServerJoin({
+      channel: 'project123:presence:lobby',
+      info: { client: 'client1', data: { online: true } },
+    });
+    realtime._handleServerSubscribed({
+      channel: 'project123:presence:lobby',
+      data: { presence: { client1: { data: { online: true } } } },
+    });
+
+    expect(channel.getPresenceState()).toEqual({});
+    expect(onJoin).not.toHaveBeenCalled();
+    expect(onSync).not.toHaveBeenCalled();
+  });
+
+  test('a paused presence channel ignores an in-flight snapshot', async () => {
+    jest.useFakeTimers();
+    try {
+      const subscription = createSubscription();
+      const realtime = createRealtime(() => subscription);
+      const snapshot = createDeferred();
+      realtime._client.presence = jest.fn(() => snapshot.promise);
+      const channel = realtime.channel('lobby', { type: 'presence' });
+      const onSync = jest.fn();
+      channel.onPresenceSync(onSync);
+      await channel.subscribe();
+
+      subscription.emit('subscribed');
+      jest.advanceTimersByTime(150);
+      await Promise.resolve();
+      channel.unsubscribe();
+      snapshot.resolve({ clients: { client1: { data: { online: true } } } });
+      await Promise.resolve();
+
+      expect(channel.getPresenceState()).toEqual({});
+      expect(onSync).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test.each([
