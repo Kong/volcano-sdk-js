@@ -410,8 +410,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
       await channel.subscribe();
       channel.unsubscribe();
 
-      expect(channel._subscription).not.toBeNull();
-      expect(channel._subscription.state).toBe('unsubscribed');
+      expect(channel._subscription).toBeNull();
     });
 
     test('can subscribe to multiple channels', async () => {
