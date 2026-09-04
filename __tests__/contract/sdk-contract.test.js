@@ -4,6 +4,7 @@ const path = require('node:path');
 const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
 const { VolcanoClient } = require('../../src/index.js');
+const { createFrontendCustomDomain } = require('../../src/generated-runtime/client.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
 
 function absoluteEnvironmentPath(name) {
@@ -330,6 +331,90 @@ autoBindSteps(features, [
 
     then('the subscriber receives the contract message within 10 seconds', () => {
       expect(context.world.lastOutcome.value).toEqual(context.world.realtimeMessage);
+    });
+    given('a managed custom-domain TLS request', () => {
+      const world = startScenario(context);
+      world.managedTLSRequest = {
+        domain: 'app.example.com',
+        tls: { mode: 'managed' },
+      };
+    });
+
+    when('the client encodes the request and decodes a pending verification response', async () => {
+      const transportClient = {
+        _generatedFetch: async (requestPath, request, authorization) => {
+          context.world.managedTLSWireRequest = { requestPath, request, authorization };
+          return new Response(
+            JSON.stringify({
+              domain: 'app.example.com',
+              tls_mode: 'managed',
+              domain_status: 'pending_verification',
+              verification_status: 'pending',
+              verification_records: [
+                {
+                  name: '_token.app.example.com',
+                  type: 'CNAME',
+                  value: '_validation.volcano.dev',
+                },
+              ],
+              required_routing_record: {
+                record_type: 'CNAME',
+                zone_apex_record_type: 'ALIAS',
+                name: 'app.example.com',
+                value: 'frontend.frontends.volcano.dev',
+              },
+              effective_urls: ['https://frontend.frontends.volcano.dev/'],
+              created_at: '2026-09-02T12:00:00Z',
+              updated_at: '2026-09-02T12:00:00Z',
+            }),
+            { status: 201, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      };
+      const result = await createFrontendCustomDomain(
+        'project-id',
+        'frontend-id',
+        context.world.managedTLSRequest,
+        {
+          volcanoAuthorization: 'session',
+          volcanoClient: transportClient,
+        },
+      );
+      context.world.managedTLSResponse = result.data;
+    });
+
+    then('the request selects managed TLS without certificate material', () => {
+      expect(context.world.managedTLSWireRequest).toMatchObject({
+        requestPath: '/projects/project-id/frontends/frontend-id/domain',
+        authorization: 'session',
+        request: { method: 'POST' },
+      });
+      expect(JSON.parse(context.world.managedTLSWireRequest.request.body)).toEqual({
+        domain: 'app.example.com',
+        tls: { mode: 'managed' },
+      });
+    });
+
+    then('the response exposes the managed lifecycle and DNS records', () => {
+      expect(context.world.managedTLSResponse).toMatchObject({
+        domain: 'app.example.com',
+        tls_mode: 'managed',
+        domain_status: 'pending_verification',
+        verification_status: 'pending',
+        verification_records: [
+          {
+            name: '_token.app.example.com',
+            type: 'CNAME',
+            value: '_validation.volcano.dev',
+          },
+        ],
+        required_routing_record: {
+          record_type: 'CNAME',
+          zone_apex_record_type: 'ALIAS',
+          name: 'app.example.com',
+          value: 'frontend.frontends.volcano.dev',
+        },
+      });
     });
   },
 ]);

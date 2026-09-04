@@ -7,17 +7,15 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-import type { FrontendCustomDomainTLSConfig } from './frontendCustomDomainTLSConfig';
+import type { ProjectConfigFrontendCustomDomainTLSConfig } from './projectConfigFrontendCustomDomainTLSConfig';
 
 /**
- * Custom domain with BYOC TLS (PRO plan). `tls` is required when the
- * domain is first created and optional afterwards: providing new TLS
- * material for the same domain rotates the certificate in place (zero
- * downtime); omitting `tls` keeps the stored certificate. TLS material is
- * write-only and omitted from config export.
+ * Custom domain with managed or BYOC TLS (PRO plan). `tls` is required
+ * when the domain is first created and optional afterwards. BYOC TLS
+ * material is write-only and omitted from config export.
  */
 export interface ProjectConfigCustomDomain {
   /** Fully-qualified domain name (hostname only, no scheme/path) */
   domain: string;
-  tls?: FrontendCustomDomainTLSConfig;
+  tls?: ProjectConfigFrontendCustomDomainTLSConfig;
 }

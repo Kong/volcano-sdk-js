@@ -8,9 +8,9 @@
  * OpenAPI spec version: 3.0.0
  */
 
-export type FrontendCustomDomainTLSConfigMode = typeof FrontendCustomDomainTLSConfigMode[keyof typeof FrontendCustomDomainTLSConfigMode];
+export type BYOCFrontendCustomDomainTLSConfigMode = typeof BYOCFrontendCustomDomainTLSConfigMode[keyof typeof BYOCFrontendCustomDomainTLSConfigMode];
 
 
-export const FrontendCustomDomainTLSConfigMode = {
+export const BYOCFrontendCustomDomainTLSConfigMode = {
   byoc: 'byoc',
 } as const;

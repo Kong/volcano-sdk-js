@@ -121,6 +121,46 @@ type _LogSearchEventBodyKeepsJsonTypes = Assert<
   LogSearchEventStructuredShape extends LogSearchEvent ? true : false
 >;
 
+type ManagedCustomDomainRequest = OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest'];
+type ManagedCustomDomainTLS = Extract<ManagedCustomDomainRequest['tls'], { mode: 'managed' }>;
+type _ManagedTLSRequestIsExplicit = Assert<
+  { domain: string; tls: { mode: 'managed' } } extends ManagedCustomDomainRequest ? true : false
+>;
+type _ManagedTLSRequestHasNoCertificate = Assert<
+  'certificate_pem' extends keyof ManagedCustomDomainTLS ? false : true
+>;
+
+type ManagedCustomDomainResponse = OpenAPIComponents['schemas']['FrontendCustomDomainResponse'];
+type ManagedVerificationRecord = NonNullable<
+  ManagedCustomDomainResponse['verification_records']
+>[number];
+type _ManagedTLSResponseUsesDomainLifecycle = Assert<
+  {
+    tls_mode: 'managed';
+    domain_status: 'pending_verification';
+    verification_status: 'pending';
+  } extends Pick<ManagedCustomDomainResponse, 'tls_mode' | 'domain_status' | 'verification_status'>
+    ? true
+    : false
+>;
+type _ManagedTLSResponseAllowsFailedVerification = Assert<
+  { verification_status: 'failed' } extends Pick<ManagedCustomDomainResponse, 'verification_status'>
+    ? true
+    : false
+>;
+type _ManagedTLSVerificationRecordUsesDNSFields = Assert<
+  keyof ManagedVerificationRecord extends 'name' | 'type' | 'value' ? true : false
+>;
+type _ManagedTLSResponseOmitsProviderLifecycle = Assert<
+  'managed_tls_certificate' extends keyof ManagedCustomDomainResponse ? false : true
+>;
+
+type ProjectConfigTLS = OpenAPIComponents['schemas']['ProjectConfigFrontendCustomDomainTLSConfig'];
+type ManagedProjectConfigTLS = Extract<ProjectConfigTLS, { mode: 'managed' }>;
+type _ManagedProjectConfigTLSHasNoCertificateMaterial = Assert<
+  'certificate_pem' extends keyof ManagedProjectConfigTLS ? false : true
+>;
+
 declare const refreshError: unknown;
 if (AuthRefreshDiscardedError.is(refreshError)) {
   const code: 'auth_refresh_discarded' = refreshError.code;
