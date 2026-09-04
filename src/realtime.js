@@ -46,6 +46,7 @@
 
 // Centrifuge client - dynamically imported
 let Centrifuge = null;
+const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
 /**
  * Dynamically imports the Centrifuge client
@@ -312,13 +313,13 @@ class VolcanoRealtime {
   }
 
   /**
-   * Disconnect from the realtime server
+   * Disconnect and permanently remove all channels and recovery state
    */
   disconnect() {
-    // Unsubscribe all channels first to clean up their timers
+    // Dispose all channels before tearing down the client.
     for (const channel of this._channels.values()) {
       try {
-        channel.unsubscribe();
+        channel._dispose();
       } catch {
         // Ignore errors during cleanup
       }
@@ -441,7 +442,7 @@ class VolcanoRealtime {
 
     const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
-    if (channel && channel._type === 'presence') {
+    if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
         channel._presenceState[ctx.info.client] = ctx.info;
@@ -463,7 +464,7 @@ class VolcanoRealtime {
 
     const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
-    if (channel && channel._type === 'presence') {
+    if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
         delete channel._presenceState[ctx.info.client];
@@ -487,7 +488,7 @@ class VolcanoRealtime {
     const channel = this._channels.get(sdkChannel);
 
     // For presence channels, populate initial state from subscribe response
-    if (channel && channel._type === 'presence' && ctx.data) {
+    if (channel && channel._type === 'presence' && !channel._paused && ctx.data) {
       // data contains initial presence information
       if (ctx.data.presence) {
         channel._presenceState = {};
@@ -537,7 +538,7 @@ class VolcanoRealtime {
   }
 
   /**
-   * Remove a specific channel
+   * Permanently remove a channel, its listeners, and its recovery state
    * @param {string} name - Channel name
    * @param {string} [type='broadcast'] - Channel type
    */
@@ -545,17 +546,17 @@ class VolcanoRealtime {
     const fullName = this._formatChannelName(name, type);
     const channel = this._channels.get(fullName);
     if (channel) {
-      channel.unsubscribe();
+      channel._dispose();
       this._channels.delete(fullName);
     }
   }
 
   /**
-   * Remove all channels and listeners
+   * Permanently remove all channels, listeners, and recovery state
    */
   removeAllChannels() {
     for (const channel of this._channels.values()) {
-      channel.unsubscribe();
+      channel._dispose();
     }
     this._channels.clear();
   }
@@ -571,6 +572,8 @@ class RealtimeChannel {
     this._type = type;
     this._options = options;
     this._subscription = null;
+    this._lifecycleVersion = 0;
+    this._paused = false;
     this._callbacks = new Map();
     this._presenceState = {};
 
@@ -596,10 +599,11 @@ class RealtimeChannel {
   }
 
   /**
-   * Subscribe to the channel
+   * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
     if (this._subscription) {
+      await this._activateSubscription();
       return;
     }
 
@@ -609,15 +613,15 @@ class RealtimeChannel {
     }
 
     this._subscription = client.newSubscription(this._name, {
-      // Enable presence for presence channels
-      presence: this._type === 'presence',
       joinLeave: this._type === 'presence',
-      // Enable recovery for all channels
-      recover: true,
     });
 
     // Set up message handler (store reference for cleanup)
     this._eventHandlers.publication = (ctx) => {
+      if (this._paused) {
+        return;
+      }
+
       const event = ctx.data?.event || 'message';
       const callbacks = this._callbacks.get(event) || [];
       callbacks.forEach((cb) => {
@@ -635,12 +639,18 @@ class RealtimeChannel {
     // Set up presence handlers for presence channels
     if (this._type === 'presence') {
       this._eventHandlers.presence = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         this._updatePresenceState(ctx);
         this._triggerPresenceSync();
       };
       this._subscription.on('presence', this._eventHandlers.presence);
 
       this._eventHandlers.join = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         this._presenceState[ctx.info.client] = ctx.info.data;
         this._triggerPresenceSync();
         this._triggerEvent('join', ctx.info);
@@ -648,6 +658,9 @@ class RealtimeChannel {
       this._subscription.on('join', this._eventHandlers.join);
 
       this._eventHandlers.leave = (ctx) => {
+        if (this._paused) {
+          return;
+        }
         delete this._presenceState[ctx.info.client];
         this._triggerPresenceSync();
         this._triggerEvent('leave', ctx.info);
@@ -657,6 +670,10 @@ class RealtimeChannel {
       // After subscribing, immediately fetch current presence for late joiners
       // For server-side subscriptions, use client.presence() not subscription.presence()
       this._eventHandlers.subscribed = async () => {
+        if (this._paused) {
+          return;
+        }
+        const lifecycleVersion = this._lifecycleVersion;
         // Small delay to ensure subscription is fully active
         this._presenceTimeoutId = setTimeout(async () => {
           this._presenceTimeoutId = null;
@@ -667,7 +684,7 @@ class RealtimeChannel {
               const presence = await client.presence(this._name);
 
               // Centrifuge returns presence data in `clients` field
-              if (presence && presence.clients) {
+              if (presence?.clients && this._canDeliver(lifecycleVersion)) {
                 this._presenceState = {};
                 for (const [clientId, info] of Object.entries(presence.clients)) {
                   this._presenceState[clientId] = info;
@@ -683,14 +700,38 @@ class RealtimeChannel {
       this._subscription.on('subscribed', this._eventHandlers.subscribed);
     }
 
-    await this._subscription.subscribe();
+    await this._activateSubscription();
+  }
+
+  async _activateSubscription() {
+    const lifecycleVersion = this._lifecycleVersion;
+    this._paused = false;
+    this._subscription.subscribe();
+    try {
+      await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
+    } catch (error) {
+      if (this._lifecycleVersion === lifecycleVersion) {
+        this.unsubscribe();
+      }
+      throw error;
+    }
   }
 
   /**
-   * Unsubscribe from the channel
+   * Pause the channel while preserving handlers and in-memory recovery state
    */
   unsubscribe() {
-    // Cancel pending presence fetch timeout
+    this._lifecycleVersion += 1;
+    this._paused = true;
+    this._cancelPendingWork();
+
+    if (this._subscription) {
+      this._subscription.unsubscribe();
+    }
+    this._presenceState = {};
+  }
+
+  _cancelPendingWork() {
     if (this._presenceTimeoutId) {
       clearTimeout(this._presenceTimeoutId);
       this._presenceTimeoutId = null;
@@ -709,9 +750,12 @@ class RealtimeChannel {
       }
       this._pendingFetches.clear();
     }
+  }
+
+  _dispose() {
+    this.unsubscribe();
 
     if (this._subscription) {
-      // Remove event listeners before unsubscribing
       for (const [event, handler] of Object.entries(this._eventHandlers)) {
         try {
           this._subscription.off(event, handler);
@@ -721,8 +765,6 @@ class RealtimeChannel {
       }
       this._eventHandlers = {};
 
-      this._subscription.unsubscribe();
-      // Also remove from Centrifuge client registry to allow re-subscription
       const client = this._realtime.getClient();
       if (client) {
         try {
@@ -742,6 +784,10 @@ class RealtimeChannel {
    * Called by VolcanoRealtime when a message arrives on the internal channel
    */
   _handlePublication(ctx) {
+    if (this._paused) {
+      return;
+    }
+
     const data = ctx.data;
 
     // Check if this is a lightweight notification (Phase 3)
@@ -760,6 +806,7 @@ class RealtimeChannel {
    * @param {Object} ctx - Publication context
    */
   async _handleLightweightNotification(data, ctx) {
+    const lifecycleVersion = this._lifecycleVersion;
     const volcanoClient = this._realtime.getVolcanoClient();
 
     // DELETE notifications may include old_record, deliver immediately
@@ -793,6 +840,10 @@ class RealtimeChannel {
     try {
       const record = await this._fetchRow(data.schema, data.table, data.id);
 
+      if (!this._canDeliver(lifecycleVersion)) {
+        return;
+      }
+
       // Convert to full payload format for backward compatibility
       const fullPayload = {
         type: data.type,
@@ -804,6 +855,10 @@ class RealtimeChannel {
 
       this._deliverPayload(fullPayload, ctx);
     } catch (err) {
+      if (!this._canDeliver(lifecycleVersion)) {
+        return;
+      }
+
       // On fetch error, still deliver the lightweight notification
       // so the client knows something changed, even if we couldn't get the data
       console.warn(
@@ -812,6 +867,10 @@ class RealtimeChannel {
       );
       this._deliverPayload(data, ctx);
     }
+  }
+
+  _canDeliver(lifecycleVersion) {
+    return !this._paused && this._lifecycleVersion === lifecycleVersion;
   }
 
   /**
@@ -986,7 +1045,7 @@ class RealtimeChannel {
       throw new Error('send() is only available for broadcast channels');
     }
 
-    if (!this._subscription) {
+    if (this._paused || !this._subscription || this._subscription.state !== 'subscribed') {
       throw new Error('Channel not subscribed');
     }
 

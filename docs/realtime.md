@@ -414,11 +414,26 @@ document.addEventListener('visibilitychange', () => {
 
 ### Unsubscribe
 
-Stop receiving events from a channel:
+Pause a channel without discarding its event handlers or in-memory broadcast
+recovery position:
 
 ```javascript
 channel.unsubscribe();
+
+// Resume the same channel and wait until it is ready.
+await channel.subscribe();
 ```
+
+When server history is available, a broadcast channel can recover publications
+missed while its connection was interrupted or the channel was paused. Recovery
+is limited to the current `VolcanoRealtime` client and is not persisted across
+page reloads or process restarts.
+
+`subscribe()` rejects if the channel does not become ready within 10 seconds.
+Handle that error before retrying the subscription.
+
+Presence always resumes from a fresh snapshot. Postgres change subscriptions do
+not currently guarantee replay.
 
 ### Remove a Channel
 
@@ -447,6 +462,10 @@ if (realtime.isConnected()) {
 ```javascript
 realtime.disconnect();
 ```
+
+`removeChannel()`, `removeAllChannels()`, and `disconnect()` permanently discard
+their channels' callbacks and recovery positions. Create and configure a new
+channel before subscribing again.
 
 ## Dynamic Token Refresh
 
