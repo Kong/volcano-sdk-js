@@ -427,7 +427,12 @@ await channel.subscribe();
 When server history is available, a broadcast channel can recover publications
 missed while its connection was interrupted or the channel was paused. Recovery
 is limited to the current `VolcanoRealtime` client and is not persisted across
-page reloads or process restarts.
+page reloads or process restarts. Refreshing a token for the same user and
+project preserves that recovery position. If `getToken` returns credentials for
+a different user or project, or changes an opaque credential whose identity
+cannot be verified, the client pauses existing channels and discards their
+recovery positions. Call `subscribe()` on each channel to resume from a fresh
+position; registered event handlers remain attached.
 
 `subscribe()` rejects if the channel does not become ready within 10 seconds.
 Handle that error before retrying the subscription.

@@ -48,6 +48,49 @@
 let Centrifuge = null;
 const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
+function decodeTokenPayload(token) {
+  const parts = typeof token === 'string' ? token.split('.') : [];
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+    const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+    const encoded = normalized + padding;
+    const decoded =
+      typeof atob === 'function' ? atob(encoded) : Buffer.from(encoded, 'base64').toString('utf-8');
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function recoveryIdentity(token) {
+  const payload = decodeTokenPayload(token);
+  if (
+    payload &&
+    typeof payload.project_id === 'string' &&
+    payload.project_id !== '' &&
+    typeof payload.sub === 'string' &&
+    payload.sub !== ''
+  ) {
+    return { kind: 'user', projectId: payload.project_id, subject: payload.sub };
+  }
+
+  return { kind: 'credential', token };
+}
+
+function sameRecoveryIdentity(left, right) {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === 'user') {
+    return left.projectId === right.projectId && left.subject === right.subject;
+  }
+  return left.token === right.token;
+}
+
 /**
  * Dynamically imports the Centrifuge client
  */
@@ -131,6 +174,7 @@ class VolcanoRealtime {
     this.anonKey = config.anonKey || ''; // Allow empty string for service keys
     this.accessToken = config.accessToken;
     this.getToken = config.getToken;
+    this._recoveryIdentity = recoveryIdentity(config.accessToken);
     this._webSocket = config.webSocket || null;
 
     this._client = null;
@@ -234,7 +278,7 @@ class VolcanoRealtime {
       getToken: this.getToken
         ? async () => {
             const token = await this.getToken();
-            this.accessToken = token;
+            this._adoptAccessToken(token);
             return token;
           }
         : undefined,
@@ -310,6 +354,23 @@ class VolcanoRealtime {
       client.on('error', onError);
       client.connect();
     });
+  }
+
+  _adoptAccessToken(token) {
+    this.accessToken = token;
+    this._synchronizeRecoveryIdentity();
+  }
+
+  _synchronizeRecoveryIdentity() {
+    const nextIdentity = recoveryIdentity(this.accessToken);
+    if (sameRecoveryIdentity(this._recoveryIdentity, nextIdentity)) {
+      return;
+    }
+
+    this._recoveryIdentity = nextIdentity;
+    for (const channel of this._channels.values()) {
+      channel._resetForIdentityChange();
+    }
   }
 
   /**
@@ -602,6 +663,7 @@ class RealtimeChannel {
    * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
+    this._realtime._synchronizeRecoveryIdentity();
     if (this._subscription) {
       await this._activateSubscription();
       return;
@@ -755,6 +817,20 @@ class RealtimeChannel {
   _dispose() {
     this.unsubscribe();
 
+    this._releaseSubscription();
+    this._callbacks.clear();
+    this._presenceState = {};
+  }
+
+  _resetForIdentityChange() {
+    this._lifecycleVersion += 1;
+    this._paused = true;
+    this._cancelPendingWork();
+    this._presenceState = {};
+    this._releaseSubscription();
+  }
+
+  _releaseSubscription() {
     if (this._subscription) {
       for (const [event, handler] of Object.entries(this._eventHandlers)) {
         try {
@@ -775,8 +851,6 @@ class RealtimeChannel {
       }
       this._subscription = null;
     }
-    this._callbacks.clear();
-    this._presenceState = {};
   }
 
   /**

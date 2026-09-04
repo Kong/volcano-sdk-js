@@ -1,10 +1,10 @@
 const { VolcanoRealtime } = require('../src/realtime.js');
 
-function createRealtime(createSubscription) {
+function createRealtime(createSubscription, accessToken = 'token123') {
   const realtime = new VolcanoRealtime({
     apiUrl: 'https://api.example.com',
     anonKey: 'project123.secret',
-    accessToken: 'token123',
+    accessToken,
   });
 
   realtime._client = {
@@ -14,6 +14,11 @@ function createRealtime(createSubscription) {
     removeSubscription: jest.fn(),
   };
   return realtime;
+}
+
+function createAccessToken(claims) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none' })}.${encode(claims)}.`;
 }
 
 function createSubscription() {
@@ -116,6 +121,67 @@ describe('realtime subscription lifecycle', () => {
     expect(subscriptions).toHaveLength(1);
     expect(onMessage).toHaveBeenNthCalledWith(
       2,
+      { event: 'message', sequence: 2 },
+      { data: { event: 'message', sequence: 2 } },
+    );
+  });
+
+  test('same-user token refresh retains the broadcast recovery subscription', async () => {
+    const subscriptions = [];
+    const originalToken = createAccessToken({ project_id: 'project-1', sub: 'user-1', exp: 1 });
+    const refreshedToken = createAccessToken({ project_id: 'project-1', sub: 'user-1', exp: 2 });
+    const realtime = createRealtime(() => {
+      const subscription = createSubscription();
+      subscriptions.push(subscription);
+      return subscription;
+    }, originalToken);
+    const channel = realtime.channel('room-1');
+
+    await channel.subscribe();
+    channel.unsubscribe();
+    realtime._adoptAccessToken(refreshedToken);
+    await channel.subscribe();
+
+    expect(subscriptions).toHaveLength(1);
+    expect(realtime._client.removeSubscription).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [
+      'a different user',
+      createAccessToken({ project_id: 'project-1', sub: 'user-1' }),
+      createAccessToken({ project_id: 'project-1', sub: 'user-2' }),
+    ],
+    [
+      'a different project',
+      createAccessToken({ project_id: 'project-1', sub: 'user-1' }),
+      createAccessToken({ project_id: 'project-2', sub: 'user-1' }),
+    ],
+    ['a changed opaque token', 'opaque-token-1', 'opaque-token-2'],
+  ])('%s discards recovery before resubscribe', async (_case, originalToken, nextToken) => {
+    const subscriptions = [];
+    const realtime = createRealtime(() => {
+      const subscription = createSubscription();
+      subscriptions.push(subscription);
+      return subscription;
+    }, originalToken);
+    const channel = realtime.channel('room-1');
+    const onMessage = jest.fn();
+    channel.on('message', onMessage);
+
+    await channel.subscribe();
+    const originalSubscription = subscriptions[0];
+    realtime._adoptAccessToken(nextToken);
+    originalSubscription.emit('publication', { data: { event: 'message', sequence: 1 } });
+
+    expect(realtime._client.removeSubscription).toHaveBeenCalledWith(originalSubscription);
+    expect(onMessage).not.toHaveBeenCalled();
+
+    await channel.subscribe();
+    subscriptions[1].emit('publication', { data: { event: 'message', sequence: 2 } });
+
+    expect(subscriptions).toHaveLength(2);
+    expect(onMessage).toHaveBeenCalledWith(
       { event: 'message', sequence: 2 },
       { data: { event: 'message', sequence: 2 } },
     );
