@@ -572,6 +572,8 @@ class RealtimeChannel {
     this._type = type;
     this._options = options;
     this._subscription = null;
+    this._lifecycleVersion = 0;
+    this._paused = false;
     this._callbacks = new Map();
     this._presenceState = {};
 
@@ -601,8 +603,7 @@ class RealtimeChannel {
    */
   async subscribe() {
     if (this._subscription) {
-      this._subscription.subscribe();
-      await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
+      await this._activateSubscription();
       return;
     }
 
@@ -617,6 +618,10 @@ class RealtimeChannel {
 
     // Set up message handler (store reference for cleanup)
     this._eventHandlers.publication = (ctx) => {
+      if (this._paused) {
+        return;
+      }
+
       const event = ctx.data?.event || 'message';
       const callbacks = this._callbacks.get(event) || [];
       callbacks.forEach((cb) => {
@@ -682,14 +687,29 @@ class RealtimeChannel {
       this._subscription.on('subscribed', this._eventHandlers.subscribed);
     }
 
+    await this._activateSubscription();
+  }
+
+  async _activateSubscription() {
+    const lifecycleVersion = this._lifecycleVersion;
+    this._paused = false;
     this._subscription.subscribe();
-    await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
+    try {
+      await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
+    } catch (error) {
+      if (this._lifecycleVersion === lifecycleVersion) {
+        this._paused = true;
+      }
+      throw error;
+    }
   }
 
   /**
    * Pause the channel while preserving handlers and in-memory recovery state
    */
   unsubscribe() {
+    this._lifecycleVersion += 1;
+    this._paused = true;
     this._cancelPendingWork();
 
     if (this._subscription) {
@@ -751,6 +771,10 @@ class RealtimeChannel {
    * Called by VolcanoRealtime when a message arrives on the internal channel
    */
   _handlePublication(ctx) {
+    if (this._paused) {
+      return;
+    }
+
     const data = ctx.data;
 
     // Check if this is a lightweight notification (Phase 3)
@@ -769,6 +793,7 @@ class RealtimeChannel {
    * @param {Object} ctx - Publication context
    */
   async _handleLightweightNotification(data, ctx) {
+    const lifecycleVersion = this._lifecycleVersion;
     const volcanoClient = this._realtime.getVolcanoClient();
 
     // DELETE notifications may include old_record, deliver immediately
@@ -802,6 +827,10 @@ class RealtimeChannel {
     try {
       const record = await this._fetchRow(data.schema, data.table, data.id);
 
+      if (!this._canDeliver(lifecycleVersion)) {
+        return;
+      }
+
       // Convert to full payload format for backward compatibility
       const fullPayload = {
         type: data.type,
@@ -813,6 +842,10 @@ class RealtimeChannel {
 
       this._deliverPayload(fullPayload, ctx);
     } catch (err) {
+      if (!this._canDeliver(lifecycleVersion)) {
+        return;
+      }
+
       // On fetch error, still deliver the lightweight notification
       // so the client knows something changed, even if we couldn't get the data
       console.warn(
@@ -821,6 +854,10 @@ class RealtimeChannel {
       );
       this._deliverPayload(data, ctx);
     }
+  }
+
+  _canDeliver(lifecycleVersion) {
+    return !this._paused && this._lifecycleVersion === lifecycleVersion;
   }
 
   /**
@@ -995,7 +1032,7 @@ class RealtimeChannel {
       throw new Error('send() is only available for broadcast channels');
     }
 
-    if (!this._subscription) {
+    if (!this._subscription || this._subscription.state !== 'subscribed') {
       throw new Error('Channel not subscribed');
     }
 

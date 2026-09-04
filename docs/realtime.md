@@ -429,6 +429,9 @@ missed while its connection was interrupted or the channel was paused. Recovery
 is limited to the current `VolcanoRealtime` client and is not persisted across
 page reloads or process restarts.
 
+`subscribe()` rejects if the channel does not become ready within 10 seconds.
+Handle that error before retrying the subscription.
+
 Presence always resumes from a fresh snapshot. Postgres change subscriptions do
 not currently guarantee replay.
 

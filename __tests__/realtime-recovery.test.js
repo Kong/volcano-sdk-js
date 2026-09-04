@@ -18,7 +18,7 @@ function createRealtime(createSubscription) {
 
 function createSubscription() {
   const handlers = new Map();
-  return {
+  const subscription = {
     emit(event, context) {
       for (const handler of handlers.get(event) || []) {
         handler(context);
@@ -30,10 +30,28 @@ function createSubscription() {
       listeners.add(handler);
       handlers.set(event, listeners);
     }),
-    ready: jest.fn(() => Promise.resolve()),
-    subscribe: jest.fn(),
-    unsubscribe: jest.fn(),
+    publish: jest.fn(),
+    state: 'unsubscribed',
   };
+  subscription.ready = jest.fn(async () => {
+    subscription.state = 'subscribed';
+  });
+  subscription.subscribe = jest.fn(() => {
+    subscription.state = 'subscribing';
+  });
+  subscription.unsubscribe = jest.fn(() => {
+    subscription.state = 'unsubscribed';
+  });
+  return subscription;
+}
+
+function createDeferred() {
+  const deferred = {};
+  deferred.promise = new Promise((resolve, reject) => {
+    deferred.resolve = resolve;
+    deferred.reject = reject;
+  });
+  return deferred;
 }
 
 describe('realtime subscription lifecycle', () => {
@@ -89,6 +107,9 @@ describe('realtime subscription lifecycle', () => {
     await channel.subscribe();
     subscriptions[0].emit('publication', { data: { event: 'message', sequence: 1 } });
     channel.unsubscribe();
+    subscriptions[0].emit('publication', { data: { event: 'message', sequence: 99 } });
+    expect(onMessage).toHaveBeenCalledTimes(1);
+
     await channel.subscribe();
     subscriptions.at(-1).emit('publication', { data: { event: 'message', sequence: 2 } });
 
@@ -98,6 +119,61 @@ describe('realtime subscription lifecycle', () => {
       { event: 'message', sequence: 2 },
       { data: { event: 'message', sequence: 2 } },
     );
+  });
+
+  test('a paused broadcast channel cannot send', async () => {
+    const subscription = createSubscription();
+    const channel = createRealtime(() => subscription).channel('room-1');
+    await channel.subscribe();
+
+    channel.unsubscribe();
+
+    await expect(channel.send({ event: 'message' })).rejects.toThrow('Channel not subscribed');
+    expect(subscription.publish).not.toHaveBeenCalled();
+  });
+
+  test('a paused channel suppresses an in-flight lightweight result', async () => {
+    const subscription = createSubscription();
+    const realtime = createRealtime(() => subscription);
+    realtime.setVolcanoClient({});
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    const onInsert = jest.fn();
+    const fetch = createDeferred();
+    channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
+    channel._fetchRow = jest.fn(() => fetch.promise);
+    await channel.subscribe();
+
+    const delivery = channel._handleLightweightNotification(
+      { id: 1, mode: 'lightweight', schema: 'public', table: 'items', type: 'INSERT' },
+      {},
+    );
+    channel.unsubscribe();
+    fetch.resolve({ id: 1 });
+    await delivery;
+
+    expect(onInsert).not.toHaveBeenCalled();
+  });
+
+  test('pausing a channel silently cancels a queued lightweight fetch', async () => {
+    const subscription = createSubscription();
+    const realtime = createRealtime(() => subscription);
+    realtime.setVolcanoClient({});
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    const onInsert = jest.fn();
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
+    await channel.subscribe();
+
+    const delivery = channel._handleLightweightNotification(
+      { id: 1, mode: 'lightweight', schema: 'public', table: 'items', type: 'INSERT' },
+      {},
+    );
+    channel.unsubscribe();
+    await delivery;
+
+    expect(onInsert).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   test.each([
