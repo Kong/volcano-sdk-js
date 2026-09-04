@@ -9,6 +9,9 @@ async function responseData(response, responseType) {
     if (contentType.includes('json') || typeof response.blob !== 'function') {
         return response.json();
     }
+    if (contentType.startsWith('text/')) {
+        return response.text();
+    }
     return response.blob();
 }
 export async function volcanoFetch(path, options) {
