@@ -7,11 +7,14 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const HostedAuthPageType = {
-    login: 'login',
-    signup: 'signup',
-    'forgot-password': 'forgot-password',
-    device: 'device',
-    'verify-email': 'verify-email',
-    'reset-password': 'reset-password',
-};
+
+export type AuthPageFont = typeof AuthPageFont[keyof typeof AuthPageFont];
+
+
+export const AuthPageFont = {
+  system: 'system',
+  humanist: 'humanist',
+  geometric: 'geometric',
+  slab: 'slab',
+  mono: 'mono',
+} as const;

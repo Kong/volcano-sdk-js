@@ -2854,7 +2854,152 @@ components:
         - has_more
     HostedAuthPageType:
       type: string
-      enum: [login, reset-password]
+      enum: [login, signup, forgot-password, device, verify-email, reset-password]
+    AuthPageLayout:
+      type: string
+      enum: [centered, split-left, split-right]
+    AuthPageFont:
+      type: string
+      enum: [system, humanist, geometric, slab, mono]
+    AuthPageScale:
+      type: string
+      enum: [small, default, large]
+    AuthPageDensity:
+      type: string
+      enum: [compact, comfortable, spacious]
+    AuthPageRadius:
+      type: string
+      enum: [none, small, medium, large]
+    AuthPageThemeColors:
+      type: object
+      additionalProperties: false
+      required: [background, surface, text, accent, accent_text]
+      properties:
+        background:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        surface:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        text:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        accent:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+        accent_text:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+    AuthPageTheme:
+      type: object
+      additionalProperties: false
+      required: [version, colors, font, scale, density, radius]
+      properties:
+        version:
+          type: integer
+          enum: [1]
+        colors:
+          $ref: '#/components/schemas/AuthPageThemeColors'
+        font:
+          $ref: '#/components/schemas/AuthPageFont'
+        scale:
+          $ref: '#/components/schemas/AuthPageScale'
+        density:
+          $ref: '#/components/schemas/AuthPageDensity'
+        radius:
+          $ref: '#/components/schemas/AuthPageRadius'
+    AuthPageAppearanceDefaults:
+      type: object
+      required: [theme, layout]
+      properties:
+        theme:
+          $ref: '#/components/schemas/AuthPageTheme'
+        layout:
+          $ref: '#/components/schemas/AuthPageLayout'
+    AuthPageAppearanceOptions:
+      type: object
+      required: [pages, fonts, scales, densities, radii, layouts]
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostedAuthPageType'
+        fonts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPageFont'
+        scales:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPageScale'
+        densities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPageDensity'
+        radii:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPageRadius'
+        layouts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPageLayout'
+    AuthPageAppearanceResponse:
+      type: object
+      required: [theme, layouts, customisation_allowed, parked, defaults, options]
+      properties:
+        theme:
+          $ref: '#/components/schemas/AuthPageTheme'
+        layouts:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuthPageLayout'
+        customisation_allowed:
+          type: boolean
+        parked:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Per-page saved-but-not-live state.
+        defaults:
+          $ref: '#/components/schemas/AuthPageAppearanceDefaults'
+        options:
+          $ref: '#/components/schemas/AuthPageAppearanceOptions'
+    UpdateAuthPageThemeRequest:
+      type: object
+      additionalProperties: false
+      required: [theme]
+      properties:
+        theme:
+          $ref: '#/components/schemas/AuthPageTheme'
+    UpdateAuthPageLayoutRequest:
+      type: object
+      additionalProperties: false
+      required: [layout]
+      properties:
+        layout:
+          $ref: '#/components/schemas/AuthPageLayout'
+    PreviewAuthPageRequest:
+      type: object
+      additionalProperties: false
+      required: [theme, layout]
+      properties:
+        theme:
+          $ref: '#/components/schemas/AuthPageTheme'
+        layout:
+          $ref: '#/components/schemas/AuthPageLayout'
+        action:
+          type: string
+    PreviewAuthPageResponse:
+      type: object
+      required: [preview_url, expires_at]
+      properties:
+        preview_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
     HostedLoginEmailCheckRequest:
       type: object
       required: [email]
@@ -2884,7 +3029,7 @@ components:
             type: string
     HostedRenderablePageType:
       type: string
-      enum: [reset-password]
+      enum: [signup, forgot-password, device, verify-email, reset-password]
     LogResource:
       type: object
       description: Resource that owns a historical log event.
@@ -4077,6 +4222,8 @@ components:
           $ref: '#/components/schemas/ProjectConfigAuthRedirects'
         pages:
           $ref: '#/components/schemas/ProjectConfigHostedPages'
+        appearance:
+          $ref: '#/components/schemas/ProjectConfigAuthPageAppearance'
     ProjectConfigAuthRedirects:
       type: object
       additionalProperties: false
@@ -4106,6 +4253,38 @@ components:
           $ref: '#/components/schemas/ProjectConfigHostedPage'
         reset_password:
           $ref: '#/components/schemas/ProjectConfigHostedPage'
+        signup:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+        forgot_password:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+        device:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+        verify_email:
+          $ref: '#/components/schemas/ProjectConfigHostedPage'
+    ProjectConfigAuthPageAppearance:
+      type: object
+      additionalProperties: false
+      properties:
+        theme:
+          $ref: '#/components/schemas/AuthPageTheme'
+        layouts:
+          $ref: '#/components/schemas/ProjectConfigAuthPageLayouts'
+    ProjectConfigAuthPageLayouts:
+      type: object
+      additionalProperties: false
+      properties:
+        login:
+          $ref: '#/components/schemas/AuthPageLayout'
+        signup:
+          $ref: '#/components/schemas/AuthPageLayout'
+        forgot_password:
+          $ref: '#/components/schemas/AuthPageLayout'
+        device:
+          $ref: '#/components/schemas/AuthPageLayout'
+        verify_email:
+          $ref: '#/components/schemas/AuthPageLayout'
+        reset_password:
+          $ref: '#/components/schemas/AuthPageLayout'
     ProjectConfigHostedPage:
       type: object
       additionalProperties: false

@@ -3223,14 +3223,143 @@ export const updateAuthHostedPage = async (id, pageType, updateAuthHostedPageReq
         body: JSON.stringify(updateAuthHostedPageRequest)
     });
 };
+export const getGetAuthPageAppearanceUrl = (id) => {
+    return `/projects/${id}/auth/pages/appearance`;
+};
+/**
+ * @summary Get managed auth page appearance
+ */
+export const getAuthPageAppearance = async (id, options) => {
+    return volcanoFetch(getGetAuthPageAppearanceUrl(id), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getUpdateAuthPageThemeUrl = (id) => {
+    return `/projects/${id}/auth/pages/theme`;
+};
+/**
+ * @summary Save the managed auth page theme
+ */
+export const updateAuthPageTheme = async (id, updateAuthPageThemeRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateAuthPageThemeUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(updateAuthPageThemeRequest)
+    });
+};
+export const getDeleteAuthPageThemeUrl = (id) => {
+    return `/projects/${id}/auth/pages/theme`;
+};
+/**
+ * @summary Clear the managed auth page theme
+ */
+export const deleteAuthPageTheme = async (id, options) => {
+    return volcanoFetch(getDeleteAuthPageThemeUrl(id), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getUpdateAuthPageLayoutUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/layout`;
+};
+/**
+ * @summary Save one managed auth page layout
+ */
+export const updateAuthPageLayout = async (id, pageType, updateAuthPageLayoutRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateAuthPageLayoutUrl(id, pageType), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(updateAuthPageLayoutRequest)
+    });
+};
+export const getDeleteAuthPageLayoutUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/layout`;
+};
+/**
+ * @summary Clear one managed auth page layout
+ */
+export const deleteAuthPageLayout = async (id, pageType, options) => {
+    return volcanoFetch(getDeleteAuthPageLayoutUrl(id, pageType), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getRenderAuthPagePreviewUrl = (id, pageType, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/auth/pages/${pageType}/preview?${stringifiedParams}` : `/projects/${id}/auth/pages/${pageType}/preview`;
+};
+/**
+ * Public HTML endpoint for a preview URL returned by the POST operation.
+ * The signed ticket contains the unsaved appearance, expires shortly, and
+ * runs the production page runtime against mocked authentication responses.
+ * @summary Render a short-lived managed auth page preview
+ */
+export const renderAuthPagePreview = async (id, pageType, params, options) => {
+    return volcanoFetch(getRenderAuthPagePreviewUrl(id, pageType, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getPreviewAuthPageUrl = (id, pageType) => {
+    return `/projects/${id}/auth/pages/${pageType}/preview`;
+};
+/**
+ * @summary Preview an unsaved managed auth page appearance
+ */
+export const previewAuthPage = async (id, pageType, previewAuthPageRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getPreviewAuthPageUrl(id, pageType), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(previewAuthPageRequest)
+    });
+};
 export const getRenderManagedAuthPageUrl = (id, pageType) => {
     return `/projects/${id}/auth/hosted/${pageType}`;
 };
 /**
- * Public HTML endpoint for the managed reset-password page.
+ * Public HTML endpoint for signup, forgot-password, device approval,
+ * verify-email, and reset-password pages. Login uses the path without a
+ * page type.
  * Requires `Accept: text/html`.
  * Returns 404 when managed hosted pages are disabled for the project.
- * @summary Render managed reset-password page
+ * @summary Render a managed auth page
  */
 export const renderManagedAuthPage = async (id, pageType, options) => {
     return volcanoFetch(getRenderManagedAuthPageUrl(id, pageType), {

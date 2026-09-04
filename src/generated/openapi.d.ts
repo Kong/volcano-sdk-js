@@ -2806,6 +2806,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/auth/pages/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get managed auth page appearance */
+        get: operations["getAuthPageAppearance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the managed auth page theme */
+        put: operations["updateAuthPageTheme"];
+        post?: never;
+        /** Clear the managed auth page theme */
+        delete: operations["deleteAuthPageTheme"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/{pageType}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Save one managed auth page layout */
+        put: operations["updateAuthPageLayout"];
+        post?: never;
+        /** Clear one managed auth page layout */
+        delete: operations["deleteAuthPageLayout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/{pageType}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Render a short-lived managed auth page preview
+         * @description Public HTML endpoint for a preview URL returned by the POST operation.
+         *     The signed ticket contains the unsaved appearance, expires shortly, and
+         *     runs the production page runtime against mocked authentication responses.
+         */
+        get: operations["renderAuthPagePreview"];
+        put?: never;
+        /** Preview an unsaved managed auth page appearance */
+        post: operations["previewAuthPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/auth/hosted/{pageType}": {
         parameters: {
             query?: never;
@@ -2814,8 +2894,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Render managed reset-password page
-         * @description Public HTML endpoint for the managed reset-password page.
+         * Render a managed auth page
+         * @description Public HTML endpoint for signup, forgot-password, device approval,
+         *     verify-email, and reset-password pages. Login uses the path without a
+         *     page type.
          *     Requires `Accept: text/html`.
          *     Returns 404 when managed hosted pages are disabled for the project.
          */
@@ -4174,6 +4256,38 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        AuthPageAppearanceResponse: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layouts: {
+                [key: string]: components["schemas"]["AuthPageLayout"];
+            };
+            customisation_allowed: boolean;
+            /** @description Per-page saved-but-not-live state. */
+            parked: {
+                [key: string]: boolean;
+            };
+            defaults: components["schemas"]["AuthPageAppearanceDefaults"];
+            options: components["schemas"]["AuthPageAppearanceOptions"];
+        };
+        /** @enum {string} */
+        AuthPageDensity: "compact" | "comfortable" | "spacious";
+        /** @enum {string} */
+        AuthPageFont: "system" | "humanist" | "geometric" | "slab" | "mono";
+        /** @enum {string} */
+        AuthPageLayout: "centered" | "split-left" | "split-right";
+        /** @enum {string} */
+        AuthPageRadius: "none" | "small" | "medium" | "large";
+        /** @enum {string} */
+        AuthPageScale: "small" | "default" | "large";
+        AuthPageTheme: {
+            /** @enum {integer} */
+            version: 1;
+            colors: components["schemas"]["AuthPageThemeColors"];
+            font: components["schemas"]["AuthPageFont"];
+            scale: components["schemas"]["AuthPageScale"];
+            density: components["schemas"]["AuthPageDensity"];
+            radius: components["schemas"]["AuthPageRadius"];
         };
         AuthHostedPageResponse: {
             /** @description The saved page, or null when the project has not customized this page type yet. */
@@ -5827,7 +5941,7 @@ export interface components {
             prev_cursor?: string;
         };
         /** @enum {string} */
-        HostedAuthPageType: "login" | "reset-password";
+        HostedAuthPageType: "login" | "signup" | "forgot-password" | "device" | "verify-email" | "reset-password";
         HostedLoginEmailCheckRequest: {
             /** Format: email */
             email: string;
@@ -5843,7 +5957,7 @@ export interface components {
             oauth_providers?: string[];
         };
         /** @enum {string} */
-        HostedRenderablePageType: "reset-password";
+        HostedRenderablePageType: "signup" | "forgot-password" | "device" | "verify-email" | "reset-password";
         /** @description Historical log event returned by log APIs. */
         LogEvent: {
             /** @description Opaque stable log event ID for pagination, deduplication, and display. */
@@ -6306,6 +6420,7 @@ export interface components {
             enabled?: boolean;
             redirects?: components["schemas"]["ProjectConfigAuthRedirects"];
             pages?: components["schemas"]["ProjectConfigHostedPages"];
+            appearance?: components["schemas"]["ProjectConfigAuthPageAppearance"];
         };
         ProjectConfigAuthPassword: {
             min_length?: number;
@@ -6495,6 +6610,21 @@ export interface components {
         ProjectConfigHostedPages: {
             login?: components["schemas"]["ProjectConfigHostedPage"];
             reset_password?: components["schemas"]["ProjectConfigHostedPage"];
+            signup?: components["schemas"]["ProjectConfigHostedPage"];
+            forgot_password?: components["schemas"]["ProjectConfigHostedPage"];
+            device?: components["schemas"]["ProjectConfigHostedPage"];
+            verify_email?: components["schemas"]["ProjectConfigHostedPage"];
+        };
+        PreviewAuthPageRequest: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layout: components["schemas"]["AuthPageLayout"];
+            action?: string;
+        };
+        PreviewAuthPageResponse: {
+            /** Format: uri */
+            preview_url: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         ProjectConfigMissingResource: {
             /** @enum {string} */
@@ -7201,6 +7331,12 @@ export interface components {
             /** @description Optional CSS injected at render time. Max 256 KiB. */
             css?: string;
         };
+        UpdateAuthPageLayoutRequest: {
+            layout: components["schemas"]["AuthPageLayout"];
+        };
+        UpdateAuthPageThemeRequest: {
+            theme: components["schemas"]["AuthPageTheme"];
+        };
         /** @description Update database compute size tier */
         UpdateDatabaseTypeRequest: {
             /**
@@ -7383,6 +7519,25 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        AuthPageThemeColors: {
+            background: string;
+            surface: string;
+            text: string;
+            accent: string;
+            accent_text: string;
+        };
+        ProjectConfigAuthPageLayouts: {
+            login?: components["schemas"]["AuthPageLayout"];
+            signup?: components["schemas"]["AuthPageLayout"];
+            forgot_password?: components["schemas"]["AuthPageLayout"];
+            device?: components["schemas"]["AuthPageLayout"];
+            verify_email?: components["schemas"]["AuthPageLayout"];
+            reset_password?: components["schemas"]["AuthPageLayout"];
+        };
+        ProjectConfigAuthPageAppearance: {
+            theme?: components["schemas"]["AuthPageTheme"];
+            layouts?: components["schemas"]["ProjectConfigAuthPageLayouts"];
         };
         DatabaseQueryPerformanceDatabase: {
             /** Format: uuid */
@@ -7593,6 +7748,18 @@ export interface components {
             script: string;
             /** @description Preview harness that supplies request params and stubs the hosted-auth API. Never served on a real page. */
             mock_prelude: string;
+        };
+        AuthPageAppearanceDefaults: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layout: components["schemas"]["AuthPageLayout"];
+        };
+        AuthPageAppearanceOptions: {
+            pages: components["schemas"]["HostedAuthPageType"][];
+            fonts: components["schemas"]["AuthPageFont"][];
+            scales: components["schemas"]["AuthPageScale"][];
+            densities: components["schemas"]["AuthPageDensity"][];
+            radii: components["schemas"]["AuthPageRadius"][];
+            layouts: components["schemas"]["AuthPageLayout"][];
         };
     };
     responses: {
@@ -15940,6 +16107,452 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getAuthPageAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved appearance and effective plan state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthPageAppearanceResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Appearance could not be read */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAuthPageTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthPageThemeRequest"];
+            };
+        };
+        responses: {
+            /** @description Theme saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateAuthPageThemeRequest"];
+                };
+            };
+            /** @description Invalid or unreadable theme */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Theme could not be saved */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAuthPageTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Theme cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Theme could not be cleared */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAuthPageLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthPageLayoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Layout saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateAuthPageLayoutRequest"];
+                };
+            };
+            /** @description Invalid page type or layout */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Layout could not be saved */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAuthPageLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Layout cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid page type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Layout could not be cleared */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renderAuthPagePreview: {
+        parameters: {
+            query: {
+                /** @description Short-lived signed preview ticket returned by the POST operation. */
+                ticket: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rendered preview document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Ticket is invalid or expired, its path does not match, or managed authentication is disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Preview could not be rendered */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    previewAuthPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewAuthPageRequest"];
+            };
+        };
+        responses: {
+            /** @description Short-lived URL for the rendered preview document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewAuthPageResponse"];
+                };
+            };
+            /** @description Invalid page type or draft */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found or managed authentication is disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Preview could not be rendered */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
