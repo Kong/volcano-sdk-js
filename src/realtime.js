@@ -58,8 +58,14 @@ function decodeTokenPayload(token) {
     const normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
     const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
     const encoded = normalized + padding;
-    const decoded =
-      typeof atob === 'function' ? atob(encoded) : Buffer.from(encoded, 'base64').toString('utf-8');
+    let decoded;
+    if (typeof atob === 'function') {
+      decoded = atob(encoded);
+    } else if (typeof Buffer !== 'undefined') {
+      decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    } else {
+      return null;
+    }
     return JSON.parse(decoded);
   } catch {
     return null;
@@ -823,10 +829,7 @@ class RealtimeChannel {
   }
 
   _resetForIdentityChange() {
-    this._lifecycleVersion += 1;
-    this._paused = true;
-    this._cancelPendingWork();
-    this._presenceState = {};
+    this.unsubscribe();
     this._releaseSubscription();
   }
 

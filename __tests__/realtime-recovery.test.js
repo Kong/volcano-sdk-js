@@ -11,7 +11,11 @@ function createRealtime(createSubscription, accessToken = 'token123') {
     disconnect: jest.fn(),
     newSubscription: jest.fn(createSubscription),
     off: jest.fn(),
-    removeSubscription: jest.fn(),
+    removeSubscription: jest.fn((subscription) => {
+      if (subscription.state !== 'unsubscribed') {
+        throw new Error('subscription must be unsubscribed before removal');
+      }
+    }),
   };
   return realtime;
 }
