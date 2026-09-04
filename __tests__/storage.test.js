@@ -566,6 +566,25 @@ describe('Storage', () => {
       expect(error).toBeNull();
       expect(data.publicUrl).toContain('/public/proj-123-456/');
     });
+
+    it.each([
+      ['an empty path', ''],
+      ['multiple paths', ['first.txt', 'second.txt']],
+    ])('should reject %s', (_description, path) => {
+      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+
+      expect(data).toBeNull();
+      expect(error.message).toBe('Storage path must be a non-empty string');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it.each(['.', 'avatars/../secret.txt'])('should reject dot segment path %s', (path) => {
+      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+
+      expect(data).toBeNull();
+      expect(error.message).toBe('Public URL paths cannot contain dot segments');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateVisibility()', () => {
@@ -801,11 +820,19 @@ describe('Storage', () => {
       const mockResponse = {
         session_id: 'sess-123',
         path: 'large-video.mp4',
-        status: 'pending',
+        status: 'uploading',
+        content_type: 'video/mp4',
+        total_size: 100 * 1024 * 1024,
+        part_size: 25 * 1024 * 1024,
         total_parts: 4,
-        uploaded_parts: 2,
-        missing_parts: [3, 4],
+        parts_uploaded: 2,
+        bytes_uploaded: 50 * 1024 * 1024,
+        parts: [
+          { part_number: 1, etag: 'etag-1', size: 25 * 1024 * 1024 },
+          { part_number: 2, etag: 'etag-2', size: 25 * 1024 * 1024 },
+        ],
         expires_at: '2026-01-30T00:00:00Z',
+        created_at: '2026-01-23T00:00:00Z',
       };
 
       global.fetch.mockResolvedValueOnce({

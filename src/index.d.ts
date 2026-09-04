@@ -406,8 +406,8 @@ export interface Functions {
  * than inside the invoked function's own code. Detect with
  * `VolcanoSystemError.is(error)` (or `error?.isSystemError === true`) — prefer
  * either over `instanceof`, which can be `false` across duplicate SDK copies in
- * a bundle. Not raised for pre-flight / name-resolution failures (bad name, no
- * session, misconfigured apiUrl, function-not-found), which stay plain `Error`s.
+ * a bundle. Not raised for pre-flight / name-resolution failures (bad name,
+ * misconfigured apiUrl, function-not-found), which stay plain `Error`s.
  */
 export class VolcanoSystemError extends Error {
   readonly name: 'VolcanoSystemError';
@@ -682,13 +682,18 @@ export interface UploadSessionStatusResponse {
   data: {
     session_id: string;
     path: string;
-    status: 'pending' | 'completed' | 'aborted';
+    status: 'pending' | 'uploading' | 'completing' | 'completed' | 'aborted';
+    content_type: string;
     total_size: number;
     part_size: number;
     total_parts: number;
-    uploaded_parts: number;
-    uploaded_bytes: number;
-    missing_parts: number[];
+    parts_uploaded: number;
+    bytes_uploaded: number;
+    parts: {
+      part_number: number;
+      etag: string;
+      size: number;
+    }[];
     expires_at: string;
     created_at: string;
   } | null;
@@ -904,6 +909,11 @@ export interface ProjectLockAcquireOptions extends ProjectLockOptions {
   token?: string;
 }
 
+export interface ProjectLockRenewOptions extends ProjectLockOptions {
+  /** Cancels the in-flight renewal request. */
+  signal?: AbortSignal;
+}
+
 export interface ProjectLockState {
   /** False means an acquire would succeed now. */
   held: boolean;
@@ -934,7 +944,7 @@ export interface ProjectLocks {
   renew(
     key: string,
     lease: ProjectLockLease,
-    options: ProjectLockOptions,
+    options: ProjectLockRenewOptions,
   ): Promise<{ lease: ProjectLockLease; error: ProjectLockError | null }>;
   release(
     key: string,
@@ -1069,7 +1079,9 @@ export interface DatabaseConnectionStringOptions {
  * - no `userId`  → `volcano_full_access` (admin, bypasses RLS)
  * - with `userId` → `volcano_user_access:{userId}` (RLS enforced)
  *
- * Throws if the base connection string is missing or not a valid URL.
+ * Throws if the base connection string is missing, lacks a PostgreSQL URI prefix,
+ * or contains malformed percent encoding. Connection details are validated by libpq.
+ * Hostless and multi-host libpq targets and unrelated query values are preserved.
  *
  * @example
  * ```typescript

@@ -6,6 +6,7 @@ import {
   releaseProjectLock,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { lockRequestStart, LockSession } from './lock-session.js';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -88,7 +89,6 @@ const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
-const MAX_LOCK_RENEWAL_DELAY_MS = 24 * 60 * 60 * 1000;
 // Both codes mean the lock is unavailable right now rather than that the request
 // failed: another live holder, or this caller's own lapsed lease still inside
 // the takeover grace window.
@@ -160,37 +160,61 @@ function sanitizeProvider(provider) {
  * @param {string} url - The URL to fetch
  * @param {RequestInit} options - Fetch options
  * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
- * @returns {Promise<Response>}
+ * @param {(response: Response, signal: AbortSignal) => Promise<unknown>|unknown} [consume] - Optional response consumer
+ * @returns {Promise<unknown>}
  */
-async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  consume = (response) => response,
+) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal.reason);
+  if (options.signal?.aborted) {
+    abortFromCaller();
+  } else {
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
     });
-    return response;
+    return await consume(response, controller.signal);
   } catch (error) {
-    if (error.name === 'AbortError') {
+    if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
       throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
 /**
  * Safely parse JSON from response, returns empty object on failure
  * @param {Response} response
+ * @param {AbortSignal} [signal]
  * @returns {Promise<Object>}
  */
-async function safeJsonParse(response) {
+async function safeJsonParse(response, signal) {
   try {
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason || error;
+    }
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
     return {};
   }
 }
@@ -303,6 +327,11 @@ class AuthSessionChangedError extends Error {
 }
 AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
 
+function authSessionChangedResult() {
+  const error = new AuthSessionChangedError();
+  return { data: null, status: error.status, headers: {}, version: null, error };
+}
+
 /**
  * Error raised when a function *invocation* fails at the platform layer rather
  * than inside the function's own code — the call reached (or tried to reach)
@@ -319,8 +348,8 @@ AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
  * NOT a system error, and therefore a plain `Error` (or not an error at all):
  * a running function's own non-2xx response (surfaced as `data` with `error`
  * null), and pre-flight / name-resolution failures — invalid function name,
- * no active session, misconfigured `apiUrl`, function-not-found — which stay
- * plain `Error`s since they are caller/config issues, not platform outages.
+ * misconfigured `apiUrl`, function-not-found — which stay plain `Error`s since
+ * they are caller/config issues, not platform outages.
  */
 class VolcanoSystemError extends Error {
   constructor(message, options = {}) {
@@ -427,22 +456,22 @@ function clearSharedFunctionResolveStateForTests() {
   state.lastPruneAtMs = 0;
 }
 
-function extractRequiredProjectIdFromToken(token) {
+function extractRequiredProjectIdFromToken(token, tokenName = 'accessToken') {
   if (!token || typeof token !== 'string') {
     throw new Error('No active session');
   }
   const parts = token.split('.');
   if (parts.length !== 3) {
-    throw new Error('accessToken must be a JWT with project_id claim');
+    throw new Error(`${tokenName} must be a JWT with project_id claim`);
   }
   let payload;
   try {
     payload = JSON.parse(decodeBase64Url(parts[1]));
   } catch {
-    throw new Error('accessToken must be a valid JWT with project_id claim');
+    throw new Error(`${tokenName} must be a valid JWT with project_id claim`);
   }
   if (!payload || typeof payload.project_id !== 'string' || payload.project_id.trim() === '') {
-    throw new Error('accessToken missing project_id claim');
+    throw new Error(`${tokenName} missing project_id claim`);
   }
   return payload.project_id.trim();
 }
@@ -606,6 +635,8 @@ function apiRequestError(response, data) {
 
 const FULL_ACCESS_APP_NAME = 'volcano_full_access';
 const USER_ACCESS_APP_NAME = 'volcano_user_access';
+const CONNECTION_URI_PREFIX = /^postgres(?:ql)?:\/\//u;
+const INVALID_PERCENT_ENCODING = /%(?![\da-f]{2})/iu;
 
 /**
  * Build a Postgres connection string for querying a Volcano database from inside
@@ -628,22 +659,33 @@ function databaseConnectionString(baseConnectionString, options = {}) {
   if (typeof baseConnectionString !== 'string' || baseConnectionString === '') {
     throw new Error('databaseConnectionString: baseConnectionString (DATABASE_URL) is required');
   }
-  let url;
-  try {
-    url = new URL(baseConnectionString);
-  } catch {
+  const prefix = CONNECTION_URI_PREFIX.exec(baseConnectionString);
+  if (!prefix || INVALID_PERCENT_ENCODING.test(baseConnectionString)) {
     throw new Error('databaseConnectionString: baseConnectionString is not a valid connection URL');
   }
   const userId = options.userId == null ? '' : String(options.userId);
   const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
-  url.searchParams.set('application_name', appName);
-  // URLSearchParams encodes spaces as '+', but a Postgres connection URI is
-  // RFC3986 where '+' is a literal plus and a space must be '%20'. Some URI
-  // parsers (e.g. libpq) don't treat '+' as a space, so normalize to '%20'.
-  // Literal '+' in a value is already serialized as '%2B', so this only rewrites
-  // space encodings.
-  url.search = url.search.replaceAll('+', '%20');
-  return url.toString();
+  const authorityEnd = baseConnectionString.indexOf('/', prefix[0].length);
+  const possibleUserInfoEnd = baseConnectionString.indexOf('@', prefix[0].length);
+  const userInfoEnd =
+    possibleUserInfoEnd !== -1 && (authorityEnd === -1 || possibleUserInfoEnd < authorityEnd)
+      ? possibleUserInfoEnd
+      : -1;
+  const queryMarker = baseConnectionString.indexOf(
+    '?',
+    Math.max(prefix[0].length, userInfoEnd + 1),
+  );
+  const target =
+    queryMarker === -1 ? baseConnectionString : baseConnectionString.slice(0, queryMarker);
+  const rawQuery = queryMarker === -1 ? '' : baseConnectionString.slice(queryMarker + 1);
+  const parameters = rawQuery
+    .split('&')
+    .filter((parameter) => decodeURIComponent(parameter.split('=', 1)[0]) !== 'application_name');
+  while (parameters.at(-1) === '') {
+    parameters.pop();
+  }
+  parameters.push(`application_name=${encodeURIComponent(appName)}`);
+  return `${target}?${parameters.join('&')}`;
 }
 
 class ProjectLocksApi {
@@ -698,6 +740,7 @@ class ProjectLocksApi {
         'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
       },
       body: JSON.stringify({ ttl_seconds: ttl }),
+      signal: options.signal,
     });
     if (!result.ok) {
       return { lease, error: result.error };
@@ -757,6 +800,7 @@ class ProjectLocksApi {
       throw new TypeError('callback must be a function');
     }
     const ttl = validateLockOptions(key, options);
+    const startedAt = lockRequestStart();
     const acquired = await this.acquire(key, {
       ttl,
       token: options.token,
@@ -766,48 +810,15 @@ class ProjectLocksApi {
       return { acquired: acquired.acquired, data: null, error: acquired.error };
     }
 
-    const controller = new AbortController();
-    let stopped = false;
-    let renewalError = null;
-    let timer;
-    let wakeTimer;
-    const renewalLoop = (async () => {
-      while (!stopped) {
-        const baseDelay = lockRenewalDelay(ttl, acquired.lease);
-        const jitter = baseDelay * 0.1 * (secureRandomUnit() * 2 - 1);
-        await new Promise((resolve) => {
-          wakeTimer = resolve;
-          timer = setTimeout(resolve, Math.max(1, baseDelay + jitter));
-        });
-        wakeTimer = null;
-        if (stopped) {
-          break;
-        }
-        const renewed = await this.renew(key, acquired.lease, { ttl });
-        if (renewed.error) {
-          renewalError = renewed.error;
-          controller.abort(renewalError);
-          break;
-        }
-      }
-    })();
-
-    let data = null;
-    let callbackError = null;
-    let releaseError;
-    try {
-      data = await callback({ signal: controller.signal, lease: acquired.lease });
-    } catch (error) {
-      callbackError = error instanceof Error ? error : new Error(String(error));
-    } finally {
-      stopped = true;
-      clearTimeout(timer);
-      wakeTimer?.();
-      await renewalLoop;
-      const released = await this.release(key, acquired.lease);
-      releaseError = released.error;
-    }
-    return { acquired: true, data, error: renewalError || callbackError || releaseError };
+    const session = new LockSession({
+      locks: this,
+      key,
+      ttl,
+      lease: acquired.lease,
+      startedAt,
+      random: secureRandomUnit,
+    });
+    return { acquired: true, ...(await session.run(callback)) };
   }
 }
 
@@ -830,16 +841,6 @@ function secureRandomUnit() {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] / 0x1_0000_0000;
-}
-
-function lockRenewalDelay(ttl, lease) {
-  const ttlDelay = (ttl * 1000) / 3;
-  const expiresAt = Date.parse(lease.expiresAt);
-  if (!Number.isFinite(expiresAt)) {
-    return ttlDelay;
-  }
-  const remainingDelay = Math.max(1, (expiresAt - Date.now()) / 3);
-  return Math.min(ttlDelay, remainingDelay, MAX_LOCK_RENEWAL_DELAY_MS);
 }
 
 function validateLease(key, lease) {
@@ -1060,7 +1061,7 @@ class VolcanoAuth {
 
     for (;;) {
       try {
-        const response = await fetchWithTimeout(
+        const { response, data } = await fetchWithTimeout(
           url,
           {
             ...fetchOptions,
@@ -1071,9 +1072,11 @@ class VolcanoAuth {
             },
           },
           this.timeout,
+          async (response, signal) => ({
+            response,
+            data: await safeJsonParse(response, signal),
+          }),
         );
-
-        const data = await safeJsonParse(response);
 
         if (!response.ok) {
           // Try token refresh once on 401. retryFailure is lexical state, so
@@ -1191,19 +1194,24 @@ class VolcanoAuth {
     return `${this.functionInvocationBase.protocol}//${hostLabel}.${this.functionInvocationBase.domain}${portSegment}/`;
   }
 
-  _functionResolveCacheKey(functionName) {
-    const projectScope = extractRequiredProjectIdFromToken(this.accessToken);
-    const tokenScope = this.accessToken;
-    return `${this.apiUrl}|project:${projectScope}|token:${tokenScope}|${functionName}`;
+  _functionResolveCacheKey(functionName, token, useAnonKey) {
+    if (useAnonKey) {
+      return `${this.apiUrl}|anon:${token}|${functionName}`;
+    }
+    const projectScope = extractRequiredProjectIdFromToken(token);
+    return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
   }
 
-  _clearFunctionResolveCache(functionName) {
-    const cacheKey = this._functionResolveCacheKey(functionName);
+  _clearFunctionResolveCache(functionName, token, useAnonKey) {
+    const cacheKey = this._functionResolveCacheKey(functionName, token, useAnonKey);
     this._functionResolveState.cache.delete(cacheKey);
     this._functionResolveState.inFlight.delete(cacheKey);
   }
 
-  async _resolveFunctionIdByName(functionName) {
+  async _resolveFunctionIdByName(
+    functionName,
+    { authContext, token, useAnonKey, allowRefresh = true },
+  ) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
@@ -1211,7 +1219,11 @@ class VolcanoAuth {
       );
     }
 
-    const cacheKey = this._functionResolveCacheKey(hostLabel);
+    if (!this._isAuthContextCurrent(authContext)) {
+      throw new AuthSessionChangedError();
+    }
+
+    const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
     const cached = this._functionResolveState.cache.get(cacheKey);
@@ -1219,57 +1231,111 @@ class VolcanoAuth {
       if (cached.error) {
         throw new Error(cached.error);
       }
-      return cached.functionId;
+      return { functionId: cached.functionId, token };
     }
     if (cached) {
       this._functionResolveState.cache.delete(cacheKey);
     }
 
-    const inFlight = this._functionResolveState.inFlight.get(cacheKey);
-    if (inFlight) {
-      return inFlight;
+    let pending = this._functionResolveState.inFlight.get(cacheKey);
+    const ownsPending = !pending;
+    if (!pending) {
+      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
+      pending = (async () => {
+        // Share only the credentialed HTTP result. Session validation and 401
+        // refresh belong to each caller so one client's auth lifecycle cannot
+        // determine another client's result.
+        const result = await this._anonFetch(resolvePath, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!result.ok) {
+          if (result.status === 404) {
+            this._functionResolveState.cache.set(cacheKey, {
+              functionId: null,
+              error: 'function not found',
+              expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
+            });
+            pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+          }
+          return {
+            functionId: null,
+            error: result.error || new Error('Failed to resolve function'),
+            status: result.status,
+          };
+        }
+
+        const resolvedId = sanitizeFunctionIdentifierForHost(
+          result.data && result.data.function_id,
+        );
+        if (!resolvedId) {
+          throw new Error('Resolve response missing valid function_id');
+        }
+
+        const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
+        if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
+          throw new Error('Resolve response missing valid cache_ttl_seconds');
+        }
+        const ttlSeconds = ttlRaw;
+
+        this._functionResolveState.cache.set(cacheKey, {
+          functionId: resolvedId,
+          error: null,
+          expiresAt: Date.now() + ttlSeconds * 1000,
+        });
+        pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
+        return { functionId: resolvedId, error: null, status: result.status };
+      })();
+
+      this._functionResolveState.inFlight.set(cacheKey, pending);
     }
 
-    const pending = (async () => {
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      const result = await this._authFetch(resolvePath, { method: 'GET' });
-      if (!result.ok) {
-        if (result.status === 404) {
-          this._functionResolveState.cache.set(cacheKey, {
-            functionId: null,
-            error: 'function not found',
-            expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
-          });
-          pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        }
-        throw result.error || new Error('Failed to resolve function');
-      }
-
-      const resolvedId = sanitizeFunctionIdentifierForHost(result.data && result.data.function_id);
-      if (!resolvedId) {
-        throw new Error('Resolve response missing valid function_id');
-      }
-
-      const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
-      if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
-        throw new Error('Resolve response missing valid cache_ttl_seconds');
-      }
-      const ttlSeconds = ttlRaw;
-
-      this._functionResolveState.cache.set(cacheKey, {
-        functionId: resolvedId,
-        error: null,
-        expiresAt: Date.now() + ttlSeconds * 1000,
-      });
-      pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-      return resolvedId;
-    })();
-
-    this._functionResolveState.inFlight.set(cacheKey, pending);
     try {
-      return await pending;
+      let outcome;
+      try {
+        outcome = await pending;
+      } catch (error) {
+        if (!this._isAuthContextCurrent(authContext)) {
+          throw new AuthSessionChangedError();
+        }
+        throw error;
+      }
+      if (!this._isAuthContextCurrent(authContext)) {
+        throw new AuthSessionChangedError();
+      }
+
+      if (outcome.error) {
+        if (outcome.status === 401 && !useAnonKey && allowRefresh) {
+          const sessionExpiredError = new Error('Session expired');
+          if (!authContext.refreshToken) {
+            throw sessionExpiredError;
+          }
+          const refreshed = await this._refreshSessionForContext(authContext);
+          if (AuthRefreshDiscardedError.is(refreshed.error)) {
+            throw refreshed.error;
+          }
+          if (refreshed.error) {
+            throw sessionExpiredError;
+          }
+          if (!this._isAuthContextCurrent(authContext)) {
+            throw new AuthRefreshDiscardedError();
+          }
+          const refreshedContext = this._captureAuthContext();
+          return this._resolveFunctionIdByName(functionName, {
+            authContext: refreshedContext,
+            token: refreshedContext.accessToken,
+            useAnonKey,
+            allowRefresh: false,
+          });
+        }
+        throw outcome.error;
+      }
+
+      return { functionId: outcome.functionId, token };
     } finally {
-      this._functionResolveState.inFlight.delete(cacheKey);
+      if (ownsPending && this._functionResolveState.inFlight.get(cacheKey) === pending) {
+        this._functionResolveState.inFlight.delete(cacheKey);
+      }
     }
   }
 
@@ -2149,15 +2215,10 @@ class VolcanoAuth {
       };
     }
     await this._completeOAuthExchange();
-    if (!this.accessToken) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: this._oauthExchangeError || new Error('No active session'),
-      };
-    }
+    const operationContext = this._captureAuthContext();
+    const useAnonKey = !operationContext.accessToken;
+    let resolutionContext = operationContext;
+    let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
     if (!this.functionInvocationBase) {
       return {
         data: null,
@@ -2172,7 +2233,13 @@ class VolcanoAuth {
 
     let resolvedFunctionId;
     try {
-      resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+      const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
+        authContext: resolutionContext,
+        token: resolutionToken,
+        useAnonKey,
+      });
+      resolvedFunctionId = resolution.functionId;
+      resolutionToken = resolution.token;
     } catch (error) {
       return {
         data: null,
@@ -2197,6 +2264,10 @@ class VolcanoAuth {
     }
 
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
+      if (!accessToken) {
+        const error = new AuthSessionChangedError();
+        return { data: null, status: error.status, headers: {}, version: null, error };
+      }
       try {
         const response = await fetchWithTimeout(
           url,
@@ -2290,28 +2361,36 @@ class VolcanoAuth {
     };
 
     let invocationContext = this._captureAuthContext();
-    let result = await invokeOnce(
-      invokeUrl,
-      true,
-      invocationContext,
-      invocationContext.accessToken,
-    );
+    if (!this._isAuthContextCurrent(operationContext)) {
+      return authSessionChangedResult();
+    }
+    let token = useAnonKey ? this.anonKey : invocationContext.accessToken;
+    let result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
     // On 404, invalidate and resolve once more before failing. (invokeOnce
     // returns no `ok` field, so gate on status alone.)
     if (result.status === 404) {
-      this._clearFunctionResolveCache(functionName.trim());
+      if (!this._isAuthContextCurrent(operationContext)) {
+        return authSessionChangedResult();
+      }
+      this._clearFunctionResolveCache(functionName.trim(), resolutionToken, useAnonKey);
       try {
-        resolvedFunctionId = await this._resolveFunctionIdByName(functionName.trim());
+        resolutionContext = this._captureAuthContext();
+        resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
+        const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
+          authContext: resolutionContext,
+          token: resolutionToken,
+          useAnonKey,
+        });
+        resolvedFunctionId = resolution.functionId;
         invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
         invocationContext = this._captureAuthContext();
-        result = await invokeOnce(
-          invokeUrl,
-          true,
-          invocationContext,
-          invocationContext.accessToken,
-        );
+        if (!this._isAuthContextCurrent(operationContext)) {
+          return authSessionChangedResult();
+        }
+        token = useAnonKey ? this.anonKey : invocationContext.accessToken;
+        result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
       } catch (error) {
         return {
           data: null,
@@ -2323,6 +2402,12 @@ class VolcanoAuth {
       }
     }
 
+    if (
+      !this._isAuthContextCurrent(operationContext) &&
+      !AuthRefreshDiscardedError.is(result.error)
+    ) {
+      return authSessionChangedResult();
+    }
     return result;
   }
 
@@ -3090,6 +3175,20 @@ class StorageFileApi {
   }
 
   /**
+   * Return a validation error for a path used in a public URL
+   * @private
+   */
+  _publicPathError(path) {
+    if (typeof path !== 'string' || path.length === 0) {
+      return 'Storage path must be a non-empty string';
+    }
+    if (path.split('/').some((segment) => segment === '.' || segment === '..')) {
+      return 'Public URL paths cannot contain dot segments';
+    }
+    return null;
+  }
+
+  /**
    * Make an authenticated storage request
    * @private
    */
@@ -3296,6 +3395,11 @@ class StorageFileApi {
    * Get the public URL for a file (only works for files with is_public=true)
    */
   getPublicUrl(path) {
+    const pathError = this._publicPathError(path);
+    if (pathError) {
+      return errorResult(pathError);
+    }
+
     try {
       const parts = this.volcanoAuth.anonKey.split('.');
       if (parts.length !== 3) {

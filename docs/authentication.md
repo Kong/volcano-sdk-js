@@ -445,7 +445,9 @@ const { data, error } = await volcano.auth.callOAuthAPI('github', {
   method: 'GET',
 });
 
-if (data) {
+if (error) {
+  console.error('Provider request failed:', error);
+} else if (Array.isArray(data)) {
   data.forEach((repo) => {
     console.log(repo.full_name);
   });
@@ -453,6 +455,8 @@ if (data) {
 ```
 
 Volcano automatically handles token refresh and passes the correct credentials to the provider.
+Check `error` to determine whether the request failed. `data` is the provider's raw JSON value and
+can be `null` after a successful request.
 The response is discarded with `AuthSessionChangedError` if the active session changes while the
 request is in flight.
 

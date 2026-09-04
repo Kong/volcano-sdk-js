@@ -26,7 +26,8 @@ if (!result.acquired) console.log('another function is leader');
 `withLock` renews near one-third of the TTL and releases in `finally`.
 Contention returns `{ acquired: false, error: null }`, whether another holder
 owns the lock or a previous lease of your own has lapsed. If renewal fails, the
-callback signal is aborted; callbacks must honor it.
+callback signal is aborted; callbacks must honor it. A stalled renewal also
+aborts the signal when the locally measured TTL elapses.
 
 For example, a scheduled function can skip work when another invocation is
 already the leader:
@@ -58,12 +59,20 @@ For direct control:
 const acquired = await volcano.locks.acquire('migration', { ttl: 10 });
 if (!acquired.acquired || acquired.error) return acquired;
 
+const renewal = new AbortController();
 try {
-  await volcano.locks.renew('migration', acquired.lease, { ttl: 10 });
+  const renewed = await volcano.locks.renew('migration', acquired.lease, {
+    ttl: 10,
+    signal: renewal.signal,
+  });
+  if (renewed.error) throw renewed.error;
 } finally {
   await volcano.locks.release('migration', acquired.lease);
 }
 ```
+
+Abort `renewal` to cancel the in-flight renewal request. Cancellation is
+reported through `renewed.error`; the existing lease remains unchanged.
 
 ## Fencing token
 

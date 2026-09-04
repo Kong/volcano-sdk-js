@@ -182,12 +182,12 @@ export declare class RealtimeChannel {
   readonly name: string;
 
   /**
-   * Subscribe to the channel
+   * Subscribe to the channel and resolve once it is ready
    */
   subscribe(): Promise<void>;
 
   /**
-   * Unsubscribe from the channel
+   * Pause the channel while preserving handlers and in-memory recovery state
    */
   unsubscribe(): void;
 
@@ -261,7 +261,7 @@ export declare class VolcanoRealtime {
   connect(): Promise<void>;
 
   /**
-   * Disconnect from the realtime server
+   * Disconnect and permanently remove all channels and recovery state
    */
   disconnect(): void;
 
@@ -299,12 +299,12 @@ export declare class VolcanoRealtime {
   onError(callback: (ctx: ErrorContext) => void): UnsubscribeFunction;
 
   /**
-   * Remove all channels and listeners
+   * Permanently remove all channels, listeners, and recovery state
    */
   removeAllChannels(): void;
 
   /**
-   * Remove a specific channel
+   * Permanently remove a channel, its listeners, and its recovery state
    * @param name - Channel name
    * @param type - Channel type (default: 'broadcast')
    */

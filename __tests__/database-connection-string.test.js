@@ -71,6 +71,7 @@ describe('databaseConnectionString', () => {
     expect(() => databaseConnectionString('')).toThrow(/required/);
     expect(() => databaseConnectionString(null)).toThrow(/required/);
     expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
   });
 
   it('preserves unrelated query parameters (e.g. connect_timeout, channel_binding)', () => {
@@ -81,6 +82,50 @@ describe('databaseConnectionString', () => {
     expect(url.searchParams.get('connect_timeout')).toBe('10');
     expect(url.searchParams.get('channel_binding')).toBe('disable');
     expect(url.searchParams.get('sslmode')).toBe('require');
+  });
+
+  it('preserves the raw encoding of unrelated query values', () => {
+    const withOptions = `postgres://${USERNAME}:p@host:5432/db?options=-c+search_path%3Dapp&application_name=old`;
+
+    expect(databaseConnectionString(withOptions)).toBe(
+      `postgres://${USERNAME}:p@host:5432/db?options=-c+search_path%3Dapp&application_name=volcano_full_access`,
+    );
+  });
+
+  it('preserves the authority marker for a hostless Postgres URI', () => {
+    expect(databaseConnectionString('postgresql:///app')).toBe(
+      'postgresql:///app?application_name=volcano_full_access',
+    );
+  });
+
+  it('preserves libpq-compatible reserved characters in credentials', () => {
+    expect(databaseConnectionString('postgres://u:pa?ss#word@host/db')).toBe(
+      'postgres://u:pa?ss#word@host/db?application_name=volcano_full_access',
+    );
+  });
+
+  it('accepts a multi-host IPv6 Postgres URI', () => {
+    expect(databaseConnectionString('postgresql://[::1],[::2]/db')).toBe(
+      'postgresql://[::1],[::2]/db?application_name=volcano_full_access',
+    );
+  });
+
+  it('drops a trailing query separator before appending', () => {
+    expect(databaseConnectionString('postgresql://host/db?sslmode=require&')).toBe(
+      'postgresql://host/db?sslmode=require&application_name=volcano_full_access',
+    );
+  });
+
+  it('does not treat an at sign in a query value as user-info', () => {
+    expect(databaseConnectionString('postgresql://host/db?options=foo@bar')).toBe(
+      'postgresql://host/db?options=foo@bar&application_name=volcano_full_access',
+    );
+  });
+
+  it('rejects malformed percent encoding', () => {
+    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(
+      /not a valid connection URL/,
+    );
   });
 
   it('round-trips a userId containing characters that must be URL-encoded', () => {

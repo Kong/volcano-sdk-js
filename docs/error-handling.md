@@ -342,9 +342,6 @@ if (error) {
 
   // Pre-flight / caller errors stay plain Error (message is case-sensitive).
   switch (true) {
-    case error.message.includes('No active session'):
-      showError('Please sign in to continue.');
-      break;
     case error.message.includes('function not found'):
       console.error('Developer error: Invalid function name');
       break;
