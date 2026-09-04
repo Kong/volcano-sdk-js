@@ -964,8 +964,12 @@ components:
           maxLength: 64
         status:
           type: string
-          enum: [provisioning, active, failed, deleting]
-          description: Database provisioning status
+          enum: [provisioning, active, failed, restoring, deleting]
+          description: |
+            Database status. `restoring` means a restore is replacing the
+            database's data: it does not accept connections, and the operations
+            that would race the restore are rejected until it finishes. Its
+            branches keep serving throughout.
         provisioning_started_at:
           type: string
           format: date-time
@@ -1006,8 +1010,13 @@ components:
           format: int64
           minimum: 0
           description: |
-            Latest observed on-disk size from `pg_database_size`, in bytes. This
-            point-in-time gauge may be absent until the database has been sampled.
+            Latest observed storage for this database, in bytes: its own on-disk
+            size, plus what each branch has diverged from it, plus what its
+            backups cost to hold. This is the figure the storage allowance is
+            enforced against, and the stats endpoint breaks it down. A
+            point-in-time gauge recorded by a background pass, so it may be
+            absent until the database has been sampled, and it can trail the
+            stats endpoint's `current_storage_bytes`, which measures on request.
             Summing the latest samples for every database in a project produces
             the project's "Database Storage (Bytes)" usage gauge. Populated on
             database list responses; single-database responses omit it.
@@ -1353,6 +1362,234 @@ components:
             $ref: '#/components/schemas/DatabaseBranch'
       required:
         - data
+    DatabaseBackup:
+      type: object
+      description: |
+        A point-in-time copy of a database, kept by the storage provider and
+        restorable in place.
+
+        Backups cover the database itself, not its branches. Restoring one
+        replaces the database's data and keeps its connection string.
+      properties:
+        name:
+          type: string
+          description: |
+            Backup name, unique within the database. Backups you create are
+            named by you; scheduled backups are named by the storage provider.
+        source:
+          type: string
+          enum: [manual, scheduled]
+          description: |
+            Whether the backup was requested explicitly or produced by the
+            backup schedule. Only `manual` backups count against the plan's
+            backup allowance.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Storage the backup occupies. Absent until the provider has costed
+            it, which takes a few minutes after the backup is taken; absent is
+            not the same as empty.
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            When the backup is deleted automatically, from the plan's retention.
+            Absent means it is kept until deleted explicitly.
+        created_at:
+          type: string
+          format: date-time
+          description: The point in time the backup captures.
+      required:
+        - name
+        - source
+        - created_at
+    DatabaseRestoreWindow:
+      type: object
+      description: |
+        The span a point-in-time restore may target. Absent from the response
+        when the owner's plan does not include point-in-time restore, and while
+        the storage provider has no history window in place yet — briefly the
+        case after an upgrade, since the window is applied asynchronously. The
+        window is read from the provider rather than from the plan, so it never
+        advertises a point a restore could not actually reach.
+      properties:
+        earliest_restore_at:
+          type: string
+          format: date-time
+          description: |
+            The oldest point that can still be restored. Moves forward
+            continuously as history ages out, so treat it as a lower bound at
+            the moment it was read rather than a fixed value.
+        latest_restore_at:
+          type: string
+          format: date-time
+          description: The most recent point that can be restored, which is now.
+    DatabaseBackupList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseBackup'
+        restore_window:
+          $ref: '#/components/schemas/DatabaseRestoreWindow'
+      required:
+        - data
+    CreateDatabaseBackupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: |
+            Backup name, unique within the database. Names beginning with
+            `volcano-` are reserved for the platform's own snapshots.
+          pattern: '^[a-z0-9][a-z0-9_-]{0,62}$'
+          maxLength: 63
+          example: "before_migration"
+      required:
+        - name
+    DatabaseRestore:
+      type: object
+      description: |
+        A restore of a database, either from a named backup or to a point in
+        time. Restores run in the background and take longer than a request, so
+        the database is unavailable until this reports `completed`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        database_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [snapshot, point_in_time]
+          description: |
+            Whether the restore targets a named backup or an arbitrary point in
+            time. Both replace the database's data in place.
+        status:
+          type: string
+          enum: [pending, running, completed, failed, exhausted]
+          description: |
+            Restore status. `pending` and `running` both mean the restore is
+            still in flight and the database is not connectable; an attempt that
+            fails with tries left goes back to `pending`. `failed` and
+            `exhausted` both mean Volcano gave up: the database is left `failed`
+            if its data may already have been replaced, and `active` if the
+            restore never started — a backup that no longer exists at the
+            provider ends the restore without touching the database. A restore
+            cannot be cancelled once it starts.
+        backup_name:
+          type: string
+          description: |
+            The backup restored, kept even if that backup is later deleted.
+            Absent for a point-in-time restore.
+        restore_to:
+          type: string
+          format: date-time
+          description: The point in time restored to. Absent for a backup restore.
+        error:
+          type: string
+          description: Why the most recent attempt failed, when one has.
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - database_id
+        - project_id
+        - kind
+        - status
+        - created_at
+        - updated_at
+    DatabaseRestoreList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseRestore'
+      required:
+        - data
+    CreateDatabaseRestoreRequest:
+      type: object
+      description: |
+        Names what to restore. Supply exactly one of `backup_name` or
+        `restore_to`.
+      properties:
+        backup_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: |
+            A backup of this database to restore, exactly as returned by the list
+            endpoint.
+
+            Deliberately looser than the names you can create, like the backup
+            path parameter: a backup made by a schedule is named for you, so
+            restoring one accepts any name a backup can have.
+          example: "before_migration"
+        restore_to:
+          type: string
+          format: date-time
+          description: |
+            A point in time to restore to, which must fall inside the
+            `restore_window` reported when listing backups.
+          example: "2026-01-15T09:30:00Z"
+    DatabaseBackupScheduleEntry:
+      type: object
+      description: One recurrence of the automated backup schedule.
+      properties:
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly]
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: Hour of the day in UTC.
+        day:
+          type: integer
+          minimum: 1
+          maximum: 28
+          description: |
+            Day of the week (1-7, Monday to Sunday) for a weekly schedule, or day
+            of the month (1-28) for a monthly one. Required for both, ignored for
+            a daily schedule. Monthly stops at 28 so the schedule fires in every
+            month.
+        retention_seconds:
+          type: integer
+          format: int64
+          minimum: 3600
+          description: |
+            How long each backup from this recurrence is kept. Clamped to the
+            plan's retention, and defaulted to it when omitted.
+      required:
+        - frequency
+        - hour
+    DatabaseBackupSchedule:
+      type: object
+      description: |
+        The database's automated backup schedule. An empty list means no
+        scheduled backups; sending one clears the schedule.
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatabaseBackupScheduleEntry'
+      required:
+        - entries
     DatabaseStats:
       type: object
       properties:
@@ -1361,9 +1598,10 @@ components:
           format: int64
           minimum: 0
           description: |
-            On-disk size right now, in bytes: the database itself plus every
-            branch's divergence from it. This is the figure the storage
-            allowance is enforced against. `branches` breaks it down.
+            On-disk size right now, in bytes: the database itself, plus every
+            branch's divergence from it, plus what its backups cost to hold. This
+            is the figure the storage allowance is enforced against. `branches`
+            and `backup_storage_bytes` break it down.
         current_storage_mb:
           type: number
           format: double
@@ -1377,6 +1615,22 @@ components:
             parent contributes nothing.
           items:
             $ref: '#/components/schemas/DatabaseBranchStorage'
+        backup_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            What this database's backups contribute to `current_storage_bytes`.
+
+            A backup taken on request is charged as a full copy of the database
+            as it was at that moment, so two backups of a 2 GB database are 4 GB.
+            A backup schedule is charged its first snapshot in full and each
+            later one only for the storage it adds. Deleting a backup releases
+            its storage immediately.
+
+            Sampled from the provider rather than measured live, so it can lag a
+            change by a few minutes, and a backup taken seconds ago may not be
+            costed yet. Zero on a plan without backups.
         storage_bytes:
           type: integer
           format: int64
@@ -1407,6 +1661,7 @@ components:
       required:
         - current_storage_bytes
         - current_storage_mb
+        - backup_storage_bytes
         - storage_bytes
         - data_written_bytes
         - data_transfer_bytes
@@ -2302,6 +2557,18 @@ components:
             Function visibility for anon-key invocation.
             - `false` (default): only auth user tokens and service keys can invoke
             - `true`: anon keys with `functions.invoke` can invoke
+        invocation_mode:
+          $ref: '#/components/schemas/FunctionInvocationMode'
+        http_auth_mode:
+          $ref: '#/components/schemas/FunctionHTTPAuthMode'
+        openapi_spec:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode function.
+        has_openapi_spec:
+          type: boolean
+          description: Whether OpenAPI metadata is configured; list responses omit the document itself.
         aws_function_arn:
           type: string
         invoke_url:
@@ -2340,6 +2607,10 @@ components:
         - name
         - status
         - is_public
+        - invocation_mode
+        - http_auth_mode
+        - openapi_spec
+        - has_openapi_spec
         - deployed_regions
         - created_at
         - updated_at
@@ -3127,8 +3398,10 @@ components:
             "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
             reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
             is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-            not a cumulative counter. It is the sum of the latest `pg_database_size` samples
-            exposed as `storage_bytes` by the project's database list.
+            not a cumulative counter. It is the sum of the latest samples exposed as
+            `storage_bytes` by the project's database list, so it includes what each
+            database's branches and backups hold, and it inherits that field's lag
+            behind a live measurement.
         total:
           type: integer
           format: int64
@@ -4314,6 +4587,17 @@ components:
         public:
           type: boolean
           description: Function visibility for anon-key invocation
+        invocation_mode:
+          $ref: '#/components/schemas/FunctionInvocationMode'
+        http_auth_mode:
+          $ref: '#/components/schemas/FunctionHTTPAuthMode'
+        openapi_spec:
+          type: object
+          nullable: true
+          additionalProperties: true
+          x-go-type: nullable.Nullable[map[string]interface{}]
+          x-go-type-skip-optional-pointer: true
+          description: OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function
         schedulers:
           type: array
           items:
@@ -5159,6 +5443,8 @@ components:
           type: string
     UpdateFunctionRequest:
       type: object
+      additionalProperties: false
+      minProperties: 1
       properties:
         is_public:
           type: boolean
@@ -5166,8 +5452,27 @@ components:
             Function visibility for anon-key invocation.
             - `false` (default): private function
             - `true`: public function (anon keys with `functions.invoke` can invoke)
-      required:
-        - is_public
+        invocation_mode:
+          $ref: '#/components/schemas/FunctionInvocationMode'
+        http_auth_mode:
+          $ref: '#/components/schemas/FunctionHTTPAuthMode'
+        openapi_spec:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: OpenAPI 3.0 or 3.1 metadata for HTTP mode. Send null to clear it.
+    FunctionInvocationMode:
+      type: string
+      enum: [rpc, http]
+      description: |
+        Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
+        `http` forwards HTTP request semantics to the function runtime.
+    FunctionHTTPAuthMode:
+      type: string
+      enum: [volcano, none]
+      description: |
+        Authentication applied by the HTTP ingress. `none` is valid only for public
+        HTTP-mode functions and is intended for externally signed webhooks.
     UpdateFunctionSchedulerRequest:
       type: object
       properties:

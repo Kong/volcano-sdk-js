@@ -7,10 +7,12 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+import type { DatabaseBackupScheduleEntry } from './databaseBackupScheduleEntry';
+
+/**
+ * The database's automated backup schedule. An empty list means no
+ * scheduled backups; sending one clears the schedule.
+ */
+export interface DatabaseBackupSchedule {
+  entries: DatabaseBackupScheduleEntry[];
+}

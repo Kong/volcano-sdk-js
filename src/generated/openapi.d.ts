@@ -482,6 +482,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/source-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report the project's source-of-truth state
+         * @description Volcano stores the source of the functions and frontend it runs for a
+         *     project. This reports whether that source has been written to the
+         *     connected repository, and whether the repository has taken over as the
+         *     project's source of truth.
+         *
+         *     `mode` is `platform`, `git_exporting`, `git_pending`, or `git`. Export
+         *     enters `git_exporting` before reading stored source. GitHub's signed
+         *     push event confirms that the initial commit reached the production
+         *     branch. That push or a newer production push changes the mode to
+         *     `git_pending` when it starts a deployment. `exported_at` records that
+         *     transition.
+         *
+         *     A successful Git run completes the transition when it matches the
+         *     recorded repository, production branch, and root directory and actually
+         *     dispatches every recorded resource. Ordinary production-branch pushes
+         *     deploy without changing a platform-managed project's source ownership.
+         */
+        get: operations["getProjectSourceExport"];
+        put?: never;
+        /**
+         * Initialize an empty repository with a project's stored source
+         * @description Creates the first commit in the connected repository and pushes it
+         *     directly to the configured production branch. The push enters the
+         *     ordinary Git auto-deploy flow. Direct source writes remain frozen until
+         *     that deployment succeeds and the repository becomes the source of truth.
+         *
+         *     The caller confirms the production branch shown before export. Starting
+         *     export pins that branch: later GitHub default-branch changes do not
+         *     repoint the project. If the configured branch changed after the caller
+         *     read it, the request fails without exporting so the caller can show and
+         *     confirm the new value.
+         *
+         *     The response lists what the export could not carry: resources with no
+         *     successful deployment to take source from (`skipped`), and things no
+         *     export can hand back (`omitted`) — migrations, which Volcano stores no
+         *     copy of, and credential-shaped files, which are left for their owner to
+         *     add.
+         *
+         *     Requires a connected repository with no commits or branches, and runs
+         *     once. Volcano never creates the repository. If GitHub did not confirm
+         *     the push, retrying creates the same commit and adopts it when it already
+         *     reached the repository.
+         */
+        post: operations["exportProjectSource"];
+        /**
+         * Cancel an incomplete source export
+         * @description Restores platform source writes while the project is in
+         *     `git_exporting` or `git_pending`. If Volcano reserved or deployed the
+         *     root commit, export remains consumed and cannot be run again. The
+         *     connected repository and any commit already pushed to it are unchanged.
+         */
+        delete: operations["cancelProjectSourceExport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/git-connection/production-branch": {
         parameters: {
             query?: never;
@@ -836,9 +902,16 @@ export interface paths {
          *     - Function receives payload only (no `__volcano_auth`)
          *
          *     **Transport and CORS:**
-         *     - Direct invocation endpoint is intended for `http://api.<domain>/functions/{functionId}/invoke`
-         *     - DNS invocation endpoint is `https://{functionId}.functions.<domain>/`
-         *     - CORS preflight for invocation allows only `POST, OPTIONS`
+         *     - This operation is the authenticated direct RPC endpoint and always uses the
+         *       POST `{payload: ...}` contract, including for functions whose DNS ingress is
+         *       configured in HTTP mode.
+         *     - The geo-routed DNS ingress is `https://{functionId}.functions.<domain>/`.
+         *     - RPC-mode DNS ingress accepts POST at `/`. HTTP-mode DNS ingress accepts GET,
+         *       HEAD, POST, PUT, PATCH, and DELETE at `/` and nested paths.
+         *     - Direct and RPC-mode CORS preflight advertises `POST, OPTIONS`. HTTP-mode DNS
+         *       preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
+         *     - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
+         *       direct operation always requires a Volcano credential.
          */
         post: operations["invokeFunction"];
         delete?: never;
@@ -1123,7 +1196,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.24 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.3 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1301,7 +1374,8 @@ export interface paths {
         /**
          * Create a new serverless PostgreSQL database
          * @description Creates a serverless PostgreSQL database in the project.
-         *     Each project can contain up to 100 databases. Requests over this cap return 403.
+         *     Each project can hold 1 database on Free and up to 10,000 on Pro.
+         *     Requests over the plan's cap return 403.
          */
         post: operations["createDatabase"];
         delete?: never;
@@ -1456,11 +1530,161 @@ export interface paths {
          * Rotate a branch's password
          * @description Issues a new password for the branch and invalidates the previous
          *     connection string. Existing connections are not interrupted; new ones
-         *     must use the returned string.
+         *     must use the returned string. Proxies pick the rotation up within a few
+         *     seconds, so the previous password can still open new connections until
+         *     then.
          *
          *     The parent database's credentials are untouched.
          */
         post: operations["resetDatabaseBranchPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's backups
+         * @description Returns every backup of the database, newest first, together with the
+         *     window a point-in-time restore may target.
+         *
+         *     Both backups you took and backups the schedule produced are listed;
+         *     `source` tells them apart. Only manual backups count against the plan's
+         *     backup allowance.
+         */
+        get: operations["listDatabaseBackups"];
+        put?: never;
+        /**
+         * Back up a database
+         * @description Captures the database as it is now. The backup is available immediately;
+         *     its `size_bytes` appears once the storage provider has costed it.
+         *
+         *     Backups are rate-limited to one per minute per database, and capped by
+         *     the owner's plan.
+         */
+        post: operations["createDatabaseBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backups/{backupName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a backup
+         * @description Returns one backup of the database.
+         */
+        get: operations["getDatabaseBackup"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a backup
+         * @description Deletes the backup and frees its storage. Scheduled backups can be
+         *     deleted too. A backup that is already gone reports `404`, so a name
+         *     that never existed and a name that no longer does read the same.
+         *     Refused with `409` while the database is being restored.
+         */
+        delete: operations["deleteDatabaseBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backup-schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the automated backup schedule
+         * @description Returns the database's backup schedule. An empty list means no scheduled
+         *     backups.
+         */
+        get: operations["getDatabaseBackupSchedule"];
+        /**
+         * Replace the automated backup schedule
+         * @description Replaces the schedule wholesale. Send an empty `entries` list to stop
+         *     scheduled backups.
+         *
+         *     Scheduled backups do not count against the plan's backup allowance, but
+         *     their retention is clamped to the plan's.
+         */
+        put: operations["updateDatabaseBackupSchedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/restores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's restores
+         * @description Returns the database's restore history, newest first, capped at the 50
+         *     most recent. There is no pagination: a database that has been restored
+         *     more than 50 times keeps the older records but does not return them.
+         */
+        get: operations["listDatabaseRestores"];
+        put?: never;
+        /**
+         * Restore a database
+         * @description Replaces the database's data, either with a named backup or with its
+         *     state at a point in time. This is destructive: everything written after
+         *     that point is discarded.
+         *
+         *     Asynchronous: the response is `202` with the restore `pending` and the
+         *     database `restoring`. The database does not accept connections until the
+         *     restore reports `completed`; its connection string is unchanged
+         *     throughout, so nothing holding it needs updating.
+         *
+         *     Restores are in place. There is no way to restore into a second
+         *     database, and a database's branches are never restored — they keep
+         *     serving their own data, but resetting a branch from its parent is
+         *     refused by the storage provider for up to 24 hours afterwards.
+         */
+        post: operations["createDatabaseRestore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/restores/{restoreId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a restore
+         * @description Returns the restore. Poll this after starting one; the database is
+         *     connectable again once it reports `completed`.
+         */
+        get: operations["getDatabaseRestore"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1482,6 +1706,10 @@ export interface paths {
          *     through pgproxy. This does not rotate or expose the internal owner password.
          *     The returned password and connection string are the only client credentials that
          *     will authenticate through pgproxy after reset.
+         *
+         *     Existing connections are not interrupted; new ones must use the returned
+         *     string. Proxies pick the rotation up within a few seconds, so the previous
+         *     password can still open new connections until then.
          */
         post: operations["resetDatabasePassword"];
         delete?: never;
@@ -3843,6 +4071,7 @@ export interface paths {
          *
          *     **Session Status (with X-Upload-Session header):**
          *     Returns the status of a resumable upload session, including which parts have been uploaded.
+         *     Anonymous sessions must reuse the exact anon key that created the session.
          */
         get: operations["downloadStorageObject"];
         /**
@@ -3855,6 +4084,7 @@ export interface paths {
          *     - Maximum part size is 25MB
          *     - Parts can be uploaded in any order
          *     - Re-uploading a part overwrites the previous upload
+         *     - Anonymous sessions must reuse the exact anon key that created the session
          */
         put: operations["uploadPart"];
         /**
@@ -3871,6 +4101,12 @@ export interface paths {
          *     **Complete Resumable Session:**
          *     Complete a session after all parts are uploaded.
          *     Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+         *
+         *     **Resumable Session Ownership:**
+         *     A session created with a user access token remains bound to that user. A session
+         *     created with an anon key remains bound to that exact anon key. Reuse the same
+         *     identity or anon key for part uploads, status, completion, and abort requests;
+         *     an ownership mismatch returns `404`.
          */
         post: operations["uploadStorageObject"];
         /**
@@ -3882,6 +4118,7 @@ export interface paths {
          *
          *     **Abort Session (with X-Upload-Session header):**
          *     Aborts a resumable upload session and cleans up any uploaded parts.
+         *     Anonymous sessions must reuse the exact anon key that created the session.
          */
         delete: operations["deleteStorageObject"];
         options?: never;
@@ -4543,6 +4780,14 @@ export interface components {
         CompleteUploadSessionResponse: {
             object?: components["schemas"]["StorageObject"];
         };
+        CreateDatabaseBackupRequest: {
+            /**
+             * @description Backup name, unique within the database. Names beginning with
+             *     `volcano-` are reserved for the platform's own snapshots.
+             * @example before_migration
+             */
+            name: string;
+        };
         CreateDatabaseBranchRequest: {
             /**
              * @description Branch name (must be unique within the parent database)
@@ -4556,6 +4801,29 @@ export interface components {
              * @example 86400
              */
             ttl_seconds?: number;
+        };
+        /**
+         * @description Names what to restore. Supply exactly one of `backup_name` or
+         *     `restore_to`.
+         */
+        CreateDatabaseRestoreRequest: {
+            /**
+             * @description A backup of this database to restore, exactly as returned by the list
+             *     endpoint.
+             *
+             *     Deliberately looser than the names you can create, like the backup
+             *     path parameter: a backup made by a schedule is named for you, so
+             *     restoring one accepts any name a backup can have.
+             * @example before_migration
+             */
+            backup_name?: string;
+            /**
+             * Format: date-time
+             * @description A point in time to restore to, which must fall inside the
+             *     `restore_window` reported when listing backups.
+             * @example 2026-01-15T09:30:00Z
+             */
+            restore_to?: string;
         };
         /**
          * @description Create a new PostgreSQL database. Volcano automatically sets up:
@@ -4773,10 +5041,13 @@ export interface components {
             /** @description Database name */
             name: string;
             /**
-             * @description Database provisioning status
+             * @description Database status. `restoring` means a restore is replacing the
+             *     database's data: it does not accept connections, and the operations
+             *     that would race the restore are rejected until it finishes. Its
+             *     branches keep serving throughout.
              * @enum {string}
              */
-            status: "provisioning" | "active" | "failed" | "deleting";
+            status: "provisioning" | "active" | "failed" | "restoring" | "deleting";
             /**
              * Format: date-time
              * @description Timestamp when the current provisioning phase started
@@ -4811,8 +5082,13 @@ export interface components {
             database_type?: "volcano-db-xs" | "volcano-db-s" | "volcano-db-m" | "volcano-db-l" | "volcano-db-xl" | "volcano-db-2xl";
             /**
              * Format: int64
-             * @description Latest observed on-disk size from `pg_database_size`, in bytes. This
-             *     point-in-time gauge may be absent until the database has been sampled.
+             * @description Latest observed storage for this database, in bytes: its own on-disk
+             *     size, plus what each branch has diverged from it, plus what its
+             *     backups cost to hold. This is the figure the storage allowance is
+             *     enforced against, and the stats endpoint breaks it down. A
+             *     point-in-time gauge recorded by a background pass, so it may be
+             *     absent until the database has been sampled, and it can trail the
+             *     stats endpoint's `current_storage_bytes`, which measures on request.
              *     Summing the latest samples for every database in a project produces
              *     the project's "Database Storage (Bytes)" usage gauge. Populated on
              *     database list responses; single-database responses omit it.
@@ -4827,6 +5103,76 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description A point-in-time copy of a database, kept by the storage provider and
+         *     restorable in place.
+         *
+         *     Backups cover the database itself, not its branches. Restoring one
+         *     replaces the database's data and keeps its connection string.
+         */
+        DatabaseBackup: {
+            /**
+             * @description Backup name, unique within the database. Backups you create are
+             *     named by you; scheduled backups are named by the storage provider.
+             */
+            name: string;
+            /**
+             * @description Whether the backup was requested explicitly or produced by the
+             *     backup schedule. Only `manual` backups count against the plan's
+             *     backup allowance.
+             * @enum {string}
+             */
+            source: "manual" | "scheduled";
+            /**
+             * Format: int64
+             * @description Storage the backup occupies. Absent until the provider has costed
+             *     it, which takes a few minutes after the backup is taken; absent is
+             *     not the same as empty.
+             */
+            size_bytes?: number;
+            /**
+             * Format: date-time
+             * @description When the backup is deleted automatically, from the plan's retention.
+             *     Absent means it is kept until deleted explicitly.
+             */
+            expires_at?: string;
+            /**
+             * Format: date-time
+             * @description The point in time the backup captures.
+             */
+            created_at: string;
+        };
+        DatabaseBackupList: {
+            data: components["schemas"]["DatabaseBackup"][];
+            restore_window?: components["schemas"]["DatabaseRestoreWindow"];
+        };
+        /**
+         * @description The database's automated backup schedule. An empty list means no
+         *     scheduled backups; sending one clears the schedule.
+         */
+        DatabaseBackupSchedule: {
+            entries: components["schemas"]["DatabaseBackupScheduleEntry"][];
+        };
+        /** @description One recurrence of the automated backup schedule. */
+        DatabaseBackupScheduleEntry: {
+            /** @enum {string} */
+            frequency: "daily" | "weekly" | "monthly";
+            /** @description Hour of the day in UTC. */
+            hour: number;
+            /**
+             * @description Day of the week (1-7, Monday to Sunday) for a weekly schedule, or day
+             *     of the month (1-28) for a monthly one. Required for both, ignored for
+             *     a daily schedule. Monthly stops at 28 so the schedule fires in every
+             *     month.
+             */
+            day?: number;
+            /**
+             * Format: int64
+             * @description How long each backup from this recurrence is kept. Clamped to the
+             *     plan's retention, and defaulted to it when omitted.
+             */
+            retention_seconds?: number;
         };
         /**
          * @description A copy-on-write fork of a database, for development and testing.
@@ -5055,12 +5401,87 @@ export interface components {
             /** @description Number of rows returned */
             count?: number;
         };
+        /**
+         * @description A restore of a database, either from a named backup or to a point in
+         *     time. Restores run in the background and take longer than a request, so
+         *     the database is unavailable until this reports `completed`.
+         */
+        DatabaseRestore: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            database_id: string;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * @description Whether the restore targets a named backup or an arbitrary point in
+             *     time. Both replace the database's data in place.
+             * @enum {string}
+             */
+            kind: "snapshot" | "point_in_time";
+            /**
+             * @description Restore status. `pending` and `running` both mean the restore is
+             *     still in flight and the database is not connectable; an attempt that
+             *     fails with tries left goes back to `pending`. `failed` and
+             *     `exhausted` both mean Volcano gave up: the database is left `failed`
+             *     if its data may already have been replaced, and `active` if the
+             *     restore never started — a backup that no longer exists at the
+             *     provider ends the restore without touching the database. A restore
+             *     cannot be cancelled once it starts.
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed" | "exhausted";
+            /**
+             * @description The backup restored, kept even if that backup is later deleted.
+             *     Absent for a point-in-time restore.
+             */
+            backup_name?: string;
+            /**
+             * Format: date-time
+             * @description The point in time restored to. Absent for a backup restore.
+             */
+            restore_to?: string;
+            /** @description Why the most recent attempt failed, when one has. */
+            error?: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatabaseRestoreList: {
+            data: components["schemas"]["DatabaseRestore"][];
+        };
+        /**
+         * @description The span a point-in-time restore may target. Absent from the response
+         *     when the owner's plan does not include point-in-time restore, and while
+         *     the storage provider has no history window in place yet — briefly the
+         *     case after an upgrade, since the window is applied asynchronously. The
+         *     window is read from the provider rather than from the plan, so it never
+         *     advertises a point a restore could not actually reach.
+         */
+        DatabaseRestoreWindow: {
+            /**
+             * Format: date-time
+             * @description The oldest point that can still be restored. Moves forward
+             *     continuously as history ages out, so treat it as a lower bound at
+             *     the moment it was read rather than a fixed value.
+             */
+            earliest_restore_at?: string;
+            /**
+             * Format: date-time
+             * @description The most recent point that can be restored, which is now.
+             */
+            latest_restore_at?: string;
+        };
         DatabaseStats: {
             /**
              * Format: int64
-             * @description On-disk size right now, in bytes: the database itself plus every
-             *     branch's divergence from it. This is the figure the storage
-             *     allowance is enforced against. `branches` breaks it down.
+             * @description On-disk size right now, in bytes: the database itself, plus every
+             *     branch's divergence from it, plus what its backups cost to hold. This
+             *     is the figure the storage allowance is enforced against. `branches`
+             *     and `backup_storage_bytes` break it down.
              */
             current_storage_bytes: number;
             /**
@@ -5074,6 +5495,21 @@ export interface components {
              *     parent contributes nothing.
              */
             branches?: components["schemas"]["DatabaseBranchStorage"][];
+            /**
+             * Format: int64
+             * @description What this database's backups contribute to `current_storage_bytes`.
+             *
+             *     A backup taken on request is charged as a full copy of the database
+             *     as it was at that moment, so two backups of a 2 GB database are 4 GB.
+             *     A backup schedule is charged its first snapshot in full and each
+             *     later one only for the storage it adds. Deleting a backup releases
+             *     its storage immediately.
+             *
+             *     Sampled from the provider rather than measured live, so it can lag a
+             *     change by a few minutes, and a backup taken seconds ago may not be
+             *     costed yet. Zero on a plan without backups.
+             */
+            backup_storage_bytes: number;
             /**
              * Format: int64
              * @description Total storage used in bytes (data + WAL)
@@ -5342,6 +5778,8 @@ export interface components {
             full_name: string;
             default_branch: string;
             private: boolean;
+            /** @description Whether the repository has no commits and can receive an initial source export. */
+            is_empty: boolean;
         };
         GitRepositoriesResponse: {
             repositories: components["schemas"]["GitRepository"][];
@@ -5425,6 +5863,55 @@ export interface components {
              * @description Current holder's fencing token. Present only when held.
              */
             fencing_token?: number;
+        };
+        /** @description The project's source of truth and any pending Git transition. */
+        ProjectSourceExportState: {
+            /** @enum {string} */
+            mode: "platform" | "git_exporting" | "git_pending" | "git";
+            /**
+             * Format: date-time
+             * @description When source export started, cleared if an incomplete transition is canceled.
+             */
+            transition_started_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the initial export push entered deployment, or when a transition was canceled after its commit was reserved. Once set, the one-time export is consumed.
+             */
+            exported_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a complete production-branch deployment first proved the repository could drive the project, null until then. Once set, the repository is the project's source of truth.
+             */
+            handed_over_at: string | null;
+        };
+        /** @description The initial production-branch commit, and everything export could not carry. */
+        ProjectSourceExport: {
+            repo_full_name: string;
+            /** @description The production branch that was created. */
+            branch: string;
+            commit_sha: string;
+            file_count: number;
+            /** @description Resources whose source could not be taken, with the reason. Most often a resource that has never deployed successfully. */
+            skipped: components["schemas"]["ProjectSourceExportSkip"][];
+            /** @description Things deliberately left out of the branch. */
+            omitted: components["schemas"]["ProjectSourceExportOmission"][];
+        };
+        ExportProjectSourceRequest: {
+            /** @description The currently configured production branch the user confirmed for export. */
+            production_branch: string;
+        };
+        ProjectSourceExportSkip: {
+            /** @description The kind of resource, "function" or "frontend". Deliberately not an enum: the generated constants would collide with an existing resource-type enum and rename its members. */
+            kind: string;
+            name: string;
+            reason: string;
+        };
+        ProjectSourceExportOmission: {
+            /** @description What was left out: migrations Volcano stores no copy of, variable values, a credential-shaped file, installed dependencies, or an archive entry a repository cannot carry. */
+            kind: string;
+            /** @description The resource it came from, empty when project-wide. */
+            resource: string;
+            path: string;
         };
         SetProjectGitProductionBranchRequest: {
             /** @description The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. */
@@ -5662,6 +6149,14 @@ export interface components {
              *     - `true`: anon keys with `functions.invoke` can invoke
              */
             is_public: boolean;
+            invocation_mode: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode function. */
+            openapi_spec: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Whether OpenAPI metadata is configured; list responses omit the document itself. */
+            has_openapi_spec: boolean;
             aws_function_arn?: string;
             /** @description Canonical GeoDNS endpoint URL for invoking this function (always HTTPS) */
             invoke_url?: string;
@@ -5689,6 +6184,18 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
+         *     `http` forwards HTTP request semantics to the function runtime.
+         * @enum {string}
+         */
+        FunctionInvocationMode: "rpc" | "http";
+        /**
+         * @description Authentication applied by the HTTP ingress. `none` is valid only for public
+         *     HTTP-mode functions and is intended for externally signed webhooks.
+         * @enum {string}
+         */
+        FunctionHTTPAuthMode: "volcano" | "none";
         FunctionDeployment: {
             /** Format: uuid */
             id: string;
@@ -5996,8 +6503,10 @@ export interface components {
              *     "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
              *     reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
              *     is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-             *     not a cumulative counter. It is the sum of the latest `pg_database_size` samples
-             *     exposed as `storage_bytes` by the project's database list.
+             *     not a cumulative counter. It is the sum of the latest samples exposed as
+             *     `storage_bytes` by the project's database list, so it includes what each
+             *     database's branches and backups hold, and it inherits that field's lag
+             *     behind a live measurement.
              */
             metric: string;
             /**
@@ -6599,6 +7108,12 @@ export interface components {
             name: string;
             /** @description Function visibility for anon-key invocation */
             public?: boolean;
+            invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function */
+            openapi_spec?: {
+                [key: string]: unknown;
+            } | null;
             schedulers?: components["schemas"]["ProjectConfigScheduler"][];
         };
         ProjectConfigHostedPage: {
@@ -7361,7 +7876,13 @@ export interface components {
              *     - `false` (default): private function
              *     - `true`: public function (anon keys with `functions.invoke` can invoke)
              */
-            is_public: boolean;
+            is_public?: boolean;
+            invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description OpenAPI 3.0 or 3.1 metadata for HTTP mode. Send null to clear it. */
+            openapi_spec?: {
+                [key: string]: unknown;
+            } | null;
         };
         UpdateFunctionSchedulerRequest: {
             name?: string;
@@ -7796,8 +8317,30 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The branch exists but cannot serve queries: it is still provisioning,
+         *     being reset, expired, or its parent is being restored. Distinct from
+         *     `404` so a caller waiting on a branch can tell it apart from a typo.
+         */
+        DatabaseBranchQueryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
+        /**
+         * @description Backup name, unique within the database, exactly as returned by the list
+         *     endpoint.
+         *
+         *     Deliberately looser than the names you can create: a backup made by a
+         *     schedule is named for you, so reading or deleting one accepts any name a
+         *     backup can have.
+         */
+        BackupName: string;
         /** @description Branch name (unique within the parent database, lowercase letters, numbers, and underscores only) */
         BranchName: string;
         /** @description Storage bucket name */
@@ -7881,6 +8424,8 @@ export interface components {
          *     endpoint description for supported pagination modes.
          */
         Search: string;
+        /** @description Database restore ID */
+        RestoreId: string;
         /** @description Function scheduler ID */
         SchedulerId: string;
         /** @description Variable name */
@@ -9595,6 +10140,275 @@ export interface operations {
             };
         };
     };
+    getProjectSourceExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's source-of-truth state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSourceExportState"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    exportProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportProjectSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description The initial production-branch commit that was pushed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSourceExport"];
+                };
+            };
+            /** @description Malformed request body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found, or it has no repository connected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The source has already been exported, the repository has already
+             *     taken over as the source of truth, the confirmed production branch
+             *     is stale, a function or frontend deployment is still in progress,
+             *     or the project has no stored source to export
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The repository refused the branch, or its contents cannot be laid
+             *     out as a repository — a stored file that only ever carries
+             *     credentials, or a layout Git auto-deploy would not read back
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub rate limited the request */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub integration is not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelProjectSourceExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The incomplete source transition was canceled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No incomplete transition exists, or Git already took ownership */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     setProjectGitProductionBranch: {
         parameters: {
             query?: never;
@@ -9656,6 +10470,15 @@ export interface operations {
              *     exists.
              */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A Git source transition is pending */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9804,6 +10627,18 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /**
+             * @description A Git source transition is pending or complete, so the recorded
+             *     repository and root cannot be changed
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Failed to connect project git */
             500: {
                 headers: {
@@ -9863,6 +10698,18 @@ export interface operations {
             };
             /** @description Project not found, or has no repo connection */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A Git source transition is pending or complete, so the recorded
+             *     repository cannot be disconnected
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9994,6 +10841,18 @@ export interface operations {
             };
             /** @description Project not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A Git source transition is pending, or this change would remove
+             *     deploy coverage after Git has taken over
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10583,6 +11442,15 @@ export interface operations {
                      * @example handler
                      */
                     handler?: string;
+                    /**
+                     * @description Whether the function can be reached through public invocation ingress.
+                     * @default false
+                     */
+                    is_public?: boolean;
+                    invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+                    http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+                    /** @description JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
+                    openapi_spec?: string;
                 };
             };
         };
@@ -12042,7 +12910,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - custom domain already in use or frontend already has a custom domain */
+            /** @description Conflict - custom domain already in use, still detaching, or frontend already has a custom domain */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12441,6 +13309,8 @@ export interface operations {
                  *     endpoint description for supported pagination modes.
                  */
                 search?: components["parameters"]["Search"];
+                /** @description Return only the databases in this status. */
+                status?: "provisioning" | "active" | "restoring" | "failed" | "deleting";
             };
             header?: never;
             path: {
@@ -12562,6 +13432,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is running on the database. Deleting it while a worker is
+             *     replacing its data would race that worker, so wait for the restore
+             *     to finish.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     delete a database that might be mid-restore. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listDatabaseBranches: {
@@ -12667,7 +13571,7 @@ export interface operations {
             /**
              * @description A branch of that name already exists on this database, or the
              *     database cannot be branched right now because it is still
-             *     provisioning, failed, or being deleted.
+             *     provisioning, being restored, failed, or being deleted.
              */
             409: {
                 headers: {
@@ -12884,7 +13788,12 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The branch is not active, or a reset is already in progress. */
+            /**
+             * @description The branch is not active, a reset is already in progress, the parent
+             *     database is being restored, or the parent was restored within the
+             *     last 24 hours — a reset re-forks from the parent, and the provider
+             *     holds a child's reset shut for that long afterwards.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12958,6 +13867,638 @@ export interface operations {
             };
         };
     };
+    listDatabaseBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupList"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so there is nothing to
+             *     list. A database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDatabaseBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description Backup created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            /** @description Invalid backup name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has reached its backup allowance, or the owner's plan
+             *     does not include backups, which are PRO-only.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A backup of that name already exists, the database is not active, a
+             *     restore is running on it, or a backup was taken too recently.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /**
+                 * @description Backup name, unique within the database, exactly as returned by the list
+                 *     endpoint.
+                 *
+                 *     Deliberately looser than the names you can create: a backup made by a
+                 *     schedule is named for you, so reading or deleting one accepts any name a
+                 *     backup can have.
+                 */
+                backupName: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so it holds no backups. A
+             *     database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /**
+                 * @description Backup name, unique within the database, exactly as returned by the list
+                 *     endpoint.
+                 *
+                 *     Deliberately looser than the names you can create: a backup made by a
+                 *     schedule is named for you, so reading or deleting one accepts any name a
+                 *     backup can have.
+                 */
+                backupName: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example deleted */
+                        status: string;
+                        /** @example backup deleted */
+                        message: string;
+                    };
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database is being restored. A restore is pinned to a backup it
+             *     may not have restored yet, so deleting one is refused until the
+             *     restore finishes.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupSchedule"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so it has no schedule. A
+             *     database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateDatabaseBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseBackupSchedule"];
+            };
+        };
+        responses: {
+            /** @description Schedule replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupSchedule"];
+                };
+            };
+            /**
+             * @description The schedule names a recurrence that cannot fire: a weekly or
+             *     monthly one with no `day`, or a `day` outside its frequency's range
+             *     (1-7 for weekly, 1-28 for monthly). The response says which.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database is not active, or a restore is running on it — a restore
+             *     moves the data to a new branch, and the provider keeps the schedule
+             *     per branch.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDatabaseRestores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestoreList"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDatabaseRestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Restore accepted and in progress */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestore"];
+                };
+            };
+            /**
+             * @description Neither or both restore targets were named, or the requested time is
+             *     outside the available window.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The owner's plan does not include backups or point-in-time restore.
+             *     Both are PRO-only.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is already in progress, the database is not active,
+             *     another database operation is still running, or the database is
+             *     holding as many pre-restore branches as it may.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /** @description Database restore ID */
+                restoreId: components["parameters"]["RestoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestore"];
+                };
+            };
+            /** @description Backups are PRO-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or restore not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resetDatabasePassword: {
         parameters: {
             query?: never;
@@ -12990,6 +14531,48 @@ export interface operations {
                         /** @description Updated pgproxy connection string using Volcano-managed credentials. */
                         connection_string?: string;
                     };
+                };
+            };
+            /** @description Database is not active */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is running on the database. A restore replaces the
+             *     credentials as it finishes, so wait for it and rotate afterwards.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     rotate a credential a restore might be about to replace. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -13034,6 +14617,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /**
+             * @description The database is not active — being provisioned, deleted, or
+             *     restored. Compute can only be changed while it is active.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     reconfigure compute a restore might be moving. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -13528,6 +15135,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchSelect: {
@@ -13609,6 +15217,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchInsert: {
@@ -13690,6 +15299,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchUpdate: {
@@ -13769,6 +15379,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchDelete: {
@@ -13846,6 +15457,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     listDatabaseRegions: {
@@ -19257,7 +20869,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Object or session not found */
+            /** @description Object or session not found, or session not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -19313,7 +20925,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Session not found */
+            /** @description Session not found or not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -19390,6 +21002,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Resumable upload session not found or not owned by this credential */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /**
              * @description File size exceeds plan-based limits. This occurs when:
              *     - File exceeds the plan-based maximum file size (FREE or PRO tier)
@@ -19435,7 +21054,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Object or session not found */
+            /** @description Object or session not found, or session not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;

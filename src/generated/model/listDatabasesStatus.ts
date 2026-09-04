@@ -8,19 +8,13 @@
  * OpenAPI spec version: 3.0.0
  */
 
-/**
- * Database status. `restoring` means a restore is replacing the
- * database's data: it does not accept connections, and the operations
- * that would race the restore are rejected until it finishes. Its
- * branches keep serving throughout.
- */
-export type DatabaseStatus = typeof DatabaseStatus[keyof typeof DatabaseStatus];
+export type ListDatabasesStatus = typeof ListDatabasesStatus[keyof typeof ListDatabasesStatus];
 
 
-export const DatabaseStatus = {
+export const ListDatabasesStatus = {
   provisioning: 'provisioning',
   active: 'active',
-  failed: 'failed',
   restoring: 'restoring',
+  failed: 'failed',
   deleting: 'deleting',
 } as const;

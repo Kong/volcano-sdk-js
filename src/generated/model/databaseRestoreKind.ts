@@ -7,10 +7,15 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+
+/**
+ * Whether the restore targets a named backup or an arbitrary point in
+ * time. Both replace the database's data in place.
+ */
+export type DatabaseRestoreKind = typeof DatabaseRestoreKind[keyof typeof DatabaseRestoreKind];
+
+
+export const DatabaseRestoreKind = {
+  snapshot: 'snapshot',
+  point_in_time: 'point_in_time',
+} as const;
