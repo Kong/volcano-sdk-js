@@ -7,10 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+
+export interface ExportProjectSourceRequest {
+  /**
+     * The currently configured production branch the user confirmed for export.
+     * @minLength 1
+     */
+  production_branch: string;
+}

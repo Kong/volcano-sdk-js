@@ -7,10 +7,10 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
+export const DatabaseRestoreStatus = {
+    pending: 'pending',
+    running: 'running',
+    completed: 'completed',
     failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
+    exhausted: 'exhausted',
 };

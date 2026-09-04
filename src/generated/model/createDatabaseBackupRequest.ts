@@ -7,10 +7,13 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+
+export interface CreateDatabaseBackupRequest {
+  /**
+     * Backup name, unique within the database. Names beginning with
+     * `volcano-` are reserved for the platform's own snapshots.
+     * @maxLength 63
+     * @pattern ^[a-z0-9][a-z0-9_-]{0,62}$
+     */
+  name: string;
+}

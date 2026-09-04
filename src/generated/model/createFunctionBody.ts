@@ -8,6 +8,8 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateFunctionBodyRuntime } from './createFunctionBodyRuntime';
+import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
+import type { FunctionInvocationMode } from './functionInvocationMode';
 
 export type CreateFunctionBody = {
   /**
@@ -33,4 +35,10 @@ export type CreateFunctionBody = {
      * - Ruby: def handler() (in main.rb)
      */
   handler?: string;
+  /** Whether the function can be reached through public invocation ingress. */
+  is_public?: boolean;
+  invocation_mode?: FunctionInvocationMode;
+  http_auth_mode?: FunctionHTTPAuthMode;
+  /** JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
+  openapi_spec?: string;
 };

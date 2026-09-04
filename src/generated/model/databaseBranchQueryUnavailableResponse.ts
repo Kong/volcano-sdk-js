@@ -7,10 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+import type { Error } from './error';
+
+/**
+ * The branch exists but cannot serve queries: it is still provisioning,
+ * being reset, expired, or its parent is being restored. Distinct from
+ * `404` so a caller waiting on a branch can tell it apart from a typo.
+ */
+export type DatabaseBranchQueryUnavailableResponse = Error;

@@ -7,10 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const DatabaseStatus = {
-    provisioning: 'provisioning',
-    active: 'active',
-    failed: 'failed',
-    restoring: 'restoring',
-    deleting: 'deleting',
-};
+
+export interface ProjectSourceExportOmission {
+  /** What was left out: migrations Volcano stores no copy of, variable values, a credential-shaped file, installed dependencies, or an archive entry a repository cannot carry. */
+  kind: string;
+  /** The resource it came from, empty when project-wide. */
+  resource: string;
+  path: string;
+}
