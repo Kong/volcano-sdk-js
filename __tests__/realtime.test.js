@@ -391,7 +391,7 @@ describe('RealtimeChannel', () => {
   });
 
   describe('unsubscribe', () => {
-    test('retains callbacks for a later resubscribe', () => {
+    test('clears callbacks', () => {
       const channel = realtime.channel('room-1');
 
       channel.on('message', jest.fn());
@@ -399,7 +399,7 @@ describe('RealtimeChannel', () => {
 
       channel.unsubscribe();
 
-      expect(channel._callbacks.size).toBe(2);
+      expect(channel._callbacks.size).toBe(0);
     });
 
     test('clears presence state', () => {
