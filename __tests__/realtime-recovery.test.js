@@ -145,6 +145,32 @@ describe('realtime subscription lifecycle', () => {
     expect(subscription.publish).not.toHaveBeenCalled();
   });
 
+  test('a retry suppresses autofetch work from a timed-out subscription', async () => {
+    const subscription = createSubscription();
+    const readiness = createDeferred();
+    subscription.ready.mockReturnValueOnce(readiness.promise);
+    const realtime = createRealtime(() => subscription);
+    realtime.setVolcanoClient({});
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    const fetch = createDeferred();
+    const onInsert = jest.fn();
+    channel._fetchRow = jest.fn(() => fetch.promise);
+    channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
+
+    const firstAttempt = channel.subscribe();
+    const delivery = channel._handleLightweightNotification(
+      { id: 1, mode: 'lightweight', schema: 'public', table: 'items', type: 'INSERT' },
+      {},
+    );
+    readiness.reject(new Error('timeout'));
+    await expect(firstAttempt).rejects.toThrow('timeout');
+    await channel.subscribe();
+    fetch.resolve({ id: 1 });
+    await delivery;
+
+    expect(onInsert).not.toHaveBeenCalled();
+  });
+
   test('a paused channel suppresses an in-flight lightweight result', async () => {
     const subscription = createSubscription();
     const realtime = createRealtime(() => subscription);

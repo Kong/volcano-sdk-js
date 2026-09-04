@@ -711,8 +711,7 @@ class RealtimeChannel {
       await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
     } catch (error) {
       if (this._lifecycleVersion === lifecycleVersion) {
-        this._paused = true;
-        this._subscription.unsubscribe();
+        this.unsubscribe();
       }
       throw error;
     }
