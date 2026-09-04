@@ -10995,6 +10995,16 @@ export type callOAuthProviderAPIResponse401 = {
   status: 401
 }
 
+export type callOAuthProviderAPIResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type callOAuthProviderAPIResponse500 = {
+  data: Error
+  status: 500
+}
+
 export type callOAuthProviderAPIResponse502 = {
   data: Error
   status: 502
@@ -11003,7 +11013,7 @@ export type callOAuthProviderAPIResponse502 = {
 export type callOAuthProviderAPIResponseSuccess = (callOAuthProviderAPIResponse200) & {
   headers: Headers;
 };
-export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse502) & {
+export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse404 | callOAuthProviderAPIResponse500 | callOAuthProviderAPIResponse502) & {
   headers: Headers;
 };
 
@@ -11033,6 +11043,10 @@ export const getCallOAuthProviderAPIUrl = (provider: 'google' | 'github' | 'micr
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
+ * An empty provider body is represented as `data: null`; the envelope
+ * preserves the provider's HTTP status in `status_code`, including errors.
+ * Provider response bodies are limited to 8 MiB after decompression.
+ * Transport failures, invalid JSON, and oversized bodies return `502`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider: 'google' | 'github' | 'microsoft' | 'apple',

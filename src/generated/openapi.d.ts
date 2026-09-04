@@ -3367,6 +3367,10 @@ export interface paths {
          *     - Microsoft Graph profile: `/me`
          *
          *     The response wraps the provider's raw JSON value with request metadata.
+         *     An empty provider body is represented as `data: null`; the envelope
+         *     preserves the provider's HTTP status in `status_code`, including errors.
+         *     Provider response bodies are limited to 8 MiB after decompression.
+         *     Transport failures, invalid JSON, and oversized bodies return `502`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -17670,7 +17674,7 @@ export interface operations {
                         provider: "google" | "github" | "microsoft" | "apple";
                         endpoint: string;
                         status_code: number;
-                        /** @description Raw JSON value returned by the OAuth provider's API */
+                        /** @description Raw provider JSON value, or null when the provider returns no body */
                         data: unknown;
                     };
                 };
@@ -17696,7 +17700,25 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Provider API error */
+            /** @description OAuth provider configuration not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the provider API request */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider transport failure, invalid JSON, or response body larger than 8 MiB */
             502: {
                 headers: {
                     [name: string]: unknown;
