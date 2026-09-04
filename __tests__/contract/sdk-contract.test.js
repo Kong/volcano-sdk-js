@@ -242,6 +242,36 @@ autoBindSteps(features, [
       expect(context.world.lastOutcome.value).toEqual([row]);
     });
 
+    when('the client updates a missing contract row', async () => {
+      const { world } = context;
+      const result = await world.client
+        .update(world.fixture.table_name, { value: 'must-not-be-written' })
+        .eq('slug', `${world.fixture.fixture_row.slug}-missing`);
+      recordOutcome(world, result.data, result.error);
+    });
+
+    when('the client deletes a missing contract row', async () => {
+      const { world } = context;
+      const result = await world.client
+        .delete(world.fixture.table_name)
+        .eq('slug', `${world.fixture.fixture_row.slug}-missing`);
+      recordOutcome(world, result.data, result.error);
+    });
+
+    then('the mutation returns an empty row list', () => {
+      expect(context.world.lastOutcome.value).toEqual([]);
+    });
+
+    then('the existing contract row is unchanged', async () => {
+      const { world } = context;
+      const result = await world.client
+        .from(world.fixture.table_name)
+        .select('*')
+        .eq('slug', world.fixture.fixture_row.slug);
+      expect(result.error).toBeNull();
+      expect(result.data).toEqual([world.fixture.fixture_row]);
+    });
+
     when('the client uploads and downloads the contract object', async () => {
       const bucket = context.world.client.storage.from(context.world.fixture.bucket_name);
       const upload = await bucket.upload(

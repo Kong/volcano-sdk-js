@@ -3887,6 +3887,10 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
+ * An empty provider body is represented as `data: null`; the envelope
+ * preserves the provider's HTTP status in `status_code`, including errors.
+ * Provider response bodies are limited to 8 MiB after decompression.
+ * Transport failures, invalid JSON, and oversized bodies return `502`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {
