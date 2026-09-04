@@ -46,6 +46,7 @@
 
 // Centrifuge client - dynamically imported
 let Centrifuge = null;
+const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
 /**
  * Dynamically imports the Centrifuge client
@@ -315,10 +316,10 @@ class VolcanoRealtime {
    * Disconnect from the realtime server
    */
   disconnect() {
-    // Unsubscribe all channels first to clean up their timers
+    // Dispose all channels before tearing down the client.
     for (const channel of this._channels.values()) {
       try {
-        channel.unsubscribe();
+        channel._dispose();
       } catch {
         // Ignore errors during cleanup
       }
@@ -545,7 +546,7 @@ class VolcanoRealtime {
     const fullName = this._formatChannelName(name, type);
     const channel = this._channels.get(fullName);
     if (channel) {
-      channel.unsubscribe();
+      channel._dispose();
       this._channels.delete(fullName);
     }
   }
@@ -555,7 +556,7 @@ class VolcanoRealtime {
    */
   removeAllChannels() {
     for (const channel of this._channels.values()) {
-      channel.unsubscribe();
+      channel._dispose();
     }
     this._channels.clear();
   }
@@ -600,6 +601,8 @@ class RealtimeChannel {
    */
   async subscribe() {
     if (this._subscription) {
+      this._subscription.subscribe();
+      await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
       return;
     }
 
@@ -609,11 +612,7 @@ class RealtimeChannel {
     }
 
     this._subscription = client.newSubscription(this._name, {
-      // Enable presence for presence channels
-      presence: this._type === 'presence',
       joinLeave: this._type === 'presence',
-      // Enable recovery for all channels
-      recover: true,
     });
 
     // Set up message handler (store reference for cleanup)
@@ -683,14 +682,23 @@ class RealtimeChannel {
       this._subscription.on('subscribed', this._eventHandlers.subscribed);
     }
 
-    await this._subscription.subscribe();
+    this._subscription.subscribe();
+    await this._subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
   }
 
   /**
    * Unsubscribe from the channel
    */
   unsubscribe() {
-    // Cancel pending presence fetch timeout
+    this._cancelPendingWork();
+
+    if (this._subscription) {
+      this._subscription.unsubscribe();
+    }
+    this._presenceState = {};
+  }
+
+  _cancelPendingWork() {
     if (this._presenceTimeoutId) {
       clearTimeout(this._presenceTimeoutId);
       this._presenceTimeoutId = null;
@@ -709,9 +717,12 @@ class RealtimeChannel {
       }
       this._pendingFetches.clear();
     }
+  }
+
+  _dispose() {
+    this.unsubscribe();
 
     if (this._subscription) {
-      // Remove event listeners before unsubscribing
       for (const [event, handler] of Object.entries(this._eventHandlers)) {
         try {
           this._subscription.off(event, handler);
@@ -721,8 +732,6 @@ class RealtimeChannel {
       }
       this._eventHandlers = {};
 
-      this._subscription.unsubscribe();
-      // Also remove from Centrifuge client registry to allow re-subscription
       const client = this._realtime.getClient();
       if (client) {
         try {
