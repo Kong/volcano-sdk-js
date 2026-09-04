@@ -313,7 +313,7 @@ class VolcanoRealtime {
   }
 
   /**
-   * Disconnect from the realtime server
+   * Disconnect and permanently remove all channels and recovery state
    */
   disconnect() {
     // Dispose all channels before tearing down the client.
@@ -538,7 +538,7 @@ class VolcanoRealtime {
   }
 
   /**
-   * Remove a specific channel
+   * Permanently remove a channel, its listeners, and its recovery state
    * @param {string} name - Channel name
    * @param {string} [type='broadcast'] - Channel type
    */
@@ -552,7 +552,7 @@ class VolcanoRealtime {
   }
 
   /**
-   * Remove all channels and listeners
+   * Permanently remove all channels, listeners, and recovery state
    */
   removeAllChannels() {
     for (const channel of this._channels.values()) {
@@ -597,7 +597,7 @@ class RealtimeChannel {
   }
 
   /**
-   * Subscribe to the channel
+   * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
     if (this._subscription) {
@@ -687,7 +687,7 @@ class RealtimeChannel {
   }
 
   /**
-   * Unsubscribe from the channel
+   * Pause the channel while preserving handlers and in-memory recovery state
    */
   unsubscribe() {
     this._cancelPendingWork();
