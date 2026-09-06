@@ -19,18 +19,19 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 
 ## Documentation
 
-| Guide                                   | Description                                                   |
-| --------------------------------------- | ------------------------------------------------------------- |
-| [Getting Started](./getting-started.md) | Installation, configuration, and your first request           |
-| [Authentication](./authentication.md)   | User sign-up, sign-in, OAuth, sessions, and password recovery |
-| [Database](./database.md)               | Query builder for PostgreSQL with Row-Level Security          |
-| [Storage](./storage.md)                 | Upload, download, and manage files                            |
-| [Realtime](./realtime.md)               | WebSocket subscriptions, presence, and broadcast              |
-| [Functions](./functions.md)             | Invoke serverless functions                                   |
-| [Project locks](./locks.md)             | Leases that keep one holder at a time on backend work         |
-| [Next.js Integration](./nextjs.md)      | Server components, middleware, and SSR considerations         |
-| [TypeScript](./typescript.md)           | Type definitions and best practices                           |
-| [Error Handling](./error-handling.md)   | Error patterns and troubleshooting                            |
+| Guide                                       | Description                                                   |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| [Getting Started](./getting-started.md)     | Installation, configuration, and your first request           |
+| [Authentication](./authentication.md)       | User sign-up, sign-in, OAuth, sessions, and password recovery |
+| [Database](./database.md)                   | Query builder for PostgreSQL with Row-Level Security          |
+| [Storage](./storage.md)                     | Upload, download, and manage files                            |
+| [Realtime](./realtime.md)                   | WebSocket subscriptions, presence, and broadcast              |
+| [Functions](./functions.md)                 | Invoke serverless functions                                   |
+| [Durable functions](./durable-functions.md) | Write functions that checkpoint and resume across hours       |
+| [Project locks](./locks.md)                 | Leases that keep one holder at a time on backend work         |
+| [Next.js Integration](./nextjs.md)          | Server components, middleware, and SSR considerations         |
+| [TypeScript](./typescript.md)               | Type definitions and best practices                           |
+| [Error Handling](./error-handling.md)       | Error patterns and troubleshooting                            |
 
 ## Quick Example
 

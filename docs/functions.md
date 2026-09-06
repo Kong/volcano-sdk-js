@@ -240,6 +240,14 @@ exports.handler = async (event) => {
 };
 ```
 
+### Work That Runs for Hours
+
+A function invocation is bounded by its timeout, so work that has to survive
+longer — a multi-step pipeline, an approval that arrives tomorrow, a batch job
+over a flaky API — belongs in a
+[durable function](./durable-functions.md), which checkpoints its progress and
+resumes where it left off.
+
 ## Use Cases
 
 ### When to Use Functions
