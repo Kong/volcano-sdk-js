@@ -15,6 +15,13 @@ const fakeStepSemantics = {
 
 // The engine's own batch result: methods and upper-case statuses, which the
 // facade flattens.
+// The engine settles every item and reports failures in the batch rather than
+// rejecting, so the double does the same: a branch that throws is a failed item.
+const fakeBatchItem = (settled, index) =>
+  settled.status === 'fulfilled'
+    ? { index, status: 'SUCCEEDED', result: settled.value }
+    : { index, status: 'FAILED', error: settled.reason };
+
 const fakeBatch = (items) => ({
   all: items,
   getResults: () => items.filter((item) => item.status === 'SUCCEEDED').map((item) => item.result),
@@ -54,21 +61,18 @@ const fakeContext = () => {
 
     map(name, items, mapFn, config) {
       engineCalls.push({ op: 'map', name, items, config });
-      return Promise.all(items.map((item, index) => mapFn(context, item, index, items))).then(
-        (results) =>
-          fakeBatch(results.map((result, index) => ({ index, status: 'SUCCEEDED', result }))),
-      );
+      return Promise.allSettled(
+        items.map((item, index) => mapFn(context, item, index, items)),
+      ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
     },
 
     parallel(name, branches, config) {
       engineCalls.push({ op: 'parallel', name, branches, config });
-      return Promise.all(
+      return Promise.allSettled(
         branches.map((branch) =>
           typeof branch === 'function' ? branch(context) : branch.func(context),
         ),
-      ).then((results) =>
-        fakeBatch(results.map((result, index) => ({ index, status: 'SUCCEEDED', result }))),
-      );
+      ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
     },
   };
   return context;
@@ -342,6 +346,25 @@ describe('ctx.map', () => {
     await expect(run((_input, ctx) => ctx.map('ship', 'a,b', async (i) => i))).rejects.toThrow(
       /requires an array of items/,
     );
+  });
+
+  it('reports a failed item instead of rejecting', async () => {
+    const failure = new Error('cannot ship b');
+    const result = await run((_input, ctx) =>
+      ctx.map('ship', ['a', 'b'], async (item) => {
+        if (item === 'b') throw failure;
+        return item.toUpperCase();
+      }),
+    );
+
+    // `results` holds what succeeded, so it is not aligned with the input; the
+    // input order lives in `items`.
+    expect(result.results).toEqual(['A']);
+    expect(result.items).toEqual([
+      { index: 0, status: 'succeeded', result: 'A', error: undefined },
+      { index: 1, status: 'failed', result: undefined, error: failure },
+    ]);
+    expect(result).toMatchObject({ succeeded: 1, failed: 1, total: 2, errors: [failure] });
   });
 
   it('delegates throwIfFailed to the batch', async () => {
