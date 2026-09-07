@@ -21,6 +21,12 @@ tags:
     description: Project-scoped log search and activity APIs
   - name: Functions
     description: Function deployment and management
+  - name: Durable Functions
+    description: |-
+      Long-running functions that checkpoint their progress and resume from the
+      last completed step, and the executions started against them. Separate
+      from Functions because a durable function is started asynchronously and
+      metered differently.
   - name: Frontends
     description: Frontend deployment and management. Supports Next.js 15.x and 16.x with Node.js 22.x or 24.x inferred from package.json engines.node when the selected Node.js family satisfies the installed Next.js package engines.node constraint.
   - name: Tokens
@@ -2443,6 +2449,131 @@ paths:
           description: Function deletion started or queued
         '404':
           description: Function not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /durable-functions/{functionId}/executions:
+    post:
+      tags:
+        - Durable Functions
+      summary: Start a durable execution from an application
+      description: |
+        Starts an execution of a durable function using an application
+        credential, and returns its handle.
+
+        This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+        and it is the endpoint an application calls. Like that one, it is not
+        project-scoped: an anon key, a service key and an auth user token each
+        carry their own project. The project-scoped collection under
+        `/projects/{id}/durable-functions/...` remains the owner's management
+        surface.
+
+        **With a service key or an auth user token:** any durable function in
+        the project.
+
+        **With an anon key:** requires the `functions.invoke` permission, and
+        the function must have `is_public: true`.
+
+        Starting is all this endpoint does. Reading a result or stopping an
+        execution requires the project owner's token, because an anon key is
+        shared by everyone who loads the page and an execution is addressed by
+        id alone.
+
+        Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+        a start with the same name returns the existing execution instead of
+        beginning a second one.
+
+        Each execution counts once against the project's function invocation
+        allowance, however many times the start is retried under the same
+        execution name, and the number in flight at once is capped by the plan.
+      operationId: startDurableExecutionFromApplication
+      security:
+        - AnonKey: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/DurableFunctionId'
+        - name: X-Volcano-Execution-Name
+          in: header
+          required: false
+          description: |
+            Idempotency key for this execution. Generated when omitted. A repeat
+            under a name that already names a running execution returns that
+            execution and is not charged again.
+          schema:
+            type: string
+            maxLength: 255
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              description: Input passed to the function, up to 256 KiB.
+      responses:
+        '202':
+          description: Execution accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DurableExecution'
+        '400':
+          description: Payload is not valid JSON, or the execution name is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: |
+            Missing or invalid credential. Also returned for a platform user
+            token, which is not an application credential; project owners start
+            executions through the project-scoped collection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: |
+            The anon key lacks `functions.invoke`, or the function is not
+            public.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: |
+            Durable function not found. Also returned for a standard function's
+            id and for a durable function in another project, so the response
+            cannot be used to tell those apart.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Function is not deployed yet, or has no deployed region
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload is larger than 256 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: |
+            The project has too many executions in flight for its plan, or the
+            function invocation rate limit was exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: |
+            Durable execution is not available in this environment. Returned by
+            a deployment that has no durable execution engine, such as a local
+            one; the request is not retryable there.
           content:
             application/json:
               schema:
@@ -9793,6 +9924,8 @@ components:
       $ref: ./components/common/parameters.yaml#/components/parameters/DatabaseName
     DeploymentId:
       $ref: ./components/common/parameters.yaml#/components/parameters/DeploymentId
+    DurableFunctionId:
+      $ref: ./components/common/parameters.yaml#/components/parameters/DurableFunctionId
     FrontendId:
       $ref: ./components/common/parameters.yaml#/components/parameters/FrontendId
     FunctionId:
@@ -10662,6 +10795,12 @@ components:
       $ref: ./components/common/schemas.yaml#/components/schemas/FrontendUsageData
     FrontendUsageHistoryResponse:
       $ref: ./components/common/schemas.yaml#/components/schemas/FrontendUsageHistoryResponse
+    DurableExecution:
+      $ref: ./components/common/schemas.yaml#/components/schemas/DurableExecution
+    DurableExecutionError:
+      $ref: ./components/common/schemas.yaml#/components/schemas/DurableExecutionError
+    DurableExecutionStatus:
+      $ref: ./components/common/schemas.yaml#/components/schemas/DurableExecutionStatus
     Function:
       $ref: ./components/common/schemas.yaml#/components/schemas/Function
     FunctionDeployment:

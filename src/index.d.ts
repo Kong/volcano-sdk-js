@@ -8,6 +8,12 @@ export type {
   paths as OpenAPIPaths,
 } from './generated/openapi';
 
+import type { components as GeneratedComponents } from './generated/openapi';
+
+/** Handle a durable start answers with, straight off the wire contract. */
+export type DurableExecution = GeneratedComponents['schemas']['DurableExecution'];
+export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExecutionStatus'];
+
 export interface VolcanoAuthConfig {
   /**
    * Your Volcano API base URL.
@@ -397,6 +403,46 @@ export interface Functions {
      * `data` with `error` null. (Union stays `Error` because
      * `VolcanoSystemError extends Error`; narrow at runtime, not by type.)
      */
+    error: Error | null;
+  }>;
+}
+
+export interface Durable {
+  /**
+   * Start a durable execution and get back a handle to it.
+   *
+   * A durable function is never invoked synchronously: it can run for hours, so
+   * the platform accepts the start and answers with an execution to poll.
+   * Starting is the only durable operation an application credential may
+   * perform — reading a result or stopping an execution needs the project
+   * owner's token, so poll from your own backend or with the CLI.
+   *
+   * @param functionName - Durable function name, or its id.
+   * @param input - JSON-serializable input handed to the function.
+   * @param options.executionName - Idempotency key. Starting again under the
+   *        same name returns the execution that already exists rather than
+   *        beginning a second one, and is charged once.
+   *
+   * @example
+   * ```typescript
+   * const { data, error } = await volcano.durable.start(
+   *   'order-pipeline',
+   *   { order_id: orderId },
+   *   { executionName: `order-${orderId}` },
+   * );
+   * if (!error) {
+   *   console.log(data.id, data.status); // 'running'
+   * }
+   * ```
+   */
+  start<TInput = JsonValue>(
+    functionName: string,
+    input?: TInput,
+    options?: { executionName?: string },
+  ): Promise<{
+    data: DurableExecution | null;
+    /** HTTP status: 202 on a start, the platform's refusal status otherwise. */
+    status: number | null;
     error: Error | null;
   }>;
 }
@@ -975,6 +1021,9 @@ export class VolcanoAuth {
 
   /** Function invocation methods */
   functions: Functions;
+
+  /** Durable execution methods */
+  durable: Durable;
 
   /** Project log methods */
   logs: Logs;

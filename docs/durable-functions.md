@@ -5,7 +5,7 @@ description: 'Write functions that checkpoint their progress and resume where th
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to 24 hours, far longer than a single invocation is allowed.
 
-`@volcano.dev/sdk/durable` is what you write that function against. Starting an execution and reading its result happen elsewhere: the [CLI](/cli/durable-functions), the API, or the dashboard.
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Reading a result is owner-scoped, so it happens elsewhere: the [CLI](/cli/durable-functions), the API, or the dashboard.
 
 ```javascript
     10|const { durable } = require('@volcano.dev/sdk/durable');
@@ -394,41 +394,50 @@ that start and read executions — is in
 
 ## Starting and reading executions
 
-Nothing in this module starts an execution. From another function, or any
-backend holding a service key:
+Nothing in this module starts an execution. `volcano.durable.start` does, from
+another function, a backend holding a service key, or a browser holding an anon
+key for a public durable function:
 
-380|```javascript
-const response = await fetch(`${process.env.VOLCANO_API_URL}/durable-functions/${functionId}/executions`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${process.env.VOLCANO_SERVICE_KEY}`,
-    'Content-Type': 'application/json',
-    'X-Volcano-Execution-Name': `order-${orderId}`,
-},
-body: JSON.stringify({ order_id: orderId }),
-});
-390|
-const { id } = await response.json(); // 202, an execution handle
+```javascript
+const { data, error } = await volcano.durable.start(
+  'order-pipeline',
+  { order_id: orderId },
+  { executionName: `order-${orderId}` },
+);
 
+if (error) {
+  throw error;
+}
+console.log(data.id, data.status); // 'running'
 ```
 
 The execution name is the idempotency key: starting again under the same name
-returns the execution that already exists rather than beginning a second one.
+returns the execution that already exists rather than beginning a second one,
+and is charged once.
 
-Reading a result is owner-scoped and takes a platform token, so poll it from
-your own backend or with the CLI, not from the browser. See
+`start` resolves rather than throws when the platform refuses. `status` carries
+why — `403` for a durable function that is not public, `429` for a project with
+too many executions in flight for its plan, `404` for a name that is not a
+durable function in this project.
+
+Starting is the only durable operation an application credential can perform.
+Reading a result or stopping an execution is owner-scoped and takes a platform
+token, because an anon key is shared by everyone who loads the page and an
+execution is addressed by id alone. A function that has to report back writes
+what it produced where the app can read it — a table, a bucket — or the owner
+polls the execution. See
 [Durable functions](/platform/functions/durable-functions) for the full API and
-   400|[the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
+[the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
 
 ## Limits
 
-| Limit                            | Free      | Pro       |
-| -------------------------------- | --------- | --------- |
-| Step timeout                     | 300 s     | 900 s     |
-| Execution timeout                | 24 h      | 24 h      |
-| Concurrent executions per project| 10        | 100       |
+| Limit                             | Free  | Pro   |
+| --------------------------------- | ----- | ----- |
+| Step timeout                      | 300 s | 900 s |
+| Execution timeout                 | 24 h  | 24 h  |
+| Concurrent executions per project | 10    | 100   |
 
-   410|The step timeout bounds one attempt between checkpoints, not the execution. A
+410|The step timeout bounds one attempt between checkpoints, not the execution. A
 step that needs longer than that has to be split, or moved behind
 `ctx.waitUntil` so the waiting happens between operations instead of inside one.
 
@@ -438,7 +447,7 @@ step that needs longer than that has to be split, or moved behind
   but nothing in Volcano can complete one, so the facade leaves it out. Wait on
   your own state with `ctx.waitUntil` instead.
 - **Durable invoke.** Call another function from inside a step —
-   420|  `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
+  420| `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
   than chaining durable executions.
 - **Local development.** Durable execution is a cloud capability; deploying a
   durable function against a local project is refused rather than emulated.
@@ -448,4 +457,7 @@ step that needs longer than that has to be split, or moved behind
 - [Functions](./functions.md) — standard functions, invocation, and user context
 - [Durable functions on the platform](/platform/functions/durable-functions) — the API, limits, and billing
 - [CLI](/cli/durable-functions) — deploy, start, and inspect executions
+
+```
+
 ```

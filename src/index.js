@@ -4,6 +4,7 @@ import {
   downloadStorageObject,
   queryDatabaseSelect,
   releaseProjectLock,
+  startDurableExecutionFromApplication,
   uploadStorageObject,
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.js';
@@ -99,6 +100,7 @@ const GENERATED_TRANSPORT = {
   downloadStorageObject,
   queryDatabaseSelect,
   releaseProjectLock,
+  startDurableExecutionFromApplication,
   uploadStorageObject,
 };
 
@@ -963,6 +965,10 @@ class VolcanoAuth {
 
     this.functions = {
       invoke: this.invokeFunction.bind(this),
+    };
+
+    this.durable = {
+      start: this.startDurableExecution.bind(this),
     };
 
     this.logs = {
@@ -2409,6 +2415,69 @@ class VolcanoAuth {
       return authSessionChangedResult();
     }
     return result;
+  }
+
+  // ========================================================================
+  // Durable Executions
+  // ========================================================================
+
+  /**
+   * Starts a durable execution of a durable function and returns its handle.
+   *
+   * The durable counterpart of `functions.invoke`, and the only durable
+   * operation an application credential may perform: reading a result or
+   * stopping an execution is owner-scoped, because an anon key is shared by
+   * everyone who loads the page and an execution is addressed by id alone. A
+   * durable function that has to report back writes what it produced somewhere
+   * the app can read, or the owner polls the execution with the CLI or API.
+   */
+  async startDurableExecution(functionName, input = {}, options = {}) {
+    const identifier = typeof functionName === 'string' ? functionName.trim() : '';
+    if (!identifier) {
+      return {
+        data: null,
+        status: null,
+        error: new Error('functionName must be a non-empty string'),
+      };
+    }
+
+    const executionName = options.executionName;
+    if (
+      executionName !== undefined &&
+      (typeof executionName !== 'string' || !executionName.trim())
+    ) {
+      return {
+        data: null,
+        status: null,
+        error: new Error('executionName must be a non-empty string when provided'),
+      };
+    }
+
+    await this._completeOAuthExchange();
+    const context = this._captureAuthContext();
+    // Same credential rule as an invoke: a signed-in session speaks for its
+    // user, otherwise the key the client was built with (anon in a browser, a
+    // service key on a server).
+    const useAnonKey = !context.accessToken;
+
+    const headers = executionName
+      ? { 'X-Volcano-Execution-Name': executionName.trim() }
+      : undefined;
+
+    try {
+      const response = await this._transport.startDurableExecutionFromApplication(
+        encodeURIComponent(identifier),
+        input,
+        this._generatedOptions(useAnonKey ? 'anon' : 'session', headers),
+      );
+      return { data: response.data, status: response.status, error: null };
+    } catch (error) {
+      return {
+        data: null,
+        status: typeof error?.status === 'number' ? error.status : null,
+        error: error instanceof Error ? error : new Error('Failed to start durable execution'),
+      };
+    }
   }
 
   // ========================================================================

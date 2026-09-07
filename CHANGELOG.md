@@ -14,6 +14,11 @@ All notable changes to the Volcano SDK will be documented in this file.
   dependency loaded on first invocation, so browser bundles and standard
   functions are unaffected. See [docs/durable-functions.md](./docs/durable-functions.md).
 
+- `volcano.durable.start(name, input, { executionName })` starts a durable
+  execution with an application credential and returns its handle. The durable
+  counterpart of `functions.invoke`, and the only durable operation an anon or
+  service key can perform: reading a result stays owner-scoped.
+
 - `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
   service-role-only project leases. `withLock` renews automatically, aborts its
   callback signal after ownership loss, and releases in `finally`.

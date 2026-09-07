@@ -2343,6 +2343,70 @@ components:
         - deployed_regions
         - created_at
         - updated_at
+    DurableExecutionStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, timed_out, stopped]
+      description: |
+        Lifecycle state of an execution. `pending` covers the window between the
+        platform reserving the execution name and the function accepting the
+        start, and has no counterpart once the execution is under way.
+        `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
+    DurableExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        function_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: |
+            Idempotency key for the execution. Supplied by the client through
+            `X-Volcano-Execution-Name`, otherwise generated.
+        status:
+          $ref: '#/components/schemas/DurableExecutionStatus'
+        region:
+          type: string
+          description: |
+            Region the execution runs in. An execution is pinned to one region
+            for its whole life because its checkpoints live there.
+        result:
+          description: |
+            Whatever the function returned, verbatim. Absent while the execution
+            is still running, and absent once its retention period has lapsed.
+        result_expired:
+          type: boolean
+          description: |
+            `true` when the execution is terminal but its result is no longer
+            retained, which distinguishes a discarded result from an empty one.
+            Shortly after that the execution itself is dropped and reads answer
+            `404`.
+        error:
+          $ref: '#/components/schemas/DurableExecutionError'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          description: Present once the execution has reached a terminal status.
+      required:
+        - id
+        - function_id
+        - name
+        - status
+        - region
+        - created_at
+    DurableExecutionError:
+      type: object
+      description: Why a failed or timed-out execution ended.
+      properties:
+        type:
+          type: string
+        message:
+          type: string
     FunctionDeployment:
       type: object
       properties:

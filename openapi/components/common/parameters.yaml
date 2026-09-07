@@ -57,6 +57,13 @@ components:
         type: string
         format: uuid
       description: Function ID
+    DurableFunctionId:
+      name: functionId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Durable function ID, or its name within the project
     Limit:
       name: limit
       in: query

@@ -1,6 +1,5 @@
-// The durable runtime is an optional peer dependency, absent from this repo's
-// install, so these tests stand a recording double in its place and assert on
-// what the facade hands it. That is the contract worth pinning here: the
+// The durable runtime is an optional peer dependency, so these tests stand a
+// recording double in its place and assert on what the facade hands it. That is the contract worth pinning here: the
 // translation from the Volcano authoring surface to the engine's own — argument
 // order, duration form, config field names.
 //

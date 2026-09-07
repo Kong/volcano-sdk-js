@@ -928,6 +928,57 @@ export const deleteFunction = async (id, functionId, options) => {
         method: 'DELETE'
     });
 };
+export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
+    return `/durable-functions/${functionId}/executions`;
+};
+/**
+ * Starts an execution of a durable function using an application
+ * credential, and returns its handle.
+ *
+ * This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+ * and it is the endpoint an application calls. Like that one, it is not
+ * project-scoped: an anon key, a service key and an auth user token each
+ * carry their own project. The project-scoped collection under
+ * `/projects/{id}/durable-functions/...` remains the owner's management
+ * surface.
+ *
+ * **With a service key or an auth user token:** any durable function in
+ * the project.
+ *
+ * **With an anon key:** requires the `functions.invoke` permission, and
+ * the function must have `is_public: true`.
+ *
+ * Starting is all this endpoint does. Reading a result or stopping an
+ * execution requires the project owner's token, because an anon key is
+ * shared by everyone who loads the page and an execution is addressed by
+ * id alone.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+ * a start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts once against the project's function invocation
+ * allowance, however many times the start is retried under the same
+ * execution name, and the number in flight at once is capped by the plan.
+ * @summary Start a durable execution from an application
+ */
+export const startDurableExecutionFromApplication = async (functionId, startDurableExecutionFromApplicationBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getStartDurableExecutionFromApplicationUrl(functionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(startDurableExecutionFromApplicationBody)
+    });
+};
 export const getInvokeFunctionUrl = (functionId) => {
     return `/functions/${functionId}/invoke`;
 };

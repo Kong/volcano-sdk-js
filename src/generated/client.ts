@@ -95,6 +95,7 @@ import type {
   DeleteDatabaseBranch202,
   DeleteOAuthConfigParams,
   DeviceAuthorizationResponse,
+  DurableExecution,
   EmailTemplate,
   Error,
   Frontend,
@@ -3141,6 +3142,119 @@ export const deleteFunction = async (id: string,
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type startDurableExecutionFromApplicationResponse202 = {
+  data: DurableExecution
+  status: 202
+}
+
+export type startDurableExecutionFromApplicationResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type startDurableExecutionFromApplicationResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type startDurableExecutionFromApplicationResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type startDurableExecutionFromApplicationResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type startDurableExecutionFromApplicationResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type startDurableExecutionFromApplicationResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type startDurableExecutionFromApplicationResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type startDurableExecutionFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type startDurableExecutionFromApplicationResponseSuccess = (startDurableExecutionFromApplicationResponse202) & {
+  headers: Headers;
+};
+export type startDurableExecutionFromApplicationResponseError = (startDurableExecutionFromApplicationResponse400 | startDurableExecutionFromApplicationResponse401 | startDurableExecutionFromApplicationResponse403 | startDurableExecutionFromApplicationResponse404 | startDurableExecutionFromApplicationResponse409 | startDurableExecutionFromApplicationResponse413 | startDurableExecutionFromApplicationResponse429 | startDurableExecutionFromApplicationResponse503) & {
+  headers: Headers;
+};
+
+export type startDurableExecutionFromApplicationResponse = (startDurableExecutionFromApplicationResponseSuccess | startDurableExecutionFromApplicationResponseError)
+
+export const getStartDurableExecutionFromApplicationUrl = (functionId: string,) => {
+
+
+
+
+  return `/durable-functions/${functionId}/executions`
+}
+
+/**
+ * Starts an execution of a durable function using an application
+ * credential, and returns its handle.
+ *
+ * This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+ * and it is the endpoint an application calls. Like that one, it is not
+ * project-scoped: an anon key, a service key and an auth user token each
+ * carry their own project. The project-scoped collection under
+ * `/projects/{id}/durable-functions/...` remains the owner's management
+ * surface.
+ *
+ * **With a service key or an auth user token:** any durable function in
+ * the project.
+ *
+ * **With an anon key:** requires the `functions.invoke` permission, and
+ * the function must have `is_public: true`.
+ *
+ * Starting is all this endpoint does. Reading a result or stopping an
+ * execution requires the project owner's token, because an anon key is
+ * shared by everyone who loads the page and an execution is addressed by
+ * id alone.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+ * a start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts once against the project's function invocation
+ * allowance, however many times the start is retried under the same
+ * execution name, and the number in flight at once is capped by the plan.
+ * @summary Start a durable execution from an application
+ */
+export const startDurableExecutionFromApplication = async (functionId: string,
+    startDurableExecutionFromApplicationBody?: unknown, options?: Parameters<typeof volcanoFetch>[1]): Promise<startDurableExecutionFromApplicationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<startDurableExecutionFromApplicationResponse>(getStartDurableExecutionFromApplicationUrl(functionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startDurableExecutionFromApplicationBody)
   }
 );}
 

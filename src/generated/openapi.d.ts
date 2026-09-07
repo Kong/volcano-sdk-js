@@ -799,6 +799,53 @@ export interface paths {
         patch: operations["updateFunction"];
         trace?: never;
     };
+    "/durable-functions/{functionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a durable execution from an application
+         * @description Starts an execution of a durable function using an application
+         *     credential, and returns its handle.
+         *
+         *     This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+         *     and it is the endpoint an application calls. Like that one, it is not
+         *     project-scoped: an anon key, a service key and an auth user token each
+         *     carry their own project. The project-scoped collection under
+         *     `/projects/{id}/durable-functions/...` remains the owner's management
+         *     surface.
+         *
+         *     **With a service key or an auth user token:** any durable function in
+         *     the project.
+         *
+         *     **With an anon key:** requires the `functions.invoke` permission, and
+         *     the function must have `is_public: true`.
+         *
+         *     Starting is all this endpoint does. Reading a result or stopping an
+         *     execution requires the project owner's token, because an anon key is
+         *     shared by everyone who loads the page and an execution is addressed by
+         *     id alone.
+         *
+         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+         *     a start with the same name returns the existing execution instead of
+         *     beginning a second one.
+         *
+         *     Each execution counts once against the project's function invocation
+         *     allowance, however many times the start is retried under the same
+         *     execution name, and the number in flight at once is capped by the plan.
+         */
+        post: operations["startDurableExecutionFromApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/functions/{functionId}/invoke": {
         parameters: {
             query?: never;
@@ -5525,6 +5572,56 @@ export interface components {
             /** Format: int64 */
             total_page_views: number;
         };
+        DurableExecution: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            function_id: string;
+            /**
+             * @description Idempotency key for the execution. Supplied by the client through
+             *     `X-Volcano-Execution-Name`, otherwise generated.
+             */
+            name: string;
+            status: components["schemas"]["DurableExecutionStatus"];
+            /**
+             * @description Region the execution runs in. An execution is pinned to one region
+             *     for its whole life because its checkpoints live there.
+             */
+            region: string;
+            /**
+             * @description Whatever the function returned, verbatim. Absent while the execution
+             *     is still running, and absent once its retention period has lapsed.
+             */
+            result?: unknown;
+            /**
+             * @description `true` when the execution is terminal but its result is no longer
+             *     retained, which distinguishes a discarded result from an empty one.
+             *     Shortly after that the execution itself is dropped and reads answer
+             *     `404`.
+             */
+            result_expired?: boolean;
+            error?: components["schemas"]["DurableExecutionError"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Present once the execution has reached a terminal status.
+             */
+            completed_at?: string;
+        };
+        /** @description Why a failed or timed-out execution ended. */
+        DurableExecutionError: {
+            type?: string;
+            message?: string;
+        };
+        /**
+         * @description Lifecycle state of an execution. `pending` covers the window between the
+         *     platform reserving the execution name and the function accepting the
+         *     start, and has no counterpart once the execution is under way.
+         *     `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
+         * @enum {string}
+         */
+        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped";
         Function: {
             /** Format: uuid */
             id: string;
@@ -7650,6 +7747,8 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
+        /** @description Durable function ID, or its name within the project */
+        DurableFunctionId: string;
         /** @description Frontend ID */
         FrontendId: string;
         /** @description Function ID */
@@ -10576,6 +10675,130 @@ export interface operations {
             };
             /** @description Function not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startDurableExecutionFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Idempotency key for this execution. Generated when omitted. A repeat
+                 *     under a name that already names a running execution returns that
+                 *     execution and is not charged again.
+                 */
+                "X-Volcano-Execution-Name"?: string;
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Execution accepted and started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Payload is not valid JSON, or the execution name is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Missing or invalid credential. Also returned for a platform user
+             *     token, which is not an application credential; project owners start
+             *     executions through the project-scoped collection.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, or the function is not
+             *     public.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function not found. Also returned for a standard function's
+             *     id and for a durable function in another project, so the response
+             *     cannot be used to tell those apart.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function is not deployed yet, or has no deployed region */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Payload is larger than 256 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The project has too many executions in flight for its plan, or the
+             *     function invocation rate limit was exceeded.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Returned by
+             *     a deployment that has no durable execution engine, such as a local
+             *     one; the request is not retryable there.
+             */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

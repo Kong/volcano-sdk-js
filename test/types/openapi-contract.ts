@@ -1,6 +1,8 @@
 import type {
   Auth,
   CompleteSession,
+  Durable,
+  DurableExecution,
   OpenAPIComponents,
   OpenAPIOperations,
   UploadSessionStatusResponse,
@@ -105,6 +107,38 @@ type OAuthResponseShape = {
   data: unknown;
 };
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
+
+type DurableExecutionShape = {
+  id: string;
+  function_id: string;
+  name: string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped';
+  region: string;
+  created_at: string;
+};
+type _DurableStartHandleMatchesHosting = Assert<
+  DurableExecutionShape extends DurableExecution ? true : false
+>;
+type _DurableExecutionComesOffTheWire = Assert<
+  Equal<DurableExecution, OpenAPIComponents['schemas']['DurableExecution']>
+>;
+
+declare const durable: Durable;
+
+// A start is answered, never thrown: `error` is what a refusal arrives as, and
+// `data` is only a handle once it is null-checked.
+async function startDurableExecution() {
+  const { data, status, error } = await durable.start('order-pipeline', { order_id: 4417 });
+  if (error) {
+    const refusal: number | null = status;
+    void refusal;
+    return;
+  }
+  const handle: DurableExecution | null = data;
+  void handle;
+}
+
+void startDurableExecution;
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {
