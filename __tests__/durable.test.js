@@ -211,7 +211,6 @@ describe('ctx.wait', () => {
     ['5m', { minutes: 5, seconds: 0 }],
     ['2h', { hours: 2, minutes: 0, seconds: 0 }],
     ['1d', { days: 1, hours: 0, minutes: 0, seconds: 0 }],
-    ['500ms', { seconds: 1 }],
     [45, { seconds: 45 }],
     [{ minutes: 90 }, { minutes: 90 }],
   ])('accepts %p as a duration', async (given, expected) => {
@@ -230,13 +229,43 @@ describe('ctx.wait', () => {
 
   it('names what is wrong with an unparseable duration', async () => {
     await expect(run((_input, ctx) => ctx.wait('pause', 'soon'))).rejects.toThrow(
-      /wait must be a duration such as '30s'.*got 'soon'/,
+      /wait must be a duration in whole seconds, such as '30s'.*got 'soon'/,
     );
   });
 
   it('refuses a negative duration', async () => {
     await expect(run((_input, ctx) => ctx.wait('pause', -1))).rejects.toThrow(
-      /non-negative number of seconds/,
+      /non-negative whole number of seconds/,
+    );
+  });
+
+  // The duration the engine takes carries whole seconds, so a sub-second value
+  // could only be rounded. It was: 'ms' parsed, and '400ms' became a wait of
+  // nothing while '500ms' became a second. A wait that does not happen is worse
+  // than one that is refused, since the code reads as if it paused.
+  it.each(['400ms', '500ms', '2000ms'])('refuses %p rather than rounding it', async (given) => {
+    await expect(run((_input, ctx) => ctx.wait('pause', given))).rejects.toThrow(
+      /must be a duration in whole seconds/,
+    );
+  });
+
+  it('refuses a fraction of a second', async () => {
+    await expect(run((_input, ctx) => ctx.wait('pause', 0.4))).rejects.toThrow(
+      /non-negative whole number of seconds/,
+    );
+  });
+
+  // The object form went to the engine unread, so a plausible-looking key was a
+  // duration of nothing.
+  it('refuses a duration object it does not understand', async () => {
+    await expect(run((_input, ctx) => ctx.wait('pause', { milliseconds: 500 }))).rejects.toThrow(
+      /takes days, hours, minutes, seconds \(got milliseconds\)/,
+    );
+  });
+
+  it('refuses a duration object with a fractional part', async () => {
+    await expect(run((_input, ctx) => ctx.wait('pause', { seconds: 1.5 }))).rejects.toThrow(
+      /seconds must be a non-negative whole number/,
     );
   });
 });
@@ -298,6 +327,28 @@ describe('ctx.waitUntil', () => {
     await expect(
       run((_input, ctx) => ctx.waitUntil('approval', async (state) => state, { interval: '5s' })),
     ).rejects.toThrow(/requires an `until` predicate/);
+  });
+
+  // The engine refuses a condition with no initialState, in a message about its
+  // own config rather than the options written here. Forwarding the undefined
+  // left the caller reading that message.
+  it('requires an initialState, in terms of the option it is given as', async () => {
+    await expect(
+      run((_input, ctx) =>
+        ctx.waitUntil('approval', async (state) => state, { until: (state) => !!state }),
+      ),
+    ).rejects.toThrow(/requires an `initialState` in its options/);
+  });
+
+  it('takes a falsy initialState as a state, not as an omission', async () => {
+    await run((_input, ctx) =>
+      ctx.waitUntil('approval', async () => 1, {
+        initialState: 0,
+        until: (state) => state > 0,
+      }),
+    );
+
+    expect(callsOf('waitForCondition')[0].config.initialState).toBe(0);
   });
 });
 

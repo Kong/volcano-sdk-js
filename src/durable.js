@@ -274,6 +274,15 @@ function conditionConfig(options, engine) {
   if (typeof options.until !== 'function') {
     throw new TypeError('ctx.waitUntil() requires an `until` predicate in its options');
   }
+  // The engine requires it — it is the value `until` is first asked about — and
+  // refuses the wait with a message naming its own config shape rather than
+  // this one. Caught here so the error names the option the caller writes, and
+  // before the step is registered.
+  if (options.initialState === undefined) {
+    throw new TypeError(
+      'ctx.waitUntil() requires an `initialState` in its options, which is what `until` is given until the state changes',
+    );
+  }
 
   return {
     initialState: options.initialState,
@@ -329,13 +338,19 @@ function toRetryStrategy(retry, engine) {
   });
 }
 
+// No `ms`: a durable duration is held by the platform between invocations, and
+// the shape the engine takes carries whole seconds, so a millisecond value
+// could only be rounded. It read as a supported unit and turned '400ms' into no
+// wait at all, so it is refused instead — parseDurationText names the units it
+// takes.
 const durationUnits = {
-  ms: 1 / 1000,
   s: 1,
   m: 60,
   h: 3600,
   d: 86400,
 };
+
+const durationFields = ['days', 'hours', 'minutes', 'seconds'];
 
 function optionalDuration(value, field) {
   return value === undefined ? undefined : toDuration(value, field);
@@ -347,22 +362,52 @@ function optionalDuration(value, field) {
  * the last one. A bare number is seconds: every durable duration is a wait the
  * platform holds, not a timer this process keeps, so milliseconds would be a
  * misleading unit to default to.
+ *
+ * A duration object is checked and forwarded as it stands rather than
+ * recomposed, so `{ minutes: 90 }` stays what the caller wrote.
  */
 function toDuration(value, field) {
   if (typeof value === 'object' && value !== null) {
-    return value;
+    return checkedDurationObject(value, field);
   }
   return secondsToDuration(toSeconds(value, field));
 }
 
+/**
+ * Unknown keys are the reason this exists: the object form reached the engine
+ * unread, so `{ milliseconds: 500 }` was a duration of nothing and the engine
+ * was left to fail on it somewhere further in.
+ */
+function checkedDurationObject(value, field) {
+  const unknown = Object.keys(value).filter((key) => !durationFields.includes(key));
+  if (unknown.length > 0) {
+    throw new TypeError(
+      `${field} duration takes ${durationFields.join(', ')} (got ${unknown.join(', ')})`,
+    );
+  }
+  for (const key of durationFields) {
+    const part = value[key];
+    if (part === undefined) {
+      continue;
+    }
+    if (!Number.isInteger(part) || part < 0) {
+      throw new TypeError(`${field} duration ${key} must be a non-negative whole number`);
+    }
+  }
+  return value;
+}
+
 function toSeconds(value, field) {
   if (typeof value === 'number') {
-    if (!Number.isFinite(value) || value < 0) {
-      throw new TypeError(`${field} must be a non-negative number of seconds`);
+    // Whole seconds, because that is all the engine's duration can carry: a
+    // fraction would silently become a different wait than the one asked for.
+    if (!Number.isInteger(value) || value < 0) {
+      throw new TypeError(`${field} must be a non-negative whole number of seconds`);
     }
     return value;
   }
   if (typeof value === 'object' && value !== null) {
+    checkedDurationObject(value, field);
     return (
       (value.days ?? 0) * 86400 +
       (value.hours ?? 0) * 3600 +
@@ -411,7 +456,7 @@ function parseDurationText(text, field) {
 
   if (segments === 0 || at !== text.length) {
     throw new TypeError(
-      `${field} must be a duration such as '30s', '5m', '2h', '1d' or '1m30s' (got '${text}')`,
+      `${field} must be a duration in whole seconds, such as '30s', '5m', '2h', '1d' or '1m30s' (got '${text}')`,
     );
   }
   return seconds;
@@ -425,8 +470,9 @@ function scanWhile(text, from, accept) {
   return at;
 }
 
-function secondsToDuration(totalSeconds) {
-  const whole = Math.round(totalSeconds);
+// Every caller has already established whole seconds, so nothing is rounded
+// here: a rounding step is what made '400ms' a wait of zero.
+function secondsToDuration(whole) {
   const days = Math.floor(whole / 86400);
   const hours = Math.floor((whole % 86400) / 3600);
   const minutes = Math.floor((whole % 3600) / 60);

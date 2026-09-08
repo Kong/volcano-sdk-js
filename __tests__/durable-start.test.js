@@ -114,3 +114,54 @@ describe('durable.start', () => {
     expect(error.message).toBe('Failed to start durable execution');
   });
 });
+
+// Every test above stands in a transport, which is the right level for the
+// credential and validation rules but leaves the request itself unasserted: the
+// route, the method and the idempotency header are the real transport's work,
+// and a wrong one of those is a start that goes nowhere.
+describe('durable.start over the wire', () => {
+  beforeEach(() => {
+    global.fetch.mockReset();
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 202,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: () => Promise.resolve(execution),
+      text: () => Promise.resolve(JSON.stringify(execution)),
+    });
+  });
+
+  function realClient() {
+    return new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-durable' });
+  }
+
+  test('posts to the function executions collection with the anon key', async () => {
+    const { data, error } = await realClient().durable.start('order-pipeline', { order_id: 42 });
+
+    expect(error).toBeNull();
+    expect(data).toEqual(execution);
+
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(String(url)).toBe('https://api.test.com/durable-functions/order-pipeline/executions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ order_id: 42 });
+    const headers = new Headers(init.headers);
+    expect(headers.get('apikey') ?? headers.get('authorization')).toContain('ak-durable');
+    expect(headers.get('x-volcano-execution-name')).toBeNull();
+  });
+
+  test('carries the execution name as the idempotency header', async () => {
+    await realClient().durable.start('order-pipeline', {}, { executionName: 'order-42' });
+
+    const headers = new Headers(global.fetch.mock.calls[0][1].headers);
+    expect(headers.get('x-volcano-execution-name')).toBe('order-42');
+  });
+
+  test('escapes a function name that needs it', async () => {
+    await realClient().durable.start('order pipeline');
+
+    expect(String(global.fetch.mock.calls[0][0])).toContain(
+      '/durable-functions/order%20pipeline/executions',
+    );
+  });
+});

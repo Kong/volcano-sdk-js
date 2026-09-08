@@ -65,8 +65,9 @@ export interface StepOptions {
 export interface WaitUntilOptions<TState> {
   /** Stop waiting once this returns true for the state the check returned. */
   until: (state: TState) => boolean;
-  /** The state the first check receives. */
-  initialState?: TState;
+  /** The state the first check receives. Required: the wait starts by asking
+   *  `until` about it. */
+  initialState: TState;
   /** Delay before the second check. Defaults to 5 seconds. */
   interval?: DurableDuration;
   /** Ceiling for the backoff delay between checks. */

@@ -95,7 +95,7 @@ JSON-serializable. Throwing fails the execution and records the error.
 Anywhere a duration is taken, these forms all work:
 
 ```javascript
-await ctx.wait('30s'); // string, with ms/s/m/h/d units
+await ctx.wait('30s'); // string, with s/m/h/d units
 await ctx.wait('1m30s'); // compound
 await ctx.wait(90); // a number is seconds
 await ctx.wait({ minutes: 1, seconds: 30 }); // explicit
@@ -103,6 +103,10 @@ await ctx.wait({ minutes: 1, seconds: 30 }); // explicit
 
 A bare number is **seconds**, not milliseconds: a durable wait is time the
 platform holds, not a timer your process keeps.
+
+Durations are whole seconds. There is no millisecond unit, and a fraction is
+refused rather than rounded — the platform holds a wait between invocations, so
+sub-second precision is not something it can honor.
 
 ## `ctx.step(name?, fn, options?)`
 
@@ -239,7 +243,7 @@ const approval = await ctx.waitUntil(
 | Option         | Type     | Default | Description                                        |
 | -------------- | -------- | ------- | -------------------------------------------------- |
 | `until`        | function | —       | Required. Stop once it returns true for the state. |
-| `initialState` | any      | —       | The state the first check receives.                |
+| `initialState` | any      | —       | Required. The state the first check receives.      |
 | `interval`     | duration | `5s`    | Delay before the second check.                     |
 | `maxInterval`  | duration | `5m`    | Ceiling for the backoff delay between checks.      |
 | `backoffRate`  | `number` | `2`     | Multiplier applied after each check.               |

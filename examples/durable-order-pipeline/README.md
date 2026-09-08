@@ -136,9 +136,9 @@ the same execution, taking the other branch, with the refund guarded by
 ## Things worth copying
 
 - **The order id is the execution name.** `orders-api` starts with
-  `X-Volcano-Execution-Name: order-<id>`, so a client that retries the submit
-  resolves to the execution that already exists rather than starting a second
-  pipeline.
+  `volcano.durable.start(id, input, { executionName: 'order-<id>' })`, so a
+  client that retries the submit resolves to the execution that already exists
+  rather than starting a second pipeline.
 - **The platform token never leaves the backend.** Starting an execution is
   allowed with a service key; reading one is owner-scoped. The browser calls
   `orders-api`, which reads the order row the pipeline keeps up to date.

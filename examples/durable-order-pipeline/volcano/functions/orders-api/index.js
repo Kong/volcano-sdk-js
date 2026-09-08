@@ -67,29 +67,27 @@ async function submitOrder(auth, input) {
 // any backend. Reading one cannot, so `orderStatus` reads the row this pipeline
 // keeps up to date instead.
 async function startExecution(orderId) {
-  const response = await fetch(
-    `${VOLCANO_API_URL}/durable-functions/${DURABLE_FUNCTION_ID}/executions`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${VOLCANO_SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        'X-Volcano-Execution-Name': `order-${orderId}`,
-      },
-      body: JSON.stringify({ order_id: orderId }),
-    },
+  const { data, error, status } = await starter().durable.start(
+    DURABLE_FUNCTION_ID,
+    { order_id: orderId },
+    { executionName: `order-${orderId}` },
   );
 
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  if (error) {
     // 429 is the project's concurrent-execution cap: the order is recorded, so
     // the caller can submit it again later.
-    throw withStatus(
-      new Error(body.error ?? `starting the pipeline failed (${response.status})`),
-      response.status === 429 ? 429 : 502,
-    );
+    throw withStatus(error, status === 429 ? 429 : 502);
   }
-  return body;
+  return data;
+}
+
+// Built without an access token, so the start speaks for the service key rather
+// than for the signed-in user.
+function starter() {
+  return new VolcanoClient({
+    apiUrl: VOLCANO_API_URL,
+    anonKey: VOLCANO_SERVICE_KEY,
+  });
 }
 
 async function orderStatus(input) {
