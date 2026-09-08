@@ -10,6 +10,7 @@
 import type { CursorParameter } from './cursorParameter';
 import type { EndingBeforeParameter } from './endingBeforeParameter';
 import type { LimitParameter } from './limitParameter';
+import type { ListDatabasesStatus } from './listDatabasesStatus';
 import type { OffsetParameter } from './offsetParameter';
 import type { PageParameter } from './pageParameter';
 import type { SearchParameter } from './searchParameter';
@@ -60,4 +61,8 @@ offset?: OffsetParameter;
  * @maxLength 256
  */
 search?: SearchParameter;
+/**
+ * Return only the databases in this status.
+ */
+status?: ListDatabasesStatus;
 };

@@ -12,5 +12,9 @@ export type HostedRenderablePageType = typeof HostedRenderablePageType[keyof typ
 
 
 export const HostedRenderablePageType = {
+  signup: 'signup',
+  'forgot-password': 'forgot-password',
+  device: 'device',
+  'verify-email': 'verify-email',
   'reset-password': 'reset-password',
 } as const;

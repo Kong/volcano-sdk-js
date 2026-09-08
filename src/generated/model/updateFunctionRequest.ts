@@ -7,6 +7,9 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
+import type { FunctionInvocationMode } from './functionInvocationMode';
+import type { UpdateFunctionRequestOpenapiSpec } from './updateFunctionRequestOpenapiSpec';
 
 export interface UpdateFunctionRequest {
   /**
@@ -14,5 +17,12 @@ export interface UpdateFunctionRequest {
      * - `false` (default): private function
      * - `true`: public function (anon keys with `functions.invoke` can invoke)
      */
-  is_public: boolean;
+  is_public?: boolean;
+  invocation_mode?: FunctionInvocationMode;
+  http_auth_mode?: FunctionHTTPAuthMode;
+  /**
+     * OpenAPI 3.0 or 3.1 metadata for HTTP mode. Send null to clear it.
+     * @nullable
+     */
+  openapi_spec?: UpdateFunctionRequestOpenapiSpec;
 }

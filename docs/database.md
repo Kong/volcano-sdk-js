@@ -280,8 +280,13 @@ if (error) {
 }
 
 const updatedPost = data[0];
-console.log('Post updated:', updatedPost.title);
+if (updatedPost) {
+  console.log('Post updated:', updatedPost.title);
+}
 ```
+
+Updates return a list of changed rows. When the filter matches no rows, the
+operation succeeds with `data: []` and leaves existing rows unchanged.
 
 ### Update Multiple Rows
 
@@ -314,8 +319,13 @@ if (error) {
   return;
 }
 
-console.log('Deleted post:', data[0].id);
+if (data.length > 0) {
+  console.log('Deleted post:', data[0].id);
+}
 ```
+
+Deletes return a list of removed rows. When the filter matches no rows, the
+operation succeeds with `data: []` and leaves existing rows unchanged.
 
 ### Soft Delete Pattern
 

@@ -27,6 +27,9 @@ async function responseData(response: Response, responseType?: 'blob'): Promise<
   if (contentType.includes('json') || typeof response.blob !== 'function') {
     return response.json();
   }
+  if (contentType.startsWith('text/')) {
+    return response.text();
+  }
   return response.blob();
 }
 

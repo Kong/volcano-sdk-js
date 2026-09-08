@@ -19,8 +19,10 @@ export interface MetricUsageData {
      * "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
      * reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
      * is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-     * not a cumulative counter. It is the sum of the latest `pg_database_size` samples
-     * exposed as `storage_bytes` by the project's database list.
+     * not a cumulative counter. It is the sum of the latest samples exposed as
+     * `storage_bytes` by the project's database list, so it includes what each
+     * database's branches and backups hold, and it inherits that field's lag
+     * behind a live measurement.
      */
   metric: string;
   /** Total usage for the current usage month */

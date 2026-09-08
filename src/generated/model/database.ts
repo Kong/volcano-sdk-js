@@ -22,7 +22,12 @@ export interface Database {
      * @pattern ^[a-z0-9_]+$
      */
   name: string;
-  /** Database provisioning status */
+  /**
+     * Database status. `restoring` means a restore is replacing the
+     * database's data: it does not accept connections, and the operations
+     * that would race the restore are rejected until it finishes. Its
+     * branches keep serving throughout.
+     */
   status: DatabaseStatus;
   /** Timestamp when the current provisioning phase started */
   provisioning_started_at?: string;
@@ -44,8 +49,13 @@ export interface Database {
   /** Database size tier that determines available RAM and scaling limits. */
   database_type?: DatabaseDatabaseType;
   /**
-     * Latest observed on-disk size from `pg_database_size`, in bytes. This
-     * point-in-time gauge may be absent until the database has been sampled.
+     * Latest observed storage for this database, in bytes: its own on-disk
+     * size, plus what each branch has diverged from it, plus what its
+     * backups cost to hold. This is the figure the storage allowance is
+     * enforced against, and the stats endpoint breaks it down. A
+     * point-in-time gauge recorded by a background pass, so it may be
+     * absent until the database has been sampled, and it can trail the
+     * stats endpoint's `current_storage_bytes`, which measures on request.
      * Summing the latest samples for every database in a project produces
      * the project's "Database Storage (Bytes)" usage gauge. Populated on
      * database list responses; single-database responses omit it.

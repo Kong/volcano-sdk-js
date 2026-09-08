@@ -14,4 +14,6 @@ export interface GitRepository {
   full_name: string;
   default_branch: string;
   private: boolean;
+  /** Whether the repository has no commits and can receive an initial source export. */
+  is_empty: boolean;
 }

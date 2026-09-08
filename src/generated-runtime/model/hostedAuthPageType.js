@@ -9,5 +9,9 @@
  */
 export const HostedAuthPageType = {
     login: 'login',
+    signup: 'signup',
+    'forgot-password': 'forgot-password',
+    device: 'device',
+    'verify-email': 'verify-email',
     'reset-password': 'reset-password',
 };
