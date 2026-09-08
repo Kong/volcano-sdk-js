@@ -190,7 +190,7 @@ autoBindSteps(features, [
     });
 
     when('the client inserts its contract row', async () => {
-      const row = context.world.fixture.mutation_rows.javascript.insert;
+      const row = context.world.fixture.mutation_rows.insert;
       registerDatabaseCleanup(context.world, () =>
         context.world.client.delete(context.world.fixture.table_name).eq('slug', row.slug),
       );
@@ -199,12 +199,12 @@ autoBindSteps(features, [
     });
 
     then('exactly the inserted contract row is returned', () => {
-      const row = context.world.fixture.mutation_rows.javascript.insert;
+      const row = context.world.fixture.mutation_rows.insert;
       expect(context.world.lastOutcome.value).toEqual([row]);
     });
 
     when('the client updates its contract row', async () => {
-      const row = context.world.fixture.mutation_rows.javascript.update;
+      const row = context.world.fixture.mutation_rows.update;
       registerDatabaseCleanup(context.world, () =>
         context.world.client
           .update(context.world.fixture.table_name, { value: row.before.value })
@@ -217,12 +217,12 @@ autoBindSteps(features, [
     });
 
     then('exactly the updated contract row is returned', () => {
-      const row = context.world.fixture.mutation_rows.javascript.update.after;
+      const row = context.world.fixture.mutation_rows.update.after;
       expect(context.world.lastOutcome.value).toEqual([row]);
     });
 
     when('the client deletes its contract row', async () => {
-      const row = context.world.fixture.mutation_rows.javascript.delete;
+      const row = context.world.fixture.mutation_rows.delete;
       registerDatabaseCleanup(context.world, async () => {
         const removed = await context.world.client
           .delete(context.world.fixture.table_name)
@@ -238,7 +238,7 @@ autoBindSteps(features, [
     });
 
     then('exactly the deleted contract row is returned', () => {
-      const row = context.world.fixture.mutation_rows.javascript.delete;
+      const row = context.world.fixture.mutation_rows.delete;
       expect(context.world.lastOutcome.value).toEqual([row]);
     });
 
