@@ -63,5 +63,12 @@ jobs:
                   -f message='chore(release): format changelog' \
                   -f content="$(base64 -w0 CHANGELOG.md)" --jq '.commit.sha')"
               fi
-              gh pr merge "$number" --auto --squash --match-head-commit "$head"
+              # GitHub's PR head can briefly lag behind the Contents API commit.
+              for attempt in {1..5}; do
+                if gh pr merge "$number" --auto --squash --match-head-commit "$head"; then
+                  break
+                fi
+                if [ "$attempt" -eq 5 ]; then exit 1; fi
+                sleep 2
+              done
             done
