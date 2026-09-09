@@ -2455,7 +2455,8 @@ class VolcanoAuth {
    * stopping an execution is owner-scoped, because an anon key is shared by
    * everyone who loads the page and an execution is addressed by id alone. A
    * durable function that has to report back writes what it produced somewhere
-   * the app can read, or the owner polls the execution with the CLI or API.
+   * the app can read; a backend holding the project's token follows it with
+   * `durable.get`.
    */
   async startDurableExecution(functionName, input = {}, options = {}) {
     const identifier = typeof functionName === 'string' ? functionName.trim() : '';
