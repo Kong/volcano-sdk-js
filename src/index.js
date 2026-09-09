@@ -2571,8 +2571,10 @@ class VolcanoAuth {
   }
 
   /**
-   * Cancels a running execution. Completed steps are not undone: the execution
-   * stops where it is and becomes `stopped`.
+   * Asks a running execution to stop. Accepted rather than awaited: what
+   * resolves here is the execution read back after asking, and it often still
+   * says `running`, so poll `durable.get` to see it reach `stopped`. Completed
+   * steps are not undone.
    *
    * Owner-scoped, like `durable.get`. Repeating a stop is safe — an execution
    * that has already finished reports the state it is in.

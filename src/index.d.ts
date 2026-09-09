@@ -490,10 +490,11 @@ export interface Durable {
   }>;
 
   /**
-   * Cancel a running execution. Completed steps are not undone: the execution
-   * stops where it is and becomes `stopped`. Repeating a stop is safe — an
-   * execution that has already finished reports the state it is in.
-   * Owner-scoped, like `get`.
+   * Ask a running execution to stop. Accepted rather than awaited: what
+   * resolves here is the execution read back after asking, and it often still
+   * says `running`, so poll `get` to see it reach `stopped`. Completed steps
+   * are not undone. Repeating a stop is safe — an execution that has already
+   * finished reports the state it is in. Owner-scoped, like `get`.
    */
   stop(
     projectId: string,

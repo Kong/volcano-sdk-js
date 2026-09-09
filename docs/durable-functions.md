@@ -424,7 +424,8 @@ returns the execution that already exists rather than beginning a second one,
 and is charged once.
 
 `start` resolves rather than throws when the platform refuses. `status` carries
-why — `400` for input that is not JSON or an execution name over 255 characters,
+why — `400` for input that is not JSON, or an execution name over 255
+characters or holding anything but letters, digits, `-`, `_` and `.`,
 `401` for a credential the endpoint does not accept, `403` for a durable
 function that is not public, `404` for a name that is not a durable function in
 this project, `409` while the function is still provisioning or has no deployed
@@ -461,13 +462,17 @@ const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
 });
 console.log(data.data.length, data.has_more);
 
-// Cancels the execution where it stands; completed steps are not undone.
+// Asks for the execution to stop; completed steps are not undone.
 await volcano.durable.stop(projectId, 'order-pipeline', executionId);
 ```
 
 Listing reports the status the platform last observed rather than polling each
-execution, so read a single one for its live state. Stopping is safe to repeat:
-an execution that has already finished reports the state it is in.
+execution, so read a single one for its live state.
+
+`stop` is accepted rather than awaited. Cancellation happens behind it, so the
+execution it resolves with is the one read back after asking and often still
+says `running`; `get` is how you watch it reach `stopped`. Stopping is safe to
+repeat, and one that has already finished reports the state it is in.
 
 All three answer the same `{ data, status, error }` envelope as `start`, with
 `404` for an execution or durable function this project does not have.
