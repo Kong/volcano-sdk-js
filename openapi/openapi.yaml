@@ -2944,9 +2944,13 @@ paths:
             Idempotency key for this execution. Generated when omitted. A repeat
             under a name that already names a running execution returns that
             execution and is not charged again.
+
+            Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+            else is rejected with `400`.
           schema:
             type: string
             maxLength: 255
+            pattern: '^[A-Za-z0-9._-]+$'
       requestBody:
         required: false
         content:
@@ -2977,8 +2981,8 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: |
-            The anon key lacks `functions.invoke`, or the function is not
-            public.
+            The anon key lacks `functions.invoke`, the function is not public,
+            or the request's origin is refused by the project's CORS policy.
           content:
             application/json:
               schema:
@@ -3010,8 +3014,9 @@ paths:
         '429':
           description: |
             The project has too many executions in flight for its plan, the
-            function invocation rate limit was exceeded, or the account is out
-            of its billing-cycle function invocation allowance.
+            function invocation rate limit was exceeded, the project is over
+            its bandwidth cap, or the account is out of its billing-cycle
+            function invocation allowance.
           content:
             application/json:
               schema:
@@ -4030,9 +4035,13 @@ paths:
             Idempotency key for this execution. Generated when omitted. A repeat
             under a name that already names a running execution returns that
             execution and is not charged again.
+
+            Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+            else is rejected with `400`.
           schema:
             type: string
             maxLength: 255
+            pattern: '^[A-Za-z0-9._-]+$'
       requestBody:
         required: false
         content:
@@ -4177,8 +4186,17 @@ paths:
         - Durable Functions
       summary: Stop a durable execution
       description: |
-        Cancels a running execution. Its completed steps are not undone; the
-        execution stops where it is and becomes `stopped`.
+        Cancels a running execution. Its completed steps are not undone.
+
+        The call is accepted rather than awaited: cancellation happens behind
+        it, so the response reports the execution as it was read back and may
+        still say `running`. Do not branch on that status — the execution
+        settles into `stopped` shortly after, and polling
+        `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+        is how you see it get there.
+
+        Stopping an execution that already finished is not an error: the
+        response carries the state it settled in.
       operationId: stopDurableExecution
       security:
         - UserToken: []
@@ -4188,7 +4206,9 @@ paths:
         - $ref: '#/components/parameters/DurableExecutionId'
       responses:
         '200':
-          description: Execution stopped
+          description: |
+            Stop accepted. The body is the execution as it was read back, which
+            may still report `running`.
           content:
             application/json:
               schema:

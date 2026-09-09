@@ -2753,7 +2753,9 @@ components:
         result:
           description: |
             Whatever the function returned, verbatim. Absent while the execution
-            is still running, and absent once its retention period has lapsed.
+            is still running, absent when the result was too large to return and
+            was checkpointed instead, and absent once the retention period has
+            lapsed.
         result_expired:
           type: boolean
           description: |
@@ -2761,6 +2763,9 @@ components:
             retained, which distinguishes a discarded result from an empty one.
             Shortly after that the execution itself is dropped and reads answer
             `404`.
+
+            A result that was checkpointed rather than returned leaves this
+            unset, so it reads like a function that returned nothing.
         error:
           $ref: '#/components/schemas/DurableExecutionError'
         created_at:

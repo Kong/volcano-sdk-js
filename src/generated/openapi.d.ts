@@ -1412,8 +1412,17 @@ export interface paths {
         put?: never;
         /**
          * Stop a durable execution
-         * @description Cancels a running execution. Its completed steps are not undone; the
-         *     execution stops where it is and becomes `stopped`.
+         * @description Cancels a running execution. Its completed steps are not undone.
+         *
+         *     The call is accepted rather than awaited: cancellation happens behind
+         *     it, so the response reports the execution as it was read back and may
+         *     still say `running`. Do not branch on that status — the execution
+         *     settles into `stopped` shortly after, and polling
+         *     `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+         *     is how you see it get there.
+         *
+         *     Stopping an execution that already finished is not an error: the
+         *     response carries the state it settled in.
          */
         post: operations["stopDurableExecution"];
         delete?: never;
@@ -6542,7 +6551,9 @@ export interface components {
             region: string;
             /**
              * @description Whatever the function returned, verbatim. Absent while the execution
-             *     is still running, and absent once its retention period has lapsed.
+             *     is still running, absent when the result was too large to return and
+             *     was checkpointed instead, and absent once the retention period has
+             *     lapsed.
              */
             result?: unknown;
             /**
@@ -6550,6 +6561,9 @@ export interface components {
              *     retained, which distinguishes a discarded result from an empty one.
              *     Shortly after that the execution itself is dropped and reads answer
              *     `404`.
+             *
+             *     A result that was checkpointed rather than returned leaves this
+             *     unset, so it reads like a function that returned nothing.
              */
             result_expired?: boolean;
             error?: components["schemas"]["DurableExecutionError"];
@@ -12225,6 +12239,9 @@ export interface operations {
                  * @description Idempotency key for this execution. Generated when omitted. A repeat
                  *     under a name that already names a running execution returns that
                  *     execution and is not charged again.
+                 *
+                 *     Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+                 *     else is rejected with `400`.
                  */
                 "X-Volcano-Execution-Name"?: string;
             };
@@ -12272,8 +12289,8 @@ export interface operations {
                 };
             };
             /**
-             * @description The anon key lacks `functions.invoke`, or the function is not
-             *     public.
+             * @description The anon key lacks `functions.invoke`, the function is not public,
+             *     or the request's origin is refused by the project's CORS policy.
              */
             403: {
                 headers: {
@@ -12320,8 +12337,9 @@ export interface operations {
             };
             /**
              * @description The project has too many executions in flight for its plan, the
-             *     function invocation rate limit was exceeded, or the account is out
-             *     of its billing-cycle function invocation allowance.
+             *     function invocation rate limit was exceeded, the project is over
+             *     its bandwidth cap, or the account is out of its billing-cycle
+             *     function invocation allowance.
              */
             429: {
                 headers: {
@@ -13623,6 +13641,9 @@ export interface operations {
                  * @description Idempotency key for this execution. Generated when omitted. A repeat
                  *     under a name that already names a running execution returns that
                  *     execution and is not charged again.
+                 *
+                 *     Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+                 *     else is rejected with `400`.
                  */
                 "X-Volcano-Execution-Name"?: string;
             };
@@ -13785,7 +13806,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Execution stopped */
+            /**
+             * @description Stop accepted. The body is the execution as it was read back, which
+             *     may still report `running`.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;

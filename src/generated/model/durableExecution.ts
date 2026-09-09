@@ -26,7 +26,9 @@ export interface DurableExecution {
   region: string;
   /**
      * Whatever the function returned, verbatim. Absent while the execution
-     * is still running, and absent once its retention period has lapsed.
+     * is still running, absent when the result was too large to return and
+     * was checkpointed instead, and absent once the retention period has
+     * lapsed.
      */
   result?: unknown;
   /**
@@ -34,6 +36,9 @@ export interface DurableExecution {
      * retained, which distinguishes a discarded result from an empty one.
      * Shortly after that the execution itself is dropped and reads answer
      * `404`.
+     *
+     * A result that was checkpointed rather than returned leaves this
+     * unset, so it reads like a function that returned nothing.
      */
   result_expired?: boolean;
   error?: DurableExecutionError;

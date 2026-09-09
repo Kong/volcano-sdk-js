@@ -5305,8 +5305,17 @@ export const getStopDurableExecutionUrl = (id: string,
 }
 
 /**
- * Cancels a running execution. Its completed steps are not undone; the
- * execution stops where it is and becomes `stopped`.
+ * Cancels a running execution. Its completed steps are not undone.
+ *
+ * The call is accepted rather than awaited: cancellation happens behind
+ * it, so the response reports the execution as it was read back and may
+ * still say `running`. Do not branch on that status — the execution
+ * settles into `stopped` shortly after, and polling
+ * `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+ * is how you see it get there.
+ *
+ * Stopping an execution that already finished is not an error: the
+ * response carries the state it settled in.
  * @summary Stop a durable execution
  */
 export const stopDurableExecution = async (id: string,
