@@ -99,3 +99,22 @@ jobs:
             exit 1
           fi
           npm publish ./package/*.tgz --ignore-scripts --provenance --access public
+
+  release-link:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Link the published npm version in the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          notes="$(gh release view "$RELEASE_TAG" --json body --jq '.body')"
+          link="[View ${RELEASE_TAG} on npm](https://www.npmjs.com/package/@volcano.dev/sdk/v/${RELEASE_TAG#v})"
+          if [[ "$notes" != *"$link"* ]]; then
+            printf '%s\n\n%s\n' "$notes" "$link" | gh release edit "$RELEASE_TAG" --notes-file -
+          fi
