@@ -13,6 +13,8 @@ import type { components as GeneratedComponents } from './generated/openapi';
 /** Handle a durable start answers with, straight off the wire contract. */
 export type DurableExecution = GeneratedComponents['schemas']['DurableExecution'];
 export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExecutionStatus'];
+export type PaginatedDurableExecutions =
+  GeneratedComponents['schemas']['PaginatedDurableExecutions'];
 
 export interface VolcanoAuthConfig {
   /**
@@ -442,6 +444,63 @@ export interface Durable {
   ): Promise<{
     data: DurableExecution | null;
     /** HTTP status: 202 on a start, the platform's refusal status otherwise. */
+    status: number | null;
+    error: Error | null;
+  }>;
+
+  /**
+   * Read an execution, including its `result` once it has succeeded. This is
+   * how you find out how a started execution went.
+   *
+   * Owner-scoped: it takes the project id and needs the project's token,
+   * because an execution is addressed by its id alone and an anon key is held
+   * by everyone who loads the page. Poll it from your backend, not a browser.
+   *
+   * @example
+   * ```typescript
+   * const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+   * if (!error && data.status === 'succeeded') {
+   *   console.log(data.result);
+   * }
+   * ```
+   */
+  get(
+    projectId: string,
+    functionName: string,
+    executionId: string,
+  ): Promise<{
+    data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+
+  /**
+   * List a durable function's executions, most recent first. Each entry carries
+   * the status the platform last observed rather than a live one; read a single
+   * execution for that. Owner-scoped, like `get`.
+   */
+  list(
+    projectId: string,
+    functionName: string,
+    options?: { status?: DurableExecutionStatus; page?: number; limit?: number },
+  ): Promise<{
+    data: PaginatedDurableExecutions | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+
+  /**
+   * Cancel a running execution. Completed steps are not undone: the execution
+   * stops where it is and becomes `stopped`. Repeating a stop is safe — an
+   * execution that has already finished reports the state it is in.
+   * Owner-scoped, like `get`.
+   */
+  stop(
+    projectId: string,
+    functionName: string,
+    executionId: string,
+  ): Promise<{
+    data: DurableExecution | null;
     status: number | null;
     error: Error | null;
   }>;

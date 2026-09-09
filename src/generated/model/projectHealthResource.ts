@@ -7,10 +7,17 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionKind } from './functionKind';
 import type { ProjectHealthResourceType } from './projectHealthResourceType';
 
 export interface ProjectHealthResource {
   type: ProjectHealthResourceType;
   id: string;
   name: string;
+  /**
+     * Which kind of function this check is about. Present only when `type`
+     * is `function`, where both kinds share the name space and this is
+     * what tells them apart.
+     */
+  kind?: FunctionKind;
 }

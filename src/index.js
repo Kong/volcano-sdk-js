@@ -2,9 +2,12 @@ import {
   acquireProjectLock,
   authSignin,
   downloadStorageObject,
+  getDurableExecution,
+  listDurableExecutions,
   queryDatabaseSelect,
   releaseProjectLock,
   startDurableExecutionFromApplication,
+  stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.js';
@@ -98,9 +101,12 @@ const GENERATED_TRANSPORT = {
   acquireProjectLock,
   authSignin,
   downloadStorageObject,
+  getDurableExecution,
+  listDurableExecutions,
   queryDatabaseSelect,
   releaseProjectLock,
   startDurableExecutionFromApplication,
+  stopDurableExecution,
   uploadStorageObject,
 };
 
@@ -622,6 +628,23 @@ function errorResult(message, extra = {}) {
   return { data: null, error, ...extra };
 }
 
+/**
+ * Checks and escapes the path segments an owner-scoped durable route is
+ * addressed by. An empty one would silently address the collection instead of
+ * the execution, which is a different request rather than a failed one.
+ */
+function durablePathSegments(fields) {
+  const segments = {};
+  for (const [field, value] of Object.entries(fields)) {
+    const identifier = typeof value === 'string' ? value.trim() : '';
+    if (!identifier) {
+      return { error: new Error(`${field} must be a non-empty string`) };
+    }
+    segments[field] = encodeURIComponent(identifier);
+  }
+  return { segments };
+}
+
 function apiRequestError(response, data) {
   const error = new Error(data?.error || 'Request failed');
   error.status = response.status;
@@ -969,6 +992,9 @@ class VolcanoAuth {
 
     this.durable = {
       start: this.startDurableExecution.bind(this),
+      get: this.getDurableExecution.bind(this),
+      list: this.listDurableExecutions.bind(this),
+      stop: this.stopDurableExecution.bind(this),
     };
 
     this.logs = {
@@ -2464,18 +2490,117 @@ class VolcanoAuth {
       ? { 'X-Volcano-Execution-Name': executionName.trim() }
       : undefined;
 
-    try {
-      const response = await this._transport.startDurableExecutionFromApplication(
+    return this._durableResult('Failed to start durable execution', () =>
+      this._transport.startDurableExecutionFromApplication(
         encodeURIComponent(identifier),
         input,
         this._generatedOptions(useAnonKey ? 'anon' : 'session', headers),
-      );
+      ),
+    );
+  }
+
+  /**
+   * Reads a durable execution, including its `result` once it has succeeded.
+   * This is how a caller finds out how a started execution went.
+   *
+   * Owner-scoped, so it takes the project id and needs the project's token: an
+   * execution is addressed by its id alone, and an anon key is held by everyone
+   * who loads the page. Poll it from your backend, or use the CLI.
+   *
+   * @param {string} projectId
+   * @param {string} functionName - Durable function name, or its id.
+   * @param {string} executionId
+   */
+  async getDurableExecution(projectId, functionName, executionId) {
+    const { segments, error } = durablePathSegments({ projectId, functionName, executionId });
+    if (error) {
+      return { data: null, status: null, error };
+    }
+    return this._durableResult('Failed to read durable execution', () =>
+      this._transport.getDurableExecution(
+        segments.projectId,
+        segments.functionName,
+        segments.executionId,
+        this._generatedOptions('session'),
+      ),
+    );
+  }
+
+  /**
+   * Lists a durable function's executions, most recent first.
+   *
+   * Each entry carries the status the platform last observed rather than a live
+   * one; read a single execution for that. Owner-scoped, like
+   * `durable.get`.
+   *
+   * @param {string} projectId
+   * @param {string} functionName - Durable function name, or its id.
+   * @param {object} [options]
+   * @param {string} [options.status] - Only executions in this status.
+   * @param {number} [options.page]
+   * @param {number} [options.limit]
+   */
+  async listDurableExecutions(projectId, functionName, options = {}) {
+    const { segments, error } = durablePathSegments({ projectId, functionName });
+    if (error) {
+      return { data: null, status: null, error };
+    }
+    const params = {};
+    for (const field of ['status', 'page', 'limit']) {
+      if (options[field] !== undefined) {
+        params[field] = options[field];
+      }
+    }
+    return this._durableResult('Failed to list durable executions', () =>
+      this._transport.listDurableExecutions(
+        segments.projectId,
+        segments.functionName,
+        params,
+        this._generatedOptions('session'),
+      ),
+    );
+  }
+
+  /**
+   * Cancels a running execution. Completed steps are not undone: the execution
+   * stops where it is and becomes `stopped`.
+   *
+   * Owner-scoped, like `durable.get`. Repeating a stop is safe — an execution
+   * that has already finished reports the state it is in.
+   *
+   * @param {string} projectId
+   * @param {string} functionName - Durable function name, or its id.
+   * @param {string} executionId
+   */
+  async stopDurableExecution(projectId, functionName, executionId) {
+    const { segments, error } = durablePathSegments({ projectId, functionName, executionId });
+    if (error) {
+      return { data: null, status: null, error };
+    }
+    return this._durableResult('Failed to stop durable execution', () =>
+      this._transport.stopDurableExecution(
+        segments.projectId,
+        segments.functionName,
+        segments.executionId,
+        this._generatedOptions('session'),
+      ),
+    );
+  }
+
+  /**
+   * The envelope every durable operation answers with. A refusal carries the
+   * platform's status rather than throwing, because the status is what tells a
+   * caller a deleted function from a cap it has hit.
+   */
+  async _durableResult(failureMessage, call) {
+    try {
+      const response = await call();
       return { data: response.data, status: response.status, error: null };
     } catch (error) {
       return {
         data: null,
         status: typeof error?.status === 'number' ? error.status : null,
-        error: error instanceof Error ? error : new Error('Failed to start durable execution'),
+        error: error instanceof Error ? error : new Error(failureMessage),
       };
     }
   }

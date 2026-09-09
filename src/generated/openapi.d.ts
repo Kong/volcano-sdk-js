@@ -865,53 +865,6 @@ export interface paths {
         patch: operations["updateFunction"];
         trace?: never;
     };
-    "/durable-functions/{functionId}/executions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start a durable execution from an application
-         * @description Starts an execution of a durable function using an application
-         *     credential, and returns its handle.
-         *
-         *     This is the durable counterpart of `POST /functions/{functionId}/invoke`,
-         *     and it is the endpoint an application calls. Like that one, it is not
-         *     project-scoped: an anon key, a service key and an auth user token each
-         *     carry their own project. The project-scoped collection under
-         *     `/projects/{id}/durable-functions/...` remains the owner's management
-         *     surface.
-         *
-         *     **With a service key or an auth user token:** any durable function in
-         *     the project.
-         *
-         *     **With an anon key:** requires the `functions.invoke` permission, and
-         *     the function must have `is_public: true`.
-         *
-         *     Starting is all this endpoint does. Reading a result or stopping an
-         *     execution requires the project owner's token, because an anon key is
-         *     shared by everyone who loads the page and an execution is addressed by
-         *     id alone.
-         *
-         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
-         *     a start with the same name returns the existing execution instead of
-         *     beginning a second one.
-         *
-         *     Each execution counts once against the project's function invocation
-         *     allowance, however many times the start is retried under the same
-         *     execution name, and the number in flight at once is capped by the plan.
-         */
-        post: operations["startDurableExecutionFromApplication"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/functions/{functionId}/invoke": {
         parameters: {
             query?: never;
@@ -959,8 +912,61 @@ export interface paths {
          *       preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
          *     - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
          *       direct operation always requires a Volcano credential.
+         *
+         *     **Durable functions are not invocable here.** A durable function's id
+         *     answers 404, whatever its visibility, because a synchronous call would
+         *     run it with no execution record, no idempotency and no concurrency
+         *     accounting. Start one with
+         *     `POST /durable-functions/{functionId}/executions`.
          */
         post: operations["invokeFunction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-functions/{functionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a durable execution from an application
+         * @description Starts an execution of a durable function using an application
+         *     credential, and returns its handle.
+         *
+         *     This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+         *     and it is the endpoint an application calls. Like that one, it is not
+         *     project-scoped: an anon key, a service key and an auth user token each
+         *     carry their own project. The project-scoped collection under
+         *     `/projects/{id}/durable-functions/...` remains the owner's management
+         *     surface.
+         *
+         *     **With a service key or an auth user token:** any durable function in
+         *     the project.
+         *
+         *     **With an anon key:** requires the `functions.invoke` permission, and
+         *     the function must have `is_public: true`.
+         *
+         *     Starting is all this endpoint does. Reading a result or stopping an
+         *     execution requires the project owner's token, because an anon key is
+         *     shared by everyone who loads the page and an execution is addressed by
+         *     id alone.
+         *
+         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+         *     a start with the same name returns the existing execution instead of
+         *     beginning a second one.
+         *
+         *     Each execution counts once against the project's function invocation
+         *     allowance, however many times the start is retried under the same
+         *     execution name, and the number in flight at once is capped by the plan.
+         */
+        post: operations["startDurableExecutionFromApplication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1198,6 +1204,218 @@ export interface paths {
         get: operations["listFunctionDeployments"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all durable functions in a project
+         * @description Standard functions never appear here, and durable functions never appear
+         *     under `/projects/{id}/functions`. The two are separate collections.
+         */
+        get: operations["listDurableFunctions"];
+        put?: never;
+        /**
+         * Create or update a durable function
+         * @description Upload a durable function source bundle. Creates the function on the
+         *     first call for a name and redeploys it on every call after that, the
+         *     same create-or-update contract `POST /projects/{id}/functions` has.
+         *
+         *     Volcano builds and deploys asynchronously. A deployment that starts
+         *     immediately returns `status: provisioning`, then transitions to `active`
+         *     or `failed`; a deployment that has to wait for a running one is exposed
+         *     through `pending_deployment_id`. Existing executions keep running
+         *     against the runtime they started on.
+         *
+         *     The `durable` configuration is derived from the project's plan rather
+         *     than supplied here, and is fixed once the function exists. A name
+         *     already held by a standard function is rejected with 409: a function
+         *     cannot change kind.
+         */
+        post: operations["createDurableFunction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get durable function by ID or name */
+        get: operations["getDurableFunction"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a durable function
+         * @description Accepted for asynchronous teardown; the work continues after the
+         *     response. Executions still running do not survive the function. History
+         *     already retained is governed by the function's `retention_days`, which
+         *     this does not shorten.
+         */
+        delete: operations["deleteDurableFunction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List durable function deployments */
+        get: operations["listDurableFunctionDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/schedulers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List schedulers for a durable function
+         * @description The durable collection's counterpart to
+         *     `/projects/{id}/functions/{functionId}/schedulers`. A standard
+         *     function's id is not accepted here, and a durable function's id is not
+         *     accepted there.
+         */
+        get: operations["listDurableFunctionSchedulers"];
+        put?: never;
+        /**
+         * Create a scheduler for a durable function
+         * @description Each tick starts an execution rather than invoking the function, under
+         *     an execution name derived from the run, so a retried tick resolves to
+         *     the execution it already started. Requested regions must be a subset of
+         *     the function's deployed regions.
+         *
+         *     A tick draws on the same invocation allowance and concurrency cap a
+         *     manual start does, and a tick that would exceed the cap fails that run.
+         */
+        post: operations["createDurableFunctionScheduler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/schedulers/{schedulerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a durable function scheduler */
+        get: operations["getDurableFunctionScheduler"];
+        put?: never;
+        post?: never;
+        /** Delete a durable function scheduler */
+        delete: operations["deleteDurableFunctionScheduler"];
+        options?: never;
+        head?: never;
+        /** Update a durable function scheduler */
+        patch: operations["updateDurableFunctionScheduler"];
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable function's executions
+         * @description Returns the platform's last observed status for each execution; listing
+         *     does not poll each one. Fetch a single execution for its live state.
+         */
+        get: operations["listDurableExecutions"];
+        put?: never;
+        /**
+         * Start a durable execution
+         * @description Starts an execution and returns its handle. Never returns a result: an
+         *     execution can outlive any request a client could hold open, so the
+         *     result is read back from
+         *     `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`.
+         *
+         *     The request body is the execution's input and must be valid JSON if
+         *     present. An empty body starts the execution with no input.
+         *
+         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating a
+         *     start with the same name returns the existing execution instead of
+         *     beginning a second one.
+         *
+         *     Each execution counts against the project's function invocation
+         *     allowance, and the number of executions in flight at once is capped by
+         *     the plan.
+         */
+        post: operations["startDurableExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a durable execution
+         * @description Returns the execution's current state, including its `result` once it has
+         *     succeeded. Poll this to wait for an execution to finish.
+         */
+        get: operations["getDurableExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a durable execution
+         * @description Cancels a running execution. Its completed steps are not undone; the
+         *     execution stops where it is and becomes `stopped`.
+         */
+        post: operations["stopDurableExecution"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3642,10 +3860,6 @@ export interface paths {
          *     - Microsoft Graph profile: `/me`
          *
          *     The response wraps the provider's raw JSON value with request metadata.
-         *     An empty provider body is represented as `data: null`; the envelope
-         *     preserves the provider's HTTP status in `status_code`, including errors.
-         *     Provider response bodies are limited to 8 MiB after decompression.
-         *     Transport failures, invalid JSON, and oversized bodies return `502`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -6177,56 +6391,6 @@ export interface components {
             /** Format: int64 */
             total_page_views: number;
         };
-        DurableExecution: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            function_id: string;
-            /**
-             * @description Idempotency key for the execution. Supplied by the client through
-             *     `X-Volcano-Execution-Name`, otherwise generated.
-             */
-            name: string;
-            status: components["schemas"]["DurableExecutionStatus"];
-            /**
-             * @description Region the execution runs in. An execution is pinned to one region
-             *     for its whole life because its checkpoints live there.
-             */
-            region: string;
-            /**
-             * @description Whatever the function returned, verbatim. Absent while the execution
-             *     is still running, and absent once its retention period has lapsed.
-             */
-            result?: unknown;
-            /**
-             * @description `true` when the execution is terminal but its result is no longer
-             *     retained, which distinguishes a discarded result from an empty one.
-             *     Shortly after that the execution itself is dropped and reads answer
-             *     `404`.
-             */
-            result_expired?: boolean;
-            error?: components["schemas"]["DurableExecutionError"];
-            /** Format: date-time */
-            created_at: string;
-            /**
-             * Format: date-time
-             * @description Present once the execution has reached a terminal status.
-             */
-            completed_at?: string;
-        };
-        /** @description Why a failed or timed-out execution ended. */
-        DurableExecutionError: {
-            type?: string;
-            message?: string;
-        };
-        /**
-         * @description Lifecycle state of an execution. `pending` covers the window between the
-         *     platform reserving the execution name and the function accepting the
-         *     start, and has no counterpart once the execution is under way.
-         *     `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
-         * @enum {string}
-         */
-        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped";
         Function: {
             /** Format: uuid */
             id: string;
@@ -6280,6 +6444,135 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description A durable function. Separate from `Function` because a durable function
+         *     is invoked only through its own execution endpoints, so it has no
+         *     invocation mode, HTTP auth mode, OpenAPI document or invoke URL, and it
+         *     carries a `durable` configuration that a standard function has no field
+         *     for.
+         */
+        DurableFunction: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            /** @enum {string} */
+            status: "provisioning" | "active" | "failed" | "deleting";
+            /**
+             * Format: date-time
+             * @description Timestamp when the current provisioning phase started
+             */
+            provisioning_started_at?: string;
+            /**
+             * @description Whether anon keys may start executions of this function through
+             *     `POST /durable-functions/{functionId}/executions`.
+             *
+             *     When `true`, an anon key holding `functions.invoke` can start an
+             *     execution. When `false` (the default) only service keys and auth
+             *     user tokens can. Reading and stopping an execution always require
+             *     the project owner's token, whatever this is set to.
+             *
+             *     Set it when the function is created. Durable functions have no
+             *     update endpoint, so changing visibility later means redeploying.
+             *
+             *     A public durable function is startable, never invocable: it is not
+             *     reachable through `POST /functions/{functionId}/invoke` or a
+             *     function URL, which answer `404` for either visibility.
+             */
+            is_public: boolean;
+            durable: components["schemas"]["DurableFunctionConfig"];
+            /** @description Regions where this function is currently deployed */
+            deployed_regions: string[];
+            runtime?: string;
+            handler?: string;
+            /**
+             * Format: uuid
+             * @description Identifier of the latest deployment operation
+             */
+            current_deployment_id?: string;
+            /**
+             * Format: uuid
+             * @description Newest queued deployment that will run after the current operation
+             */
+            pending_deployment_id?: string;
+            /**
+             * Format: date-time
+             * @description Most recent successful invocation timestamp
+             */
+            last_invoked_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @description Execution limits the function was created with, derived from the
+         *     project's plan. Fixed for the life of the function: changing them means
+         *     creating a new one.
+         */
+        DurableFunctionConfig: {
+            /**
+             * Format: int64
+             * @description How long a single execution may run before it is timed out.
+             */
+            execution_timeout_seconds: number;
+            /**
+             * Format: int64
+             * @description How long a finished execution's result and history are retained.
+             */
+            retention_days: number;
+        };
+        DurableExecution: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            function_id: string;
+            /**
+             * @description Idempotency key for the execution. Supplied by the client through
+             *     `X-Volcano-Execution-Name`, otherwise generated.
+             */
+            name: string;
+            status: components["schemas"]["DurableExecutionStatus"];
+            /**
+             * @description Region the execution runs in. An execution is pinned to one region
+             *     for its whole life because its checkpoints live there.
+             */
+            region: string;
+            /**
+             * @description Whatever the function returned, verbatim. Absent while the execution
+             *     is still running, and absent once its retention period has lapsed.
+             */
+            result?: unknown;
+            /**
+             * @description `true` when the execution is terminal but its result is no longer
+             *     retained, which distinguishes a discarded result from an empty one.
+             *     Shortly after that the execution itself is dropped and reads answer
+             *     `404`.
+             */
+            result_expired?: boolean;
+            error?: components["schemas"]["DurableExecutionError"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Present once the execution has reached a terminal status.
+             */
+            completed_at?: string;
+        };
+        /**
+         * @description Lifecycle state of an execution. `pending` covers the window between the
+         *     platform reserving the execution name and the function accepting the
+         *     start, and has no counterpart once the execution is under way.
+         *     `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
+         * @enum {string}
+         */
+        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped";
+        /** @description Why a failed or timed-out execution ended. */
+        DurableExecutionError: {
+            type?: string;
+            message?: string;
         };
         /**
          * @description Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
@@ -6498,6 +6791,8 @@ export interface components {
             language: string;
             /** @description Whether this runtime is the CLI default for its language. */
             default: boolean;
+            /** @description Whether a durable function can be authored on this runtime. Only runtimes with a durable authoring API report true, and a durable deploy naming any other runtime is rejected. */
+            durable_capable: boolean;
             deployment: components["schemas"]["FunctionRuntimeDeployment"];
         };
         FunctionRuntimesResponse: {
@@ -6510,6 +6805,14 @@ export interface components {
             project_id?: string;
             /** Format: uuid */
             function_id?: string;
+            /**
+             * @description Which collection the scheduled function belongs to. A project-wide
+             *     scheduler list mixes both kinds, and this is what says whether the
+             *     function is read back from `/projects/{id}/functions` or
+             *     `/projects/{id}/durable-functions` — and whether a tick invokes it
+             *     or starts a durable execution.
+             */
+            function_kind?: components["schemas"]["FunctionKind"];
             name?: string;
             enabled?: boolean;
             /** @enum {string} */
@@ -6745,6 +7048,28 @@ export interface components {
             next_cursor?: string;
             /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
             prev_cursor?: string;
+        };
+        PaginatedDurableFunctions: {
+            data: components["schemas"]["DurableFunction"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
+        };
+        PaginatedDurableExecutions: {
+            data: components["schemas"]["DurableExecution"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
         };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
@@ -7199,12 +7524,32 @@ export interface components {
          * @description Configuration for an existing (deployed) function. Functions are never
          *     created or deleted through the manifest. When `schedulers` is declared
          *     it is fully synced (schedulers absent from the list are deleted);
-         *     omitting `schedulers` leaves the function's schedulers untouched.
+         *     omitting `schedulers` leaves the function's schedulers untouched. The
+         *     same applies to `variables`: declaring it replaces the function's
+         *     declared variable names, and omitting it leaves them untouched.
          */
         ProjectConfigFunction: {
             name: string;
+            kind?: components["schemas"]["FunctionKind"];
             /** @description Function visibility for anon-key invocation */
             public?: boolean;
+            /**
+             * @description Which project variables this function receives. `all` (the default)
+             *     gives it every project variable. `scoped` gives it only the variables
+             *     it selects: every name declared in `variables`, plus the names
+             *     Volcano detects in its source that the project defines.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "scoped";
+            /**
+             * @description Project variable names this function requires, on top of the ones
+             *     detected in its source. Declare a name here when the function reads
+             *     it through a computed key, which detection cannot see, or when the
+             *     function must not deploy without it: a declared name the project does
+             *     not define fails the apply, while a detected name it does not define
+             *     is ignored. Only used when `variable_scope` is `scoped`.
+             */
+            variables?: string[];
             invocation_mode?: components["schemas"]["FunctionInvocationMode"];
             http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
             /** @description OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function */
@@ -7316,6 +7661,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description Which kind of function this check is about. Present only when `type`
+             *     is `function`, where both kinds share the name space and this is
+             *     what tells them apart.
+             */
+            kind?: components["schemas"]["FunctionKind"];
         };
         /** @description Stable reference to a Volcano resource. */
         ResourceReference: {
@@ -7464,6 +7815,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description Which kind of function this deployment belongs to. Both kinds appear
+             *     in this feed under `type: function`, because a deployment means the
+             *     same thing for either, so this is what tells them apart. Absent when
+             *     `type` is `frontend`.
+             */
+            kind?: components["schemas"]["FunctionKind"];
         };
         /** @description Aggregate deployment statistics for one resource pipeline. */
         ProjectDeploymentSummary: {
@@ -8142,6 +8500,16 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Which kind of function this is. `standard` runs once per invocation.
+         *     `durable` checkpoints its progress and resumes from the last completed
+         *     step, and is invoked asynchronously through its own executions
+         *     collection. A function's kind is fixed when it is created and cannot be
+         *     changed afterwards. Omitting this field means `standard`.
+         * @default standard
+         * @enum {string}
+         */
+        FunctionKind: "standard" | "durable";
         AuthPageThemeColors: {
             background: string;
             surface: string;
@@ -8461,12 +8829,14 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
-        /** @description Durable function ID, or its name within the project */
-        DurableFunctionId: string;
         /** @description Frontend ID */
         FrontendId: string;
         /** @description Function ID */
         FunctionId: string;
+        /** @description Durable function ID, or its name within the project */
+        DurableFunctionId: string;
+        /** @description Durable execution ID */
+        DurableExecutionId: string;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -9719,7 +10089,11 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description Bad request */
+            /**
+             * @description Bad request (no region selected, an unknown region, or — for a
+             *     project holding durable functions — a region that does not offer
+             *     durable execution)
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11542,14 +11916,22 @@ export interface operations {
                      */
                     handler?: string;
                     /**
-                     * @description Whether the function can be reached through public invocation ingress.
-                     * @default false
+                     * @description Whether the function can be reached through public invocation
+                     *     ingress. Omit it to keep the function's current visibility; a
+                     *     new function starts private.
                      */
                     is_public?: boolean;
                     invocation_mode?: components["schemas"]["FunctionInvocationMode"];
                     http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
                     /** @description JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
                     openapi_spec?: string;
+                    /**
+                     * @description Which project variables this function receives. `all` (the default) gives it every project variable; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+                    variables?: string;
                 };
             };
         };
@@ -11590,7 +11972,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function deletion is queued or running */
+            /**
+             * @description Function deletion is queued or running, or the name is already held
+             *     by a durable function — a function cannot change kind.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11719,6 +12104,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    invokeFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Function ID */
+                functionId: components["parameters"]["FunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FunctionInvocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Function response (passthrough from function runtime) */
+            200: {
+                headers: {
+                    /** @description Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production) */
+                    "X-Volcano-Version"?: string;
+                    /** @description Region the function ran in (for example `us-east-1`) */
+                    "X-Volcano-Region"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionInvocationResponse"];
+                };
+            };
+            /** @description Bad request - invalid payload or function in failed state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - CORS blocked, missing `functions.invoke`, or private function with anon key */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Rate limit exceeded (per-function or project-wide limit), or the
+             *     owning platform user's billing-cycle bandwidth allowance (aggregate ingress +
+             *     egress) was exceeded.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Function still provisioning or rate limiting service unavailable.
+             *     A freshly deployed (or updated) function may briefly report
+             *     `provisioning` and reject invocations until the background status
+             *     reconciler observes its deployment workflow completing and transitions
+             *     it to `active`. This is expected for a few seconds after deploy; clients
+             *     should retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function response (passthrough; status code/body/headers come from the function) */
+            default: {
+                headers: {
+                    /** @description Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production) */
+                    "X-Volcano-Version"?: string;
+                    /** @description Region the function ran in (for example `us-east-1`) */
+                    "X-Volcano-Region"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionInvocationResponse"];
                 };
             };
         };
@@ -11854,115 +12348,6 @@ export interface operations {
             };
         };
     };
-    invokeFunction: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Function ID */
-                functionId: components["parameters"]["FunctionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FunctionInvocationRequest"];
-            };
-        };
-        responses: {
-            /** @description Function response (passthrough from function runtime) */
-            200: {
-                headers: {
-                    /** @description Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production) */
-                    "X-Volcano-Version"?: string;
-                    /** @description Region the function ran in (for example `us-east-1`) */
-                    "X-Volcano-Region"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FunctionInvocationResponse"];
-                };
-            };
-            /** @description Bad request - invalid payload or function in failed state */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Unauthorized - invalid or missing token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Forbidden - CORS blocked, missing `functions.invoke`, or private function with anon key */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Function not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /**
-             * @description Rate limit exceeded (per-function or project-wide limit), or the
-             *     owning platform user's billing-cycle bandwidth allowance (aggregate ingress +
-             *     egress) was exceeded.
-             */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /**
-             * @description Function still provisioning or rate limiting service unavailable.
-             *     A freshly deployed (or updated) function may briefly report
-             *     `provisioning` and reject invocations until the background status
-             *     reconciler observes its deployment workflow completing and transitions
-             *     it to `active`. This is expected for a few seconds after deploy; clients
-             *     should retry.
-             */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Function response (passthrough; status code/body/headers come from the function) */
-            default: {
-                headers: {
-                    /** @description Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production) */
-                    "X-Volcano-Version"?: string;
-                    /** @description Region the function ran in (for example `us-east-1`) */
-                    "X-Volcano-Region"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FunctionInvocationResponse"];
-                };
-            };
-        };
-    };
     resolveFunctionForInvocation: {
         parameters: {
             query: {
@@ -12014,7 +12399,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function not found (or private function with anon key) */
+            /**
+             * @description Function not found (or private function with anon key). A durable
+             *     function is never resolvable here: it is started through
+             *     `POST /durable-functions/{functionId}/executions`, not invoked.
+             */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12242,7 +12631,11 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle. */
+                    /**
+                     * @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
+                     *
+                     *     Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
+                     */
                     functions: string;
                     /**
                      * Format: binary
@@ -12273,6 +12666,40 @@ export interface operations {
             };
             /** @description Bad request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function limit exceeded for the project */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A name in the batch is held by a function of the other kind — a
+             *     function cannot change kind — or the project's source is managed by
+             *     Git, where deploys come from a push to the production branch.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The batch carries a durable function and durable deploys are paused
+             *     platform-wide. The same request succeeds once they are re-enabled.
+             */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12367,6 +12794,15 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionSchedulerListResponse"];
                 };
             };
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createFunctionScheduler: {
@@ -12396,8 +12832,33 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionScheduler"];
                 };
             };
-            /** @description Invalid schedule or geofenced region */
+            /**
+             * @description Invalid schedule, geofenced region, a scheduler of this name
+             *     already exists on the function, or the function is not active.
+             */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Schedulers are not available on this plan, or the project already
+             *     holds as many as the plan allows. The cap counts standard and
+             *     durable function schedulers together.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12432,6 +12893,15 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionScheduler"];
                 };
             };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     deleteFunctionScheduler: {
@@ -12456,6 +12926,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -12486,6 +12965,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, or a scheduler of this name
+             *     already exists on the function.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -12526,6 +13026,798 @@ export interface operations {
             };
             /** @description Function not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Case-insensitive substring match on the resource `name`. See the
+                 *     endpoint description for supported pagination modes.
+                 */
+                search?: components["parameters"]["Search"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableFunctions"];
+                };
+            };
+            /** @description Bad request - invalid pagination parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * @description DNS-safe function name (lowercase letters, numbers, hyphens; cannot start or end with hyphen)
+                     * @example order-pipeline
+                     */
+                    name: string;
+                    /**
+                     * Format: binary
+                     * @description ZIP or tar.gz archive containing function source code plus dependency manifests/lockfiles.
+                     */
+                    code: string;
+                    /**
+                     * @description Runtime environment. Required. Durable execution needs the
+                     *     durable authoring API, which ships for the Node runtimes;
+                     *     any other runtime is rejected with 400 and the response
+                     *     names the ones that work.
+                     * @example nodejs24.x
+                     * @enum {string}
+                     */
+                    runtime: "nodejs22.x" | "nodejs24.x";
+                    /**
+                     * @description The name of the function to invoke. Defaults to "handler" if not specified.
+                     * @default handler
+                     * @example handler
+                     */
+                    handler?: string;
+                    /**
+                     * @description Whether anon keys with `functions.invoke` may start an
+                     *     execution. Redeploying is the only way to change it, since
+                     *     the collection has no update endpoint; omit it to keep the
+                     *     current visibility, and a new function starts private.
+                     *
+                     *     The standard collection's synchronous invocation fields —
+                     *     `invocation_mode`, `http_auth_mode`, `openapi_spec` —
+                     *     configure a request path no durable route serves, and are
+                     *     rejected with 400 rather than ignored.
+                     */
+                    is_public?: boolean;
+                    /**
+                     * @description Which project variables this function receives. `all` (the default) gives it every project variable; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+                    variables?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing durable function updated; its deployment was started or queued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /** @description Durable function created and deployment workflow started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /**
+             * @description Bad request (invalid archive, unsupported runtime, invalid name, or a
+             *     project region that does not offer durable execution — a durable
+             *     function deploys to every region of its project)
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function limit exceeded for the project */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name is held by a standard function, or a deletion is queued or running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error (function deployment failed) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable deploys are paused platform-wide. The same request succeeds
+             *     once they are re-enabled; executions already running are unaffected.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deletion accepted and teardown started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description Durable function not found. Also returned for an id that names a
+             *     durable function in another project, so the response cannot be used
+             *     to tell the two apart.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctionDeployments: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedFunctionDeployments"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctionSchedulers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable function schedulers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionSchedulerListResponse"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFunctionSchedulerRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduler created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, a scheduler of this name
+             *     already exists on the function, or the function is not active.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Schedulers are not available on this plan, or the project already
+             *     holds as many as the plan allows. The cap counts standard and
+             *     durable function schedulers together.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable function scheduler */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scheduler deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFunctionSchedulerRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduler updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, or a scheduler of this name
+             *     already exists on the function.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableExecutions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /** @description Return only executions in this status. */
+                status?: components["schemas"]["DurableExecutionStatus"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableExecutions"];
+                };
+            };
+            /** @description Unsupported status filter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Idempotency key for this execution. Generated when omitted. A repeat
+                 *     under a name that already names a running execution returns that
+                 *     execution and is not charged again.
+                 */
+                "X-Volcano-Execution-Name"?: string;
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Execution accepted and started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Payload is not valid JSON, or the execution name is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Function is not deployed yet, or has no deployed region. Also
+             *     returned when two starts under the same execution name raced and
+             *     both released it, which is retryable as it stands.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Payload exceeds the maximum execution input size */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Too many executions already in flight for this project, or the
+             *     account is out of its billing-cycle function invocation allowance.
+             *     An owner-started execution is metered exactly like an
+             *     application-started one.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment, or the
+             *     usage limit service could not be reached to charge the start. The
+             *     first is returned by a deployment that has no durable execution
+             *     engine, such as a local one, and is not retryable there; the second
+             *     is transient.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Returned by
+             *     a deployment that has no durable execution engine, such as a local
+             *     one; the request is not retryable there.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stopDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Execution stopped */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Execution has not started yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Returned by
+             *     a deployment that has no durable execution engine, such as a local
+             *     one; the request is not retryable there.
+             */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19542,25 +20834,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description OAuth provider configuration not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Failed to create the provider API request */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Provider transport failure, invalid JSON, or response body larger than 8 MiB */
+            /** @description Provider API error */
             502: {
                 headers: {
                     [name: string]: unknown;

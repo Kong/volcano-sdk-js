@@ -5,7 +5,7 @@ description: 'Write functions that checkpoint their progress and resume where th
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to 24 hours, far longer than a single invocation is allowed.
 
-`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Reading a result is owner-scoped, so it happens elsewhere: the [CLI](/cli/durable-functions), the API, or the dashboard.
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — is owner-scoped, so it belongs on your backend, the [CLI](/cli/durable-functions), or the dashboard.
 
 ```javascript
 const { durable } = require('@volcano.dev/sdk/durable');
@@ -427,11 +427,46 @@ executions in flight for its plan or out of its invocation allowance. `409` is
 the one to expect right after a deploy: retry once the function is `active`.
 
 Starting is the only durable operation an application credential can perform.
-Reading a result or stopping an execution is owner-scoped and takes a platform
-token, because an anon key is shared by everyone who loads the page and an
-execution is addressed by id alone. A function that has to report back writes
-what it produced where the app can read it — a table, a bucket — or the owner
-polls the execution. See
+Reading an execution, listing them and stopping one are owner-scoped: they take
+the project id and a platform token, because an anon key is shared by everyone
+who loads the page and an execution is addressed by id alone. Call them from
+your backend, never a browser.
+
+```javascript
+const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+
+if (!error && data.status === 'succeeded') {
+  console.log(data.result); // what the function returned
+}
+```
+
+An execution is `running` until it finishes, including while it is suspended in
+a wait with nothing invoked, so polling it is how you follow one. `result` is
+absent until it succeeds, and stays absent for an execution that failed or was
+stopped.
+
+```javascript
+// Most recent first, optionally filtered by status.
+const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
+  status: 'running',
+  limit: 20,
+});
+console.log(data.data.length, data.has_more);
+
+// Cancels the execution where it stands; completed steps are not undone.
+await volcano.durable.stop(projectId, 'order-pipeline', executionId);
+```
+
+Listing reports the status the platform last observed rather than polling each
+execution, so read a single one for its live state. Stopping is safe to repeat:
+an execution that has already finished reports the state it is in.
+
+All three answer the same `{ data, status, error }` envelope as `start`, with
+`404` for an execution or durable function this project does not have.
+
+A function that has to report back to an app holding only an anon key writes
+what it produced where the app can read it — a table, a bucket — rather than
+having the browser poll the execution. See
 [Durable functions](/platform/functions/durable-functions) for the full API and
 [the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
 

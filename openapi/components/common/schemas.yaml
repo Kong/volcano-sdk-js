@@ -1915,6 +1915,13 @@ components:
           format: uuid
         name:
           type: string
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FunctionKind'
+          description: |
+            Which kind of function this check is about. Present only when `type`
+            is `function`, where both kinds share the name space and this is
+            what tells them apart.
       required:
         - type
         - id
@@ -2614,6 +2621,106 @@ components:
         - deployed_regions
         - created_at
         - updated_at
+    DurableFunction:
+      type: object
+      description: |
+        A durable function. Separate from `Function` because a durable function
+        is invoked only through its own execution endpoints, so it has no
+        invocation mode, HTTP auth mode, OpenAPI document or invoke URL, and it
+        carries a `durable` configuration that a standard function has no field
+        for.
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 63
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+        status:
+          type: string
+          enum: [provisioning, active, failed, deleting]
+        provisioning_started_at:
+          type: string
+          format: date-time
+          description: Timestamp when the current provisioning phase started
+        is_public:
+          type: boolean
+          description: |
+            Whether anon keys may start executions of this function through
+            `POST /durable-functions/{functionId}/executions`.
+
+            When `true`, an anon key holding `functions.invoke` can start an
+            execution. When `false` (the default) only service keys and auth
+            user tokens can. Reading and stopping an execution always require
+            the project owner's token, whatever this is set to.
+
+            Set it when the function is created. Durable functions have no
+            update endpoint, so changing visibility later means redeploying.
+
+            A public durable function is startable, never invocable: it is not
+            reachable through `POST /functions/{functionId}/invoke` or a
+            function URL, which answer `404` for either visibility.
+        durable:
+          $ref: '#/components/schemas/DurableFunctionConfig'
+        deployed_regions:
+          type: array
+          items:
+            type: string
+          description: Regions where this function is currently deployed
+        runtime:
+          type: string
+        handler:
+          type: string
+        current_deployment_id:
+          type: string
+          format: uuid
+          description: Identifier of the latest deployment operation
+        pending_deployment_id:
+          type: string
+          format: uuid
+          description: Newest queued deployment that will run after the current operation
+        last_invoked_at:
+          type: string
+          format: date-time
+          description: Most recent successful invocation timestamp
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - status
+        - is_public
+        - durable
+        - deployed_regions
+        - created_at
+        - updated_at
+    DurableFunctionConfig:
+      type: object
+      description: |
+        Execution limits the function was created with, derived from the
+        project's plan. Fixed for the life of the function: changing them means
+        creating a new one.
+      properties:
+        execution_timeout_seconds:
+          type: integer
+          format: int64
+          description: How long a single execution may run before it is timed out.
+        retention_days:
+          type: integer
+          format: int64
+          description: How long a finished execution's result and history are retained.
+      required:
+        - execution_timeout_seconds
+        - retention_days
     DurableExecutionStatus:
       type: string
       enum: [pending, running, succeeded, failed, timed_out, stopped]
@@ -2775,6 +2882,7 @@ components:
         - name
         - language
         - default
+        - durable_capable
         - deployment
       properties:
         name:
@@ -2788,6 +2896,12 @@ components:
         default:
           type: boolean
           description: Whether this runtime is the CLI default for its language.
+        durable_capable:
+          type: boolean
+          description: >-
+            Whether a durable function can be authored on this runtime. Only
+            runtimes with a durable authoring API report true, and a durable
+            deploy naming any other runtime is rejected.
         deployment:
           $ref: '#/components/schemas/FunctionRuntimeDeployment'
     FunctionRuntimeDeployment:
@@ -2862,6 +2976,15 @@ components:
         function_id:
           type: string
           format: uuid
+        function_kind:
+          allOf:
+            - $ref: '#/components/schemas/FunctionKind'
+          description: |
+            Which collection the scheduled function belongs to. A project-wide
+            scheduler list mixes both kinds, and this is what says whether the
+            function is read back from `/projects/{id}/functions` or
+            `/projects/{id}/durable-functions` — and whether a tick invokes it
+            or starts a durable execution.
         name:
           type: string
         enabled:
@@ -3634,6 +3757,14 @@ components:
           format: uuid
         name:
           type: string
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FunctionKind'
+          description: |
+            Which kind of function this deployment belongs to. Both kinds appear
+            in this feed under `type: function`, because a deployment means the
+            same thing for either, so this is what tells them apart. Absent when
+            `type` is `frontend`.
       required:
         - type
         - id
@@ -3897,6 +4028,56 @@ components:
         prev_cursor:
           type: string
           description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedDurableFunctions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DurableFunction'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
+      required:
+        - data
+        - page
+        - limit
+        - total
+        - has_more
+    PaginatedDurableExecutions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DurableExecution'
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+        limit:
+          type: integer
+          description: Number of items per page
+        total:
+          type: integer
+          description: Total number of items across all pages
+        has_more:
+          type: boolean
+          description: Whether there are more pages available
       required:
         - data
         - page
@@ -4643,14 +4824,39 @@ components:
         Configuration for an existing (deployed) function. Functions are never
         created or deleted through the manifest. When `schedulers` is declared
         it is fully synced (schedulers absent from the list are deleted);
-        omitting `schedulers` leaves the function's schedulers untouched.
+        omitting `schedulers` leaves the function's schedulers untouched. The
+        same applies to `variables`: declaring it replaces the function's
+        declared variable names, and omitting it leaves them untouched.
       properties:
         name:
           type: string
           minLength: 1
+        kind:
+          $ref: '#/components/schemas/FunctionKind'
         public:
           type: boolean
           description: Function visibility for anon-key invocation
+        variable_scope:
+          type: string
+          enum: [all, scoped]
+          description: |
+            Which project variables this function receives. `all` (the default)
+            gives it every project variable. `scoped` gives it only the variables
+            it selects: every name declared in `variables`, plus the names
+            Volcano detects in its source that the project defines.
+        variables:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+          description: |
+            Project variable names this function requires, on top of the ones
+            detected in its source. Declare a name here when the function reads
+            it through a computed key, which detection cannot see, or when the
+            function must not deploy without it: a declared name the project does
+            not define fails the apply, while a detected name it does not define
+            is ignored. Only used when `variable_scope` is `scoped`.
         invocation_mode:
           $ref: '#/components/schemas/FunctionInvocationMode'
         http_auth_mode:
@@ -5525,6 +5731,16 @@ components:
           nullable: true
           additionalProperties: true
           description: OpenAPI 3.0 or 3.1 metadata for HTTP mode. Send null to clear it.
+    FunctionKind:
+      type: string
+      enum: [standard, durable]
+      default: standard
+      description: |
+        Which kind of function this is. `standard` runs once per invocation.
+        `durable` checkpoints its progress and resumes from the last completed
+        step, and is invoked asynchronously through its own executions
+        collection. A function's kind is fixed when it is created and cannot be
+        changed afterwards. Omitting this field means `standard`.
     FunctionInvocationMode:
       type: string
       enum: [rpc, http]

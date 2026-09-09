@@ -140,6 +140,28 @@ async function startDurableExecution() {
 
 void startDurableExecution;
 
+// The owner-scoped half: reading, listing and stopping all answer the same
+// envelope, and a page carries the executions rather than a bare array.
+async function followDurableExecution() {
+  const read = await durable.get('proj-1', 'order-pipeline', 'exec-1');
+  if (!read.error) {
+    const result: DurableExecution | null = read.data;
+    void result;
+  }
+
+  const listed = await durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 20 });
+  if (!listed.error && listed.data) {
+    const executions: DurableExecution[] = listed.data.data;
+    const more: boolean = listed.data.has_more;
+    void [executions, more];
+  }
+
+  const stopped = await durable.stop('proj-1', 'order-pipeline', 'exec-1');
+  void stopped.status;
+}
+
+void followDurableExecution;
+
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {
   id: string;
