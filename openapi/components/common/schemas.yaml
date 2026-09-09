@@ -936,6 +936,9 @@ components:
     CreateVariableRequest:
       type: object
       properties:
+        shared:
+          type: boolean
+          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
         name:
           type: string
           minLength: 1
@@ -4077,6 +4080,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectConfigDatabase'
+        shared_variables:
+          type: array
+          uniqueItems: true
+          description: Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it.
+          items:
+            type: string
+            pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
         variables:
           type: array
           description: Fully synced when declared - variables absent from this list are deleted.
@@ -4157,6 +4167,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        shared:
+          type: boolean
+          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
         name:
           type: string
           minLength: 1
@@ -4579,7 +4592,9 @@ components:
         Configuration for an existing (deployed) function. Functions are never
         created or deleted through the manifest. When `schedulers` is declared
         it is fully synced (schedulers absent from the list are deleted);
-        omitting `schedulers` leaves the function's schedulers untouched.
+        omitting `schedulers` leaves the function's schedulers untouched. The
+        same applies to `variables`: declaring it replaces the function's
+        declared variable names, and omitting it leaves them untouched.
       properties:
         name:
           type: string
@@ -4587,6 +4602,27 @@ components:
         public:
           type: boolean
           description: Function visibility for anon-key invocation
+        variable_scope:
+          type: string
+          enum: [all, scoped]
+          description: |
+            Which project variables this function receives. `all` (the default)
+            gives it the project variables marked `shared: true`. `scoped` gives it only the variables
+            it selects: every name declared in `variables`, plus the names
+            Volcano detects in its source that the project defines.
+        variables:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+          description: |
+            Project variable names this function requires, on top of the ones
+            detected in its source. Declare a name here when the function reads
+            it through a computed key, which detection cannot see, or when the
+            function must not deploy without it: a declared name the project does
+            not define fails the apply, while a detected name it does not define
+            is ignored. Only used when `variable_scope` is `scoped`.
         invocation_mode:
           $ref: '#/components/schemas/FunctionInvocationMode'
         http_auth_mode:
@@ -5562,6 +5598,9 @@ components:
     UpdateVariableRequest:
       type: object
       properties:
+        shared:
+          type: boolean
+          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
         value:
           type: string
       required:
@@ -5646,6 +5685,9 @@ components:
     Variable:
       type: object
       properties:
+        shared:
+          type: boolean
+          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
         id:
           type: string
           format: uuid

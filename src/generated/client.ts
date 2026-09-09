@@ -216,6 +216,7 @@ import type {
   RefreshOAuthProviderToken200,
   RenderAuthPagePreviewParams,
   RenderDefaultManagedAuthPageParams,
+  ReplaceSharedVariablesBody,
   ResetDatabasePassword200,
   ResolveFunctionForInvocationParams,
   ResolveFunctionResponse,
@@ -1884,6 +1885,85 @@ export const getProjectUsage = async (id: string, options?: Parameters<typeof vo
 
 
 
+export type replaceSharedVariablesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type replaceSharedVariablesResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type replaceSharedVariablesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type replaceSharedVariablesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type replaceSharedVariablesResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type replaceSharedVariablesResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type replaceSharedVariablesResponse500 = {
+  data: void
+  status: 500
+}
+
+export type replaceSharedVariablesResponseSuccess = (replaceSharedVariablesResponse204) & {
+  headers: Headers;
+};
+export type replaceSharedVariablesResponseError = (replaceSharedVariablesResponse400 | replaceSharedVariablesResponse401 | replaceSharedVariablesResponse404 | replaceSharedVariablesResponse409 | replaceSharedVariablesResponse413 | replaceSharedVariablesResponse500) & {
+  headers: Headers;
+};
+
+export type replaceSharedVariablesResponse = (replaceSharedVariablesResponseSuccess | replaceSharedVariablesResponseError)
+
+export const getReplaceSharedVariablesUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/shared-variables`
+}
+
+/**
+ * Atomically replaces the complete shared function-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * function environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored as non-shared variables.
+ * @summary Replace shared variable names
+ */
+export const replaceSharedVariables = async (id: string,
+    replaceSharedVariablesBody: ReplaceSharedVariablesBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<replaceSharedVariablesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<replaceSharedVariablesResponse>(getReplaceSharedVariablesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replaceSharedVariablesBody)
+  }
+);}
+
+
+
 export type getProjectConfigResponse200ApplicationJson = {
   data: ProjectConfig
   status: 200
@@ -1904,10 +1984,15 @@ export type getProjectConfigResponse404 = {
   status: 404
 }
 
+export type getProjectConfigResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type getProjectConfigResponseSuccess = (getProjectConfigResponse200ApplicationJson | getProjectConfigResponse200ApplicationYaml) & {
   headers: Headers;
 };
-export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404) & {
+export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404 | getProjectConfigResponse413) & {
   headers: Headers;
 };
 
@@ -1935,8 +2020,8 @@ export const getGetProjectConfigUrl = (id: string,
  * volcano-config.yaml rendering with `Accept: application/yaml` or
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
- * Write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; the YAML rendering adds a header comment
+ * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+ * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -3299,6 +3384,12 @@ if(createFunctionBody.http_auth_mode !== undefined) {
  }
 if(createFunctionBody.openapi_spec !== undefined) {
  formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
+ }
+if(createFunctionBody.variable_scope !== undefined) {
+ formData.append(`variable_scope`, createFunctionBody.variable_scope);
+ }
+if(createFunctionBody.variables !== undefined) {
+ formData.append(`variables`, createFunctionBody.variables);
  }
 
   return volcanoFetch<createFunctionResponse>(getCreateFunctionUrl(id),

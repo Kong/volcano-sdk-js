@@ -1393,6 +1393,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /projects/{id}/shared-variables:
+    put:
+      tags:
+        - Projects
+      summary: Replace shared variable names
+      description: |
+        Atomically replaces the complete shared function-variable list without
+        changing values. Names must already exist. Validates final affected
+        function environments before membership or propagation side effects.
+        An empty list clears membership. Omitted names remain stored as non-shared variables.
+      operationId: replaceSharedVariables
+      security:
+        - UserToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shared_variables]
+              not:
+                required: [expected_shared_variables, expected_shared_variables_digest]
+              properties:
+                shared_variables:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+                expected_shared_variables:
+                  type: array
+                  uniqueItems: true
+                  description: When present, replace only if the current complete shared list matches this list.
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+                expected_shared_variables_digest:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                  pattern: '^[a-f0-9]{64}$'
+                  description: SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_shared_variables for a compact conditional replacement.
+      responses:
+        '204':
+          description: Shared list replaced and affected function synchronization started.
+        '400':
+          description: Invalid names or final function environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Project not found
+        '409':
+          description: Shared list changed since it was read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Request body exceeds 4,194,304 bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Persistence or synchronization failed
   /projects/{id}/config:
     get:
       tags:
@@ -1404,8 +1476,8 @@ paths:
         volcano-config.yaml rendering with `Accept: application/yaml` or
         `?format=yaml`; the YAML is returned verbatim as the raw response body
         (`Content-Type: application/yaml`) and is meant to be saved as-is.
-        Write-only secrets (SMTP password, OAuth client secrets, TLS material)
-        are omitted from the export; the YAML rendering adds a header comment
+        Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+        are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
         describing how to set them via CLI environment interpolation.
       operationId: getProjectConfig
       security:
@@ -1435,7 +1507,8 @@ paths:
                 format: binary
                 description: |
                   Canonical volcano-config.yaml document returned verbatim,
-                  ready to be saved as-is.
+                  ready to be saved as-is. The response body is limited to
+                  4,194,304 bytes, matching the configuration apply limit.
         '401':
           description: Unauthorized - invalid or missing token
           content:
@@ -1444,6 +1517,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Canonical YAML export exceeds 4,194,304 bytes
           content:
             application/json:
               schema:
@@ -2591,6 +2670,15 @@ paths:
                 openapi_spec:
                   type: string
                   description: JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function.
+                variable_scope:
+                  type: string
+                  enum: [all, scoped]
+                  description: |
+                    Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                variables:
+                  type: string
+                  description: |
+                    JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged.
       responses:
         '201':
           description: Function created and deployment workflow started
@@ -3174,7 +3262,10 @@ paths:
               properties:
                 functions:
                   type: string
-                  description: JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
+                  description: |
+                    JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
+
+                    Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
                 code_0:
                   type: string
                   format: binary

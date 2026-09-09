@@ -9,6 +9,8 @@
  */
 
 export interface CreateVariableRequest {
+  /** Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+  shared?: boolean;
   /**
      * @minLength 1
      * @maxLength 256

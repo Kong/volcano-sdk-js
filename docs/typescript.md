@@ -39,6 +39,24 @@ if (user) {
 
 ## Core Types
 
+### Shared project variables
+
+`OpenAPIComponents` exposes optional `shared` metadata on variable requests and responses. Existing payloads can omit it. Set `shared: false` to create a non-shared variable.
+
+```typescript
+import type { OpenAPIOperations } from '@volcano.dev/sdk';
+
+type SharedVariablesRequest =
+  OpenAPIOperations['replaceSharedVariables']['requestBody']['content']['application/json'];
+const membership: SharedVariablesRequest = {
+  shared_variables: ['REGION'],
+  expected_shared_variables_digest:
+    '23519a43c66b4c342f25b32e09797ec5f3fc0be388cd8243fb3449afbdce4013',
+};
+```
+
+`PUT /projects/{id}/shared-variables` replaces the complete shared-name list. To replace it conditionally, send either `expected_shared_variables` or `expected_shared_variables_digest`, never both. The digest is SHA-256 of the sorted unique current names joined by `\n`. A changed list returns `409`.
+
 ### Configuration
 
 ```typescript
