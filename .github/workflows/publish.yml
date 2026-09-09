@@ -98,4 +98,4 @@ jobs:
             echo "Refusing to replace npm latest $latest with older $version." >&2
             exit 1
           fi
-          npm publish package/*.tgz --ignore-scripts --provenance --access public
+          npm publish ./package/*.tgz --ignore-scripts --provenance --access public
