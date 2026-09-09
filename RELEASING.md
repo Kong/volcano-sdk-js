@@ -12,7 +12,8 @@ normal squash auto-merge only for that App's same-repository, non-draft release
 branch and an increasing stable version. Major versions use the same checks.
 It does not approve reviews or bypass branch protections.
 
-Required `main` checks: `GitHub Actions Lint`, `SDK Lint, Tests, and Build`, and `Pull Request Title`.
+Required `main` checks: `GitHub Actions Lint`, `SDK Lint, Tests, and Build`,
+`Pull Request Title`, and `CodeQL`.
 Keep these required and auto-merge enabled in repository settings. If reviews
 or a merge queue are added later, GitHub enforces those too.
 
