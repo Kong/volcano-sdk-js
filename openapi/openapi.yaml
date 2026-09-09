@@ -10228,24 +10228,33 @@ paths:
                     minimum: 100
                     maximum: 599
                   data:
-                    description: Raw provider JSON value, or null when the provider returns no body
+                    type: object
+                    additionalProperties: true
                     nullable: true
+                    description: The provider's JSON response body.
         '400':
           description: |
             Invalid request (for example: missing `endpoint`, an `endpoint` that is
-            not a relative path, or an unsupported HTTP method).
+            not a relative path, or an unsupported HTTP method), no stored token for
+            this provider, or the call to the provider failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: Not authenticated or provider not linked
+          description: Not authenticated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '502':
-          description: Provider API error
+        '404':
+          description: No configuration for this provider in the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: The request to the provider could not be built, or its response was not a JSON object
           content:
             application/json:
               schema:

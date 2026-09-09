@@ -106,6 +106,7 @@ export * from './batchFunctionDeployFailure';
 export * from './batchFunctionDeployFailureOperation';
 export * from './batchFunctionDeployResponse';
 export * from './callOAuthProviderAPI200';
+export * from './callOAuthProviderAPI200Data';
 export * from './callOAuthProviderAPI200Provider';
 export * from './callOAuthProviderAPIBody';
 export * from './callOAuthProviderAPIBodyBody';

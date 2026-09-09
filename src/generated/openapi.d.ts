@@ -20808,14 +20808,17 @@ export interface operations {
                         provider: "google" | "github" | "microsoft" | "apple";
                         endpoint: string;
                         status_code: number;
-                        /** @description Raw provider JSON value, or null when the provider returns no body */
-                        data: unknown;
+                        /** @description The provider's JSON response body. */
+                        data: {
+                            [key: string]: unknown;
+                        } | null;
                     };
                 };
             };
             /**
              * @description Invalid request (for example: missing `endpoint`, an `endpoint` that is
-             *     not a relative path, or an unsupported HTTP method).
+             *     not a relative path, or an unsupported HTTP method), no stored token for
+             *     this provider, or the call to the provider failed.
              */
             400: {
                 headers: {
@@ -20825,7 +20828,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Not authenticated or provider not linked */
+            /** @description Not authenticated */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -20834,8 +20837,17 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Provider API error */
-            502: {
+            /** @description No configuration for this provider in the project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request to the provider could not be built, or its response was not a JSON object */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

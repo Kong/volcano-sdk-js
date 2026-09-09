@@ -104,7 +104,9 @@ type OAuthResponseShape = {
   provider: 'google' | 'github' | 'microsoft' | 'apple';
   endpoint: string;
   status_code: number;
-  data: unknown;
+  // Hosting decodes the provider's body into an object, so anything else it
+  // sends is a 500 rather than a scalar reaching the caller.
+  data: { [key: string]: unknown } | null;
 };
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 

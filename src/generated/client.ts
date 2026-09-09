@@ -13041,15 +13041,20 @@ export type callOAuthProviderAPIResponse401 = {
   status: 401
 }
 
-export type callOAuthProviderAPIResponse502 = {
+export type callOAuthProviderAPIResponse404 = {
   data: Error
-  status: 502
+  status: 404
+}
+
+export type callOAuthProviderAPIResponse500 = {
+  data: Error
+  status: 500
 }
 
 export type callOAuthProviderAPIResponseSuccess = (callOAuthProviderAPIResponse200) & {
   headers: Headers;
 };
-export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse502) & {
+export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse404 | callOAuthProviderAPIResponse500) & {
   headers: Headers;
 };
 
