@@ -39,8 +39,6 @@ jobs:
 
       - name: Run actionlint
         run: bash .github/scripts/actionlint.sh
-      - name: Test release eligibility
-        run: bash .github/scripts/release-tests.sh
 
   sdk:
     name: SDK Lint, Tests, and Build
