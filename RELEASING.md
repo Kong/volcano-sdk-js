@@ -1,5 +1,9 @@
 # Releasing
 
+The npm package is `@volcano.dev/sdk`. Do not rename it without a coordinated
+package migration. Publishing uses GitHub OIDC; no long-lived `NPM_TOKEN` is
+needed.
+
 ## Release flow
 
 A merge to `main` runs Release Please. Following Volcano CLI's changelog policy,
@@ -47,6 +51,11 @@ Configure the registry trusted publisher with these exact values:
 | Repository         | `volcano-sdk-js`   |
 | Workflow filename  | `publish.yml`      |
 | GitHub environment | `npm-production`   |
+| Allowed action     | `npm publish`      |
+
+Enable direct `npm publish` access; staged publishing alone does not authorize
+this workflow. After trusted publishing works, require 2FA and disallow
+traditional token publishing in the npm package settings where possible.
 
 The environment allows only the `main` branch and `v*` tags. It has no required
 human deployment approval. Registry trust must use this environment name.
@@ -66,12 +75,27 @@ Re-run a failed Release Please job to rediscover an existing pending release PR.
 For a failed publish, re-run its original `Publish SDK` workflow run. It rebuilds
 and rechecks the release event's commit. There is no arbitrary-ref dispatch input.
 
-An already-published immutable version is not overwritten. npm/RubyGems reject
+An already-published immutable version is not overwritten. npm rejects
 duplicate uploads; confirm the existing registry version before treating that
 specific error as an already-completed publish.
 Do not delete or move a released tag to repair a package. Fix the source and
 release a new version. For npm, do not republish an older missing version with
 the `latest` tag after a newer release; use a deliberate registry recovery.
+
+If only the `latest` dist-tag is wrong, a maintainer with npm package access can
+point it at an already-published version:
+
+```sh
+npm dist-tag add @volcano.dev/sdk@1.2.0 latest
+npm dist-tag ls @volcano.dev/sdk
+```
+
+Replace `1.2.0` with the intended version. This repairs registry metadata; normal
+releases use the workflow above.
+
+For authentication failures, check the trusted-publisher fields above,
+`id-token: write`, and that the job uses a GitHub-hosted runner. The package's
+`repository.url` must identify `https://github.com/Kong/volcano-sdk-js.git`.
 
 ## Verification
 
@@ -88,5 +112,3 @@ changes. No registry credentials are needed for these checks.
 - [Volcano CLI release automation](https://github.com/Kong/volcano-cli/blob/main/.github/workflows/release-please.yml)
 - [Release Please authentication and event triggering](https://github.com/googleapis/release-please-action#github-credentials)
 - [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
-- [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/)
-- [RubyGems trusted publishing](https://guides.rubygems.org/trusted-publishing/)
