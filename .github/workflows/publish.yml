@@ -10,6 +10,8 @@ permissions:
 concurrency:
   group: publish-sdk
   cancel-in-progress: false
+  # Retain pending runs for versions that already have a GitHub release.
+  queue: max
 
 defaults:
   run:

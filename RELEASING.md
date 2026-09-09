@@ -31,7 +31,9 @@ tag and GitHub release. `publish.yml` then:
 4. Passes only the build artifact to a separate OIDC publishing job.
 
 Build jobs cannot request publishing credentials. The publish job does not
-check out source or run package build hooks. Workflows serialize releases.
+check out source or run package build hooks. Publication runs one release at a
+time, with up to 100 pending runs retained in GitHub's concurrency queue. New
+releases do not replace pending publications while the queue has capacity.
 
 ## One-time setup
 
@@ -101,8 +103,12 @@ For authentication failures, check the trusted-publisher fields above,
 
 ```sh
 bash .github/scripts/release-tests.sh
-go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+bash .github/scripts/actionlint.sh
 ```
+
+The actionlint script pins the unreleased queue-support commit from
+[upstream PR #654](https://github.com/rhysd/actionlint/pull/654). Replace the pin
+with an official release once it supports `concurrency.queue`.
 
 Run the normal native CI checks and package smoke test before merging workflow
 changes. No registry credentials are needed for these checks.
