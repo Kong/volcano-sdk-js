@@ -2,7 +2,13 @@
  * Volcano SDK - Durable function authoring type definitions
  */
 
-/** A duration: `'30s'`, `'5m'`, `'2h'`, `'1d'`, a number of seconds, or the explicit form. */
+/**
+ * A duration: `'30s'`, `'5m'`, `'2h'`, `'1d'`, a compound string like `'1m30s'`,
+ * a number of seconds, or the explicit form.
+ *
+ * Whole seconds only. There is no millisecond unit, and a fraction is refused
+ * rather than rounded: the platform holds a wait between invocations.
+ */
 export type DurableDuration =
   | string
   | number

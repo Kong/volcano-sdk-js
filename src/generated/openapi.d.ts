@@ -11802,7 +11802,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function is not deployed yet, or has no deployed region */
+            /**
+             * @description Function is not deployed yet, or has no deployed region. Also
+             *     returned when two starts under the same execution name raced and
+             *     both released it, which is retryable as it stands.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -11821,8 +11825,9 @@ export interface operations {
                 };
             };
             /**
-             * @description The project has too many executions in flight for its plan, or the
-             *     function invocation rate limit was exceeded.
+             * @description The project has too many executions in flight for its plan, the
+             *     function invocation rate limit was exceeded, or the account is out
+             *     of its billing-cycle function invocation allowance.
              */
             429: {
                 headers: {
@@ -11833,9 +11838,11 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Returned by
-             *     a deployment that has no durable execution engine, such as a local
-             *     one; the request is not retryable there.
+             * @description Durable execution is not available in this environment, or the
+             *     usage limit service could not be reached to charge the start. The
+             *     first is returned by a deployment that has no durable execution
+             *     engine, such as a local one, and is not retryable there; the second
+             *     is transient.
              */
             503: {
                 headers: {

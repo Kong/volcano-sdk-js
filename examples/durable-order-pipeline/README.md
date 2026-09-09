@@ -61,7 +61,7 @@ cp volcano/volcano.env.example volcano/volcano.env   # then fill it in
 volcano cloud variables deploy
 
 # 2. The durable function. Its own package.json pulls in the durable runtime.
-volcano cloud durable deploy order-pipeline
+volcano cloud durable deploy -f order-pipeline
 
 # 3. Record the id it printed, and redeploy variables so orders-api has it.
 #    `volcano cloud durable list` prints it again if you lose it.

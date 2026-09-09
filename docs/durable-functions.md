@@ -33,8 +33,10 @@ need it install it, and it must be a dependency of the function you deploy.
 
 Deploy the result as a durable function — `volcano cloud durable deploy`, or
 `kind: durable` in `volcano-config.yaml`. A durable handler deployed as a
-standard function fails on its first invocation, because nothing is there to
-checkpoint it.
+standard function fails on its first invocation with `DurableRuntimeMissingError`,
+which is also what a handler throws in a browser or a local script: nothing is
+there to checkpoint it. The error is exported from `@volcano.dev/sdk/durable`, so
+a caller can tell it apart from a failure inside the handler.
 
 ## How a durable function runs
 
@@ -417,9 +419,12 @@ returns the execution that already exists rather than beginning a second one,
 and is charged once.
 
 `start` resolves rather than throws when the platform refuses. `status` carries
-why — `403` for a durable function that is not public, `429` for a project with
-too many executions in flight for its plan, `404` for a name that is not a
-durable function in this project.
+why — `401` for a credential the endpoint does not accept, `403` for a durable
+function that is not public, `404` for a name that is not a durable function in
+this project, `409` while the function is still provisioning or has no deployed
+region, `413` for an input over 256 KiB, and `429` for a project with too many
+executions in flight for its plan or out of its invocation allowance. `409` is
+the one to expect right after a deploy: retry once the function is `active`.
 
 Starting is the only durable operation an application credential can perform.
 Reading a result or stopping an execution is owner-scoped and takes a platform
