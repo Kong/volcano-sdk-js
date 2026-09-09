@@ -11,7 +11,7 @@ const execution = {
   result: { shipped: true },
 };
 
-const page = { executions: [execution], total: 1, page: 1, limit: 20 };
+const page = { data: [execution], page: 1, limit: 20, total: 1, has_more: false };
 
 function clientWithTransport(overrides = {}) {
   const transport = {
