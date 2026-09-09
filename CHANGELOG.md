@@ -26,6 +26,22 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.7.0](https://github.com/Kong/volcano-sdk-js/compare/v1.6.3...v1.7.0) (2026-09-09)
+
+
+### Features
+
+* **openapi:** generate managed auth page clients ([#76](https://github.com/Kong/volcano-sdk-js/issues/76)) ([f1ad158](https://github.com/Kong/volcano-sdk-js/commit/f1ad1588d854c07fdf7b0d013883975b3c701c0c))
+
+
+### Bug Fixes
+
+* **openapi:** accept null OAuth provider data ([#89](https://github.com/Kong/volcano-sdk-js/issues/89)) ([5fd79b7](https://github.com/Kong/volcano-sdk-js/commit/5fd79b7993965f0a88e1b16fd2556c06b3089fc3))
+* **realtime:** bind recovery to auth identity ([#88](https://github.com/Kong/volcano-sdk-js/issues/88)) ([52abfcd](https://github.com/Kong/volcano-sdk-js/commit/52abfcd596a158153707e80c579f268ce386112a))
+* **realtime:** preserve broadcast recovery state ([#87](https://github.com/Kong/volcano-sdk-js/issues/87)) ([adcaf51](https://github.com/Kong/volcano-sdk-js/commit/adcaf5182f853096b6263e72b23d95561d5c300e))
+* **realtime:** revert recovery lifecycle to unblock hosting CI ([#92](https://github.com/Kong/volcano-sdk-js/issues/92)) ([5e28b96](https://github.com/Kong/volcano-sdk-js/commit/5e28b96bb5c800868f34ee17ca0a7c3f9062865a))
+* **release:** format generated changelogs before auto-merge ([#98](https://github.com/Kong/volcano-sdk-js/issues/98)) ([0c1dabd](https://github.com/Kong/volcano-sdk-js/commit/0c1dabd459fdda4cf19781329c0b633def0082c6))
+
 ## [1.6.0] - 2026-07-28
 
 ### Changed
