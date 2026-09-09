@@ -34,6 +34,8 @@ const fakeBatch = (items) => ({
   },
 });
 
+let lastContext = null;
+
 const fakeContext = () => {
   const context = {
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -75,7 +77,21 @@ const fakeContext = () => {
       ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
     },
   };
+  lastContext = context;
   return context;
+};
+
+// The engine merges a strategy config over its own defaults with a spread, so a
+// key present with an undefined value replaces the default instead of falling
+// back to it — and an absent delay is then read for a unit it does not have,
+// which throws on the first failure. The double holds the facade to that: a
+// config carrying a key the caller never set fails here.
+const engineStrategyConfig = (op, config) => {
+  const unset = Object.keys(config).filter((key) => config[key] === undefined);
+  if (unset.length > 0) {
+    throw new TypeError(`${op} was given undefined ${unset.join(', ')}, which clobbers a default`);
+  }
+  return config;
 };
 
 jest.mock(
@@ -84,11 +100,14 @@ jest.mock(
     withDurableExecution: (handler) => (event) => handler(event.input, fakeContext()),
     StepSemantics: fakeStepSemantics,
     createRetryStrategy: (config) => {
-      engineCalls.push({ op: 'createRetryStrategy', config });
+      engineCalls.push({
+        op: 'createRetryStrategy',
+        config: engineStrategyConfig('retry', config),
+      });
       return () => ({ shouldRetry: false });
     },
     createWaitStrategy: (config) => {
-      engineCalls.push({ op: 'createWaitStrategy', config });
+      engineCalls.push({ op: 'createWaitStrategy', config: engineStrategyConfig('wait', config) });
       return () => ({ shouldContinue: false });
     },
   }),
@@ -169,13 +188,26 @@ describe('ctx.step', () => {
       }),
     );
 
-    expect(callsOf('createRetryStrategy')[0].config).toEqual({
+    expect(callsOf('createRetryStrategy')[0].config).toStrictEqual({
       maxAttempts: 5,
       initialDelay: { seconds: 2 },
       maxDelay: { minutes: 1, seconds: 30 },
       backoffRate: 3,
-      retryableErrors: undefined,
-      retryableErrorTypes: undefined,
+    });
+  });
+
+  // What the caller leaves out has to reach the engine as left out. Naming it
+  // with an undefined value overrode the engine's default, and the first
+  // failure of a step written the way the guide writes one died reading a
+  // duration that was not there.
+  it('sends only the retry options the caller set', async () => {
+    await run((_input, ctx) =>
+      ctx.step('charge', async () => 'ok', { retry: { attempts: 5, initialDelay: '2s' } }),
+    );
+
+    expect(callsOf('createRetryStrategy')[0].config).toStrictEqual({
+      maxAttempts: 5,
+      initialDelay: { seconds: 2 },
     });
   });
 
@@ -190,6 +222,12 @@ describe('ctx.step', () => {
     await run((_input, ctx) => ctx.step('charge', async () => 'ok', { atMostOnce: true }));
 
     expect(callsOf('step')[0].config.semantics).toBe(fakeStepSemantics.AtMostOncePerRetry);
+  });
+
+  it('leaves the semantics alone for atMostOnce: false', async () => {
+    await run((_input, ctx) => ctx.step('charge', async () => 'ok', { atMostOnce: false }));
+
+    expect(callsOf('step')[0].config).toStrictEqual({});
   });
 
   it('leaves retry and semantics unset when neither is asked for', async () => {
@@ -225,6 +263,18 @@ describe('ctx.wait', () => {
     const call = callsOf('wait')[0];
     expect(call.name).toEqual({ minutes: 1, seconds: 30 });
     expect(call.duration).toBeUndefined();
+  });
+
+  it('refuses a duration where the name belongs', async () => {
+    await expect(run((_input, ctx) => ctx.wait(30, '5m'))).rejects.toThrow(
+      /ctx\.wait\(\) takes a name and a duration, or a duration alone/,
+    );
+  });
+
+  it('refuses a duration object that holds no duration', async () => {
+    await expect(run((_input, ctx) => ctx.wait('pause', {}))).rejects.toThrow(
+      /wait duration needs one of days, hours, minutes, seconds/,
+    );
   });
 
   it('names what is wrong with an unparseable duration', async () => {
@@ -284,6 +334,13 @@ describe('ctx.child', () => {
     expect(callsOf('wait')[0].duration).toEqual({ seconds: 10 });
     expect(callsOf('step')[0].name).toBe('finish');
   });
+
+  it('takes an unnamed child', async () => {
+    const result = await run((_input, ctx) => ctx.child(async () => 'done'));
+
+    expect(result).toBe('done');
+    expect(callsOf('child')[0].name).toBeUndefined();
+  });
 });
 
 describe('ctx.waitUntil', () => {
@@ -295,7 +352,6 @@ describe('ctx.waitUntil', () => {
         interval: '15s',
         maxInterval: '5m',
         maxAttempts: 40,
-        timeout: '1h',
       }),
     );
 
@@ -308,7 +364,34 @@ describe('ctx.waitUntil', () => {
     expect(strategy.initialDelay).toEqual({ seconds: 15 });
     expect(strategy.maxDelay).toEqual({ minutes: 5, seconds: 0 });
     expect(strategy.maxAttempts).toBe(40);
-    expect(strategy.timeoutSeconds).toBe(3600);
+  });
+
+  it('sends only the polling options the caller set', async () => {
+    await run((_input, ctx) =>
+      ctx.waitUntil('approval', async (state) => state, {
+        initialState: { approved: false },
+        until: (state) => state.approved,
+      }),
+    );
+
+    expect(Object.keys(callsOf('createWaitStrategy')[0].config)).toStrictEqual([
+      'shouldContinuePolling',
+    ]);
+  });
+
+  // The engine's wait strategy has no deadline: it bounds a condition by how
+  // many times it is checked. `timeout` was accepted, forwarded to a field
+  // nothing reads, and a wait meant to give up after an hour polled on.
+  it('refuses a timeout it cannot enforce', async () => {
+    await expect(
+      run((_input, ctx) =>
+        ctx.waitUntil('approval', async (state) => state, {
+          initialState: {},
+          until: () => true,
+          timeout: '1h',
+        }),
+      ),
+    ).rejects.toThrow(/has no `timeout`: bound the wait with `maxAttempts`/);
   });
 
   it('returns the state the check produced', async () => {
@@ -470,25 +553,38 @@ describe('ctx.parallel', () => {
 });
 
 describe('logging', () => {
+  // ctx.log is the operation's logger rather than the process's, which is what
+  // suppresses a replayed line from being written twice.
   it('exposes the operation logger as ctx.log', async () => {
+    let log;
     await run(async (_input, ctx) => {
+      log = ctx.log;
       ctx.log.info('started', { order: 1 });
       return null;
     });
+
+    expect(log.info).toHaveBeenCalledWith('started', { order: 1 });
+    expect(log).not.toBe(console);
   });
 
   it('installs a custom logger before the handler runs', async () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    let installed;
+    let configuredBeforeHandler;
 
     await durable(
       async (_input, ctx) => {
-        installed = ctx.log;
-        return null;
+        configuredBeforeHandler = lastContext.configureLogger.mock.calls;
+        return ctx.step('charge', async () => 'ok');
       },
       { logger },
     )({ input: {} }, {});
 
-    expect(installed).toBeDefined();
+    expect(configuredBeforeHandler).toEqual([[{ customLogger: logger }]]);
+  });
+
+  it('leaves the logger alone when the handler brings none', async () => {
+    await run(async () => null);
+
+    expect(lastContext.configureLogger).not.toHaveBeenCalled();
   });
 });

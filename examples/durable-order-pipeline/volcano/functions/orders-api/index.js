@@ -58,7 +58,14 @@ async function submitOrder(auth, input) {
   }
 
   const execution = await startExecution(order.id);
-  unwrap(await volcano.update('orders', { execution_id: execution.id }).eq('id', order.id));
+  // Which execution is working an order is the pipeline's bookkeeping, not the
+  // customer's, so it is written with the service key: `orders` gives a
+  // signed-in user select and insert on their own rows and nothing more.
+  unwrap(
+    await client(VOLCANO_SERVICE_KEY)
+      .update('orders', { execution_id: execution.id })
+      .eq('id', order.id),
+  );
 
   return { order_id: order.id, execution_id: execution.id, status: execution.status };
 }

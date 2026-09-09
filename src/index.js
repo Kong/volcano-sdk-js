@@ -2517,6 +2517,10 @@ class VolcanoAuth {
     if (error) {
       return { data: null, status: null, error };
     }
+    const sessionError = await this._durableOwnerSession();
+    if (sessionError) {
+      return { data: null, status: null, error: sessionError };
+    }
     return this._durableResult('Failed to read durable execution', () =>
       this._transport.getDurableExecution(
         segments.projectId,
@@ -2545,6 +2549,10 @@ class VolcanoAuth {
     const { segments, error } = durablePathSegments({ projectId, functionName });
     if (error) {
       return { data: null, status: null, error };
+    }
+    const sessionError = await this._durableOwnerSession();
+    if (sessionError) {
+      return { data: null, status: null, error: sessionError };
     }
     const params = {};
     for (const field of ['status', 'page', 'limit']) {
@@ -2578,6 +2586,10 @@ class VolcanoAuth {
     if (error) {
       return { data: null, status: null, error };
     }
+    const sessionError = await this._durableOwnerSession();
+    if (sessionError) {
+      return { data: null, status: null, error: sessionError };
+    }
     return this._durableResult('Failed to stop durable execution', () =>
       this._transport.stopDurableExecution(
         segments.projectId,
@@ -2586,6 +2598,20 @@ class VolcanoAuth {
         this._generatedOptions('session'),
       ),
     );
+  }
+
+  /**
+   * The owner-scoped durable routes carry the project's own token, so without a
+   * session there is nothing to send them. Refused here rather than spending a
+   * round trip on the 401 the platform would answer, which is how `logs.search`
+   * treats the same credential.
+   */
+  async _durableOwnerSession() {
+    await this._completeOAuthExchange();
+    if (!this.accessToken) {
+      return this._oauthExchangeError || new Error('No active session');
+    }
+    return null;
   }
 
   /**

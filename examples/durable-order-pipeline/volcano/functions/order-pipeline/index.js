@@ -40,7 +40,8 @@ exports.handler = durable(async (input, ctx) => {
     until: (status) => status !== 'pending',
     interval: '30s',
     maxInterval: '10m',
-    timeout: '24h',
+    // Checks, not a deadline: at these intervals this is most of a day.
+    maxAttempts: 200,
   });
 
   if (review === 'rejected') {

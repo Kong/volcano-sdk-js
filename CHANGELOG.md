@@ -7,7 +7,8 @@ All notable changes to the Volcano SDK will be documented in this file.
 ### Added
 
 - `@volcano.dev/sdk/durable` for authoring durable functions: `durable(handler)`
-  and a context with `step`, `wait`, `child`, `waitUntil`, `map`, and `parallel`.
+  and a context with `step`, `wait`, `child`, `waitUntil`, `map`, `parallel`, and
+  `log`.
   Durations are written as `'30s'` or `'1m30s'`, retries as
   `{ attempts, initialDelay, maxDelay }`, and batches resolve to plain results.
   The durable runtime (`@aws/durable-execution-sdk-js`) is an optional peer
@@ -17,7 +18,11 @@ All notable changes to the Volcano SDK will be documented in this file.
 - `volcano.durable.start(name, input, { executionName })` starts a durable
   execution with an application credential and returns its handle. The durable
   counterpart of `functions.invoke`, and the only durable operation an anon or
-  service key can perform: reading a result stays owner-scoped.
+  service key can perform.
+
+- `volcano.durable.get`, `list` and `stop` follow an execution afterwards. They
+  are owner-scoped — project id plus a platform token — so they belong on a
+  backend rather than in a browser.
 
 - `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
   service-role-only project leases. `withLock` renews automatically, aborts its

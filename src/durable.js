@@ -129,6 +129,12 @@ function durableContext(context, engine) {
       if (duration === undefined) {
         return context.wait(toDuration(name, 'wait'));
       }
+      // The engine decides which argument is which by testing the first for a
+      // string, so anything else here is read as the duration and fails on a
+      // shape it never had.
+      if (typeof name !== 'string') {
+        throw new TypeError('ctx.wait() takes a name and a duration, or a duration alone');
+      }
       return context.wait(name, toDuration(duration, 'wait'));
     },
 
@@ -283,18 +289,28 @@ function conditionConfig(options, engine) {
       'ctx.waitUntil() requires an `initialState` in its options, which is what `until` is given until the state changes',
     );
   }
+  // A condition is bounded by how many times it is checked, not by a deadline:
+  // the platform holds the wait between checks and has no clock to compare
+  // against when it resumes. Refused rather than ignored, because a wait that
+  // was meant to give up after an hour would otherwise poll until the
+  // execution's own ceiling.
+  if (options.timeout !== undefined) {
+    throw new TypeError(
+      'ctx.waitUntil() has no `timeout`: bound the wait with `maxAttempts`, `interval` and `maxInterval`',
+    );
+  }
 
   return {
     initialState: options.initialState,
-    waitStrategy: engine.createWaitStrategy({
-      shouldContinuePolling: (state) => !options.until(state),
-      maxAttempts: options.maxAttempts,
-      initialDelay: optionalDuration(options.interval, 'interval'),
-      maxDelay: optionalDuration(options.maxInterval, 'maxInterval'),
-      backoffRate: options.backoffRate,
-      timeoutSeconds:
-        options.timeout === undefined ? undefined : toSeconds(options.timeout, 'timeout'),
-    }),
+    waitStrategy: engine.createWaitStrategy(
+      engineConfig({
+        shouldContinuePolling: (state) => !options.until(state),
+        maxAttempts: options.maxAttempts,
+        initialDelay: optionalDuration(options.interval, 'interval'),
+        maxDelay: optionalDuration(options.maxInterval, 'maxInterval'),
+        backoffRate: options.backoffRate,
+      }),
+    ),
   };
 }
 
@@ -328,14 +344,26 @@ function toRetryStrategy(retry, engine) {
     throw new TypeError('retry must be false, a function, or an options object');
   }
 
-  return engine.createRetryStrategy({
-    maxAttempts: retry.attempts,
-    initialDelay: optionalDuration(retry.initialDelay, 'initialDelay'),
-    maxDelay: optionalDuration(retry.maxDelay, 'maxDelay'),
-    backoffRate: retry.backoffRate,
-    retryableErrors: retry.retryOn,
-    retryableErrorTypes: retry.retryOnTypes,
-  });
+  return engine.createRetryStrategy(
+    engineConfig({
+      maxAttempts: retry.attempts,
+      initialDelay: optionalDuration(retry.initialDelay, 'initialDelay'),
+      maxDelay: optionalDuration(retry.maxDelay, 'maxDelay'),
+      backoffRate: retry.backoffRate,
+      retryableErrors: retry.retryOn,
+      retryableErrorTypes: retry.retryOnTypes,
+    }),
+  );
+}
+
+/**
+ * The engine merges a config over its defaults with a spread, so a key that is
+ * present with an undefined value wins over the default instead of falling back
+ * to it — and an absent delay is then read for a unit it does not have, which
+ * throws. What the caller left out has to be left out here too.
+ */
+function engineConfig(entries) {
+  return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined));
 }
 
 // No `ms`: a durable duration is held by the platform between invocations, and
@@ -384,6 +412,9 @@ function checkedDurationObject(value, field) {
     throw new TypeError(
       `${field} duration takes ${durationFields.join(', ')} (got ${unknown.join(', ')})`,
     );
+  }
+  if (!durationFields.some((key) => value[key] !== undefined)) {
+    throw new TypeError(`${field} duration needs one of ${durationFields.join(', ')}`);
   }
   for (const key of durationFields) {
     const part = value[key];

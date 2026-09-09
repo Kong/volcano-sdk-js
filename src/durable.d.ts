@@ -39,7 +39,8 @@ export interface RetryOptions {
 
 /**
  * `false` fails on the first error; an options object configures backoff; a
- * function decides per attempt. Unset means the engine's default retry.
+ * function decides per attempt. Unset means the platform's default retry: 6
+ * attempts, 5 seconds apart doubling to a minute, with the delays jittered.
  */
 export type Retry = false | RetryOptions | ((error: Error, attempt: number) => RetryDecision);
 
@@ -76,14 +77,17 @@ export interface WaitUntilOptions<TState> {
   initialState: TState;
   /** Delay before the second check. Defaults to 5 seconds. */
   interval?: DurableDuration;
-  /** Ceiling for the backoff delay between checks. */
+  /** Ceiling for the backoff delay between checks. Defaults to 5 minutes. */
   maxInterval?: DurableDuration;
-  /** Multiplier applied to the delay after each check. Defaults to 2. */
+  /** Multiplier applied to the delay after each check. Defaults to 1.5. */
   backoffRate?: number;
-  /** Give up after this many checks. */
+  /**
+   * How many times to check before giving up. Defaults to 60, and running out
+   * fails the execution rather than returning the last state. A condition is
+   * bounded by checks, not by a deadline: the platform holds the wait between
+   * them and has no clock to compare against when it resumes.
+   */
   maxAttempts?: number;
-  /** Give up after this long. */
-  timeout?: DurableDuration;
 }
 
 export interface BatchOptions {
@@ -218,7 +222,7 @@ export type DurableHandler<TInput = unknown, TResult = unknown> = (
 export declare function durable<TInput = unknown, TResult = unknown>(
   handler: DurableHandler<TInput, TResult>,
   options?: DurableOptions,
-): (event: unknown, functionContext?: unknown) => Promise<unknown>;
+): (event: unknown, functionContext: unknown) => Promise<unknown>;
 
 /** Thrown on the first invocation when the durable runtime is not installed. */
 export declare class DurableRuntimeMissingError extends Error {

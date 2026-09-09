@@ -59,14 +59,16 @@ describe('durable.get / durable.list / durable.stop', () => {
       status: 200,
       error: null,
     });
-    expect(transport.listDurableExecutions.mock.calls[0][2]).toEqual({});
+    // Strict, because a key carrying undefined is a query parameter the caller
+    // never asked for.
+    expect(transport.listDurableExecutions.mock.calls[0][2]).toStrictEqual({});
 
     await volcano.durable.list('proj-1', 'order-pipeline', {
       status: 'running',
       page: 2,
       limit: 50,
     });
-    expect(transport.listDurableExecutions.mock.calls[1][2]).toEqual({
+    expect(transport.listDurableExecutions.mock.calls[1][2]).toStrictEqual({
       status: 'running',
       page: 2,
       limit: 50,
@@ -117,6 +119,59 @@ describe('durable.get / durable.list / durable.stop', () => {
 
     const listed = await volcano.durable.list('proj-1', '');
     expect(listed.error.message).toContain('functionName must be a non-empty string');
+
+    expect(transport.getDurableExecution).not.toHaveBeenCalled();
+    expect(transport.listDurableExecutions).not.toHaveBeenCalled();
+    expect(transport.stopDurableExecution).not.toHaveBeenCalled();
+  });
+
+  test('escapes every segment it puts in the path', async () => {
+    const { volcano, transport } = clientWithTransport();
+
+    await volcano.durable.get('proj/1', 'order pipeline', 'exec#1');
+    await volcano.durable.stop('proj/1', 'order pipeline', 'exec#1');
+    await volcano.durable.list('proj/1', 'order pipeline');
+
+    expect(transport.getDurableExecution.mock.calls[0].slice(0, 3)).toEqual([
+      'proj%2F1',
+      'order%20pipeline',
+      'exec%231',
+    ]);
+    expect(transport.stopDurableExecution.mock.calls[0].slice(0, 3)).toEqual([
+      'proj%2F1',
+      'order%20pipeline',
+      'exec%231',
+    ]);
+    expect(transport.listDurableExecutions.mock.calls[0].slice(0, 2)).toEqual([
+      'proj%2F1',
+      'order%20pipeline',
+    ]);
+  });
+
+  // These routes carry the project's own token. Without a session there is
+  // nothing to send, and the platform's 401 costs a round trip to learn it.
+  test('refuses an owner-scoped call with no session', async () => {
+    const transport = {
+      getDurableExecution: jest.fn(),
+      listDurableExecutions: jest.fn(),
+      stopDurableExecution: jest.fn(),
+    };
+    const volcano = new VolcanoClient({
+      apiUrl: 'https://api.test.com',
+      anonKey: 'ak-durable',
+      transportFactory: () => transport,
+    });
+
+    for (const call of [
+      () => volcano.durable.get('proj-1', 'order-pipeline', 'exec-1'),
+      () => volcano.durable.list('proj-1', 'order-pipeline'),
+      () => volcano.durable.stop('proj-1', 'order-pipeline', 'exec-1'),
+    ]) {
+      const { data, status, error } = await call();
+      expect(data).toBeNull();
+      expect(status).toBeNull();
+      expect(error.message).toContain('No active session');
+    }
 
     expect(transport.getDurableExecution).not.toHaveBeenCalled();
     expect(transport.listDurableExecutions).not.toHaveBeenCalled();

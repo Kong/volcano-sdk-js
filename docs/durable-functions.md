@@ -142,10 +142,10 @@ across replays of a loop — `ctx.map` names its items for you.
 
 ### StepOptions
 
-| Option       | Type                          | Description                                                                                                                                       |
-| ------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `retry`      | `false` \| object \| function | `false` fails on the first error. An object configures backoff. A function decides per attempt. Unset means the default: 3 attempts with backoff. |
-| `atMostOnce` | `boolean`                     | Checkpoint before running instead of after, so an attempt interrupted mid-flight is not repeated on replay.                                       |
+| Option       | Type                          | Description                                                                                                                                                                    |
+| ------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `retry`      | `false` \| object \| function | `false` fails on the first error. An object configures backoff. A function decides per attempt. Unset means the platform's default: 6 attempts, 5s apart doubling to a minute. |
+| `atMostOnce` | `boolean`                     | Checkpoint before running instead of after, so an attempt interrupted mid-flight is not repeated on replay.                                                                    |
 
 `atMostOnce` is per attempt, so pair it with `retry: false` for work that must
 never run twice — a charge, an outbound payment, a one-shot email.
@@ -237,7 +237,7 @@ const approval = await ctx.waitUntil(
     until: (state) => state.status !== 'pending',
     interval: '30s',
     maxInterval: '10m',
-    timeout: '12h',
+    maxAttempts: 200,
   },
 );
 ```
@@ -248,9 +248,14 @@ const approval = await ctx.waitUntil(
 | `initialState` | any      | —       | Required. The state the first check receives.      |
 | `interval`     | duration | `5s`    | Delay before the second check.                     |
 | `maxInterval`  | duration | `5m`    | Ceiling for the backoff delay between checks.      |
-| `backoffRate`  | `number` | `2`     | Multiplier applied after each check.               |
-| `maxAttempts`  | `number` | —       | Give up after this many checks.                    |
-| `timeout`      | duration | —       | Give up after this long.                           |
+| `backoffRate`  | `number` | `1.5`   | Multiplier applied after each check.               |
+| `maxAttempts`  | `number` | `60`    | How many checks before the wait gives up.          |
+
+A condition is bounded by how many times it is checked rather than by a
+deadline: the platform holds the wait between checks, so there is no clock left
+running to compare against. Running out of checks fails the execution instead of
+returning the last state, so size `maxAttempts` against `interval` and
+`maxInterval` for the longest you are willing to wait.
 
 This is how a durable function waits on the outside world: an approval, a
 third-party job, a file that has to land. Whatever signals it — a webhook, an
@@ -365,7 +370,7 @@ exports.handler = durable(async (input, ctx) => {
       initialState: 'pending',
       until: (status) => status !== 'pending',
       interval: '1m',
-      timeout: '24h',
+      maxAttempts: 500,
     },
   );
 
@@ -419,12 +424,15 @@ returns the execution that already exists rather than beginning a second one,
 and is charged once.
 
 `start` resolves rather than throws when the platform refuses. `status` carries
-why — `401` for a credential the endpoint does not accept, `403` for a durable
+why — `400` for input that is not JSON or an execution name over 255 characters,
+`401` for a credential the endpoint does not accept, `403` for a durable
 function that is not public, `404` for a name that is not a durable function in
 this project, `409` while the function is still provisioning or has no deployed
-region, `413` for an input over 256 KiB, and `429` for a project with too many
-executions in flight for its plan or out of its invocation allowance. `409` is
-the one to expect right after a deploy: retry once the function is `active`.
+region, `413` for an input over 256 KiB, `429` for a project with too many
+executions in flight for its plan or out of its invocation allowance, and `503`
+where durable execution is unavailable, which is what a local deployment
+answers. `409` is the one to expect right after a deploy: retry once the
+function is `active`.
 
 Starting is the only durable operation an application credential can perform.
 Reading an execution, listing them and stopping one are owner-scoped: they take
