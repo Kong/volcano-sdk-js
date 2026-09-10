@@ -1920,10 +1920,15 @@ export type replaceSharedVariablesResponse500 = {
   status: 500
 }
 
+export type replaceSharedVariablesResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type replaceSharedVariablesResponseSuccess = (replaceSharedVariablesResponse204) & {
   headers: Headers;
 };
-export type replaceSharedVariablesResponseError = (replaceSharedVariablesResponse400 | replaceSharedVariablesResponse401 | replaceSharedVariablesResponse404 | replaceSharedVariablesResponse409 | replaceSharedVariablesResponse413 | replaceSharedVariablesResponse500) & {
+export type replaceSharedVariablesResponseError = (replaceSharedVariablesResponse400 | replaceSharedVariablesResponse401 | replaceSharedVariablesResponse404 | replaceSharedVariablesResponse409 | replaceSharedVariablesResponse413 | replaceSharedVariablesResponse500 | replaceSharedVariablesResponse503) & {
   headers: Headers;
 };
 
@@ -2069,10 +2074,15 @@ export type applyProjectConfigResponse422 = {
   status: 422
 }
 
+export type applyProjectConfigResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type applyProjectConfigResponseSuccess = (applyProjectConfigResponse200) & {
   headers: Headers;
 };
-export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422) & {
+export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422 | applyProjectConfigResponse503) & {
   headers: Headers;
 };
 
@@ -5233,10 +5243,15 @@ export type createVariableResponse400 = {
   status: 400
 }
 
+export type createVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type createVariableResponseSuccess = (createVariableResponse201) & {
   headers: Headers;
 };
-export type createVariableResponseError = (createVariableResponse400) & {
+export type createVariableResponseError = (createVariableResponse400 | createVariableResponse503) & {
   headers: Headers;
 };
 
@@ -7795,10 +7810,15 @@ export type updateVariableResponse404 = {
   status: 404
 }
 
+export type updateVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type updateVariableResponseSuccess = (updateVariableResponse200) & {
   headers: Headers;
 };
-export type updateVariableResponseError = (updateVariableResponse404) & {
+export type updateVariableResponseError = (updateVariableResponse404 | updateVariableResponse503) & {
   headers: Headers;
 };
 
@@ -12098,16 +12118,6 @@ export type callOAuthProviderAPIResponse401 = {
   status: 401
 }
 
-export type callOAuthProviderAPIResponse404 = {
-  data: Error
-  status: 404
-}
-
-export type callOAuthProviderAPIResponse500 = {
-  data: Error
-  status: 500
-}
-
 export type callOAuthProviderAPIResponse502 = {
   data: Error
   status: 502
@@ -12116,7 +12126,7 @@ export type callOAuthProviderAPIResponse502 = {
 export type callOAuthProviderAPIResponseSuccess = (callOAuthProviderAPIResponse200) & {
   headers: Headers;
 };
-export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse404 | callOAuthProviderAPIResponse500 | callOAuthProviderAPIResponse502) & {
+export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse502) & {
   headers: Headers;
 };
 
@@ -12146,10 +12156,6 @@ export const getCallOAuthProviderAPIUrl = (provider: 'google' | 'github' | 'micr
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
- * An empty provider body is represented as `data: null`; the envelope
- * preserves the provider's HTTP status in `status_code`, including errors.
- * Provider response bodies are limited to 8 MiB after decompression.
- * Transport failures, invalid JSON, and oversized bodies return `502`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider: 'google' | 'github' | 'microsoft' | 'apple',
