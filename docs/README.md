@@ -13,7 +13,8 @@ Volcano is a backend-as-a-service platform that provides everything you need to 
 - **PostgreSQL Database** with Row-Level Security and a browser-friendly query builder
 - **File Storage** with access control policies
 - **Realtime** subscriptions for database changes, presence, and broadcast messaging
-- **Serverless Functions** for custom backend logic
+- **Serverless Functions** for custom backend logic, including durable
+  functions that checkpoint and resume across hours
 
 The SDK is designed to work seamlessly in browsers, React/Next.js applications, and Node.js environments.
 

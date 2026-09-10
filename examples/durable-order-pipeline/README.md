@@ -35,7 +35,8 @@ const review = await ctx.waitUntil('await-review', () => db.reviewStatus(order.i
   initialState: 'pending',
   until: (status) => status !== 'pending',
   interval: '30s',
-  timeout: '24h',
+  maxInterval: '10m',
+  maxAttempts: 200,
 });
 ```
 
@@ -136,9 +137,9 @@ the same execution, taking the other branch, with the refund guarded by
 ## Things worth copying
 
 - **The order id is the execution name.** `orders-api` starts with
-  `volcano.durable.start(id, input, { executionName: 'order-<id>' })`, so a
-  client that retries the submit resolves to the execution that already exists
-  rather than starting a second pipeline.
+  `volcano.durable.start(functionName, input, { executionName: 'order-<id>' })`,
+  so a client that retries the submit resolves to the execution that already
+  exists rather than starting a second pipeline.
 - **The platform token never leaves the backend.** Starting an execution is
   allowed with a service key; reading one is owner-scoped. The browser calls
   `orders-api`, which reads the order row the pipeline keeps up to date.

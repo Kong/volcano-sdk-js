@@ -393,6 +393,65 @@ if (error && VolcanoSystemError.is(error)) {
 }
 ```
 
+## Durable Function Types
+
+Writing a [durable function](./durable-functions.md) and calling one are two
+different type surfaces. The handler's types come from the `/durable` subpath,
+which is where the authoring API lives:
+
+```typescript
+import { durable, type DurableContext, type DurableHandler } from '@volcano.dev/sdk/durable';
+
+interface OrderInput {
+  order_id: number;
+}
+
+interface OrderResult {
+  order_id: number;
+  outcome: 'shipped' | 'refunded';
+}
+
+// `DurableContext` is what a helper takes when steps live outside the handler.
+async function charge(ctx: DurableContext, order: Order) {
+  return ctx.step('charge', () => chargeCard(order));
+}
+
+const run: DurableHandler<OrderInput, OrderResult> = async (input, ctx) => {
+  const order = await ctx.step('load', () => loadOrder(input.order_id));
+  await charge(ctx, order);
+  await ctx.wait('settle', '30s');
+  return { order_id: order.id, outcome: 'shipped' };
+};
+
+export const handler = durable(run);
+```
+
+`ctx.step`, `ctx.map` and `ctx.parallel` are generic in what they return, so a
+step's result type flows into the rest of the handler without a cast.
+`StepOptions`, `WaitUntilOptions`, `BatchOptions`, `BatchResult`, `Retry` and
+`DurableDuration` are exported alongside them for anything you build on top.
+
+Starting and reading executions uses the main entry point instead:
+
+```typescript
+import type { DurableExecutionStatus } from '@volcano.dev/sdk';
+
+const running: DurableExecutionStatus = 'running';
+const { data } = await volcano.durable.list(projectId, 'order-pipeline', { status: running });
+
+const execution = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+if (execution.data?.status === 'succeeded') {
+  const result = execution.data.result as OrderResult;
+}
+```
+
+`DurableExecution` is the handle `start`, `get` and `stop` resolve with, and
+`PaginatedDurableExecutions` is what `list` returns. Both are generated from
+the API contract, so they follow the wire's snake_case (`function_id`,
+`created_at`, `result_expired`). `result` is `unknown` there — the platform
+returns whatever the handler produced and cannot know its type, so narrow or
+assert it on the way out.
+
 ## OAuth Types
 
 ```typescript

@@ -223,7 +223,9 @@ function of its own, or to give `map` and `parallel` branches somewhere to run.
 
 Polls until a condition holds, suspending between checks rather than sleeping.
 The check returns the state the next check receives, and `until` decides when to
-stop.
+stop. It is handed the same scope a step's function gets as a second argument,
+so `(state, { log, attempt })` works when a check wants to log which round it is
+on.
 
 ```javascript
 const approval = await ctx.waitUntil(
@@ -331,8 +333,13 @@ being replayed, so a resumed execution does not re-log what it already did.
 
 ```javascript
 ctx.log.info('order received', { order_id: input.order_id });
+ctx.log.warn('carrier slow', { order_id: input.order_id });
+ctx.log.debug('quote', { total: order.total });
 ctx.log.error('shipping failed', error, { order_id: input.order_id });
 ```
+
+`error` takes the error as its second argument and the data as its third; the
+other three take a message and data.
 
 `console.log` still works, and still reaches [function logs](/platform/functions/logs) — it just repeats on every replay.
 
@@ -404,7 +411,9 @@ that start and read executions — is in
 
 Nothing in this module starts an execution. `volcano.durable.start` does, from
 another function, a backend holding a service key, or a browser holding an anon
-key for a public durable function:
+key for a public durable function. A signed-in user's session is used ahead of
+the anon key when there is one, the same as an invoke, which is what lets a
+signed-in user start a durable function that is not public:
 
 ```javascript
 const { data, error } = await volcano.durable.start(
@@ -426,13 +435,13 @@ and is charged once.
 `start` resolves rather than throws when the platform refuses. `status` carries
 why — `400` for input that is not JSON, or an execution name over 255
 characters or holding anything but letters, digits, `-`, `_` and `.`,
-`401` for a credential the endpoint does not accept, `403` for a durable
-function that is not public, `404` for a name that is not a durable function in
-this project, `409` while the function is still provisioning or has no deployed
-region, `413` for an input over 256 KiB, `429` for a project with too many
-executions in flight for its plan or out of its invocation allowance, and `503`
-where durable execution is unavailable, which is what a local deployment
-answers. `409` is the one to expect right after a deploy: retry once the
+`401` for a credential the endpoint does not accept, `403` for an anon key
+starting a durable function that is not public, `404` for a name that is not a
+durable function in this project, `409` while the function is still
+provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
+for a project with too many executions in flight for its plan or out of its
+invocation allowance, and `503` where durable execution is unavailable, which
+is what a local deployment answers. `409` is the one to expect right after a deploy: retry once the
 function is `active`.
 
 Starting is the only durable operation an application credential can perform.
@@ -450,24 +459,35 @@ if (!error && data.status === 'succeeded') {
 ```
 
 An execution is `running` until it finishes, including while it is suspended in
-a wait with nothing invoked, so polling it is how you follow one. `result` is
-absent until it succeeds, and stays absent for an execution that failed or was
-stopped.
+a wait with nothing invoked, so polling it is how you follow one. It reads
+`pending` only in the moment between being accepted and being started, and
+finishes as one of `succeeded`, `failed`, `timed_out` or `stopped`.
+
+`result` is what the handler returned. It is absent while the execution runs,
+and absent on one that failed, timed out or was stopped — those carry
+`data.error` with a `type` and a `message` instead. It is also absent once the
+platform no longer holds the output, which is where a retained execution ends
+up: `data.result_expired` is what tells that apart from a function that
+returned nothing. A result too large to return is checkpointed instead and
+reads the same as nothing returned, so keep what you read back small and write
+anything bigger to a table or a bucket.
 
 ```javascript
 // Most recent first, optionally filtered by status.
 const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
   status: 'running',
   limit: 20,
+  page: 1,
 });
-console.log(data.data.length, data.has_more);
+console.log(data.data.length, data.total, data.has_more);
 
 // Asks for the execution to stop; completed steps are not undone.
 await volcano.durable.stop(projectId, 'order-pipeline', executionId);
 ```
 
 Listing reports the status the platform last observed rather than polling each
-execution, so read a single one for its live state.
+execution, so read a single one for its live state. It pages one page at a
+time: raise `page` while `has_more` is true.
 
 `stop` is accepted rather than awaited. Cancellation happens behind it, so the
 execution it resolves with is the one read back after asking and often still
