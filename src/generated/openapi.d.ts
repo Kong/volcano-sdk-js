@@ -3618,10 +3618,6 @@ export interface paths {
          *     - Microsoft Graph profile: `/me`
          *
          *     The response wraps the provider's raw JSON value with request metadata.
-         *     An empty provider body is represented as `data: null`; the envelope
-         *     preserves the provider's HTTP status in `status_code`, including errors.
-         *     Provider response bodies are limited to 8 MiB after decompression.
-         *     Transport failures, invalid JSON, and oversized bodies return `502`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -5803,8 +5799,6 @@ export interface components {
             full_name: string;
             default_branch: string;
             private: boolean;
-            /** @description Whether the repository has no commits and can receive an initial source export. */
-            is_empty: boolean;
         };
         GitRepositoriesResponse: {
             repositories: components["schemas"]["GitRepository"][];
@@ -10141,6 +10135,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getProjectConfig: {
@@ -10276,6 +10279,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectConfigValidationErrorResponse"];
+                };
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -13417,6 +13429,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listDatabases: {
@@ -15780,6 +15801,15 @@ export interface operations {
             };
             /** @description Variable not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19437,7 +19467,7 @@ export interface operations {
                         provider: "google" | "github" | "microsoft" | "apple";
                         endpoint: string;
                         status_code: number;
-                        /** @description Raw provider JSON value, or null when the provider returns no body */
+                        /** @description Raw JSON value returned by the OAuth provider's API */
                         data: unknown;
                     };
                 };
@@ -19463,25 +19493,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description OAuth provider configuration not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Failed to create the provider API request */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Provider transport failure, invalid JSON, or response body larger than 8 MiB */
+            /** @description Provider API error */
             502: {
                 headers: {
                     [name: string]: unknown;

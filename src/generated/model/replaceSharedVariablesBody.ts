@@ -9,10 +9,14 @@
  */
 
 export type ReplaceSharedVariablesBody = {
-  /** @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$ */
+  /**
+     * @items.maxLength 256
+     * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
+     */
   shared_variables: string[];
   /**
      * When present, replace only if the current complete shared list matches this list.
+     * @items.maxLength 256
      * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
      */
   expected_shared_variables?: string[];
