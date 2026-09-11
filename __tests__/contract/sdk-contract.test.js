@@ -415,10 +415,8 @@ autoBindSteps(features, [
         const paths = listed.data
           .map(({ name }) => name)
           .filter((name) => [source, copied, moved].includes(name));
-        for (const objectPath of paths) {
-          const removed = await bucket.remove([objectPath]);
-          if (removed.error) throw removed.error;
-        }
+        const removed = await bucket.remove(paths);
+        if (removed.error) throw removed.error;
       });
       try {
         const upload = await bucket.upload(source, new Blob([world.storageBytes]));
