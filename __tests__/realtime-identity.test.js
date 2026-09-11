@@ -7,6 +7,14 @@ function token(projectId, subject, expires = 1) {
   return `header.${payload}.signature`;
 }
 
+function deferred() {
+  const result = {};
+  result.promise = new Promise((resolve) => {
+    result.resolve = resolve;
+  });
+  return result;
+}
+
 function createRealtime(accessToken) {
   const realtime = new VolcanoRealtime({
     apiUrl: 'https://api.example.com',
@@ -84,5 +92,45 @@ describe('realtime auth identity', () => {
       data: { presence: { 'old-client': { data: { online: true } } } },
     });
     expect(channel.getPresenceState()).toEqual({});
+  });
+
+  test('rejects readiness invalidated by an identity change', async () => {
+    const { realtime, client } = createRealtime('old');
+    const channel = realtime.channel('room');
+    const ready = deferred();
+    const subscription = client.newSubscription();
+    subscription.ready.mockReturnValue(ready.promise);
+    client.newSubscription.mockReturnValueOnce(subscription);
+    const pending = channel.subscribe();
+    ready.resolve();
+    realtime._adoptAccessToken('new');
+    await expect(pending).rejects.toThrow('Subscription changed');
+    expect(channel._subscription).toBeNull();
+  });
+
+  test('waits for server acceptance but delivers recovery before ready resumes', async () => {
+    const { realtime, client } = createRealtime('old');
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    realtime._adoptAccessToken('new');
+    const onMessage = jest.fn();
+    channel.on('message', onMessage);
+    const ready = deferred();
+    const subscription = client.newSubscription();
+    subscription.ready.mockReturnValue(ready.promise);
+    client.newSubscription.mockReturnValueOnce(subscription);
+    const pending = channel.subscribe();
+    realtime._handleServerJoin({
+      channel: 'project:presence:lobby',
+      info: { client: 'stale', data: {} },
+    });
+    subscription.emit('publication', { data: { event: 'message', text: 'stale' } });
+    expect(channel.getPresenceState()).toEqual({});
+    expect(onMessage).not.toHaveBeenCalled();
+    subscription.emit('state', { newState: 'subscribed' });
+    subscription.emit('publication', { data: { event: 'message', text: 'recovered' } });
+    expect(onMessage).toHaveBeenCalledTimes(1);
+    ready.resolve();
+    await pending;
   });
 });
