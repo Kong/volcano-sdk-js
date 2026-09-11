@@ -375,6 +375,34 @@ autoBindSteps(features, [
       ]);
     });
 
+    when('the client uploads the contract object and downloads bytes 2 through 7', async () => {
+      const { world } = context;
+      const bucket = world.client.storage.from(world.fixture.bucket_name);
+      try {
+        const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]));
+        if (upload.error) throw upload.error;
+        world.cleanupCallbacks.push(async () => {
+          const removed = await bucket.remove([world.storagePath]);
+          if (removed.error) throw removed.error;
+        });
+        const download = await bucket.download(world.storagePath, { range: 'bytes=2-7' });
+        if (download.error) throw download.error;
+        recordOutcome(
+          world,
+          { bytes: Buffer.from(await download.data.arrayBuffer()), path: upload.data.name },
+          null,
+        );
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    then('the downloaded bytes equal uploaded bytes 2 through 7 inclusive', () => {
+      expect(context.world.lastOutcome.value.bytes).toEqual(
+        context.world.storageBytes.subarray(2, 8),
+      );
+    });
+
     then('the stored object path equals the contract path', () => {
       expect(context.world.lastOutcome.value.path).toBe(context.world.storagePath);
     });
