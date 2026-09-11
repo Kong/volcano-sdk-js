@@ -333,6 +333,48 @@ autoBindSteps(features, [
       expect(context.world.lastOutcome.value.bytes).toEqual(context.world.storageBytes);
     });
 
+    when(
+      'the client uploads the contract object as text/plain and reads its stored metadata',
+      async () => {
+        const { world } = context;
+        const bucket = world.client.storage.from(world.fixture.bucket_name);
+        try {
+          const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]), {
+            contentType: 'text/plain',
+          });
+          if (upload.error) throw upload.error;
+          world.cleanupCallbacks.push(async () => {
+            const removed = await bucket.remove([world.storagePath]);
+            if (removed.error) throw removed.error;
+          });
+          const listed = await bucket.list(world.storagePath);
+          if (listed.error) throw listed.error;
+          const downloaded = await bucket.download(world.storagePath);
+          if (downloaded.error) throw downloaded.error;
+          recordOutcome(
+            world,
+            {
+              path: upload.data.name,
+              bytes: Buffer.from(await downloaded.data.arrayBuffer()),
+              contentType: upload.data.mime_type,
+              listed: listed.data.map(({ name, mime_type }) => ({ name, mime_type })),
+            },
+            null,
+          );
+        } catch (error) {
+          recordOutcome(world, null, error);
+        }
+      },
+    );
+
+    then('the uploaded and listed object content types are text/plain', () => {
+      const { world } = context;
+      expect(world.lastOutcome.value.contentType).toBe('text/plain');
+      expect(world.lastOutcome.value.listed).toEqual([
+        { name: world.storagePath, mime_type: 'text/plain' },
+      ]);
+    });
+
     then('the stored object path equals the contract path', () => {
       expect(context.world.lastOutcome.value.path).toBe(context.world.storagePath);
     });
