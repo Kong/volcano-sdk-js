@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.7.3](https://github.com/Kong/volcano-sdk-js/compare/v1.7.2...v1.7.3) (2026-09-11)
 
-
 ### Bug Fixes
 
-* **realtime:** discard stale asynchronous channel results ([#106](https://github.com/Kong/volcano-sdk-js/issues/106)) ([a65058d](https://github.com/Kong/volcano-sdk-js/commit/a65058de0431f2eaf8928ea4653000851f3d5828))
+- **realtime:** discard stale asynchronous channel results ([#106](https://github.com/Kong/volcano-sdk-js/issues/106)) ([a65058d](https://github.com/Kong/volcano-sdk-js/commit/a65058de0431f2eaf8928ea4653000851f3d5828))
 
 ## [1.7.2](https://github.com/Kong/volcano-sdk-js/compare/v1.7.1...v1.7.2) (2026-09-11)
 
