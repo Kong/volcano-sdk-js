@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches:
       - main
@@ -37,7 +38,7 @@ jobs:
           cache: false
 
       - name: Run actionlint
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+        run: bash .github/scripts/actionlint.sh
 
   sdk:
     name: SDK Lint, Tests, and Build

@@ -1,0 +1,74 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # App-created PRs and releases trigger CI and package checks; GITHUB_TOKEN does not.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app
+        with:
+          app-id: ${{ vars.VOLCANO_APP_ID }}
+          private-key: ${{ secrets.VOLCANO_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app.outputs.token }}
+      # Run the formatter from main; read only changelog data from the release PR.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.34.1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Format changelog and enable checked auto-merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_BRANCH: release-please--branches--main--components--@volcano.dev/sdk
+        # Looking up the branch also handles retries when Release Please leaves the PR unchanged.
+        run: |
+          gh pr list --base main --head "$RELEASE_BRANCH" --state open \
+            --json number,author,isCrossRepository,isDraft,headRefOid \
+            --jq '.[] | select(.author.login == "app/kong-volcano-app" and .isCrossRepository == false and .isDraft == false) | [.number, .headRefOid] | @tsv' |
+            while IFS=$'\t' read -r number head; do
+              changelog="$(gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$head")"
+              jq -r '.content' <<< "$changelog" | base64 --decode > CHANGELOG.md
+              pnpm exec prettier --write CHANGELOG.md
+              blob="$(jq -r '.sha' <<< "$changelog")"
+              if [ "$blob" != "$(git hash-object CHANGELOG.md)" ]; then
+                head="$(gh api --method PUT "repos/$GH_REPO/contents/CHANGELOG.md" \
+                  -f branch="$RELEASE_BRANCH" -f sha="$blob" \
+                  -f message='chore(release): format changelog' \
+                  -f content="$(base64 -w0 CHANGELOG.md)" --jq '.commit.sha')"
+              fi
+              # GitHub's PR head can briefly lag behind the Contents API commit.
+              for attempt in {1..5}; do
+                if gh pr merge "$number" --auto --squash --match-head-commit "$head"; then
+                  break
+                fi
+                if [ "$attempt" -eq 5 ]; then exit 1; fi
+                sleep 2
+              done
+            done
