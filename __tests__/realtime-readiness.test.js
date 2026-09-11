@@ -54,37 +54,38 @@ describe('channel subscription readiness', () => {
     expect(completed).toHaveBeenCalledTimes(2);
   });
 
-  test('cleans up a failed subscription and propagates its error', async () => {
+  test('pauses a failed subscription and propagates its error', async () => {
     const failure = { code: 1, message: 'timeout' };
     transport.ready.mockRejectedValue(failure);
     await expect(channel.subscribe()).rejects.toBe(failure);
     expect(transport.unsubscribe).toHaveBeenCalledTimes(1);
-    expect(client.removeSubscription).toHaveBeenCalledWith(transport);
-    expect(channel._subscription).toBeNull();
+    expect(client.removeSubscription).not.toHaveBeenCalled();
+    expect(channel._subscription).toBe(transport);
+    expect(channel._paused).toBe(true);
   });
 
-  test('allows a fresh subscription after readiness fails', async () => {
+  test('retries the retained subscription after readiness fails', async () => {
     transport.ready.mockRejectedValue(new Error('denied'));
     await expect(channel.subscribe()).rejects.toThrow('denied');
-    const next = subscription();
-    client.newSubscription.mockReturnValue(next);
+    transport.ready.mockResolvedValue(undefined);
     await expect(channel.subscribe()).resolves.toBeUndefined();
-    expect(next.subscribe).toHaveBeenCalledTimes(1);
-    expect(next.ready).toHaveBeenCalledWith(10_000);
+    expect(transport.subscribe).toHaveBeenCalledTimes(2);
+    expect(transport.ready).toHaveBeenCalledWith(10_000);
+    expect(client.newSubscription).toHaveBeenCalledTimes(1);
   });
 
-  test('does not remove a replacement subscription when an earlier wait rejects', async () => {
+  test('does not pause a resumed subscription when an earlier wait rejects', async () => {
     const ready = deferred();
     ready.promise.catch(() => undefined);
     transport.ready.mockReturnValue(ready.promise);
     const failed = channel.subscribe().catch((error) => error);
     channel.unsubscribe();
-    const next = subscription();
-    client.newSubscription.mockReturnValue(next);
+    transport.ready.mockResolvedValue(undefined);
     await channel.subscribe();
     ready.reject(new Error('cancelled'));
     await expect(failed).resolves.toEqual(new Error('cancelled'));
-    expect(next.unsubscribe).not.toHaveBeenCalled();
-    expect(channel._subscription).toBe(next);
+    expect(transport.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(channel._subscription).toBe(transport);
+    expect(channel._paused).toBe(false);
   });
 });

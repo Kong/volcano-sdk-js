@@ -576,7 +576,8 @@ describe('Realtime Capabilities E2E Tests', () => {
       expect(channel._subscription).not.toBeNull();
 
       channel.unsubscribe();
-      expect(channel._subscription).toBeNull();
+      expect(channel._subscription).not.toBeNull();
+      expect(channel._subscription.state).toBe('unsubscribed');
     });
 
     test('2.7 send fails if not subscribed', async () => {

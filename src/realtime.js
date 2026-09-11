@@ -384,7 +384,7 @@ class VolcanoRealtime {
     // Unsubscribe all channels first to clean up their timers
     for (const channel of this._channels.values()) {
       try {
-        channel.unsubscribe();
+        channel._dispose();
       } catch {
         // Ignore errors during cleanup
       }
@@ -611,7 +611,7 @@ class VolcanoRealtime {
     const fullName = this._formatChannelName(name, type);
     const channel = this._channels.get(fullName);
     if (channel) {
-      channel.unsubscribe();
+      channel._dispose();
       this._channels.delete(fullName);
     }
   }
@@ -621,7 +621,7 @@ class VolcanoRealtime {
    */
   removeAllChannels() {
     for (const channel of this._channels.values()) {
-      channel.unsubscribe();
+      channel._dispose();
     }
     this._channels.clear();
   }
@@ -678,11 +678,7 @@ class RealtimeChannel {
     }
 
     this._subscription = client.newSubscription(this._name, {
-      // Enable presence for presence channels
-      presence: this._type === 'presence',
       joinLeave: this._type === 'presence',
-      // Enable recovery for all channels
-      recover: true,
     });
 
     const subscription = this._subscription;
@@ -799,14 +795,9 @@ class RealtimeChannel {
   }
 
   /**
-   * Unsubscribe from the channel
+   * Pause the channel while retaining handlers and in-memory recovery state
    */
   unsubscribe() {
-    this._resetForIdentityChange();
-    this._callbacks.clear();
-  }
-
-  _resetForIdentityChange() {
     this._paused = true;
     this._lifecycleVersion += 1;
     // Cancel pending presence fetch timeout
@@ -829,8 +820,18 @@ class RealtimeChannel {
       this._pendingFetches.clear();
     }
 
+    this._subscription?.unsubscribe();
+    this._presenceState = {};
+  }
+
+  _dispose() {
+    this._resetForIdentityChange();
+    this._callbacks.clear();
+  }
+
+  _resetForIdentityChange() {
+    this.unsubscribe();
     if (this._subscription) {
-      // Remove event listeners before unsubscribing
       for (const [event, handler] of Object.entries(this._eventHandlers)) {
         try {
           this._subscription.off(event, handler);
@@ -840,7 +841,6 @@ class RealtimeChannel {
       }
       this._eventHandlers = {};
 
-      this._subscription.unsubscribe();
       // Also remove from Centrifuge client registry to allow re-subscription
       const client = this._realtime.getClient();
       if (client) {
@@ -852,7 +852,6 @@ class RealtimeChannel {
       }
       this._subscription = null;
     }
-    this._presenceState = {};
   }
 
   /**
@@ -1114,7 +1113,7 @@ class RealtimeChannel {
       throw new Error('send() is only available for broadcast channels');
     }
 
-    if (!this._subscription) {
+    if (this._paused || !this._subscription || this._subscription.state !== 'subscribed') {
       throw new Error('Channel not subscribed');
     }
 
