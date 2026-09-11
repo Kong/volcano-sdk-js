@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.7.4](https://github.com/Kong/volcano-sdk-js/compare/v1.7.3...v1.7.4) (2026-09-11)
 
-
 ### Bug Fixes
 
-* **realtime:** reset subscriptions when auth identity changes ([#108](https://github.com/Kong/volcano-sdk-js/issues/108)) ([1ced832](https://github.com/Kong/volcano-sdk-js/commit/1ced8322cc8112348719c97bf7bd266b9d3bb574))
+- **realtime:** reset subscriptions when auth identity changes ([#108](https://github.com/Kong/volcano-sdk-js/issues/108)) ([1ced832](https://github.com/Kong/volcano-sdk-js/commit/1ced8322cc8112348719c97bf7bd266b9d3bb574))
 
 ## [1.7.3](https://github.com/Kong/volcano-sdk-js/compare/v1.7.2...v1.7.3) (2026-09-11)
 
