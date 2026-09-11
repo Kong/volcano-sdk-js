@@ -72,6 +72,25 @@ describe('retained broadcast subscriptions', () => {
     expect(client.newSubscription).toHaveBeenCalledTimes(2);
   });
 
+  test('discards server-side publications while paused and delivers new messages on resume', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('room');
+    const onMessage = jest.fn();
+    channel.on('message', onMessage);
+    await channel.subscribe();
+    channel.unsubscribe();
+    realtime._handleServerPublication({
+      channel: 'project:broadcast:room',
+      data: { event: 'message', text: 'paused' },
+    });
+    await channel.subscribe();
+    expect(onMessage).not.toHaveBeenCalled();
+    const message = { event: 'message', text: 'resumed' };
+    realtime._handleServerPublication({ channel: 'project:broadcast:room', data: message });
+    expect(onMessage).toHaveBeenCalledTimes(1);
+    expect(onMessage.mock.calls[0][0]).toEqual(message);
+  });
+
   test.each([
     ['removeChannel', (realtime) => realtime.removeChannel('room')],
     ['removeAllChannels', (realtime) => realtime.removeAllChannels()],

@@ -795,7 +795,7 @@ class RealtimeChannel {
   }
 
   /**
-   * Pause the channel while retaining handlers and in-memory recovery state
+   * Pause delivery while retaining event handlers
    */
   unsubscribe() {
     this._paused = true;

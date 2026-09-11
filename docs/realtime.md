@@ -435,7 +435,7 @@ paused. Its handlers remain registered for a later retry.
 
 ### Unsubscribe
 
-Pause delivery while retaining handlers and the in-memory broadcast recovery position:
+Pause delivery while retaining event handlers:
 
 ```javascript
 channel.unsubscribe();
@@ -444,18 +444,16 @@ channel.unsubscribe();
 await channel.subscribe();
 ```
 
-When server history is available, the channel can recover missed broadcast
-publications after a pause or connection interruption. Recovery is best effort;
-messages already in flight when pausing may be discarded. Recovery state is local
-to this client and is not persisted across page reloads or process restarts.
-Presence resumes from a fresh snapshot. Postgres changes do not guarantee replay.
+Messages received while paused are discarded, not buffered or replayed on resume.
+After subscribing again, the same handlers receive new messages. Presence resumes
+from a fresh snapshot.
 
 Row fetches and presence snapshots started before unsubscribe are discarded when
 they finish, even if you have since subscribed again.
 
-`removeChannel()`, `removeAllChannels()`, and `disconnect()` discard subscriptions,
-listeners, and recovery state permanently. Auth identity changes also discard the
-old recovery position while preserving application listeners.
+`removeChannel()`, `removeAllChannels()`, and `disconnect()` discard subscriptions
+and listeners. Auth identity changes discard subscriptions while preserving
+application listeners.
 
 ### Remove a Channel
 
