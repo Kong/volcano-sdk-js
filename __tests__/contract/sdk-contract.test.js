@@ -5,6 +5,7 @@ const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
 const { VolcanoClient } = require('../../src/index.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
+const { verifyBroadcastPause } = require('./broadcast-pause.js');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];
@@ -22,6 +23,7 @@ const fixturePath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FIXTURE');
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 const features = loadFeatures(path.join(featuresPath, '*.feature'));
 const ACCESS_TOKEN_CLOCK_TICK_MS = 1_100;
+const REJECTED_ACCESS_TOKEN = 'sdk-contract-rejected-access-token';
 
 let activeWorld;
 
@@ -53,6 +55,36 @@ afterEach(async () => {
 
 autoBindSteps(features, [
   ({ given, when, then, context }) => {
+    given('the client replaces its access token with a rejected token', async () => {
+      const { data, error } = await context.world.client.auth.getSession();
+      if (error) throw error;
+      const adopted = await context.world.client.auth.setSession({
+        ...data.session,
+        access_token: REJECTED_ACCESS_TOKEN,
+      });
+      if (adopted.error) throw adopted.error;
+    });
+
+    then('the database read replaces the rejected token for the same user', async () => {
+      const { data, error } = await context.world.client.auth.getSession();
+      expect(error).toBeNull();
+      expect(data.session.access_token).toBeTruthy();
+      expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+      expect(data.session.refresh_token).toBeTruthy();
+      expect(data.session.user.id).toBe(context.world.fixture.user_id);
+    });
+
+    when(
+      'one client pauses delivery for 1 second and then resumes with the same handler',
+      async () => {
+        try {
+          recordOutcome(context.world, await verifyBroadcastPause(context.world), null);
+        } catch (error) {
+          recordOutcome(context.world, null, error);
+        }
+      },
+    );
+
     given('the confirmed contract user', () => {
       startScenario(context);
     });
