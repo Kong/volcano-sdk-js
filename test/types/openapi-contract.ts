@@ -10,6 +10,19 @@ import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/in
 type Assert<T extends true> = T;
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
+type SharedVariablesBody =
+  OpenAPIOperations['replaceSharedVariables']['requestBody']['content']['application/json'];
+type _SharedVariablesContract = Assert<
+  Equal<
+    SharedVariablesBody,
+    {
+      shared_variables: string[];
+      expected_shared_variables?: string[];
+      expected_shared_variables_digest?: string;
+    }
+  >
+>;
+
 type SetSessionParameter = Parameters<Auth['setSession']>[0];
 type _CompleteSessionCanBeAdopted = Assert<
   CompleteSession extends SetSessionParameter ? true : false

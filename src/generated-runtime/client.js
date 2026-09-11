@@ -453,6 +453,33 @@ export const getProjectUsage = async (id, options) => {
         method: 'GET'
     });
 };
+export const getReplaceSharedVariablesUrl = (id) => {
+    return `/projects/${id}/shared-variables`;
+};
+/**
+ * Atomically replaces the complete shared function-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * function environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored as non-shared variables.
+ * @summary Replace shared variable names
+ */
+export const replaceSharedVariables = async (id, replaceSharedVariablesBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getReplaceSharedVariablesUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(replaceSharedVariablesBody)
+    });
+};
 export const getGetProjectConfigUrl = (id, params) => {
     const normalizedParams = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -469,8 +496,8 @@ export const getGetProjectConfigUrl = (id, params) => {
  * volcano-config.yaml rendering with `Accept: application/yaml` or
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
- * Write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; the YAML rendering adds a header comment
+ * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+ * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -970,6 +997,12 @@ export const createFunction = async (id, createFunctionBody, options) => {
     }
     if (createFunctionBody.openapi_spec !== undefined) {
         formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
+    }
+    if (createFunctionBody.variable_scope !== undefined) {
+        formData.append(`variable_scope`, createFunctionBody.variable_scope);
+    }
+    if (createFunctionBody.variables !== undefined) {
+        formData.append(`variables`, createFunctionBody.variables);
     }
     return volcanoFetch(getCreateFunctionUrl(id), {
         ...options,
@@ -4181,10 +4214,6 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
- * An empty provider body is represented as `data: null`; the envelope
- * preserves the provider's HTTP status in `status_code`, including errors.
- * Provider response bodies are limited to 8 MiB after decompression.
- * Transport failures, invalid JSON, and oversized bodies return `502`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {

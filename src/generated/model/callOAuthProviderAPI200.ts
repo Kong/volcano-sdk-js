@@ -20,6 +20,6 @@ export type CallOAuthProviderAPI200 = {
      * @maximum 599
      */
   status_code: number;
-  /** Raw provider JSON value, or null when the provider returns no body */
-  data: unknown | null;
+  /** Raw JSON value returned by the OAuth provider's API */
+  data: unknown;
 };
