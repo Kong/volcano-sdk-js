@@ -366,15 +366,16 @@ describe('Storage', () => {
 
     it('should return partial error when some files fail to delete', async () => {
       global.fetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) });
+        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
 
       const { data, error } = await volcano.storage
         .from('files')
-        .remove(['exists.txt', 'missing.txt']);
+        .remove(['missing.txt', 'exists.txt']);
 
       expect(data.deleted).toContain('exists.txt');
       expect(error.message).toContain('Failed to delete 1 file(s)');
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should return error when not authenticated', async () => {

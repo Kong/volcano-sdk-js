@@ -403,6 +403,76 @@ autoBindSteps(features, [
       );
     });
 
+    when('the client copies, moves, and removes a copy of the contract object', async () => {
+      const { world } = context;
+      const bucket = world.client.storage.from(world.fixture.bucket_name);
+      const source = world.storagePath;
+      const copied = `${source}.copy`;
+      const moved = `${source}.moved`;
+      world.cleanupCallbacks.push(async () => {
+        const listed = await bucket.list(source);
+        if (listed.error) throw listed.error;
+        const paths = listed.data
+          .map(({ name }) => name)
+          .filter((name) => [source, copied, moved].includes(name));
+        const removed = await bucket.remove(paths);
+        if (removed.error) throw removed.error;
+      });
+      try {
+        const upload = await bucket.upload(source, new Blob([world.storageBytes]));
+        if (upload.error) throw upload.error;
+        const copy = await bucket.copy(source, copied);
+        if (copy.error) throw copy.error;
+        const originalDownload = await bucket.download(source);
+        if (originalDownload.error) throw originalDownload.error;
+        const copiedDownload = await bucket.download(copied);
+        if (copiedDownload.error) throw copiedDownload.error;
+        const move = await bucket.move(copied, moved);
+        if (move.error) throw move.error;
+        const movedDownload = await bucket.download(moved);
+        if (movedDownload.error) throw movedDownload.error;
+        const afterMove = await bucket.list(source);
+        if (afterMove.error) throw afterMove.error;
+        const removed = await bucket.remove([moved]);
+        if (removed.error) throw removed.error;
+        const afterRemove = await bucket.list(source);
+        if (afterRemove.error) throw afterRemove.error;
+        const remainingDownload = await bucket.download(source);
+        if (remainingDownload.error) throw remainingDownload.error;
+        recordOutcome(
+          world,
+          {
+            bytes: await Promise.all(
+              [originalDownload, copiedDownload, movedDownload, remainingDownload].map(
+                async (result) => Buffer.from(await result.data.arrayBuffer()),
+              ),
+            ),
+            afterMove: afterMove.data.map(({ name }) => name).sort(),
+            afterRemove: afterRemove.data.map(({ name }) => name).sort(),
+          },
+          null,
+        );
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    then('the original, copied, and moved bytes equal the uploaded bytes', () => {
+      for (const bytes of context.world.lastOutcome.value.bytes) {
+        expect(bytes).toEqual(context.world.storageBytes);
+      }
+    });
+
+    then('moving the copy leaves only the original and moved paths', () => {
+      const source = context.world.storagePath;
+      expect(context.world.lastOutcome.value.afterMove).toEqual([source, `${source}.moved`].sort());
+    });
+
+    then('removing the moved object leaves the original unchanged', () => {
+      expect(context.world.lastOutcome.value.afterRemove).toEqual([context.world.storagePath]);
+      expect(context.world.lastOutcome.value.bytes[3]).toEqual(context.world.storageBytes);
+    });
+
     then('the stored object path equals the contract path', () => {
       expect(context.world.lastOutcome.value.path).toBe(context.world.storagePath);
     });
