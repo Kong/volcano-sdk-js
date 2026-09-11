@@ -412,6 +412,20 @@ document.addEventListener('visibilitychange', () => {
 
 ## Managing Channels
 
+### Auth Identity Changes
+
+When `getToken` returns a token for the same user and project, existing channel
+subscriptions remain active. A different user or project, or a changed opaque
+credential, pauses channels and discards their underlying subscriptions.
+Application event handlers remain registered; call `subscribe()` on each channel
+to resume. Session identity is used only to scope local state; the server still
+authenticates each credential.
+
+`accessToken` is constructor configuration, not a live account-switch API. To
+switch accounts explicitly, disconnect and create a new `VolcanoRealtime` client
+with the new credentials. Assigning properties on an existing client does not
+reauthenticate its WebSocket.
+
 ### Wait for a Subscription
 
 `await channel.subscribe()` waits until the server accepts the subscription.
