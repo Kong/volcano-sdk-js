@@ -667,7 +667,6 @@ class RealtimeChannel {
    * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
-    this._realtime._synchronizeRecoveryIdentity();
     if (this._subscription) {
       await this._activateSubscription();
       return;

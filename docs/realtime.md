@@ -421,6 +421,11 @@ Application event handlers remain registered; call `subscribe()` on each channel
 to resume. Session identity is used only to scope local state; the server still
 authenticates each credential.
 
+`accessToken` is constructor configuration, not a live account-switch API. To
+switch accounts explicitly, disconnect and create a new `VolcanoRealtime` client
+with the new credentials. Assigning properties on an existing client does not
+reauthenticate its WebSocket.
+
 ### Wait for a Subscription
 
 `await channel.subscribe()` waits until the server accepts the subscription.

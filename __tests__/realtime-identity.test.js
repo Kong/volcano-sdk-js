@@ -70,15 +70,6 @@ describe('realtime auth identity', () => {
     expect(onMessage).toHaveBeenCalledTimes(1);
   });
 
-  test('checks directly assigned credentials before subscribing again', async () => {
-    const { realtime, client } = createRealtime('old');
-    const channel = realtime.channel('room');
-    await channel.subscribe();
-    realtime.accessToken = 'new';
-    await channel.subscribe();
-    expect(client.newSubscription).toHaveBeenCalledTimes(2);
-  });
-
   test('ignores server presence events while a changed identity is paused', async () => {
     const { realtime } = createRealtime('old');
     const channel = realtime.channel('lobby', { type: 'presence' });
