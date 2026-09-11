@@ -26,6 +26,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.7.5](https://github.com/Kong/volcano-sdk-js/compare/v1.7.4...v1.7.5) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** retain subscriptions across pause and resume ([#110](https://github.com/Kong/volcano-sdk-js/issues/110)) ([9b4b0b6](https://github.com/Kong/volcano-sdk-js/commit/9b4b0b61d71f3b03c0a9361ef37aafdd71c3febf))
+
 ## [1.7.4](https://github.com/Kong/volcano-sdk-js/compare/v1.7.3...v1.7.4) (2026-09-11)
 
 ### Bug Fixes
