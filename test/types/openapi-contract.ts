@@ -1,6 +1,7 @@
 import type {
   Auth,
   CompleteSession,
+  CreateUploadSessionResponse,
   OpenAPIComponents,
   OpenAPIOperations,
   UploadSessionStatusResponse,
@@ -65,6 +66,23 @@ type _StorageMimeTypesCanBeNull = Assert<
   null extends StorageBucket['allowed_mime_types'] ? true : false
 >;
 type _StorageOwnerCanBeNull = Assert<null extends StorageObject['owner_id'] ? true : false>;
+
+type UploadSessionCreated = NonNullable<CreateUploadSessionResponse['data']>;
+type UploadSessionCreatedShape = {
+  session_id: string;
+  part_size: number;
+  total_parts: number;
+  expires_at: string;
+};
+type _UploadSessionCreatedMatchesHosting = Assert<
+  Equal<UploadSessionCreated, UploadSessionCreatedShape>
+>;
+type _UploadSessionCreatedKeysMatchOpenAPI = Assert<
+  Equal<
+    keyof UploadSessionCreated,
+    keyof OpenAPIComponents['schemas']['CreateUploadSessionResponse']
+  >
+>;
 
 type UploadSessionStatus = NonNullable<UploadSessionStatusResponse['data']>;
 type UploadSessionStatusShape = {

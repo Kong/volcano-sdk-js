@@ -652,8 +652,6 @@ export interface CreateUploadSessionOptions {
 export interface CreateUploadSessionResponse {
   data: {
     session_id: string;
-    path: string;
-    total_size: number;
     part_size: number;
     total_parts: number;
     expires_at: string;
