@@ -46,6 +46,7 @@
 
 // Centrifuge client - dynamically imported
 let Centrifuge = null;
+const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
 /**
  * Dynamically imports the Centrifuge client
@@ -596,10 +597,11 @@ class RealtimeChannel {
   }
 
   /**
-   * Subscribe to the channel
+   * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
     if (this._subscription) {
+      await this._activateSubscription();
       return;
     }
 
@@ -683,7 +685,20 @@ class RealtimeChannel {
       this._subscription.on('subscribed', this._eventHandlers.subscribed);
     }
 
-    await this._subscription.subscribe();
+    await this._activateSubscription();
+  }
+
+  async _activateSubscription() {
+    const subscription = this._subscription;
+    try {
+      subscription.subscribe();
+      await subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
+    } catch (error) {
+      if (this._subscription === subscription) {
+        this.unsubscribe();
+      }
+      throw error;
+    }
   }
 
   /**

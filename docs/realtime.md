@@ -412,6 +412,13 @@ document.addEventListener('visibilitychange', () => {
 
 ## Managing Channels
 
+### Wait for a Subscription
+
+`await channel.subscribe()` waits until the server accepts the subscription.
+Concurrent calls wait for the same subscription to become ready. If subscribing
+fails or takes longer than 10 seconds, the promise rejects and the channel is
+unsubscribed. Register your handlers again before retrying a failed subscription.
+
 ### Unsubscribe
 
 Stop receiving events from a channel:
