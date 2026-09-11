@@ -182,12 +182,12 @@ export declare class RealtimeChannel {
   readonly name: string;
 
   /**
-   * Subscribe to the channel
+   * Subscribe to the channel and resolve once it is ready (10-second timeout)
    */
   subscribe(): Promise<void>;
 
   /**
-   * Unsubscribe from the channel
+   * Pause delivery while retaining event handlers
    */
   unsubscribe(): void;
 

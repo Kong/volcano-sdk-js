@@ -366,15 +366,16 @@ describe('Storage', () => {
 
     it('should return partial error when some files fail to delete', async () => {
       global.fetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) });
+        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
 
       const { data, error } = await volcano.storage
         .from('files')
-        .remove(['exists.txt', 'missing.txt']);
+        .remove(['missing.txt', 'exists.txt']);
 
       expect(data.deleted).toContain('exists.txt');
       expect(error.message).toContain('Failed to delete 1 file(s)');
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should return error when not authenticated', async () => {
@@ -669,8 +670,6 @@ describe('Storage', () => {
     it('should create an upload session successfully', async () => {
       const mockResponse = {
         session_id: 'sess-123',
-        path: 'large-video.mp4',
-        total_size: 100 * 1024 * 1024,
         part_size: 25 * 1024 * 1024,
         total_parts: 4,
         expires_at: '2026-01-30T00:00:00Z',

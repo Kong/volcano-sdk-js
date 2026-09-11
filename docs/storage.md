@@ -419,6 +419,10 @@ if (data) {
 
 ### Resume Interrupted Upload
 
+`createUploadSession()` returns `session_id`, `part_size`, `total_parts`, and
+`expires_at`. Read `path` and `total_size` from `getUploadSession()`, not the
+creation response.
+
 If an upload is interrupted, you can resume it later:
 
 ```javascript

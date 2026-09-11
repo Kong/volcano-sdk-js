@@ -44,6 +44,36 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.7.6](https://github.com/Kong/volcano-sdk-js/compare/v1.7.5...v1.7.6) (2026-09-11)
+
+### Bug Fixes
+
+- **storage:** align upload session response types with Hosting ([#114](https://github.com/Kong/volcano-sdk-js/issues/114)) ([02e3f15](https://github.com/Kong/volcano-sdk-js/commit/02e3f15d0cc0ddecd859e6b5775bd1dda307e276))
+
+## [1.7.5](https://github.com/Kong/volcano-sdk-js/compare/v1.7.4...v1.7.5) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** retain subscriptions across pause and resume ([#110](https://github.com/Kong/volcano-sdk-js/issues/110)) ([9b4b0b6](https://github.com/Kong/volcano-sdk-js/commit/9b4b0b61d71f3b03c0a9361ef37aafdd71c3febf))
+
+## [1.7.4](https://github.com/Kong/volcano-sdk-js/compare/v1.7.3...v1.7.4) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** reset subscriptions when auth identity changes ([#108](https://github.com/Kong/volcano-sdk-js/issues/108)) ([1ced832](https://github.com/Kong/volcano-sdk-js/commit/1ced8322cc8112348719c97bf7bd266b9d3bb574))
+
+## [1.7.3](https://github.com/Kong/volcano-sdk-js/compare/v1.7.2...v1.7.3) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** discard stale asynchronous channel results ([#106](https://github.com/Kong/volcano-sdk-js/issues/106)) ([a65058d](https://github.com/Kong/volcano-sdk-js/commit/a65058de0431f2eaf8928ea4653000851f3d5828))
+
+## [1.7.2](https://github.com/Kong/volcano-sdk-js/compare/v1.7.1...v1.7.2) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** await subscription readiness ([#104](https://github.com/Kong/volcano-sdk-js/issues/104)) ([46159a9](https://github.com/Kong/volcano-sdk-js/commit/46159a906eb53f7576a769f6dffe3c8a3cb5fc7e))
+
 ## [1.7.1](https://github.com/Kong/volcano-sdk-js/compare/v1.7.0...v1.7.1) (2026-09-09)
 
 ### Bug Fixes

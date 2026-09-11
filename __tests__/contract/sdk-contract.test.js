@@ -5,6 +5,7 @@ const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
 const { VolcanoClient } = require('../../src/index.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
+const { verifyBroadcastPause } = require('./broadcast-pause.js');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];
@@ -22,6 +23,7 @@ const fixturePath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FIXTURE');
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 const features = loadFeatures(path.join(featuresPath, '*.feature'));
 const ACCESS_TOKEN_CLOCK_TICK_MS = 1_100;
+const REJECTED_ACCESS_TOKEN = 'sdk-contract-rejected-access-token';
 
 let activeWorld;
 
@@ -53,6 +55,36 @@ afterEach(async () => {
 
 autoBindSteps(features, [
   ({ given, when, then, context }) => {
+    given('the client replaces its access token with a rejected token', async () => {
+      const { data, error } = await context.world.client.auth.getSession();
+      if (error) throw error;
+      const adopted = await context.world.client.auth.setSession({
+        ...data.session,
+        access_token: REJECTED_ACCESS_TOKEN,
+      });
+      if (adopted.error) throw adopted.error;
+    });
+
+    then('the database read replaces the rejected token for the same user', async () => {
+      const { data, error } = await context.world.client.auth.getSession();
+      expect(error).toBeNull();
+      expect(data.session.access_token).toBeTruthy();
+      expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+      expect(data.session.refresh_token).toBeTruthy();
+      expect(data.session.user.id).toBe(context.world.fixture.user_id);
+    });
+
+    when(
+      'one client pauses delivery for 1 second and then resumes with the same handler',
+      async () => {
+        try {
+          recordOutcome(context.world, await verifyBroadcastPause(context.world), null);
+        } catch (error) {
+          recordOutcome(context.world, null, error);
+        }
+      },
+    );
+
     given('the confirmed contract user', () => {
       startScenario(context);
     });
@@ -299,6 +331,146 @@ autoBindSteps(features, [
 
     then('the downloaded bytes equal the uploaded bytes', () => {
       expect(context.world.lastOutcome.value.bytes).toEqual(context.world.storageBytes);
+    });
+
+    when(
+      'the client uploads the contract object as text/plain and reads its stored metadata',
+      async () => {
+        const { world } = context;
+        const bucket = world.client.storage.from(world.fixture.bucket_name);
+        try {
+          const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]), {
+            contentType: 'text/plain',
+          });
+          if (upload.error) throw upload.error;
+          world.cleanupCallbacks.push(async () => {
+            const removed = await bucket.remove([world.storagePath]);
+            if (removed.error) throw removed.error;
+          });
+          const listed = await bucket.list(world.storagePath);
+          if (listed.error) throw listed.error;
+          const downloaded = await bucket.download(world.storagePath);
+          if (downloaded.error) throw downloaded.error;
+          recordOutcome(
+            world,
+            {
+              path: upload.data.name,
+              bytes: Buffer.from(await downloaded.data.arrayBuffer()),
+              contentType: upload.data.mime_type,
+              listed: listed.data.map(({ name, mime_type }) => ({ name, mime_type })),
+            },
+            null,
+          );
+        } catch (error) {
+          recordOutcome(world, null, error);
+        }
+      },
+    );
+
+    then('the uploaded and listed object content types are text/plain', () => {
+      const { world } = context;
+      expect(world.lastOutcome.value.contentType).toBe('text/plain');
+      expect(world.lastOutcome.value.listed).toEqual([
+        { name: world.storagePath, mime_type: 'text/plain' },
+      ]);
+    });
+
+    when('the client uploads the contract object and downloads bytes 2 through 7', async () => {
+      const { world } = context;
+      const bucket = world.client.storage.from(world.fixture.bucket_name);
+      try {
+        const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]));
+        if (upload.error) throw upload.error;
+        world.cleanupCallbacks.push(async () => {
+          const removed = await bucket.remove([world.storagePath]);
+          if (removed.error) throw removed.error;
+        });
+        const download = await bucket.download(world.storagePath, { range: 'bytes=2-7' });
+        if (download.error) throw download.error;
+        recordOutcome(
+          world,
+          { bytes: Buffer.from(await download.data.arrayBuffer()), path: upload.data.name },
+          null,
+        );
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    then('the downloaded bytes equal uploaded bytes 2 through 7 inclusive', () => {
+      expect(context.world.lastOutcome.value.bytes).toEqual(
+        context.world.storageBytes.subarray(2, 8),
+      );
+    });
+
+    when('the client copies, moves, and removes a copy of the contract object', async () => {
+      const { world } = context;
+      const bucket = world.client.storage.from(world.fixture.bucket_name);
+      const source = world.storagePath;
+      const copied = `${source}.copy`;
+      const moved = `${source}.moved`;
+      world.cleanupCallbacks.push(async () => {
+        const listed = await bucket.list(source);
+        if (listed.error) throw listed.error;
+        const paths = listed.data
+          .map(({ name }) => name)
+          .filter((name) => [source, copied, moved].includes(name));
+        const removed = await bucket.remove(paths);
+        if (removed.error) throw removed.error;
+      });
+      try {
+        const upload = await bucket.upload(source, new Blob([world.storageBytes]));
+        if (upload.error) throw upload.error;
+        const copy = await bucket.copy(source, copied);
+        if (copy.error) throw copy.error;
+        const originalDownload = await bucket.download(source);
+        if (originalDownload.error) throw originalDownload.error;
+        const copiedDownload = await bucket.download(copied);
+        if (copiedDownload.error) throw copiedDownload.error;
+        const move = await bucket.move(copied, moved);
+        if (move.error) throw move.error;
+        const movedDownload = await bucket.download(moved);
+        if (movedDownload.error) throw movedDownload.error;
+        const afterMove = await bucket.list(source);
+        if (afterMove.error) throw afterMove.error;
+        const removed = await bucket.remove([moved]);
+        if (removed.error) throw removed.error;
+        const afterRemove = await bucket.list(source);
+        if (afterRemove.error) throw afterRemove.error;
+        const remainingDownload = await bucket.download(source);
+        if (remainingDownload.error) throw remainingDownload.error;
+        recordOutcome(
+          world,
+          {
+            bytes: await Promise.all(
+              [originalDownload, copiedDownload, movedDownload, remainingDownload].map(
+                async (result) => Buffer.from(await result.data.arrayBuffer()),
+              ),
+            ),
+            afterMove: afterMove.data.map(({ name }) => name).sort(),
+            afterRemove: afterRemove.data.map(({ name }) => name).sort(),
+          },
+          null,
+        );
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    then('the original, copied, and moved bytes equal the uploaded bytes', () => {
+      for (const bytes of context.world.lastOutcome.value.bytes) {
+        expect(bytes).toEqual(context.world.storageBytes);
+      }
+    });
+
+    then('moving the copy leaves only the original and moved paths', () => {
+      const source = context.world.storagePath;
+      expect(context.world.lastOutcome.value.afterMove).toEqual([source, `${source}.moved`].sort());
+    });
+
+    then('removing the moved object leaves the original unchanged', () => {
+      expect(context.world.lastOutcome.value.afterRemove).toEqual([context.world.storagePath]);
+      expect(context.world.lastOutcome.value.bytes[3]).toEqual(context.world.storageBytes);
     });
 
     then('the stored object path equals the contract path', () => {
