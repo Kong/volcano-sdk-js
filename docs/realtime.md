@@ -431,18 +431,29 @@ reauthenticate its WebSocket.
 `await channel.subscribe()` waits until the server accepts the subscription.
 Concurrent calls wait for the same subscription to become ready. If subscribing
 fails or takes longer than 10 seconds, the promise rejects and the channel is
-unsubscribed. Register your handlers again before retrying a failed subscription.
+paused. Its handlers remain registered for a later retry.
 
 ### Unsubscribe
 
-Stop receiving events from a channel:
+Pause delivery while retaining event handlers:
 
 ```javascript
 channel.unsubscribe();
+
+// Resume the same channel.
+await channel.subscribe();
 ```
+
+Messages received while paused are discarded, not buffered or replayed on resume.
+After subscribing again, the same handlers receive new messages. Presence resumes
+from a fresh snapshot.
 
 Row fetches and presence snapshots started before unsubscribe are discarded when
 they finish, even if you have since subscribed again.
+
+`removeChannel()`, `removeAllChannels()`, and `disconnect()` discard subscriptions
+and listeners. Auth identity changes discard subscriptions while preserving
+application listeners.
 
 ### Remove a Channel
 

@@ -187,7 +187,7 @@ export declare class RealtimeChannel {
   subscribe(): Promise<void>;
 
   /**
-   * Unsubscribe from the channel
+   * Pause delivery while retaining event handlers
    */
   unsubscribe(): void;
 
