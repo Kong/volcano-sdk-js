@@ -259,6 +259,10 @@ running to compare against. Running out of checks fails the execution instead of
 returning the last state, so size `maxAttempts` against `interval` and
 `maxInterval` for the longest you are willing to wait.
 
+Every check is a metered operation, and the 200 above is 200 of them, so buy the
+wait with a longer `interval` rather than with more checks where you can. See
+[Limits](#limits-and-what-an-operation-costs).
+
 This is how a durable function waits on the outside world: an approval, a
 third-party job, a file that has to land. Whatever signals it — a webhook, an
 endpoint of yours, another function — writes somewhere the check can read.
@@ -503,13 +507,29 @@ having the browser poll the execution. See
 [Durable functions](/platform/functions/durable-functions) for the full API and
 [the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
 
-## Limits
+## Limits and what an operation costs
 
-| Limit                             | Free  | Pro   |
-| --------------------------------- | ----- | ----- |
-| Step timeout                      | 300 s | 900 s |
-| Execution timeout                 | 24 h  | 24 h  |
-| Concurrent executions per project | 10    | 100   |
+| Limit                             | Free            | Pro             |
+| --------------------------------- | --------------- | --------------- |
+| Execution allowance               | 5,000 / month   | 10,000 / month  |
+| Operation allowance               | 100,000 / month | 200,000 / month |
+| Operations per execution          | 3,000           | 3,000           |
+| Step timeout                      | 300 s           | 900 s           |
+| Execution timeout                 | 24 h            | 24 h            |
+| Concurrent executions per project | 10              | 100             |
+
+Durable work is metered on those two allowances rather than on the request
+allowance a standard invocation spends. Every context operation is one
+operation: the execution itself, each `step` attempt — a retry is another
+attempt — each `wait`, each `waitUntil` check, each `child` context, and each
+`map` item or `parallel` branch. Time is not charged, so a suspended execution
+costs nothing while it waits.
+
+That makes the shape of a handler its cost. `ctx.map` over ten thousand items is
+ten thousand operations and will fail on the per-execution ceiling; batch the
+items, or start an execution per batch. A `waitUntil` polling every 5 seconds
+for a day is not affordable either, and a longer `interval` with a higher
+`maxInterval` costs less and is kinder to whatever it polls.
 
 The step timeout bounds one attempt between checkpoints, not the execution. A
 step that needs longer than that has to be split, or moved behind
