@@ -669,8 +669,6 @@ describe('Storage', () => {
     it('should create an upload session successfully', async () => {
       const mockResponse = {
         session_id: 'sess-123',
-        path: 'large-video.mp4',
-        total_size: 100 * 1024 * 1024,
         part_size: 25 * 1024 * 1024,
         total_parts: 4,
         expires_at: '2026-01-30T00:00:00Z',
