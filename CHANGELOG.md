@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.7.6](https://github.com/Kong/volcano-sdk-js/compare/v1.7.5...v1.7.6) (2026-09-11)
 
-
 ### Bug Fixes
 
-* **storage:** align upload session response types with Hosting ([#114](https://github.com/Kong/volcano-sdk-js/issues/114)) ([02e3f15](https://github.com/Kong/volcano-sdk-js/commit/02e3f15d0cc0ddecd859e6b5775bd1dda307e276))
+- **storage:** align upload session response types with Hosting ([#114](https://github.com/Kong/volcano-sdk-js/issues/114)) ([02e3f15](https://github.com/Kong/volcano-sdk-js/commit/02e3f15d0cc0ddecd859e6b5775bd1dda307e276))
 
 ## [1.7.5](https://github.com/Kong/volcano-sdk-js/compare/v1.7.4...v1.7.5) (2026-09-11)
 
