@@ -427,6 +427,9 @@ Stop receiving events from a channel:
 channel.unsubscribe();
 ```
 
+Row fetches and presence snapshots started before unsubscribe are discarded when
+they finish, even if you have since subscribed again.
+
 ### Remove a Channel
 
 ```javascript

@@ -572,6 +572,7 @@ class RealtimeChannel {
     this._type = type;
     this._options = options;
     this._subscription = null;
+    this._lifecycleVersion = 0;
     this._callbacks = new Map();
     this._presenceState = {};
 
@@ -659,6 +660,7 @@ class RealtimeChannel {
       // After subscribing, immediately fetch current presence for late joiners
       // For server-side subscriptions, use client.presence() not subscription.presence()
       this._eventHandlers.subscribed = async () => {
+        const lifecycleVersion = this._lifecycleVersion;
         // Small delay to ensure subscription is fully active
         this._presenceTimeoutId = setTimeout(async () => {
           this._presenceTimeoutId = null;
@@ -669,7 +671,7 @@ class RealtimeChannel {
               const presence = await client.presence(this._name);
 
               // Centrifuge returns presence data in `clients` field
-              if (presence && presence.clients) {
+              if (presence?.clients && lifecycleVersion === this._lifecycleVersion) {
                 this._presenceState = {};
                 for (const [clientId, info] of Object.entries(presence.clients)) {
                   this._presenceState[clientId] = info;
@@ -705,6 +707,7 @@ class RealtimeChannel {
    * Unsubscribe from the channel
    */
   unsubscribe() {
+    this._lifecycleVersion += 1;
     // Cancel pending presence fetch timeout
     if (this._presenceTimeoutId) {
       clearTimeout(this._presenceTimeoutId);
@@ -775,6 +778,7 @@ class RealtimeChannel {
    * @param {Object} ctx - Publication context
    */
   async _handleLightweightNotification(data, ctx) {
+    const lifecycleVersion = this._lifecycleVersion;
     const volcanoClient = this._realtime.getVolcanoClient();
 
     // DELETE notifications may include old_record, deliver immediately
@@ -807,6 +811,9 @@ class RealtimeChannel {
     // Auto-fetch the record for INSERT/UPDATE
     try {
       const record = await this._fetchRow(data.schema, data.table, data.id);
+      if (lifecycleVersion !== this._lifecycleVersion) {
+        return;
+      }
 
       // Convert to full payload format for backward compatibility
       const fullPayload = {
@@ -819,6 +826,9 @@ class RealtimeChannel {
 
       this._deliverPayload(fullPayload, ctx);
     } catch (err) {
+      if (lifecycleVersion !== this._lifecycleVersion) {
+        return;
+      }
       // On fetch error, still deliver the lightweight notification
       // so the client knows something changed, even if we couldn't get the data
       console.warn(
