@@ -1,0 +1,553 @@
+---
+title: 'Durable functions'
+description: 'Write functions that checkpoint their progress and resume where they left off, so one execution can run for hours across many invocations.'
+---
+
+A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to 24 hours, far longer than a single invocation is allowed.
+
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — is owner-scoped, so it belongs on your backend, the [CLI](/cli/durable-functions), or the dashboard.
+
+```javascript
+const { durable } = require('@volcano.dev/sdk/durable');
+
+exports.handler = durable(async (input, ctx) => {
+  const charge = await ctx.step('charge', () => chargeCard(input.order_id));
+
+  await ctx.wait('settle', '30s');
+
+  const shipment = await ctx.step('ship', () => ship(charge.id));
+
+  return { charged: charge.id, shipment: shipment.tracking };
+});
+```
+
+## Install
+
+```bash
+npm install @volcano.dev/sdk @aws/durable-execution-sdk-js
+```
+
+The second package is the durable runtime the platform's checkpointing protocol
+is implemented by. It is an optional peer dependency, so only functions that
+need it install it, and it must be a dependency of the function you deploy.
+
+Deploy the result as a durable function — `volcano cloud durable deploy`, or
+`kind: durable` in `volcano-config.yaml`. A durable handler deployed as a
+standard function fails on its first invocation with `DurableRuntimeMissingError`,
+which is also what a handler throws in a browser or a local script: nothing is
+there to checkpoint it. The error is exported from `@volcano.dev/sdk/durable`, so
+a caller can tell it apart from a failure inside the handler.
+
+## How a durable function runs
+
+Your handler runs more than once. Each time it is invoked it starts from the
+
+top, and every operation it already completed returns its recorded result
+immediately instead of running again. When it reaches an operation that has not
+run, that one executes for real.
+
+That gives one rule to write by: **reach the same operations in the same order
+every time.** The code between operations re-runs, so it has to be reproducible.
+
+```javascript
+// ❌ A random branch, so a resumed run can take the other path and the
+//    recorded operations no longer line up.
+if (Math.random() > 0.5) {
+  await ctx.step('a', chargeCard);
+}
+
+// ✅ Decide inside a step, so the decision is recorded with everything else.
+const branch = await ctx.step('pick', async () => (Math.random() > 0.5 ? 'a' : 'b'));
+if (branch === 'a') {
+  await ctx.step('a', chargeCard);
+}
+```
+
+Anything non-deterministic belongs inside a step: `Date.now()`, `Math.random()`,
+
+a UUID, a database read whose answer you branch on. Everything a step returns
+must survive `JSON.stringify` — it is stored and handed back on replay.
+
+A step is not retried once it has succeeded, but it is retried when it fails,
+and an interrupted attempt can run it twice. Make the work idempotent, or read
+[`atMostOnce`](#stepoptions).
+
+## `durable(handler, options?)`
+
+Wraps a handler so Volcano runs it as a durable execution. The handler is
+
+called with the execution's input and a durable context, matching a standard
+function's `(event, context)`.
+
+```javascript
+exports.handler = durable(async (input, ctx) => {
+  /* ... */
+});
+```
+
+| Option   | Type     | Description                                   |
+| -------- | -------- | --------------------------------------------- |
+| `logger` | `object` | Replaces the default logger behind `ctx.log`. |
+
+Whatever the handler returns becomes the execution's `result`, so it has to be
+JSON-serializable. Throwing fails the execution and records the error.
+
+## Durations
+
+Anywhere a duration is taken, these forms all work:
+
+```javascript
+await ctx.wait('30s'); // string, with s/m/h/d units
+await ctx.wait('1m30s'); // compound
+await ctx.wait(90); // a number is seconds
+await ctx.wait({ minutes: 1, seconds: 30 }); // explicit
+```
+
+A bare number is **seconds**, not milliseconds: a durable wait is time the
+platform holds, not a timer your process keeps.
+
+Durations are whole seconds. There is no millisecond unit, and a fraction is
+refused rather than rounded — the platform holds a wait between invocations, so
+sub-second precision is not something it can honor.
+
+## `ctx.step(name?, fn, options?)`
+
+Runs one atomic operation and records its result.
+
+```javascript
+const user = await ctx.step('load-user', async () => db.users.find(input.user_id));
+
+const charge = await ctx.step(
+  'charge',
+  async (scope) => {
+    scope.log.info('charging', { attempt: scope.attempt });
+    return stripe.charges.create({ amount: user.total });
+  },
+  { retry: { attempts: 5, initialDelay: '2s' }, atMostOnce: true },
+);
+```
+
+The function receives a scope, not a context: a step is a single operation and
+cannot contain durable operations. Use [`ctx.child`](#ctxchildname-fn) to group
+those.
+
+| Scope     | Type     | Description                       |
+| --------- | -------- | --------------------------------- |
+| `log`     | logger   | Logs, suppressed while replaying. |
+| `attempt` | `number` | 1 on the first attempt.           |
+
+The name is what the operation is recorded under, and is worth giving; omit it
+for a single obvious step. Names are per context and do not have to be unique
+across replays of a loop — `ctx.map` names its items for you.
+
+### StepOptions
+
+| Option       | Type                          | Description                                                                                                                                                                    |
+| ------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `retry`      | `false` \| object \| function | `false` fails on the first error. An object configures backoff. A function decides per attempt. Unset means the platform's default: 6 attempts, 5s apart doubling to a minute. |
+| `atMostOnce` | `boolean`                     | Checkpoint before running instead of after, so an attempt interrupted mid-flight is not repeated on replay.                                                                    |
+
+`atMostOnce` is per attempt, so pair it with `retry: false` for work that must
+never run twice — a charge, an outbound payment, a one-shot email.
+
+```javascript
+await ctx.step('pay-out', () => bank.transfer(input), { atMostOnce: true, retry: false });
+```
+
+### Retry options
+
+| Option         | Type                      | Default | Description                              |
+| -------------- | ------------------------- | ------- | ---------------------------------------- |
+| `attempts`     | `number`                  | `3`     | Total attempts, including the first.     |
+| `initialDelay` | duration                  | `5s`    | Delay before the first retry.            |
+| `maxDelay`     | duration                  | `5m`    | Ceiling for the backoff delay.           |
+| `backoffRate`  | `number`                  | `2`     | Multiplier applied after each attempt.   |
+| `retryOn`      | `Array<string \| RegExp>` | all     | Retry only errors whose message matches. |
+| `retryOnTypes` | `Array<ErrorClass>`       | all     | Retry only errors of these types.        |
+
+```javascript
+await ctx.step('call-flaky-api', () => fetch(url), {
+  retry: { attempts: 8, initialDelay: '5s', maxDelay: '2m', retryOn: [/timeout/i, '502'] },
+});
+
+// Or decide yourself.
+await ctx.step('call-flaky-api', () => fetch(url), {
+  retry: (error, attempt) =>
+    attempt < 4 && error.name === 'TimeoutError'
+      ? { shouldRetry: true, delay: { seconds: attempt * 10 } }
+      : { shouldRetry: false },
+});
+```
+
+A step that exhausts its retries fails the execution, unless you catch it:
+
+```javascript
+let receipt = null;
+try {
+  receipt = await ctx.step('receipt', () => sendReceipt(charge), { retry: { attempts: 2 } });
+} catch (error) {
+  ctx.log.warn('receipt failed, continuing', { message: error.message });
+}
+```
+
+Catching is itself part of the replayed path, so keep the `catch` as
+deterministic as the rest of the handler.
+
+## `ctx.wait(name?, duration)`
+
+Suspends the execution for a duration. The execution is not running while it
+waits, and a wait can outlast any single invocation.
+
+```javascript
+await ctx.wait('cool-off', '15m');
+await ctx.wait('1d'); // one argument is always the duration
+```
+
+## `ctx.child(name?, fn)`
+
+Groups operations under one recorded context. The function is given a durable
+context of its own, so it can run steps, waits, and further children.
+
+```javascript
+const total = await ctx.child('fulfil', async (childCtx) => {
+  const pack = await childCtx.step('pack', () => packOrder(input));
+  await childCtx.wait('label', '5s');
+  return childCtx.step('label', () => printLabel(pack));
+});
+```
+
+Reach for it to keep a long handler readable, to reuse a sub-workflow as a
+function of its own, or to give `map` and `parallel` branches somewhere to run.
+
+## `ctx.waitUntil(name?, check, options)`
+
+Polls until a condition holds, suspending between checks rather than sleeping.
+The check returns the state the next check receives, and `until` decides when to
+stop. It is handed the same scope a step's function gets as a second argument,
+so `(state, { log, attempt })` works when a check wants to log which round it is
+on.
+
+```javascript
+const approval = await ctx.waitUntil(
+  'await-approval',
+  async (state) => {
+    const row = await db.approvals.find(input.order_id);
+    return { ...state, status: row?.status ?? 'pending', checks: state.checks + 1 };
+  },
+  {
+    initialState: { status: 'pending', checks: 0 },
+    until: (state) => state.status !== 'pending',
+    interval: '30s',
+    maxInterval: '10m',
+    maxAttempts: 200,
+  },
+);
+```
+
+| Option         | Type     | Default | Description                                        |
+| -------------- | -------- | ------- | -------------------------------------------------- |
+| `until`        | function | —       | Required. Stop once it returns true for the state. |
+| `initialState` | any      | —       | Required. The state the first check receives.      |
+| `interval`     | duration | `5s`    | Delay before the second check.                     |
+| `maxInterval`  | duration | `5m`    | Ceiling for the backoff delay between checks.      |
+| `backoffRate`  | `number` | `1.5`   | Multiplier applied after each check.               |
+| `maxAttempts`  | `number` | `60`    | How many checks before the wait gives up.          |
+
+A condition is bounded by how many times it is checked rather than by a
+deadline: the platform holds the wait between checks, so there is no clock left
+running to compare against. Running out of checks fails the execution instead of
+returning the last state, so size `maxAttempts` against `interval` and
+`maxInterval` for the longest you are willing to wait.
+
+Every check is a metered operation, and the 200 above is 200 of them, so buy the
+wait with a longer `interval` rather than with more checks where you can. See
+[Limits](#limits-and-what-an-operation-costs).
+
+This is how a durable function waits on the outside world: an approval, a
+third-party job, a file that has to land. Whatever signals it — a webhook, an
+endpoint of yours, another function — writes somewhere the check can read.
+
+## `ctx.map(name?, items, fn, options?)`
+
+Runs the same work over every item, each item in its own child context.
+
+```javascript
+const shipped = await ctx.map(
+  'ship-items',
+  input.items,
+  async (item, itemCtx, index) => {
+    const label = await itemCtx.step('label', () => printLabel(item));
+    return { sku: item.sku, label, index };
+  },
+  { concurrency: 5 },
+);
+
+ctx.log.info('shipping done', { ok: shipped.succeeded, failed: shipped.failed });
+shipped.throwIfFailed();
+```
+
+The item comes first and its context second, so the common case reads well and
+the context is there when an item needs operations of its own.
+
+## `ctx.parallel(name?, branches, options?)`
+
+Runs different branches at the same time, each in its own child context. A
+branch is a function, or `{ name, run }` to name it in the execution history.
+
+```javascript
+const checks = await ctx.parallel(
+  'pre-flight',
+  [
+    (branch) => branch.step('fraud', () => scoreFraud(input)),
+    { name: 'stock', run: (branch) => branch.step('stock', () => reserveStock(input)) },
+  ],
+  { minSucceeded: 2 },
+);
+```
+
+### BatchOptions
+
+| Option         | Type     | Description                                                   |
+| -------------- | -------- | ------------------------------------------------------------- |
+| `concurrency`  | `number` | How many items or branches run at once. Unlimited by default. |
+| `minSucceeded` | `number` | Finish as soon as this many have succeeded.                   |
+
+### BatchResult
+
+`map` and `parallel` both resolve to the same plain object, so it logs and
+returns cleanly:
+
+| Field             | Type     | Description                                                              |
+| ----------------- | -------- | ------------------------------------------------------------------------ |
+| `items`           | array    | Every item in input order: `{ index, status, result, error }`.           |
+| `results`         | array    | The results that succeeded, so not aligned with the input if any failed. |
+| `errors`          | array    | The failures.                                                            |
+| `succeeded`       | `number` | How many succeeded.                                                      |
+| `failed`          | `number` | How many failed.                                                         |
+| `total`           | `number` | How many were in the batch.                                              |
+| `throwIfFailed()` | function | Throws the first failure, if there was one.                              |
+
+An item's `status` is `succeeded`, `failed`, or `started` — the last one only
+appears when `minSucceeded` finished the batch while others were still running.
+
+## `ctx.log`
+
+Logs through the durable logger, which suppresses output while an operation is
+being replayed, so a resumed execution does not re-log what it already did.
+
+```javascript
+ctx.log.info('order received', { order_id: input.order_id });
+ctx.log.warn('carrier slow', { order_id: input.order_id });
+ctx.log.debug('quote', { total: order.total });
+ctx.log.error('shipping failed', error, { order_id: input.order_id });
+```
+
+`error` takes the error as its second argument and the data as its third; the
+other three take a message and data.
+
+`console.log` still works, and still reaches [function logs](/platform/functions/logs) — it just repeats on every replay.
+
+## A complete function
+
+An order pipeline: charge, fan out over the items, wait for a human, then
+finish. Every operation is recorded, so an interrupted execution picks up where
+it stopped rather than charging the card twice.
+
+```javascript
+const { durable } = require('@volcano.dev/sdk/durable');
+const { Client } = require('pg');
+const { databaseConnectionString } = require('@volcano.dev/sdk');
+
+exports.handler = durable(async (input, ctx) => {
+  const order = await ctx.step('load-order', () => withDb((db) => loadOrder(db, input.order_id)));
+
+  const charge = await ctx.step('charge', () => chargeCard(order), {
+    atMostOnce: true,
+    retry: false,
+  });
+
+  const packed = await ctx.map(
+    'pack',
+    order.items,
+    (item, itemCtx) => itemCtx.step('pack-item', () => packItem(item)),
+    { concurrency: 5 },
+  );
+  packed.throwIfFailed();
+
+  const review = await ctx.waitUntil(
+    'await-review',
+    async () => withDb((db) => reviewStatus(db, order.id)),
+    {
+      initialState: 'pending',
+      until: (status) => status !== 'pending',
+      interval: '1m',
+      maxAttempts: 500,
+    },
+  );
+
+  if (review === 'rejected') {
+    await ctx.step('refund', () => refundCharge(charge.id), { atMostOnce: true, retry: false });
+    return { order_id: order.id, outcome: 'refunded' };
+  }
+
+  await ctx.step('dispatch', () => dispatch(order, packed.results));
+  return { order_id: order.id, outcome: 'shipped', charge_id: charge.id };
+});
+
+async function withDb(fn) {
+  const client = new Client({
+    connectionString: databaseConnectionString(process.env.DATABASE_URL),
+  });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+```
+
+A worked, deployable version of this — manifest, migration, and the endpoints
+that start and read executions — is in
+[`examples/durable-order-pipeline`](https://github.com/Kong/volcano-sdk-js/tree/main/examples/durable-order-pipeline).
+
+## Starting and reading executions
+
+Nothing in this module starts an execution. `volcano.durable.start` does, from
+another function, a backend holding a service key, or a browser holding an anon
+key for a public durable function. A signed-in user's session is used ahead of
+the anon key when there is one, the same as an invoke, which is what lets a
+signed-in user start a durable function that is not public:
+
+```javascript
+const { data, error } = await volcano.durable.start(
+  'order-pipeline',
+  { order_id: orderId },
+  { executionName: `order-${orderId}` },
+);
+
+if (error) {
+  throw error;
+}
+console.log(data.id, data.status); // 'running'
+```
+
+The execution name is the idempotency key: starting again under the same name
+returns the execution that already exists rather than beginning a second one,
+and is charged once.
+
+`start` resolves rather than throws when the platform refuses. `status` carries
+why — `400` for input that is not JSON, or an execution name over 255
+characters or holding anything but letters, digits, `-`, `_` and `.`,
+`401` for a credential the endpoint does not accept, `403` for an anon key
+starting a durable function that is not public, `404` for a name that is not a
+durable function in this project, `409` while the function is still
+provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
+for a project with too many executions in flight for its plan or out of either
+durable allowance, and `503` where durable execution is unavailable, which
+is what a local deployment answers. `409` is the one to expect right after a deploy: retry once the
+function is `active`.
+
+Starting is the only durable operation an application credential can perform.
+Reading an execution, listing them and stopping one are owner-scoped: they take
+the project id and a platform token, because an anon key is shared by everyone
+who loads the page and an execution is addressed by id alone. Call them from
+your backend, never a browser.
+
+```javascript
+const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+
+if (!error && data.status === 'succeeded') {
+  console.log(data.result); // what the function returned
+}
+```
+
+An execution is `running` until it finishes, including while it is suspended in
+a wait with nothing invoked, so polling it is how you follow one. It reads
+`pending` only in the moment between being accepted and being started, and
+finishes as one of `succeeded`, `failed`, `timed_out` or `stopped`.
+
+`result` is what the handler returned. It is absent while the execution runs,
+and absent on one that failed, timed out or was stopped — those carry
+`data.error` with a `type` and a `message` instead. It is also absent once the
+platform no longer holds the output, which is where a retained execution ends
+up: `data.result_expired` is what tells that apart from a function that
+returned nothing. A result too large to return is checkpointed instead and
+reads the same as nothing returned, so keep what you read back small and write
+anything bigger to a table or a bucket.
+
+```javascript
+// Most recent first, optionally filtered by status.
+const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
+  status: 'running',
+  limit: 20,
+  page: 1,
+});
+console.log(data.data.length, data.total, data.has_more);
+
+// Asks for the execution to stop; completed steps are not undone.
+await volcano.durable.stop(projectId, 'order-pipeline', executionId);
+```
+
+Listing reports the status the platform last observed rather than polling each
+execution, so read a single one for its live state. It pages one page at a
+time: raise `page` while `has_more` is true.
+
+`stop` is accepted rather than awaited. Cancellation happens behind it, so the
+execution it resolves with is the one read back after asking and often still
+says `running`; `get` is how you watch it reach `stopped`. Stopping is safe to
+repeat, and one that has already finished reports the state it is in.
+
+All three answer the same `{ data, status, error }` envelope as `start`, with
+`404` for an execution or durable function this project does not have.
+
+A function that has to report back to an app holding only an anon key writes
+what it produced where the app can read it — a table, a bucket — rather than
+having the browser poll the execution. See
+[Durable functions](/platform/functions/durable-functions) for the full API and
+[the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
+
+## Limits and what an operation costs
+
+| Limit                             | Free            | Pro             |
+| --------------------------------- | --------------- | --------------- |
+| Execution allowance               | 5,000 / month   | 10,000 / month  |
+| Operation allowance               | 100,000 / month | 200,000 / month |
+| Operations per execution          | 3,000           | 3,000           |
+| Step timeout                      | 300 s           | 900 s           |
+| Execution timeout                 | 24 h            | 24 h            |
+| Concurrent executions per project | 10              | 100             |
+
+Durable work is metered on those two allowances rather than on the request
+allowance a standard invocation spends. Every context operation is one
+operation: the execution itself, each `step` attempt — a retry is another
+attempt — each `wait`, each `waitUntil` check, each `child` context, and each
+`map` item or `parallel` branch. Time is not charged, so a suspended execution
+costs nothing while it waits.
+
+That makes the shape of a handler its cost. `ctx.map` over ten thousand items is
+ten thousand operations and will fail on the per-execution ceiling; batch the
+items, or start an execution per batch. A `waitUntil` polling every 5 seconds
+for a day is not affordable either, and a longer `interval` with a higher
+`maxInterval` costs less and is kinder to whatever it polls.
+
+The step timeout bounds one attempt between checkpoints, not the execution. A
+step that needs longer than that has to be split, or moved behind
+`ctx.waitUntil` so the waiting happens between operations instead of inside one.
+
+## Not available yet
+
+- **Callbacks.** The runtime can suspend on an externally-completed callback,
+  but nothing in Volcano can complete one, so the facade leaves it out. Wait on
+  your own state with `ctx.waitUntil` instead.
+- **Durable invoke.** Call another function from inside a step —
+  `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
+  than chaining durable executions.
+- **Local development.** Durable execution is a cloud capability; deploying a
+  durable function against a local project is refused rather than emulated.
+
+## Next steps
+
+- [Functions](./functions.md) — standard functions, invocation, and user context
+- [Durable functions on the platform](/platform/functions/durable-functions) — the API, limits, and billing
+- [CLI](/cli/durable-functions) — deploy, start, and inspect executions

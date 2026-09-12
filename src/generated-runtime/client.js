@@ -971,6 +971,12 @@ export const createFunction = async (id, createFunctionBody, options) => {
     if (createFunctionBody.openapi_spec !== undefined) {
         formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
     }
+    if (createFunctionBody.variable_scope !== undefined) {
+        formData.append(`variable_scope`, createFunctionBody.variable_scope);
+    }
+    if (createFunctionBody.variables !== undefined) {
+        formData.append(`variables`, createFunctionBody.variables);
+    }
     return volcanoFetch(getCreateFunctionUrl(id), {
         ...options,
         method: 'POST',
@@ -1068,6 +1074,12 @@ export const getInvokeFunctionUrl = (functionId) => {
  *   preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
  * - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
  *   direct operation always requires a Volcano credential.
+ *
+ * **Durable functions are not invocable here.** A durable function's id
+ * answers 404, whatever its visibility, because a synchronous call would
+ * run it with no execution record, no idempotency and no concurrency
+ * accounting. Start one with
+ * `POST /durable-functions/{functionId}/executions`.
  * @summary Invoke a function
  */
 export const invokeFunction = async (functionId, functionInvocationRequest, options) => {
@@ -1085,6 +1097,59 @@ export const invokeFunction = async (functionId, functionInvocationRequest, opti
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
         body: JSON.stringify(functionInvocationRequest)
+    });
+};
+export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
+    return `/durable-functions/${functionId}/executions`;
+};
+/**
+ * Starts an execution of a durable function using an application
+ * credential, and returns its handle.
+ *
+ * This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+ * and it is the endpoint an application calls. Like that one, it is not
+ * project-scoped: an anon key, a service key and an auth user token each
+ * carry their own project. The project-scoped collection under
+ * `/projects/{id}/durable-functions/...` remains the owner's management
+ * surface.
+ *
+ * **With a service key or an auth user token:** any durable function in
+ * the project.
+ *
+ * **With an anon key:** requires the `functions.invoke` permission, and
+ * the function must have `is_public: true`.
+ *
+ * Starting is all this endpoint does. Reading a result or stopping an
+ * execution requires the project owner's token, because an anon key is
+ * shared by everyone who loads the page and an execution is addressed by
+ * id alone.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+ * a start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts once against the project's durable execution
+ * allowance, however many times the start is retried under the same
+ * execution name, and the number in flight at once is capped by the plan.
+ * The operations the execution performs are counted against the durable
+ * operations allowance when it finishes.
+ * @summary Start a durable execution from an application
+ */
+export const startDurableExecutionFromApplication = async (functionId, startDurableExecutionFromApplicationBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getStartDurableExecutionFromApplicationUrl(functionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(startDurableExecutionFromApplicationBody)
     });
 };
 export const getResolveFunctionForInvocationUrl = (params) => {
@@ -1286,7 +1351,6 @@ export const listProjectSchedulers = async (id, params, options) => {
         method: 'GET'
     });
 };
-;
 export const getListFunctionSchedulersUrl = (id, functionId) => {
     return `/projects/${id}/functions/${functionId}/schedulers`;
 };
@@ -1323,7 +1387,6 @@ export const createFunctionScheduler = async (id, functionId, createFunctionSche
         body: JSON.stringify(createFunctionSchedulerRequest)
     });
 };
-;
 export const getGetFunctionSchedulerUrl = (id, functionId, schedulerId) => {
     return `/projects/${id}/functions/${functionId}/schedulers/${schedulerId}`;
 };
@@ -1336,7 +1399,6 @@ export const getFunctionScheduler = async (id, functionId, schedulerId, options)
         method: 'GET'
     });
 };
-;
 export const getUpdateFunctionSchedulerUrl = (id, functionId, schedulerId) => {
     return `/projects/${id}/functions/${functionId}/schedulers/${schedulerId}`;
 };
@@ -1360,7 +1422,6 @@ export const updateFunctionScheduler = async (id, functionId, schedulerId, updat
         body: JSON.stringify(updateFunctionSchedulerRequest)
     });
 };
-;
 export const getDeleteFunctionSchedulerUrl = (id, functionId, schedulerId) => {
     return `/projects/${id}/functions/${functionId}/schedulers/${schedulerId}`;
 };
@@ -1390,6 +1451,307 @@ export const listFunctionDeployments = async (id, functionId, params, options) =
     return volcanoFetch(getListFunctionDeploymentsUrl(id, functionId, params), {
         ...options,
         method: 'GET'
+    });
+};
+export const getListDurableFunctionsUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions?${stringifiedParams}` : `/projects/${id}/durable-functions`;
+};
+/**
+ * Standard functions never appear here, and durable functions never appear
+ * under `/projects/{id}/functions`. The two are separate collections.
+ * @summary List all durable functions in a project
+ */
+export const listDurableFunctions = async (id, params, options) => {
+    return volcanoFetch(getListDurableFunctionsUrl(id, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateDurableFunctionUrl = (id) => {
+    return `/projects/${id}/durable-functions`;
+};
+/**
+ * Upload a durable function source bundle. Creates the function on the
+ * first call for a name and redeploys it on every call after that, the
+ * same create-or-update contract `POST /projects/{id}/functions` has.
+ *
+ * Volcano builds and deploys asynchronously. A deployment that starts
+ * immediately returns `status: provisioning`, then transitions to `active`
+ * or `failed`; a deployment that has to wait for a running one is exposed
+ * through `pending_deployment_id`. Existing executions keep running
+ * against the runtime they started on.
+ *
+ * The `durable` configuration is derived from the project's plan rather
+ * than supplied here, and is fixed once the function exists. A name
+ * already held by a standard function is rejected with 409: a function
+ * cannot change kind.
+ * @summary Create or update a durable function
+ */
+export const createDurableFunction = async (id, createDurableFunctionBody, options) => {
+    const formData = new FormData();
+    formData.append(`name`, createDurableFunctionBody.name);
+    formData.append(`code`, createDurableFunctionBody.code);
+    formData.append(`runtime`, createDurableFunctionBody.runtime);
+    if (createDurableFunctionBody.handler !== undefined) {
+        formData.append(`handler`, createDurableFunctionBody.handler);
+    }
+    if (createDurableFunctionBody.is_public !== undefined) {
+        formData.append(`is_public`, createDurableFunctionBody.is_public.toString());
+    }
+    if (createDurableFunctionBody.variable_scope !== undefined) {
+        formData.append(`variable_scope`, createDurableFunctionBody.variable_scope);
+    }
+    if (createDurableFunctionBody.variables !== undefined) {
+        formData.append(`variables`, createDurableFunctionBody.variables);
+    }
+    return volcanoFetch(getCreateDurableFunctionUrl(id), {
+        ...options,
+        method: 'POST',
+        body: formData
+    });
+};
+export const getGetDurableFunctionUrl = (id, functionId) => {
+    return `/projects/${id}/durable-functions/${functionId}`;
+};
+/**
+ * @summary Get durable function by ID or name
+ */
+export const getDurableFunction = async (id, functionId, options) => {
+    return volcanoFetch(getGetDurableFunctionUrl(id, functionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getDeleteDurableFunctionUrl = (id, functionId) => {
+    return `/projects/${id}/durable-functions/${functionId}`;
+};
+/**
+ * Accepted for asynchronous teardown; the work continues after the
+ * response. Executions still running do not survive the function. History
+ * already retained is governed by the function's `retention_days`, which
+ * this does not shorten.
+ * @summary Delete a durable function
+ */
+export const deleteDurableFunction = async (id, functionId, options) => {
+    return volcanoFetch(getDeleteDurableFunctionUrl(id, functionId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getListDurableFunctionDeploymentsUrl = (id, functionId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions/${functionId}/deployments?${stringifiedParams}` : `/projects/${id}/durable-functions/${functionId}/deployments`;
+};
+/**
+ * @summary List durable function deployments
+ */
+export const listDurableFunctionDeployments = async (id, functionId, params, options) => {
+    return volcanoFetch(getListDurableFunctionDeploymentsUrl(id, functionId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getListDurableFunctionSchedulersUrl = (id, functionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/schedulers`;
+};
+/**
+ * The durable collection's counterpart to
+ * `/projects/{id}/functions/{functionId}/schedulers`. A standard
+ * function's id is not accepted here, and a durable function's id is not
+ * accepted there.
+ * @summary List schedulers for a durable function
+ */
+export const listDurableFunctionSchedulers = async (id, functionId, options) => {
+    return volcanoFetch(getListDurableFunctionSchedulersUrl(id, functionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateDurableFunctionSchedulerUrl = (id, functionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/schedulers`;
+};
+/**
+ * Each tick starts an execution rather than invoking the function, under
+ * an execution name derived from the run, so a retried tick resolves to
+ * the execution it already started. Requested regions must be a subset of
+ * the function's deployed regions.
+ *
+ * A tick draws on the same durable allowances and concurrency cap a
+ * manual start does, and a tick that would exceed the cap fails that run.
+ * @summary Create a scheduler for a durable function
+ */
+export const createDurableFunctionScheduler = async (id, functionId, createFunctionSchedulerRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getCreateDurableFunctionSchedulerUrl(id, functionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createFunctionSchedulerRequest)
+    });
+};
+export const getGetDurableFunctionSchedulerUrl = (id, functionId, schedulerId) => {
+    return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`;
+};
+/**
+ * @summary Get a durable function scheduler
+ */
+export const getDurableFunctionScheduler = async (id, functionId, schedulerId, options) => {
+    return volcanoFetch(getGetDurableFunctionSchedulerUrl(id, functionId, schedulerId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getUpdateDurableFunctionSchedulerUrl = (id, functionId, schedulerId) => {
+    return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`;
+};
+/**
+ * @summary Update a durable function scheduler
+ */
+export const updateDurableFunctionScheduler = async (id, functionId, schedulerId, updateFunctionSchedulerRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getUpdateDurableFunctionSchedulerUrl(id, functionId, schedulerId), {
+        ...options,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(updateFunctionSchedulerRequest)
+    });
+};
+export const getDeleteDurableFunctionSchedulerUrl = (id, functionId, schedulerId) => {
+    return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`;
+};
+/**
+ * @summary Delete a durable function scheduler
+ */
+export const deleteDurableFunctionScheduler = async (id, functionId, schedulerId, options) => {
+    return volcanoFetch(getDeleteDurableFunctionSchedulerUrl(id, functionId, schedulerId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getStartDurableExecutionUrl = (id, functionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/executions`;
+};
+/**
+ * Starts an execution and returns its handle. Never returns a result: an
+ * execution can outlive any request a client could hold open, so the
+ * result is read back from
+ * `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`.
+ *
+ * The request body is the execution's input and must be valid JSON if
+ * present. An empty body starts the execution with no input.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating a
+ * start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts against the project's durable execution
+ * allowance, the operations it performs count against the durable
+ * operations allowance when it finishes, and the number of executions in
+ * flight at once is capped by the plan.
+ * @summary Start a durable execution
+ */
+export const startDurableExecution = async (id, functionId, startDurableExecutionBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getStartDurableExecutionUrl(id, functionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(startDurableExecutionBody)
+    });
+};
+export const getListDurableExecutionsUrl = (id, functionId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions/${functionId}/executions?${stringifiedParams}` : `/projects/${id}/durable-functions/${functionId}/executions`;
+};
+/**
+ * Returns the platform's last observed status for each execution; listing
+ * does not poll each one. Fetch a single execution for its live state.
+ * @summary List a durable function's executions
+ */
+export const listDurableExecutions = async (id, functionId, params, options) => {
+    return volcanoFetch(getListDurableExecutionsUrl(id, functionId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetDurableExecutionUrl = (id, functionId, executionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/executions/${executionId}`;
+};
+/**
+ * Returns the execution's current state, including its `result` once it has
+ * succeeded. Poll this to wait for an execution to finish.
+ * @summary Get a durable execution
+ */
+export const getDurableExecution = async (id, functionId, executionId, options) => {
+    return volcanoFetch(getGetDurableExecutionUrl(id, functionId, executionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getStopDurableExecutionUrl = (id, functionId, executionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/executions/${executionId}/stop`;
+};
+/**
+ * Cancels a running execution. Its completed steps are not undone.
+ *
+ * The call is accepted rather than awaited: cancellation happens behind
+ * it, so the response reports the execution as it was read back and may
+ * still say `running`. Do not branch on that status — the execution
+ * settles into `stopped` shortly after, and polling
+ * `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+ * is how you see it get there.
+ *
+ * Stopping an execution that already finished is not an error: the
+ * response carries the state it settled in.
+ * @summary Stop a durable execution
+ */
+export const stopDurableExecution = async (id, functionId, executionId, options) => {
+    return volcanoFetch(getStopDurableExecutionUrl(id, functionId, executionId), {
+        ...options,
+        method: 'POST'
     });
 };
 export const getListFrontendsUrl = (id, params) => {
@@ -4181,10 +4543,6 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
- * An empty provider body is represented as `data: null`; the envelope
- * preserves the provider's HTTP status in `status_code`, including errors.
- * Provider response bodies are limited to 8 MiB after decompression.
- * Transport failures, invalid JSON, and oversized bodies return `502`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {

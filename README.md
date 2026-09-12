@@ -69,18 +69,19 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 
 ## Documentation
 
-| Guide                                        | Description                       |
-| -------------------------------------------- | --------------------------------- |
-| [Getting Started](./docs/getting-started.md) | Installation and setup            |
-| [Authentication](./docs/authentication.md)   | Sign-up, sign-in, OAuth, sessions |
-| [Database](./docs/database.md)               | Query builder and CRUD operations |
-| [Storage](./docs/storage.md)                 | File upload and management        |
-| [Realtime](./docs/realtime.md)               | Live subscriptions and presence   |
-| [Functions](./docs/functions.md)             | Serverless function invocation    |
-| [Project locks](./docs/locks.md)             | Renewable backend leases          |
-| [Next.js](./docs/nextjs.md)                  | Server components and middleware  |
-| [TypeScript](./docs/typescript.md)           | Type definitions                  |
-| [Error Handling](./docs/error-handling.md)   | Error patterns                    |
+| Guide                                            | Description                       |
+| ------------------------------------------------ | --------------------------------- |
+| [Getting Started](./docs/getting-started.md)     | Installation and setup            |
+| [Authentication](./docs/authentication.md)       | Sign-up, sign-in, OAuth, sessions |
+| [Database](./docs/database.md)                   | Query builder and CRUD operations |
+| [Storage](./docs/storage.md)                     | File upload and management        |
+| [Realtime](./docs/realtime.md)                   | Live subscriptions and presence   |
+| [Functions](./docs/functions.md)                 | Serverless function invocation    |
+| [Durable functions](./docs/durable-functions.md) | Checkpointed, long-running work   |
+| [Project locks](./docs/locks.md)                 | Renewable backend leases          |
+| [Next.js](./docs/nextjs.md)                      | Server components and middleware  |
+| [TypeScript](./docs/typescript.md)               | Type definitions                  |
+| [Error Handling](./docs/error-handling.md)       | Error patterns                    |
 
 ## Contributing
 

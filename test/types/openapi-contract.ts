@@ -2,6 +2,8 @@ import type {
   Auth,
   CompleteSession,
   CreateUploadSessionResponse,
+  Durable,
+  DurableExecution,
   OpenAPIComponents,
   OpenAPIOperations,
   UploadSessionStatusResponse,
@@ -120,9 +122,65 @@ type OAuthResponseShape = {
   provider: 'google' | 'github' | 'microsoft' | 'apple';
   endpoint: string;
   status_code: number;
-  data: unknown;
+  // Hosting decodes the provider's body into an object, so anything else it
+  // sends is a 500 rather than a scalar reaching the caller.
+  data: { [key: string]: unknown } | null;
 };
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
+
+type DurableExecutionShape = {
+  id: string;
+  function_id: string;
+  name: string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped';
+  region: string;
+  created_at: string;
+};
+type _DurableStartHandleMatchesHosting = Assert<
+  DurableExecutionShape extends DurableExecution ? true : false
+>;
+type _DurableExecutionComesOffTheWire = Assert<
+  Equal<DurableExecution, OpenAPIComponents['schemas']['DurableExecution']>
+>;
+
+declare const durable: Durable;
+
+// A start is answered, never thrown: `error` is what a refusal arrives as, and
+// `data` is only a handle once it is null-checked.
+async function startDurableExecution() {
+  const { data, status, error } = await durable.start('order-pipeline', { order_id: 4417 });
+  if (error) {
+    const refusal: number | null = status;
+    void refusal;
+    return;
+  }
+  const handle: DurableExecution | null = data;
+  void handle;
+}
+
+void startDurableExecution;
+
+// The owner-scoped half: reading, listing and stopping all answer the same
+// envelope, and a page carries the executions rather than a bare array.
+async function followDurableExecution() {
+  const read = await durable.get('proj-1', 'order-pipeline', 'exec-1');
+  if (!read.error) {
+    const result: DurableExecution | null = read.data;
+    void result;
+  }
+
+  const listed = await durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 20 });
+  if (!listed.error && listed.data) {
+    const executions: DurableExecution[] = listed.data.data;
+    const more: boolean = listed.data.has_more;
+    void [executions, more];
+  }
+
+  const stopped = await durable.stop('proj-1', 'order-pipeline', 'exec-1');
+  void stopped.status;
+}
+
+void followDurableExecution;
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 type LogSearchEventShape = {

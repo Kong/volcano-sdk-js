@@ -16,5 +16,7 @@ export interface FunctionRuntimeOption {
   language: string;
   /** Whether this runtime is the CLI default for its language. */
   default: boolean;
+  /** Whether a durable function can be authored on this runtime. Only runtimes with a durable authoring API report true, and a durable deploy naming any other runtime is rejected. */
+  durable_capable: boolean;
   deployment: FunctionRuntimeDeployment;
 }
