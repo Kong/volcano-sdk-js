@@ -439,6 +439,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/shared-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace shared variable names
+         * @description Atomically replaces the complete shared function-variable list without
+         *     changing values. Names must already exist. Validates final affected
+         *     function environments before membership or propagation side effects.
+         *     An empty list clears membership. Omitted names remain stored as non-shared variables.
+         */
+        put: operations["replaceSharedVariables"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/config": {
         parameters: {
             query?: never;
@@ -453,8 +476,8 @@ export interface paths {
          *     volcano-config.yaml rendering with `Accept: application/yaml` or
          *     `?format=yaml`; the YAML is returned verbatim as the raw response body
          *     (`Content-Type: application/yaml`) and is meant to be saved as-is.
-         *     Write-only secrets (SMTP password, OAuth client secrets, TLS material)
-         *     are omitted from the export; the YAML rendering adds a header comment
+         *     Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+         *     are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
          *     describing how to set them via CLI environment interpolation.
          */
         get: operations["getProjectConfig"];
@@ -1196,7 +1219,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -2079,6 +2102,8 @@ export interface paths {
         /**
          * List platform-supported regions for database provisioning
          * @description Returns the regions enabled for database provisioning in this platform environment.
+         *     These are the same regions offered for function deployment, and the only values
+         *     the `region` field of a database accepts.
          *     This is a public endpoint that doesn't require authentication.
          */
         get: operations["listDatabaseRegions"];
@@ -3598,7 +3623,9 @@ export interface paths {
          *     An empty provider body is represented as `data: null`; the envelope
          *     preserves the provider's HTTP status in `status_code`, including errors.
          *     Provider response bodies are limited to 8 MiB after decompression.
-         *     Transport failures, invalid JSON, and oversized bodies return `502`.
+         *     Transport failures, invalid JSON (including invalid UTF-8), and oversized
+         *     bodies return `502`. Provider redirects to another origin are blocked and
+         *     return `400`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -4839,11 +4866,13 @@ export interface components {
              */
             name: string;
             /**
-             * @description Region for database hosting
+             * @description Region for database hosting. The accepted values are the regions this
+             *     environment runs in, so read them from `GET /databases/regions` rather
+             *     than hardcoding a list. A region the environment does not offer is
+             *     rejected with 400.
              * @example aws-us-east-1
-             * @enum {string}
              */
-            region: "aws-us-east-1" | "aws-us-east-2" | "aws-us-west-2" | "aws-eu-central-1" | "aws-eu-west-2" | "aws-ap-southeast-1" | "aws-ap-southeast-2" | "aws-sa-east-1";
+            region: string;
             /**
              * @description PostgreSQL major version
              * @example 16
@@ -5029,6 +5058,8 @@ export interface components {
             expires_at?: string;
         };
         CreateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -6830,6 +6861,8 @@ export interface components {
             version: 1;
             project?: components["schemas"]["ProjectConfigProject"];
             databases?: components["schemas"]["ProjectConfigDatabase"][];
+            /** @description Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it. */
+            shared_variables?: string[];
             /** @description Fully synced when declared - variables absent from this list are deleted. */
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
@@ -7102,12 +7135,31 @@ export interface components {
          * @description Configuration for an existing (deployed) function. Functions are never
          *     created or deleted through the manifest. When `schedulers` is declared
          *     it is fully synced (schedulers absent from the list are deleted);
-         *     omitting `schedulers` leaves the function's schedulers untouched.
+         *     omitting `schedulers` leaves the function's schedulers untouched. The
+         *     same applies to `variables`: declaring it replaces the function's
+         *     declared variable names, and omitting it leaves them untouched.
          */
         ProjectConfigFunction: {
             name: string;
             /** @description Function visibility for anon-key invocation */
             public?: boolean;
+            /**
+             * @description Which project variables this function receives. `all` (the default)
+             *     gives it the project variables marked `shared: true`. `scoped` gives it only the variables
+             *     it selects: every name declared in `variables`, plus the names
+             *     Volcano detects in its source that the project defines.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "scoped";
+            /**
+             * @description Project variable names this function requires, on top of the ones
+             *     detected in its source. Declare a name here when the function reads
+             *     it through a computed key, which detection cannot see, or when the
+             *     function must not deploy without it: a declared name the project does
+             *     not define fails the apply, while a detected name it does not define
+             *     is ignored. Only used when `variable_scope` is `scoped`.
+             */
+            variables?: string[];
             invocation_mode?: components["schemas"]["FunctionInvocationMode"];
             http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
             /** @description OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function */
@@ -7210,6 +7262,8 @@ export interface components {
             errors: components["schemas"]["ProjectConfigValidationError"][];
         };
         ProjectConfigVariable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -7941,6 +7995,8 @@ export interface components {
             allowed_mime_types?: string[];
         };
         UpdateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             value: string;
         };
         /** @description Information about an uploaded part */
@@ -8014,6 +8070,8 @@ export interface components {
             value: number;
         };
         Variable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -10012,6 +10070,94 @@ export interface operations {
             };
         };
     };
+    replaceSharedVariables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    shared_variables: string[];
+                    /** @description When present, replace only if the current complete shared list matches this list. */
+                    expected_shared_variables?: string[];
+                    /** @description SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_shared_variables for a compact conditional replacement. */
+                    expected_shared_variables_digest?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Shared list replaced and affected function synchronization started. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid names or final function environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared list changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,194,304 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Persistence or synchronization failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getProjectConfig: {
         parameters: {
             query?: {
@@ -10052,6 +10198,15 @@ export interface operations {
             };
             /** @description Project not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Canonical YAML export exceeds 4,194,304 bytes */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10136,6 +10291,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectConfigValidationErrorResponse"];
+                };
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -11451,6 +11615,13 @@ export interface operations {
                     http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
                     /** @description JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
                     openapi_spec?: string;
+                    /**
+                     * @description Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+                    variables?: string;
                 };
             };
         };
@@ -12012,7 +12183,11 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle. */
+                    /**
+                     * @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
+                     *
+                     *     Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
+                     */
                     functions: string;
                     /**
                      * Format: binary
@@ -13259,6 +13434,15 @@ export interface operations {
             };
             /** @description Bad request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15482,8 +15666,8 @@ export interface operations {
                          */
                         id?: string;
                         /**
-                         * @description Human-readable region name
-                         * @example AWS US East 1 (N. Virginia)
+                         * @description Human-readable region location
+                         * @example US East (N. Virginia)
                          */
                         name?: string;
                     }[];
@@ -15629,6 +15813,15 @@ export interface operations {
             };
             /** @description Variable not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19293,7 +19486,8 @@ export interface operations {
             };
             /**
              * @description Invalid request (for example: missing `endpoint`, an `endpoint` that is
-             *     not a relative path, or an unsupported HTTP method).
+             *     not a relative path, or an unsupported HTTP method), or a provider
+             *     redirect to another origin.
              */
             400: {
                 headers: {

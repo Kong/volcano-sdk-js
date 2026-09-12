@@ -34,6 +34,11 @@ export interface ProjectConfig {
   version: ProjectConfigVersion;
   project?: ProjectConfigProject;
   databases?: ProjectConfigDatabase[];
+  /**
+     * Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it.
+     * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
+     */
+  shared_variables?: string[];
   /** Fully synced when declared - variables absent from this list are deleted. */
   variables?: ProjectConfigVariable[];
   buckets?: ProjectConfigBucket[];
