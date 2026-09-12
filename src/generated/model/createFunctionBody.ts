@@ -8,6 +8,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateFunctionBodyRuntime } from './createFunctionBodyRuntime';
+import type { CreateFunctionBodyVariableScope } from './createFunctionBodyVariableScope';
 import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
 import type { FunctionInvocationMode } from './functionInvocationMode';
 
@@ -41,4 +42,8 @@ export type CreateFunctionBody = {
   http_auth_mode?: FunctionHTTPAuthMode;
   /** JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
   openapi_spec?: string;
+  /** Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged. */
+  variable_scope?: CreateFunctionBodyVariableScope;
+  /** JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+  variables?: string;
 };

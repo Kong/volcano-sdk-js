@@ -11,6 +11,6 @@
 export type ListDatabaseRegions200Item = {
   /** Region identifier for API usage */
   id?: string;
-  /** Human-readable region name */
+  /** Human-readable region location */
   name?: string;
 };
