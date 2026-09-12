@@ -443,8 +443,8 @@ characters or holding anything but letters, digits, `-`, `_` and `.`,
 starting a durable function that is not public, `404` for a name that is not a
 durable function in this project, `409` while the function is still
 provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
-for a project with too many executions in flight for its plan or out of its
-invocation allowance, and `503` where durable execution is unavailable, which
+for a project with too many executions in flight for its plan or out of either
+durable allowance, and `503` where durable execution is unavailable, which
 is what a local deployment answers. `409` is the one to expect right after a deploy: retry once the
 function is `active`.
 

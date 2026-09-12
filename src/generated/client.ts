@@ -3687,9 +3687,11 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId: string,) 
  * a start with the same name returns the existing execution instead of
  * beginning a second one.
  *
- * Each execution counts once against the project's function invocation
+ * Each execution counts once against the project's durable execution
  * allowance, however many times the start is retried under the same
  * execution name, and the number in flight at once is capped by the plan.
+ * The operations the execution performs are counted against the durable
+ * operations allowance when it finishes.
  * @summary Start a durable execution from an application
  */
 export const startDurableExecutionFromApplication = async (functionId: string,
@@ -4880,7 +4882,7 @@ export const getCreateDurableFunctionSchedulerUrl = (id: string,
  * the execution it already started. Requested regions must be a subset of
  * the function's deployed regions.
  *
- * A tick draws on the same invocation allowance and concurrency cap a
+ * A tick draws on the same durable allowances and concurrency cap a
  * manual start does, and a tick that would exceed the cap fails that run.
  * @summary Create a scheduler for a durable function
  */
@@ -5124,9 +5126,10 @@ export const getStartDurableExecutionUrl = (id: string,
  * start with the same name returns the existing execution instead of
  * beginning a second one.
  *
- * Each execution counts against the project's function invocation
- * allowance, and the number of executions in flight at once is capped by
- * the plan.
+ * Each execution counts against the project's durable execution
+ * allowance, the operations it performs count against the durable
+ * operations allowance when it finishes, and the number of executions in
+ * flight at once is capped by the plan.
  * @summary Start a durable execution
  */
 export const startDurableExecution = async (id: string,

@@ -25,8 +25,10 @@ tags:
     description: |-
       Long-running functions that checkpoint their progress and resume from the
       last completed step, and the executions started against them. Separate
-      from Functions because a durable function is started asynchronously and
-      metered differently.
+      from Functions because a durable function is started asynchronously: what
+      a start returns is an execution to poll and stop, not a result. Durable
+      work is metered on its own allowances: executions, and the operations each
+      execution performs while it runs.
   - name: Frontends
     description: Frontend deployment and management. Supports Next.js 15.x and 16.x with Node.js 22.x or 24.x inferred from package.json engines.node when the selected Node.js family satisfies the installed Next.js package engines.node constraint.
   - name: Tokens
@@ -2927,9 +2929,11 @@ paths:
         a start with the same name returns the existing execution instead of
         beginning a second one.
 
-        Each execution counts once against the project's function invocation
+        Each execution counts once against the project's durable execution
         allowance, however many times the start is retried under the same
         execution name, and the number in flight at once is capped by the plan.
+        The operations the execution performs are counted against the durable
+        operations allowance when it finishes.
       operationId: startDurableExecutionFromApplication
       security:
         - AnonKey: []
@@ -3016,7 +3020,9 @@ paths:
             The project has too many executions in flight for its plan, the
             function invocation rate limit was exceeded, the project is over
             its bandwidth cap, or the account is out of its billing-cycle
-            function invocation allowance.
+            durable execution or durable operations allowance. An operations
+            refusal never interrupts an execution already running: it declines
+            the next start.
           content:
             application/json:
               schema:
@@ -3874,7 +3880,7 @@ paths:
         the execution it already started. Requested regions must be a subset of
         the function's deployed regions.
 
-        A tick draws on the same invocation allowance and concurrency cap a
+        A tick draws on the same durable allowances and concurrency cap a
         manual start does, and a tick that would exceed the cap fails that run.
       operationId: createDurableFunctionScheduler
       security:
@@ -4019,9 +4025,10 @@ paths:
         start with the same name returns the existing execution instead of
         beginning a second one.
 
-        Each execution counts against the project's function invocation
-        allowance, and the number of executions in flight at once is capped by
-        the plan.
+        Each execution counts against the project's durable execution
+        allowance, the operations it performs count against the durable
+        operations allowance when it finishes, and the number of executions in
+        flight at once is capped by the plan.
       operationId: startDurableExecution
       security:
         - UserToken: []
@@ -4085,9 +4092,9 @@ paths:
         '429':
           description: |
             Too many executions already in flight for this project, or the
-            account is out of its billing-cycle function invocation allowance.
-            An owner-started execution is metered exactly like an
-            application-started one.
+            account is out of its billing-cycle durable execution or durable
+            operations allowance. An owner-started execution is metered exactly
+            like an application-started one.
           content:
             application/json:
               schema:

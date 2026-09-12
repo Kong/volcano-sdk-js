@@ -962,9 +962,11 @@ export interface paths {
          *     a start with the same name returns the existing execution instead of
          *     beginning a second one.
          *
-         *     Each execution counts once against the project's function invocation
+         *     Each execution counts once against the project's durable execution
          *     allowance, however many times the start is retried under the same
          *     execution name, and the number in flight at once is capped by the plan.
+         *     The operations the execution performs are counted against the durable
+         *     operations allowance when it finishes.
          */
         post: operations["startDurableExecutionFromApplication"];
         delete?: never;
@@ -1312,7 +1314,7 @@ export interface paths {
          *     the execution it already started. Requested regions must be a subset of
          *     the function's deployed regions.
          *
-         *     A tick draws on the same invocation allowance and concurrency cap a
+         *     A tick draws on the same durable allowances and concurrency cap a
          *     manual start does, and a tick that would exceed the cap fails that run.
          */
         post: operations["createDurableFunctionScheduler"];
@@ -1369,9 +1371,10 @@ export interface paths {
          *     start with the same name returns the existing execution instead of
          *     beginning a second one.
          *
-         *     Each execution counts against the project's function invocation
-         *     allowance, and the number of executions in flight at once is capped by
-         *     the plan.
+         *     Each execution counts against the project's durable execution
+         *     allowance, the operations it performs count against the durable
+         *     operations allowance when it finishes, and the number of executions in
+         *     flight at once is capped by the plan.
          */
         post: operations["startDurableExecution"];
         delete?: never;
@@ -12339,7 +12342,9 @@ export interface operations {
              * @description The project has too many executions in flight for its plan, the
              *     function invocation rate limit was exceeded, the project is over
              *     its bandwidth cap, or the account is out of its billing-cycle
-             *     function invocation allowance.
+             *     durable execution or durable operations allowance. An operations
+             *     refusal never interrupts an execution already running: it declines
+             *     the next start.
              */
             429: {
                 headers: {
@@ -13712,9 +13717,9 @@ export interface operations {
             };
             /**
              * @description Too many executions already in flight for this project, or the
-             *     account is out of its billing-cycle function invocation allowance.
-             *     An owner-started execution is metered exactly like an
-             *     application-started one.
+             *     account is out of its billing-cycle durable execution or durable
+             *     operations allowance. An owner-started execution is metered exactly
+             *     like an application-started one.
              */
             429: {
                 headers: {
