@@ -3629,9 +3629,11 @@ export const getResolveFunctionForInvocationUrl = (params: ResolveFunctionForInv
 }
 
 /**
- * Resolves a DNS-safe function name to its function ID within the caller's project.
+ * Resolves a DNS-safe function name to its function ID and invocation URL within the caller's project.
  *
  * SDKs use this endpoint internally to invoke by function name while routing by function ID.
+ * Invoke the returned `invoke_url` as-is. It does not share a domain with the API, so a host
+ * built from the API URL will not reach the function.
  *
  * **With Service Key**:
  * - Allowed

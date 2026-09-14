@@ -929,9 +929,11 @@ export interface paths {
         };
         /**
          * Resolve function name for invocation
-         * @description Resolves a DNS-safe function name to its function ID within the caller's project.
+         * @description Resolves a DNS-safe function name to its function ID and invocation URL within the caller's project.
          *
          *     SDKs use this endpoint internally to invoke by function name while routing by function ID.
+         *     Invoke the returned `invoke_url` as-is. It does not share a domain with the API, so a host
+         *     built from the API URL will not reach the function.
          *
          *     **With Service Key**:
          *     - Allowed
@@ -7496,6 +7498,8 @@ export interface components {
              * @description Canonical function ID used for invocation routing
              */
             function_id: string;
+            /** @description Canonical endpoint URL for invoking this function (always HTTPS). Clients must use this value rather than deriving a host from the API URL; the two do not share a domain. */
+            invoke_url: string;
             /** @description Suggested SDK cache TTL for this name-to-ID mapping */
             cache_ttl_seconds: number;
         };

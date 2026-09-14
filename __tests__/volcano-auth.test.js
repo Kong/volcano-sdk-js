@@ -2168,6 +2168,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4251,6 +4252,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4290,7 +4292,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ payload: { action: 'getData' } }),
@@ -4311,6 +4313,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4336,7 +4339,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
         }),
@@ -4358,6 +4361,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4404,6 +4408,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4442,6 +4447,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4489,6 +4495,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'public-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4524,6 +4531,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4570,6 +4578,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4599,7 +4608,7 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(global.fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
@@ -4625,6 +4634,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4689,6 +4699,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4750,6 +4761,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4770,18 +4782,60 @@ describe('VolcanoAuth', () => {
       expect(error.cause).toBe(networkError);
     });
 
-    it('should reject invoke when apiUrl does not follow api.<domain> pattern', async () => {
+    it('should invoke on any apiUrl because the server supplies the invocation URL', async () => {
       const customVolcano = new VolcanoAuth({
         apiUrl: 'https://edge.example.com',
         anonKey: 'ak-test-anon-key',
       });
       customVolcano.accessToken = TEST_ACCESS_TOKEN;
 
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
       const { error } = await customVolcano.functions.invoke('my-function', {});
 
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should fail invoke when the resolve response omits invoke_url', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
       expect(error).toBeDefined();
-      expect(error.message).toContain('api.<domain>');
-      expect(fetch).not.toHaveBeenCalled();
+      expect(error.message).toContain('invoke_url');
+      expect(fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should use direct invoke path when apiUrl points to localhost', async () => {
@@ -4798,6 +4852,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4832,6 +4887,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'notes-summary',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         });
@@ -4988,6 +5044,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -5013,6 +5070,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -5038,6 +5096,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -5080,6 +5139,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5102,12 +5162,12 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
         3,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5170,6 +5230,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5185,6 +5246,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '22222222-2222-2222-2222-222222222222',
+              invoke_url: 'https://22222222-2222-2222-2222-222222222222.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5206,7 +5268,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://11111111-1111-1111-1111-111111111111.functions.test.com/',
+        'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5216,7 +5278,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://22222222-2222-2222-2222-222222222222.functions.test.com/',
+        'https://22222222-2222-2222-2222-222222222222.functions.test.run/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ payload: { action: 'retry' } }),
@@ -5235,6 +5297,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5262,7 +5325,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://11111111-1111-1111-1111-111111111111.functions.test.com/',
+        'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5294,6 +5357,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5316,12 +5380,12 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
         3,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(localStorage.getItem).not.toHaveBeenCalled();
@@ -5348,6 +5412,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'shared-name',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5363,6 +5428,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'shared-name',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5385,7 +5451,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5395,7 +5461,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5424,6 +5490,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'same-name',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5439,6 +5506,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'same-name',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5461,7 +5529,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5471,7 +5539,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5488,6 +5556,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5503,6 +5572,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5526,7 +5596,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5536,7 +5606,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5573,6 +5643,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name: 'my-function',
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           };
@@ -5687,6 +5758,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name: 'my-function',
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           };
@@ -5758,6 +5830,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name,
                 function_id: idByName[name],
+                invoke_url: `https://${idByName[name]}.functions.test.run/`,
                 cache_ttl_seconds: 300,
               }),
           });
@@ -5854,6 +5927,7 @@ describe('VolcanoAuth', () => {
             json: () =>
               Promise.resolve({
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           });

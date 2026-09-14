@@ -4898,6 +4898,12 @@ components:
           type: string
           format: uuid
           description: Canonical function ID used for invocation routing
+        invoke_url:
+          type: string
+          description: >-
+            Canonical endpoint URL for invoking this function (always HTTPS).
+            Clients must use this value rather than deriving a host from the
+            API URL; the two do not share a domain.
         cache_ttl_seconds:
           type: integer
           minimum: 1
@@ -4905,6 +4911,7 @@ components:
       required:
         - name
         - function_id
+        - invoke_url
         - cache_ttl_seconds
     ScheduleRequest:
       type: object

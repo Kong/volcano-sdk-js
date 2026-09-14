@@ -534,36 +534,27 @@ function sanitizeFunctionIdentifierForHost(identifier) {
   return trimmed;
 }
 
-function resolveFunctionInvocationBase(apiUrl) {
+// Functions answer on their own domain, unrelated to the API's, so the
+// invocation URL can only come from /functions/resolve. The one case the SDK
+// still decides locally is a client pointed at localhost or an IP: there is no
+// wildcard DNS to reach, and invoking through one triggers browser preflight
+// redirects, so those clients invoke via the API path instead.
+function isLocalApiUrl(apiUrl) {
   try {
-    const parsed = new URL(apiUrl);
-    const hostname = parsed.hostname.toLowerCase();
+    const hostname = new URL(apiUrl).hostname.toLowerCase();
+    return hostname === 'localhost' || isIPAddress(hostname);
+  } catch {
+    return false;
+  }
+}
 
-    // Default mapping:
-    // api.volcano.dev -> functions.volcano.dev
-    // api.staging.volcano.dev -> functions.staging.volcano.dev
-    if (hostname === 'localhost' || isIPAddress(hostname)) {
-      return {
-        protocol: parsed.protocol,
-        port: parsed.port,
-        domain: 'functions.local.volcano.dev',
-      };
-    }
-
-    if (!hostname.startsWith('api.')) {
-      return null;
-    }
-
-    const suffix = hostname.slice(4);
-    if (!suffix || isIPAddress(suffix)) {
-      return null;
-    }
-
-    return {
-      protocol: parsed.protocol,
-      port: parsed.port,
-      domain: `functions.${suffix}`,
-    };
+function validInvokeUrl(value) {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null;
   } catch {
     return null;
   }
@@ -871,7 +862,7 @@ class VolcanoAuth {
     }
 
     this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
-    this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
+    this.functionInvocationIsLocal = isLocalApiUrl(this.apiUrl);
     this.anonKey = config.anonKey;
     this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
     this._currentDatabaseName = null;
@@ -1167,7 +1158,7 @@ class VolcanoAuth {
     return fetchWithAuthRetry(this, url, options);
   }
 
-  _getFunctionInvokeUrl(functionIdentifier) {
+  _getFunctionInvokeUrl(functionIdentifier, resolvedInvokeUrl) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionIdentifier);
     if (!hostLabel) {
       throw new Error(
@@ -1175,23 +1166,15 @@ class VolcanoAuth {
       );
     }
 
-    if (!this.functionInvocationBase) {
-      throw new Error(
-        'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
-      );
-    }
-
-    // Local mode fallback (Option A):
-    // resolve function by name, then invoke directly via API path to avoid
-    // browser preflight redirects on local wildcard DNS hosts.
-    if (this.functionInvocationBase.domain === 'functions.local.volcano.dev') {
+    if (this.functionInvocationIsLocal) {
       return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
     }
 
-    const portSegment = this.functionInvocationBase.port
-      ? `:${this.functionInvocationBase.port}`
-      : '';
-    return `${this.functionInvocationBase.protocol}//${hostLabel}.${this.functionInvocationBase.domain}${portSegment}/`;
+    const invokeUrl = validInvokeUrl(resolvedInvokeUrl);
+    if (!invokeUrl) {
+      throw new Error('Resolve response missing valid invoke_url');
+    }
+    return invokeUrl;
   }
 
   _functionResolveCacheKey(functionName, token, useAnonKey) {
@@ -1231,7 +1214,7 @@ class VolcanoAuth {
       if (cached.error) {
         throw new Error(cached.error);
       }
-      return { functionId: cached.functionId, token };
+      return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
     if (cached) {
       this._functionResolveState.cache.delete(cacheKey);
@@ -1278,13 +1261,21 @@ class VolcanoAuth {
         }
         const ttlSeconds = ttlRaw;
 
+        const resolvedInvokeUrl = result.data && result.data.invoke_url;
+
         this._functionResolveState.cache.set(cacheKey, {
           functionId: resolvedId,
+          invokeUrl: resolvedInvokeUrl,
           error: null,
           expiresAt: Date.now() + ttlSeconds * 1000,
         });
         pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        return { functionId: resolvedId, error: null, status: result.status };
+        return {
+          functionId: resolvedId,
+          invokeUrl: resolvedInvokeUrl,
+          error: null,
+          status: result.status,
+        };
       })();
 
       this._functionResolveState.inFlight.set(cacheKey, pending);
@@ -1331,7 +1322,7 @@ class VolcanoAuth {
         throw outcome.error;
       }
 
-      return { functionId: outcome.functionId, token };
+      return { functionId: outcome.functionId, invokeUrl: outcome.invokeUrl, token };
     } finally {
       if (ownsPending && this._functionResolveState.inFlight.get(cacheKey) === pending) {
         this._functionResolveState.inFlight.delete(cacheKey);
@@ -2219,19 +2210,9 @@ class VolcanoAuth {
     const useAnonKey = !operationContext.accessToken;
     let resolutionContext = operationContext;
     let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
-    if (!this.functionInvocationBase) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: new Error(
-          'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
-        ),
-      };
-    }
 
     let resolvedFunctionId;
+    let resolvedInvokeUrl;
     try {
       const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
         authContext: resolutionContext,
@@ -2239,6 +2220,7 @@ class VolcanoAuth {
         useAnonKey,
       });
       resolvedFunctionId = resolution.functionId;
+      resolvedInvokeUrl = resolution.invokeUrl;
       resolutionToken = resolution.token;
     } catch (error) {
       return {
@@ -2252,7 +2234,7 @@ class VolcanoAuth {
 
     let invokeUrl;
     try {
-      invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
+      invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId, resolvedInvokeUrl);
     } catch (error) {
       return {
         data: null,
@@ -2384,7 +2366,8 @@ class VolcanoAuth {
           useAnonKey,
         });
         resolvedFunctionId = resolution.functionId;
-        invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
+        resolvedInvokeUrl = resolution.invokeUrl;
+        invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId, resolvedInvokeUrl);
         invocationContext = this._captureAuthContext();
         if (!this._isAuthContextCurrent(operationContext)) {
           return authSessionChangedResult();
