@@ -224,6 +224,7 @@ import type {
   RefreshOAuthProviderToken200,
   RenderAuthPagePreviewParams,
   RenderDefaultManagedAuthPageParams,
+  ReplaceSharedVariablesBody,
   ResetDatabasePassword200,
   ResolveFunctionForInvocationParams,
   ResolveFunctionResponse,
@@ -1892,6 +1893,90 @@ export const getProjectUsage = async (id: string, options?: Parameters<typeof vo
 
 
 
+export type replaceSharedVariablesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type replaceSharedVariablesResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type replaceSharedVariablesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type replaceSharedVariablesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type replaceSharedVariablesResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type replaceSharedVariablesResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type replaceSharedVariablesResponse500 = {
+  data: void
+  status: 500
+}
+
+export type replaceSharedVariablesResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type replaceSharedVariablesResponseSuccess = (replaceSharedVariablesResponse204) & {
+  headers: Headers;
+};
+export type replaceSharedVariablesResponseError = (replaceSharedVariablesResponse400 | replaceSharedVariablesResponse401 | replaceSharedVariablesResponse404 | replaceSharedVariablesResponse409 | replaceSharedVariablesResponse413 | replaceSharedVariablesResponse500 | replaceSharedVariablesResponse503) & {
+  headers: Headers;
+};
+
+export type replaceSharedVariablesResponse = (replaceSharedVariablesResponseSuccess | replaceSharedVariablesResponseError)
+
+export const getReplaceSharedVariablesUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/shared-variables`
+}
+
+/**
+ * Atomically replaces the complete shared function-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * function environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored as non-shared variables.
+ * @summary Replace shared variable names
+ */
+export const replaceSharedVariables = async (id: string,
+    replaceSharedVariablesBody: ReplaceSharedVariablesBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<replaceSharedVariablesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<replaceSharedVariablesResponse>(getReplaceSharedVariablesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replaceSharedVariablesBody)
+  }
+);}
+
+
+
 export type getProjectConfigResponse200ApplicationJson = {
   data: ProjectConfig
   status: 200
@@ -1912,10 +1997,15 @@ export type getProjectConfigResponse404 = {
   status: 404
 }
 
+export type getProjectConfigResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type getProjectConfigResponseSuccess = (getProjectConfigResponse200ApplicationJson | getProjectConfigResponse200ApplicationYaml) & {
   headers: Headers;
 };
-export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404) & {
+export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404 | getProjectConfigResponse413) & {
   headers: Headers;
 };
 
@@ -1943,8 +2033,8 @@ export const getGetProjectConfigUrl = (id: string,
  * volcano-config.yaml rendering with `Accept: application/yaml` or
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
- * Write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; the YAML rendering adds a header comment
+ * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+ * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -1992,10 +2082,15 @@ export type applyProjectConfigResponse422 = {
   status: 422
 }
 
+export type applyProjectConfigResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type applyProjectConfigResponseSuccess = (applyProjectConfigResponse200) & {
   headers: Headers;
 };
-export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422) & {
+export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422 | applyProjectConfigResponse503) & {
   headers: Headers;
 };
 
@@ -4716,9 +4811,10 @@ export const getDeleteDurableFunctionUrl = (id: string,
 
 /**
  * Accepted for asynchronous teardown; the work continues after the
- * response. Executions still running do not survive the function. History
- * already retained is governed by the function's `retention_days`, which
- * this does not shorten.
+ * response. The function's executions go with it: history stops being
+ * readable whatever `retention_days` had left, and the executions still
+ * running stop counting against the project's concurrency cap. Stop an
+ * execution first if you need it to end before the function does.
  * @summary Delete a durable function
  */
 export const deleteDurableFunction = async (id: string,
@@ -5496,7 +5592,7 @@ export const getCreateFrontendUrl = (id: string,) => {
  * 22.x or 24.x. The Node.js runtime is inferred from
  * `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
  * The selected Node.js family must also satisfy the installed Next.js package's
- * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
+ * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
  * Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
  * does not apply its own source archive size limit. After the final container images are
  * built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -6188,10 +6284,15 @@ export type createVariableResponse400 = {
   status: 400
 }
 
+export type createVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type createVariableResponseSuccess = (createVariableResponse201) & {
   headers: Headers;
 };
-export type createVariableResponseError = (createVariableResponse400) & {
+export type createVariableResponseError = (createVariableResponse400 | createVariableResponse503) & {
   headers: Headers;
 };
 
@@ -8562,6 +8663,8 @@ export const getListDatabaseRegionsUrl = () => {
 
 /**
  * Returns the regions enabled for database provisioning in this platform environment.
+ * These are the same regions offered for function deployment, and the only values
+ * the `region` field of a database accepts.
  * This is a public endpoint that doesn't require authentication.
  * @summary List platform-supported regions for database provisioning
  */
@@ -8750,10 +8853,15 @@ export type updateVariableResponse404 = {
   status: 404
 }
 
+export type updateVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type updateVariableResponseSuccess = (updateVariableResponse200) & {
   headers: Headers;
 };
-export type updateVariableResponseError = (updateVariableResponse404) & {
+export type updateVariableResponseError = (updateVariableResponse404 | updateVariableResponse503) & {
   headers: Headers;
 };
 
@@ -13063,10 +13171,15 @@ export type callOAuthProviderAPIResponse500 = {
   status: 500
 }
 
+export type callOAuthProviderAPIResponse502 = {
+  data: Error
+  status: 502
+}
+
 export type callOAuthProviderAPIResponseSuccess = (callOAuthProviderAPIResponse200) & {
   headers: Headers;
 };
-export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse404 | callOAuthProviderAPIResponse500) & {
+export type callOAuthProviderAPIResponseError = (callOAuthProviderAPIResponse400 | callOAuthProviderAPIResponse401 | callOAuthProviderAPIResponse404 | callOAuthProviderAPIResponse500 | callOAuthProviderAPIResponse502) & {
   headers: Headers;
 };
 
@@ -13096,6 +13209,12 @@ export const getCallOAuthProviderAPIUrl = (provider: 'google' | 'github' | 'micr
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
+ * An empty provider body is represented as `data: null`; the envelope
+ * preserves the provider's HTTP status in `status_code`, including errors.
+ * Provider response bodies are limited to 8 MiB after decompression.
+ * Transport failures, invalid JSON (including invalid UTF-8), and oversized
+ * bodies return `502`. Provider redirects to another origin are blocked and
+ * return `400`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider: 'google' | 'github' | 'microsoft' | 'apple',

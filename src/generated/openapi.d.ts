@@ -439,6 +439,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/shared-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace shared variable names
+         * @description Atomically replaces the complete shared function-variable list without
+         *     changing values. Names must already exist. Validates final affected
+         *     function environments before membership or propagation side effects.
+         *     An empty list clears membership. Omitted names remain stored as non-shared variables.
+         */
+        put: operations["replaceSharedVariables"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/config": {
         parameters: {
             query?: never;
@@ -453,8 +476,8 @@ export interface paths {
          *     volcano-config.yaml rendering with `Accept: application/yaml` or
          *     `?format=yaml`; the YAML is returned verbatim as the raw response body
          *     (`Content-Type: application/yaml`) and is meant to be saved as-is.
-         *     Write-only secrets (SMTP password, OAuth client secrets, TLS material)
-         *     are omitted from the export; the YAML rendering adds a header comment
+         *     Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+         *     are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
          *     describing how to set them via CLI environment interpolation.
          */
         get: operations["getProjectConfig"];
@@ -1264,9 +1287,10 @@ export interface paths {
         /**
          * Delete a durable function
          * @description Accepted for asynchronous teardown; the work continues after the
-         *     response. Executions still running do not survive the function. History
-         *     already retained is governed by the function's `retention_days`, which
-         *     this does not shorten.
+         *     response. The function's executions go with it: history stops being
+         *     readable whatever `retention_days` had left, and the executions still
+         *     running stop counting against the project's concurrency cap. Stop an
+         *     execution first if you need it to end before the function does.
          */
         delete: operations["deleteDurableFunction"];
         options?: never;
@@ -1473,7 +1497,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -2356,6 +2380,8 @@ export interface paths {
         /**
          * List platform-supported regions for database provisioning
          * @description Returns the regions enabled for database provisioning in this platform environment.
+         *     These are the same regions offered for function deployment, and the only values
+         *     the `region` field of a database accepts.
          *     This is a public endpoint that doesn't require authentication.
          */
         get: operations["listDatabaseRegions"];
@@ -3872,6 +3898,12 @@ export interface paths {
          *     - Microsoft Graph profile: `/me`
          *
          *     The response wraps the provider's raw JSON value with request metadata.
+         *     An empty provider body is represented as `data: null`; the envelope
+         *     preserves the provider's HTTP status in `status_code`, including errors.
+         *     Provider response bodies are limited to 8 MiB after decompression.
+         *     Transport failures, invalid JSON (including invalid UTF-8), and oversized
+         *     bodies return `502`. Provider redirects to another origin are blocked and
+         *     return `400`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -5112,11 +5144,13 @@ export interface components {
              */
             name: string;
             /**
-             * @description Region for database hosting
+             * @description Region for database hosting. The accepted values are the regions this
+             *     environment runs in, so read them from `GET /databases/regions` rather
+             *     than hardcoding a list. A region the environment does not offer is
+             *     rejected with 400.
              * @example aws-us-east-1
-             * @enum {string}
              */
-            region: "aws-us-east-1" | "aws-us-east-2" | "aws-us-west-2" | "aws-eu-central-1" | "aws-eu-west-2" | "aws-ap-southeast-1" | "aws-ap-southeast-2" | "aws-sa-east-1";
+            region: string;
             /**
              * @description PostgreSQL major version
              * @example 16
@@ -5302,6 +5336,8 @@ export interface components {
             expires_at?: string;
         };
         CreateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -6523,16 +6559,26 @@ export interface components {
          * @description Execution limits the function was created with, derived from the
          *     project's plan. Fixed for the life of the function: changing them means
          *     creating a new one.
+         *
+         *     The memory the function runs at, and the timeout on one attempt within
+         *     an execution, also come from the plan but are not reported here: they
+         *     are applied to the deployed function rather than recorded on it. Both
+         *     are published per plan in the plans and limits guide.
          */
         DurableFunctionConfig: {
             /**
              * Format: int64
-             * @description How long a single execution may run before it is timed out.
+             * @description How long a whole execution may run, including time suspended in a
+             *     wait. This is not a limit on one attempt: an execution outlives any
+             *     single attempt by checkpointing and resuming, and the per-attempt
+             *     timeout is the plan's own, smaller number.
              */
             execution_timeout_seconds: number;
             /**
              * Format: int64
-             * @description How long a finished execution's result and history are retained.
+             * @description How long a finished execution's result and history are retained, for
+             *     as long as the function exists. Deleting the function, or its
+             *     project, ends retention early and takes the history with it.
              */
             retention_days: number;
         };
@@ -6582,10 +6628,18 @@ export interface components {
          * @description Lifecycle state of an execution. `pending` covers the window between the
          *     platform reserving the execution name and the function accepting the
          *     start, and has no counterpart once the execution is under way.
-         *     `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
+         *     `succeeded`, `failed`, `timed_out`, `stopped` and `unknown` are
+         *     terminal.
+         *
+         *     `unknown` means the platform lost track of the execution's outcome: it
+         *     was never seen to finish and is no longer reported, so no result or
+         *     error can be given for it. It is terminal because nothing can settle it
+         *     later, and it is rare — treat it as an outcome to retry under a new
+         *     name rather than a state to wait on. `completed_at` on an `unknown`
+         *     execution is when the platform gave up, not when the work ended.
          * @enum {string}
          */
-        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped";
+        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped" | "unknown";
         /** @description Why a failed or timed-out execution ended. */
         DurableExecutionError: {
             type?: string;
@@ -6916,10 +6970,19 @@ export interface components {
         MetricUsageData: {
             /**
              * @description Metric name (for example, "Function & Frontend Invocations", "Frontend Requests",
-             *     "CodeBuild Build Seconds", "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
+             *     "Durable Executions", "Durable Operations", "Durable Compute (MB-Seconds)",
+             *     "CodeBuild Build Seconds",
+             *     "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
              *     "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
              *     reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
-             *     is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
+             *     is not billed separately. The three durable metrics are
+             *     counted separately from "Function & Frontend Invocations", which covers standard
+             *     invocations only. Operations and compute are counted when an execution finishes,
+             *     so they appear in the window the execution completed in rather than the one it
+             *     started in. "Durable Compute (MB-Seconds)" reports the memory the execution ran
+             *     at times the time it spent running, in megabyte-seconds; the allowance for it is
+             *     published in gigabyte-seconds, which is 1024 of these.
+             *     "Database Storage (Bytes)" is a current observed gauge,
              *     not a cumulative counter. It is the sum of the latest samples exposed as
              *     `storage_bytes` by the project's database list, so it includes what each
              *     database's branches and backups hold, and it inherits that field's lag
@@ -7269,6 +7332,8 @@ export interface components {
             version: 1;
             project?: components["schemas"]["ProjectConfigProject"];
             databases?: components["schemas"]["ProjectConfigDatabase"][];
+            /** @description Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it. */
+            shared_variables?: string[];
             /** @description Fully synced when declared - variables absent from this list are deleted. */
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
@@ -7552,7 +7617,7 @@ export interface components {
             public?: boolean;
             /**
              * @description Which project variables this function receives. `all` (the default)
-             *     gives it every project variable. `scoped` gives it only the variables
+             *     gives it the project variables marked `shared: true`. `scoped` gives it only the variables
              *     it selects: every name declared in `variables`, plus the names
              *     Volcano detects in its source that the project defines.
              * @enum {string}
@@ -7669,6 +7734,8 @@ export interface components {
             errors: components["schemas"]["ProjectConfigValidationError"][];
         };
         ProjectConfigVariable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -8413,6 +8480,8 @@ export interface components {
             allowed_mime_types?: string[];
         };
         UpdateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             value: string;
         };
         /** @description Information about an uploaded part */
@@ -8486,6 +8555,8 @@ export interface components {
             value: number;
         };
         Variable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -10502,6 +10573,94 @@ export interface operations {
             };
         };
     };
+    replaceSharedVariables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    shared_variables: string[];
+                    /** @description When present, replace only if the current complete shared list matches this list. */
+                    expected_shared_variables?: string[];
+                    /** @description SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_shared_variables for a compact conditional replacement. */
+                    expected_shared_variables_digest?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Shared list replaced and affected function synchronization started. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid names or final function environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared list changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,194,304 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Persistence or synchronization failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getProjectConfig: {
         parameters: {
             query?: {
@@ -10542,6 +10701,15 @@ export interface operations {
             };
             /** @description Project not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Canonical YAML export exceeds 4,194,304 bytes */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10626,6 +10794,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectConfigValidationErrorResponse"];
+                };
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -11943,7 +12120,7 @@ export interface operations {
                     /** @description JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
                     openapi_spec?: string;
                     /**
-                     * @description Which project variables this function receives. `all` (the default) gives it every project variable; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @description Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
                      * @enum {string}
                      */
                     variable_scope?: "all" | "scoped";
@@ -12341,10 +12518,11 @@ export interface operations {
             /**
              * @description The project has too many executions in flight for its plan, the
              *     function invocation rate limit was exceeded, the project is over
-             *     its bandwidth cap, or the account is out of its billing-cycle
-             *     durable execution or durable operations allowance. An operations
-             *     refusal never interrupts an execution already running: it declines
-             *     the next start.
+             *     its bandwidth cap, or the account is out of one of its
+             *     billing-cycle durable allowances: executions, operations, or
+             *     compute. Operations and compute are counted once an execution
+             *     finishes, so a refusal on either never interrupts an execution
+             *     already running — it declines the next start.
              */
             429: {
                 headers: {
@@ -13717,9 +13895,9 @@ export interface operations {
             };
             /**
              * @description Too many executions already in flight for this project, or the
-             *     account is out of its billing-cycle durable execution or durable
-             *     operations allowance. An owner-started execution is metered exactly
-             *     like an application-started one.
+             *     account is out of one of its billing-cycle durable allowances:
+             *     executions, operations, or compute. An owner-started execution is
+             *     metered exactly like an application-started one.
              */
             429: {
                 headers: {
@@ -14810,6 +14988,15 @@ export interface operations {
             };
             /** @description Bad request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17033,8 +17220,8 @@ export interface operations {
                          */
                         id?: string;
                         /**
-                         * @description Human-readable region name
-                         * @example AWS US East 1 (N. Virginia)
+                         * @description Human-readable region location
+                         * @example US East (N. Virginia)
                          */
                         name?: string;
                     }[];
@@ -17180,6 +17367,15 @@ export interface operations {
             };
             /** @description Variable not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20837,17 +21033,15 @@ export interface operations {
                         provider: "google" | "github" | "microsoft" | "apple";
                         endpoint: string;
                         status_code: number;
-                        /** @description The provider's JSON response body. */
-                        data: {
-                            [key: string]: unknown;
-                        } | null;
+                        /** @description Raw provider JSON value, or null when the provider returns no body */
+                        data: unknown;
                     };
                 };
             };
             /**
              * @description Invalid request (for example: missing `endpoint`, an `endpoint` that is
-             *     not a relative path, or an unsupported HTTP method), no stored token for
-             *     this provider, or the call to the provider failed.
+             *     not a relative path, or an unsupported HTTP method), or a provider
+             *     redirect to another origin.
              */
             400: {
                 headers: {
@@ -20866,7 +21060,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No configuration for this provider in the project */
+            /** @description OAuth provider configuration not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -20875,8 +21069,17 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The request to the provider could not be built, or its response was not a JSON object */
+            /** @description Failed to create the provider API request */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider transport failure, invalid JSON, or response body larger than 8 MiB */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

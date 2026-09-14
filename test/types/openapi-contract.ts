@@ -122,9 +122,11 @@ type OAuthResponseShape = {
   provider: 'google' | 'github' | 'microsoft' | 'apple';
   endpoint: string;
   status_code: number;
-  // Hosting decodes the provider's body into an object, so anything else it
-  // sends is a 500 rather than a scalar reaching the caller.
-  data: { [key: string]: unknown } | null;
+  // Whatever JSON value the provider sent, or null when it sent no body. Not
+  // narrowed to an object: hosting passes the decoded value through, so an
+  // endpoint that answers with an array or a scalar reaches the caller as one.
+  // A body hosting cannot decode is a 502 and never arrives here.
+  data: unknown;
 };
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 
@@ -132,7 +134,10 @@ type DurableExecutionShape = {
   id: string;
   function_id: string;
   name: string;
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped';
+  // `unknown` is a terminal status the platform writes itself, for an execution
+  // whose outcome it could not find out. Listed here because the handle a start
+  // returns can carry it on a later read.
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped' | 'unknown';
   region: string;
   created_at: string;
 };

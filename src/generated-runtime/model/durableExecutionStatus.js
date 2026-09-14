@@ -14,4 +14,5 @@ export const DurableExecutionStatus = {
     failed: 'failed',
     timed_out: 'timed_out',
     stopped: 'stopped',
+    unknown: 'unknown',
 };

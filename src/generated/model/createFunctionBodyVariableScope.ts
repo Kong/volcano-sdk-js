@@ -9,7 +9,7 @@
  */
 
 /**
- * Which project variables this function receives. `all` (the default) gives it every project variable; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+ * Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
  */
 export type CreateFunctionBodyVariableScope = typeof CreateFunctionBodyVariableScope[keyof typeof CreateFunctionBodyVariableScope];
 

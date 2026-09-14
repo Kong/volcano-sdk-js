@@ -12,7 +12,15 @@
  * Lifecycle state of an execution. `pending` covers the window between the
  * platform reserving the execution name and the function accepting the
  * start, and has no counterpart once the execution is under way.
- * `succeeded`, `failed`, `timed_out` and `stopped` are terminal.
+ * `succeeded`, `failed`, `timed_out`, `stopped` and `unknown` are
+ * terminal.
+ *
+ * `unknown` means the platform lost track of the execution's outcome: it
+ * was never seen to finish and is no longer reported, so no result or
+ * error can be given for it. It is terminal because nothing can settle it
+ * later, and it is rare — treat it as an outcome to retry under a new
+ * name rather than a state to wait on. `completed_at` on an `unknown`
+ * execution is when the platform gave up, not when the work ended.
  */
 export type DurableExecutionStatus = typeof DurableExecutionStatus[keyof typeof DurableExecutionStatus];
 
@@ -24,4 +32,5 @@ export const DurableExecutionStatus = {
   failed: 'failed',
   timed_out: 'timed_out',
   stopped: 'stopped',
+  unknown: 'unknown',
 } as const;

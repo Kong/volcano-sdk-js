@@ -30,7 +30,7 @@ export interface ProjectConfigFunction {
   public?: boolean;
   /**
      * Which project variables this function receives. `all` (the default)
-     * gives it every project variable. `scoped` gives it only the variables
+     * gives it the project variables marked `shared: true`. `scoped` gives it only the variables
      * it selects: every name declared in `variables`, plus the names
      * Volcano detects in its source that the project defines.
      */

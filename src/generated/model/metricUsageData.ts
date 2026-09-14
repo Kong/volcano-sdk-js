@@ -15,10 +15,19 @@ import type { UsageDataPoint } from './usageDataPoint';
 export interface MetricUsageData {
   /**
      * Metric name (for example, "Function & Frontend Invocations", "Frontend Requests",
-     * "CodeBuild Build Seconds", "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
+     * "Durable Executions", "Durable Operations", "Durable Compute (MB-Seconds)",
+     * "CodeBuild Build Seconds",
+     * "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
      * "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
      * reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
-     * is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
+     * is not billed separately. The three durable metrics are
+     * counted separately from "Function & Frontend Invocations", which covers standard
+     * invocations only. Operations and compute are counted when an execution finishes,
+     * so they appear in the window the execution completed in rather than the one it
+     * started in. "Durable Compute (MB-Seconds)" reports the memory the execution ran
+     * at times the time it spent running, in megabyte-seconds; the allowance for it is
+     * published in gigabyte-seconds, which is 1024 of these.
+     * "Database Storage (Bytes)" is a current observed gauge,
      * not a cumulative counter. It is the sum of the latest samples exposed as
      * `storage_bytes` by the project's database list, so it includes what each
      * database's branches and backups hold, and it inherits that field's lag

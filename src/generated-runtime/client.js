@@ -453,6 +453,33 @@ export const getProjectUsage = async (id, options) => {
         method: 'GET'
     });
 };
+export const getReplaceSharedVariablesUrl = (id) => {
+    return `/projects/${id}/shared-variables`;
+};
+/**
+ * Atomically replaces the complete shared function-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * function environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored as non-shared variables.
+ * @summary Replace shared variable names
+ */
+export const replaceSharedVariables = async (id, replaceSharedVariablesBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getReplaceSharedVariablesUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(replaceSharedVariablesBody)
+    });
+};
 export const getGetProjectConfigUrl = (id, params) => {
     const normalizedParams = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -469,8 +496,8 @@ export const getGetProjectConfigUrl = (id, params) => {
  * volcano-config.yaml rendering with `Accept: application/yaml` or
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
- * Write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; the YAML rendering adds a header comment
+ * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+ * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -1534,9 +1561,10 @@ export const getDeleteDurableFunctionUrl = (id, functionId) => {
 };
 /**
  * Accepted for asynchronous teardown; the work continues after the
- * response. Executions still running do not survive the function. History
- * already retained is governed by the function's `retention_days`, which
- * this does not shorten.
+ * response. The function's executions go with it: history stops being
+ * readable whatever `retention_days` had left, and the executions still
+ * running stop counting against the project's concurrency cap. Stop an
+ * execution first if you need it to end before the function does.
  * @summary Delete a durable function
  */
 export const deleteDurableFunction = async (id, functionId, options) => {
@@ -1802,7 +1830,7 @@ export const getCreateFrontendUrl = (id) => {
  * 22.x or 24.x. The Node.js runtime is inferred from
  * `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
  * The selected Node.js family must also satisfy the installed Next.js package's
- * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
+ * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
  * Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
  * does not apply its own source archive size limit. After the final container images are
  * built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -2832,6 +2860,8 @@ export const getListDatabaseRegionsUrl = () => {
 };
 /**
  * Returns the regions enabled for database provisioning in this platform environment.
+ * These are the same regions offered for function deployment, and the only values
+ * the `region` field of a database accepts.
  * This is a public endpoint that doesn't require authentication.
  * @summary List platform-supported regions for database provisioning
  */
@@ -4543,6 +4573,12 @@ export const getCallOAuthProviderAPIUrl = (provider) => {
  * - Microsoft Graph profile: `/me`
  *
  * The response wraps the provider's raw JSON value with request metadata.
+ * An empty provider body is represented as `data: null`; the envelope
+ * preserves the provider's HTTP status in `status_code`, including errors.
+ * Provider response bodies are limited to 8 MiB after decompression.
+ * Transport failures, invalid JSON (including invalid UTF-8), and oversized
+ * bodies return `502`. Provider redirects to another origin are blocked and
+ * return `400`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider, callOAuthProviderAPIBody, options) => {

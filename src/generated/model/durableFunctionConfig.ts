@@ -12,10 +12,24 @@
  * Execution limits the function was created with, derived from the
  * project's plan. Fixed for the life of the function: changing them means
  * creating a new one.
+ *
+ * The memory the function runs at, and the timeout on one attempt within
+ * an execution, also come from the plan but are not reported here: they
+ * are applied to the deployed function rather than recorded on it. Both
+ * are published per plan in the plans and limits guide.
  */
 export interface DurableFunctionConfig {
-  /** How long a single execution may run before it is timed out. */
+  /**
+     * How long a whole execution may run, including time suspended in a
+     * wait. This is not a limit on one attempt: an execution outlives any
+     * single attempt by checkpointing and resuming, and the per-attempt
+     * timeout is the plan's own, smaller number.
+     */
   execution_timeout_seconds: number;
-  /** How long a finished execution's result and history are retained. */
+  /**
+     * How long a finished execution's result and history are retained, for
+     * as long as the function exists. Deleting the function, or its
+     * project, ends retention early and takes the history with it.
+     */
   retention_days: number;
 }
