@@ -500,18 +500,6 @@ function sessionIdsEqual(left, right) {
   );
 }
 
-function isIPv4Address(hostname) {
-  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-}
-
-function isIPv6Address(hostname) {
-  return hostname.includes(':');
-}
-
-function isIPAddress(hostname) {
-  return isIPv4Address(hostname) || isIPv6Address(hostname);
-}
-
 function sanitizeFunctionIdentifierForHost(identifier) {
   if (!identifier || typeof identifier !== 'string') {
     return null;
@@ -532,20 +520,6 @@ function sanitizeFunctionIdentifierForHost(identifier) {
   }
 
   return trimmed;
-}
-
-// Functions answer on their own domain, unrelated to the API's, so the
-// invocation URL can only come from /functions/resolve. The one case the SDK
-// still decides locally is a client pointed at localhost or an IP: there is no
-// wildcard DNS to reach, and invoking through one triggers browser preflight
-// redirects, so those clients invoke via the API path instead.
-function isLocalApiUrl(apiUrl) {
-  try {
-    const hostname = new URL(apiUrl).hostname.toLowerCase();
-    return hostname === 'localhost' || isIPAddress(hostname);
-  } catch {
-    return false;
-  }
 }
 
 function validInvokeUrl(value) {
@@ -862,7 +836,6 @@ class VolcanoAuth {
     }
 
     this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
-    this.functionInvocationIsLocal = isLocalApiUrl(this.apiUrl);
     this.anonKey = config.anonKey;
     this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
     this._currentDatabaseName = null;
@@ -1166,13 +1139,13 @@ class VolcanoAuth {
       );
     }
 
-    if (this.functionInvocationIsLocal) {
-      return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
-    }
-
+    // Functions answer on their own domain, unrelated to the API's, so only
+    // /functions/resolve can name the endpoint. A deployment serving no public
+    // invocation domain, as in local development, omits it; the API invoke
+    // path reaches the function there.
     const invokeUrl = validInvokeUrl(resolvedInvokeUrl);
     if (!invokeUrl) {
-      throw new Error('Resolve response missing valid invoke_url');
+      return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
     }
     return invokeUrl;
   }
@@ -2350,9 +2323,10 @@ class VolcanoAuth {
     let result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing. (invokeOnce
-    // returns no `ok` field, so gate on status alone.)
-    if (result.status === 404) {
+    // On a platform 404, invalidate and resolve once more before failing. A
+    // function that answers 404 itself carries the version header and must be
+    // returned as-is: invoking twice would run the caller's side effects twice.
+    if (result.status === 404 && !result.version) {
       if (!this._isAuthContextCurrent(operationContext)) {
         return authSessionChangedResult();
       }

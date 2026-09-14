@@ -4817,7 +4817,7 @@ describe('VolcanoAuth', () => {
       );
     });
 
-    it('should fail invoke when the resolve response omits invoke_url', async () => {
+    it('should invoke through the API path when the resolve response omits invoke_url', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
       global.fetch.mockResolvedValueOnce({
@@ -4830,15 +4830,24 @@ describe('VolcanoAuth', () => {
             cache_ttl_seconds: 300,
           }),
       });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
 
       const { error } = await volcano.functions.invoke('my-function', {});
 
-      expect(error).toBeDefined();
-      expect(error.message).toContain('invoke_url');
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
 
-    it('should use direct invoke path when apiUrl points to localhost', async () => {
+    it('should use direct invoke path on localhost, where resolve omits invoke_url', async () => {
       const localVolcano = new VolcanoAuth({
         apiUrl: 'http://localhost:8000',
         anonKey: 'ak-test-anon-key',
@@ -4852,7 +4861,6 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
-            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4887,7 +4895,6 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'notes-summary',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         });
@@ -5217,6 +5224,37 @@ describe('VolcanoAuth', () => {
         'https://api.test.com/functions/resolve?name=my-function',
         expect.objectContaining({ method: 'GET' }),
       );
+    });
+
+    it('should return a function-owned 404 without invoking twice', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          headers: { get: (name) => (name.toLowerCase() === 'x-volcano-version' ? 'v1' : null) },
+          json: () => Promise.resolve({ error: 'no such route' }),
+        });
+
+      const { status, version, error } = await volcano.functions.invoke('my-function', {});
+
+      expect(error).toBeNull();
+      expect(status).toBe(404);
+      expect(version).toBe('v1');
+      // Resolve plus one invocation: a retry would run the caller's function twice.
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should invalidate stale function ID mapping on invoke 404 and retry with fresh resolve', async () => {
