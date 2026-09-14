@@ -3550,7 +3550,8 @@ export const getInvokeFunctionUrl = (functionId: string,) => {
  * - This operation is the authenticated direct RPC endpoint and always uses the
  *   POST `{payload: ...}` contract, including for functions whose DNS ingress is
  *   configured in HTTP mode.
- * - The geo-routed DNS ingress is `https://{functionId}.functions.<domain>/`.
+ * - The geo-routed DNS ingress is the function's `invoke_url`. It is on a
+ *   different domain from this API, so it cannot be derived from the API host.
  * - RPC-mode DNS ingress accepts POST at `/`. HTTP-mode DNS ingress accepts GET,
  *   HEAD, POST, PUT, PATCH, and DELETE at `/` and nested paths.
  * - Direct and RPC-mode CORS preflight advertises `POST, OPTIONS`. HTTP-mode DNS
@@ -3633,7 +3634,9 @@ export const getResolveFunctionForInvocationUrl = (params: ResolveFunctionForInv
  *
  * SDKs use this endpoint internally to invoke by function name while routing by function ID.
  * Invoke the returned `invoke_url` as-is. It does not share a domain with the API, so a host
- * built from the API URL will not reach the function.
+ * built from the API URL will not reach the function. When the deployment serves no public
+ * invocation domain, as in local development, `invoke_url` is omitted and callers invoke
+ * through `POST /functions/{functionId}/invoke`.
  *
  * **With Service Key**:
  * - Allowed
@@ -7977,7 +7980,9 @@ export const getAuthSigninUrl = () => {
  * Set `session_mode` to `cookie` to request HttpOnly refresh-token
  * storage. Cookie mode is honored only for an exact, credentialed CORS
  * origin on the same schemeful site as this API. Otherwise the response
- * retains the refresh token in its body.
+ * retains the refresh token in its body. A frontend on its default
+ * Volcano URL is cross-site with this API and so always gets the body
+ * token.
  * @summary Sign in an auth user
  */
 export const authSignin = async (authSigninBody: AuthSigninBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<authSigninResponse> => {

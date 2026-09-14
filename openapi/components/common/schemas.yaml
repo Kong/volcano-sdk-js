@@ -2573,7 +2573,12 @@ components:
           type: string
         invoke_url:
           type: string
-          description: Canonical GeoDNS endpoint URL for invoking this function (always HTTPS)
+          description: >-
+            Canonical geo-routed HTTPS endpoint for invoking this function. Use
+            it as-is: it does not share a domain with the API, so a host derived
+            from the API URL will not reach the function. Empty when the
+            deployment serves no public invocation domain, as in local
+            development.
         deployed_regions:
           type: array
           items:
@@ -4901,9 +4906,11 @@ components:
         invoke_url:
           type: string
           description: >-
-            Canonical endpoint URL for invoking this function (always HTTPS).
-            Clients must use this value rather than deriving a host from the
-            API URL; the two do not share a domain.
+            Canonical HTTPS endpoint for invoking this function. Use it as-is:
+            it does not share a domain with the API, so a host derived from the
+            API URL will not reach the function. Omitted when the deployment
+            serves no public invocation domain, as in local development; invoke
+            through POST /functions/{functionId}/invoke instead.
         cache_ttl_seconds:
           type: integer
           minimum: 1
@@ -4911,7 +4918,6 @@ components:
       required:
         - name
         - function_id
-        - invoke_url
         - cache_ttl_seconds
     ScheduleRequest:
       type: object

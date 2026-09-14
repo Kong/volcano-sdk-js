@@ -17,8 +17,8 @@ export interface ResolveFunctionResponse {
   name: string;
   /** Canonical function ID used for invocation routing */
   function_id: string;
-  /** Canonical endpoint URL for invoking this function (always HTTPS). Clients must use this value rather than deriving a host from the API URL; the two do not share a domain. */
-  invoke_url: string;
+  /** Canonical HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development; invoke through POST /functions/{functionId}/invoke instead. */
+  invoke_url?: string;
   /**
      * Suggested SDK cache TTL for this name-to-ID mapping
      * @minimum 1
