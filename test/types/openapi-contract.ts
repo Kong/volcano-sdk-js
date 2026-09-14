@@ -54,6 +54,21 @@ type _UserMetadataAcceptsProperties = Assert<
 type _AppMetadataAcceptsProperties = Assert<{ role: string } extends AppMetadata ? true : false>;
 type _AuthUserBanCanBeNull = Assert<null extends AuthUser['banned_until'] ? true : false>;
 
+type ListProjectsQuery = NonNullable<OpenAPIOperations['listProjects']['parameters']['query']>;
+type _ListProjectsAcceptsMetadataExpansions = Assert<
+  Equal<NonNullable<ListProjectsQuery['include']>[number], 'git_connection' | 'health'>
+>;
+type Project = OpenAPIComponents['schemas']['Project'];
+type _ProjectGitConnectionUsesSummary = Assert<
+  Equal<
+    NonNullable<Project['git_connection']>,
+    OpenAPIComponents['schemas']['ProjectGitConnectionSummary']
+  >
+>;
+type _ProjectHealthUsesSummary = Assert<
+  Equal<NonNullable<Project['health']>, OpenAPIComponents['schemas']['ProjectHealthSummary']>
+>;
+
 type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
 type _DefaultedRequestFieldsStayOptional = Assert<
   { name: string } extends CreateProjectRequest ? true : false
