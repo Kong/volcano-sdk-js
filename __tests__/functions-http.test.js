@@ -28,14 +28,14 @@ async function startServer(respond) {
   const server = http.createServer((request, response) => {
     const chunks = [];
     request.on('data', (chunk) => chunks.push(chunk));
-    request.on('end', () => {
+    request.on('end', async () => {
       const body = Buffer.concat(chunks).toString();
       requests.push({
         target: request.url,
         body: body ? JSON.parse(body) : null,
         authorization: request.headers.authorization || null,
       });
-      const [status, payload] = respond(request.url);
+      const [status, payload] = await respond(request.url);
       const encoded = JSON.stringify(payload);
       response.writeHead(status, {
         'Content-Type': 'application/json',
@@ -53,10 +53,16 @@ async function startServer(respond) {
   };
 }
 
-function apiServer(resolvePayload, status = 200) {
-  return startServer((target) =>
-    target.startsWith('/functions/resolve') ? [status, resolvePayload] : [200, { ok: 'via-api' }],
-  );
+function apiServer(resolvePayload, { status = 200, resolveDelayMs = 0 } = {}) {
+  return startServer(async (target) => {
+    if (!target.startsWith('/functions/resolve')) {
+      return [200, { ok: 'via-api' }];
+    }
+    if (resolveDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
+    }
+    return [status, resolvePayload];
+  });
 }
 
 function client(apiUrl) {
@@ -125,7 +131,7 @@ describe('function invocation over HTTP', () => {
   });
 
   it('does not re-resolve an unknown name on every attempt', async () => {
-    const api = track(await apiServer({ error: 'function not found' }, 404));
+    const api = track(await apiServer({ error: 'function not found' }, { status: 404 }));
     const volcano = client(api.url);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -134,5 +140,54 @@ describe('function invocation over HTTP', () => {
     }
 
     expect(api.targets()).toEqual(['/functions/resolve?name=missing-function']);
+  });
+
+  it('shares one resolve across concurrent first invocations', async () => {
+    const functions = track(await startServer(() => [200, { ok: true }]));
+    const api = track(
+      await apiServer(
+        {
+          name: 'my-function',
+          function_id: FUNCTION_ID,
+          invoke_url: `${functions.url}/`,
+          cache_ttl_seconds: 300,
+        },
+        { resolveDelayMs: 100 },
+      ),
+    );
+    const volcano = client(api.url);
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => volcano.functions.invoke('my-function', {})),
+    );
+
+    expect(results.every((result) => result.error === null)).toBe(true);
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function']);
+    expect(functions.targets()).toHaveLength(8);
+  });
+
+  it('resolves a recreated function again after a platform 404', async () => {
+    let invoked = 0;
+    const api = track(
+      await startServer((target) => {
+        if (target.startsWith('/functions/resolve')) {
+          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
+        }
+        invoked += 1;
+        // The first invocation finds the cached identity gone.
+        return invoked === 1 ? [404, { error: 'function not found' }] : [200, { ok: true }];
+      }),
+    );
+
+    const { error, status } = await client(api.url).functions.invoke('my-function', {});
+
+    expect(error).toBeNull();
+    expect(status).toBe(200);
+    expect(api.targets()).toEqual([
+      '/functions/resolve?name=my-function',
+      `/functions/${FUNCTION_ID}/invoke`,
+      '/functions/resolve?name=my-function',
+      `/functions/${FUNCTION_ID}/invoke`,
+    ]);
   });
 });

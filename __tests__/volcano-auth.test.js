@@ -4847,6 +4847,39 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should refuse a plaintext invoke_url when the API is https', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'http://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
+      // Sending the bearer token in the clear would downgrade a credential the
+      // https API keeps encrypted, so the API path is used instead.
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
     it('should use direct invoke path on localhost, where resolve omits invoke_url', async () => {
       const localVolcano = new VolcanoAuth({
         apiUrl: 'http://localhost:8000',

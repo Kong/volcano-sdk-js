@@ -522,15 +522,32 @@ function sanitizeFunctionIdentifierForHost(identifier) {
   return trimmed;
 }
 
-function validInvokeUrl(value) {
+// The URL carries the caller's bearer token. Plaintext is accepted only when
+// the API itself is plaintext, so a resolve response cannot downgrade a
+// credential that is otherwise protected in transit.
+function validInvokeUrl(value, apiUrl) {
   if (!value || typeof value !== 'string') {
     return null;
   }
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null;
+    if (!parsed.hostname) {
+      return null;
+    }
+    if (parsed.protocol === 'https:') {
+      return parsed.href;
+    }
+    return parsed.protocol === 'http:' && isPlaintextUrl(apiUrl) ? parsed.href : null;
   } catch {
     return null;
+  }
+}
+
+function isPlaintextUrl(value) {
+  try {
+    return new URL(value).protocol === 'http:';
+  } catch {
+    return false;
   }
 }
 
@@ -1143,7 +1160,7 @@ class VolcanoAuth {
     // /functions/resolve can name the endpoint. A deployment serving no public
     // invocation domain, as in local development, omits it; the API invoke
     // path reaches the function there.
-    const invokeUrl = validInvokeUrl(resolvedInvokeUrl);
+    const invokeUrl = validInvokeUrl(resolvedInvokeUrl, this.apiUrl);
     if (!invokeUrl) {
       return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
     }
