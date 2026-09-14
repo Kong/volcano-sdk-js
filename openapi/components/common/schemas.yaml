@@ -4038,6 +4038,14 @@ components:
             param that changes on each upload. Absent when the project has no
             logo. The logo image is stored in the project's storage folder.
           example: "/projects/3fa85f64-5717-4562-b3fc-2c963f66afa6/logo?v=1718524800"
+        git_connection:
+          allOf:
+            - $ref: '#/components/schemas/ProjectGitConnectionSummary'
+          description: Present for connected projects when `git_connection` is requested through the list endpoint's `include` parameter.
+        health:
+          allOf:
+            - $ref: '#/components/schemas/ProjectHealthSummary'
+          description: Present when `health` is requested through the list endpoint's `include` parameter.
         created_at:
           type: string
           format: date-time
@@ -4052,6 +4060,38 @@ components:
         - selected_regions
         - created_at
         - updated_at
+    ProjectGitConnectionSummary:
+      type: object
+      properties:
+        repo_installation_id:
+          type: integer
+          format: int64
+        repo_id:
+          type: integer
+          format: int64
+        repo_full_name:
+          type: string
+        root_directory:
+          type: string
+        production_branch:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - repo_installation_id
+        - repo_id
+        - repo_full_name
+        - root_directory
+        - production_branch
+        - updated_at
+    ProjectHealthSummary:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/ProjectHealthStatus'
+      required:
+        - status
     ProjectConfig:
       type: object
       additionalProperties: false
