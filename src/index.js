@@ -85,6 +85,10 @@ const OAUTH_RESPONSE_QUERY_KEYS = new Set([
 ]);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
+// Present only once the platform has dispatched to the function. Its absence on
+// a 404 is what says the id we cached no longer names anything, as opposed to
+// the function itself answering 404.
+const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
@@ -500,18 +504,6 @@ function sessionIdsEqual(left, right) {
   );
 }
 
-function isIPv4Address(hostname) {
-  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-}
-
-function isIPv6Address(hostname) {
-  return hostname.includes(':');
-}
-
-function isIPAddress(hostname) {
-  return isIPv4Address(hostname) || isIPv6Address(hostname);
-}
-
 function sanitizeFunctionIdentifierForHost(identifier) {
   if (!identifier || typeof identifier !== 'string') {
     return null;
@@ -534,38 +526,32 @@ function sanitizeFunctionIdentifierForHost(identifier) {
   return trimmed;
 }
 
-function resolveFunctionInvocationBase(apiUrl) {
+// The URL carries the caller's bearer token. Plaintext is accepted only when
+// the API itself is plaintext, so a resolve response cannot downgrade a
+// credential that is otherwise protected in transit.
+function validInvokeUrl(value, apiUrl) {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
   try {
-    const parsed = new URL(apiUrl);
-    const hostname = parsed.hostname.toLowerCase();
-
-    // Default mapping:
-    // api.volcano.dev -> functions.volcano.dev
-    // api.staging.volcano.dev -> functions.staging.volcano.dev
-    if (hostname === 'localhost' || isIPAddress(hostname)) {
-      return {
-        protocol: parsed.protocol,
-        port: parsed.port,
-        domain: 'functions.local.volcano.dev',
-      };
-    }
-
-    if (!hostname.startsWith('api.')) {
+    const parsed = new URL(value);
+    if (!parsed.hostname) {
       return null;
     }
-
-    const suffix = hostname.slice(4);
-    if (!suffix || isIPAddress(suffix)) {
-      return null;
+    if (parsed.protocol === 'https:') {
+      return parsed.href;
     }
-
-    return {
-      protocol: parsed.protocol,
-      port: parsed.port,
-      domain: `functions.${suffix}`,
-    };
+    return parsed.protocol === 'http:' && isPlaintextUrl(apiUrl) ? parsed.href : null;
   } catch {
     return null;
+  }
+}
+
+function isPlaintextUrl(value) {
+  try {
+    return new URL(value).protocol === 'http:';
+  } catch {
+    return false;
   }
 }
 
@@ -871,7 +857,6 @@ class VolcanoAuth {
     }
 
     this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
-    this.functionInvocationBase = resolveFunctionInvocationBase(this.apiUrl);
     this.anonKey = config.anonKey;
     this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
     this._currentDatabaseName = null;
@@ -1167,7 +1152,7 @@ class VolcanoAuth {
     return fetchWithAuthRetry(this, url, options);
   }
 
-  _getFunctionInvokeUrl(functionIdentifier) {
+  _getFunctionInvokeUrl(functionIdentifier, resolvedInvokeUrl) {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionIdentifier);
     if (!hostLabel) {
       throw new Error(
@@ -1175,23 +1160,15 @@ class VolcanoAuth {
       );
     }
 
-    if (!this.functionInvocationBase) {
-      throw new Error(
-        'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
-      );
-    }
-
-    // Local mode fallback (Option A):
-    // resolve function by name, then invoke directly via API path to avoid
-    // browser preflight redirects on local wildcard DNS hosts.
-    if (this.functionInvocationBase.domain === 'functions.local.volcano.dev') {
+    // Functions answer on their own domain, unrelated to the API's, so only
+    // /functions/resolve can name the endpoint. A deployment serving no public
+    // invocation domain, as in local development, omits it; the API invoke
+    // path reaches the function there.
+    const invokeUrl = validInvokeUrl(resolvedInvokeUrl, this.apiUrl);
+    if (!invokeUrl) {
       return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
     }
-
-    const portSegment = this.functionInvocationBase.port
-      ? `:${this.functionInvocationBase.port}`
-      : '';
-    return `${this.functionInvocationBase.protocol}//${hostLabel}.${this.functionInvocationBase.domain}${portSegment}/`;
+    return invokeUrl;
   }
 
   _functionResolveCacheKey(functionName, token, useAnonKey) {
@@ -1231,7 +1208,7 @@ class VolcanoAuth {
       if (cached.error) {
         throw new Error(cached.error);
       }
-      return { functionId: cached.functionId, token };
+      return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
     if (cached) {
       this._functionResolveState.cache.delete(cacheKey);
@@ -1278,13 +1255,21 @@ class VolcanoAuth {
         }
         const ttlSeconds = ttlRaw;
 
+        const resolvedInvokeUrl = result.data && result.data.invoke_url;
+
         this._functionResolveState.cache.set(cacheKey, {
           functionId: resolvedId,
+          invokeUrl: resolvedInvokeUrl,
           error: null,
           expiresAt: Date.now() + ttlSeconds * 1000,
         });
         pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        return { functionId: resolvedId, error: null, status: result.status };
+        return {
+          functionId: resolvedId,
+          invokeUrl: resolvedInvokeUrl,
+          error: null,
+          status: result.status,
+        };
       })();
 
       this._functionResolveState.inFlight.set(cacheKey, pending);
@@ -1331,7 +1316,7 @@ class VolcanoAuth {
         throw outcome.error;
       }
 
-      return { functionId: outcome.functionId, token };
+      return { functionId: outcome.functionId, invokeUrl: outcome.invokeUrl, token };
     } finally {
       if (ownsPending && this._functionResolveState.inFlight.get(cacheKey) === pending) {
         this._functionResolveState.inFlight.delete(cacheKey);
@@ -2219,19 +2204,9 @@ class VolcanoAuth {
     const useAnonKey = !operationContext.accessToken;
     let resolutionContext = operationContext;
     let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
-    if (!this.functionInvocationBase) {
-      return {
-        data: null,
-        status: null,
-        headers: {},
-        version: null,
-        error: new Error(
-          'apiUrl must be api.<domain> (or localhost/IP for local mode) to use DNS function invocation',
-        ),
-      };
-    }
 
     let resolvedFunctionId;
+    let resolvedInvokeUrl;
     try {
       const resolution = await this._resolveFunctionIdByName(functionName.trim(), {
         authContext: resolutionContext,
@@ -2239,6 +2214,7 @@ class VolcanoAuth {
         useAnonKey,
       });
       resolvedFunctionId = resolution.functionId;
+      resolvedInvokeUrl = resolution.invokeUrl;
       resolutionToken = resolution.token;
     } catch (error) {
       return {
@@ -2252,7 +2228,7 @@ class VolcanoAuth {
 
     let invokeUrl;
     try {
-      invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
+      invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId, resolvedInvokeUrl);
     } catch (error) {
       return {
         data: null,
@@ -2263,7 +2239,12 @@ class VolcanoAuth {
       };
     }
 
+    // Read off the response rather than the returned headers object: a Headers
+    // instance that only supports get() cannot be enumerated into one, and the
+    // retry below must not turn on whether it could be.
+    let functionDispatched = false;
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
+      functionDispatched = false;
       if (!accessToken) {
         const error = new AuthSessionChangedError();
         return { data: null, status: error.status, headers: {}, version: null, error };
@@ -2287,6 +2268,7 @@ class VolcanoAuth {
         );
 
         const versionHeader = getHeaderValue(response, 'x-volcano-version');
+        functionDispatched = Boolean(getHeaderValue(response, FUNCTION_INVOKED_HEADER));
         if (response.status === 401 && allowRefresh && !versionHeader) {
           const refreshed = await this._refreshSessionForContext(context);
           if (AuthRefreshDiscardedError.is(refreshed.error)) {
@@ -2368,9 +2350,15 @@ class VolcanoAuth {
     let result = await invokeOnce(invokeUrl, !useAnonKey, invocationContext, token);
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
-    // On 404, invalidate and resolve once more before failing. (invokeOnce
-    // returns no `ok` field, so gate on status alone.)
-    if (result.status === 404) {
+    // On a platform 404, invalidate and resolve once more before failing. A
+    // function that answers 404 itself must be returned as-is: invoking twice
+    // would run the caller's side effects twice.
+    //
+    // The platform sets x-volcano-function-invoked only after dispatch, so its
+    // absence is what separates the two. x-volcano-version cannot: the server
+    // stamps it on every response, including errors raised before the function
+    // is reached, which would make this branch unreachable.
+    if (result.status === 404 && !functionDispatched) {
       if (!this._isAuthContextCurrent(operationContext)) {
         return authSessionChangedResult();
       }
@@ -2384,7 +2372,8 @@ class VolcanoAuth {
           useAnonKey,
         });
         resolvedFunctionId = resolution.functionId;
-        invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId);
+        resolvedInvokeUrl = resolution.invokeUrl;
+        invokeUrl = this._getFunctionInvokeUrl(resolvedFunctionId, resolvedInvokeUrl);
         invocationContext = this._captureAuthContext();
         if (!this._isAuthContextCurrent(operationContext)) {
           return authSessionChangedResult();
