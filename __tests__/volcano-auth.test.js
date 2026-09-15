@@ -5314,7 +5314,14 @@ describe('VolcanoAuth', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 404,
-          headers: { get: (name) => (name.toLowerCase() === 'x-volcano-version' ? 'v1' : null) },
+          // What the server sends once a function has run: the dispatch marker
+          // alongside the version stamp every response carries.
+          headers: {
+            get: (name) =>
+              ({ 'x-volcano-version': 'v1', 'x-volcano-function-invoked': 'true' })[
+                name.toLowerCase()
+              ] ?? null,
+          },
           json: () => Promise.resolve({ error: 'no such route' }),
         });
 
@@ -5345,6 +5352,10 @@ describe('VolcanoAuth', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 404,
+          // A platform 404 still carries the version stamp — every response
+          // does. Only the dispatch marker is missing, and keying the retry on
+          // the version header instead would never fire against a real server.
+          headers: { get: (name) => (name.toLowerCase() === 'x-volcano-version' ? 'v1' : null) },
           json: () => Promise.resolve({ error: 'function not found' }),
         })
         .mockResolvedValueOnce({

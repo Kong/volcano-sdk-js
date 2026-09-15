@@ -85,6 +85,10 @@ const OAUTH_RESPONSE_QUERY_KEYS = new Set([
 ]);
 const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
+// Present only once the platform has dispatched to the function. Its absence on
+// a 404 is what says the id we cached no longer names anything, as opposed to
+// the function itself answering 404.
+const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
@@ -2235,7 +2239,12 @@ class VolcanoAuth {
       };
     }
 
+    // Read off the response rather than the returned headers object: a Headers
+    // instance that only supports get() cannot be enumerated into one, and the
+    // retry below must not turn on whether it could be.
+    let functionDispatched = false;
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
+      functionDispatched = false;
       if (!accessToken) {
         const error = new AuthSessionChangedError();
         return { data: null, status: error.status, headers: {}, version: null, error };
@@ -2259,6 +2268,7 @@ class VolcanoAuth {
         );
 
         const versionHeader = getHeaderValue(response, 'x-volcano-version');
+        functionDispatched = Boolean(getHeaderValue(response, FUNCTION_INVOKED_HEADER));
         if (response.status === 401 && allowRefresh && !versionHeader) {
           const refreshed = await this._refreshSessionForContext(context);
           if (AuthRefreshDiscardedError.is(refreshed.error)) {
@@ -2341,9 +2351,14 @@ class VolcanoAuth {
 
     // Function can be deleted/recreated, making cached name->id mapping stale.
     // On a platform 404, invalidate and resolve once more before failing. A
-    // function that answers 404 itself carries the version header and must be
-    // returned as-is: invoking twice would run the caller's side effects twice.
-    if (result.status === 404 && !result.version) {
+    // function that answers 404 itself must be returned as-is: invoking twice
+    // would run the caller's side effects twice.
+    //
+    // The platform sets x-volcano-function-invoked only after dispatch, so its
+    // absence is what separates the two. x-volcano-version cannot: the server
+    // stamps it on every response, including errors raised before the function
+    // is reached, which would make this branch unreachable.
+    if (result.status === 404 && !functionDispatched) {
       if (!this._isAuthContextCurrent(operationContext)) {
         return authSessionChangedResult();
       }

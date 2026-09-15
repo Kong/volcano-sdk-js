@@ -35,11 +35,15 @@ async function startServer(respond) {
         body: body ? JSON.parse(body) : null,
         authorization: request.headers.authorization || null,
       });
-      const [status, payload] = await respond(request.url);
+      const [status, payload, extraHeaders] = await respond(request.url);
       const encoded = JSON.stringify(payload);
       response.writeHead(status, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(encoded),
+        // The server stamps this on every response, errors included, so a test
+        // that omits it would accept a client keying the retry off its absence.
+        'X-Volcano-Version': 'test-build',
+        ...extraHeaders,
       });
       response.end(encoded);
     });
@@ -174,8 +178,12 @@ describe('function invocation over HTTP', () => {
           return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
         }
         invoked += 1;
-        // The first invocation finds the cached identity gone.
-        return invoked === 1 ? [404, { error: 'function not found' }] : [200, { ok: true }];
+        // The first invocation finds the cached identity gone. The platform
+        // answers without the dispatch marker, which is the only thing telling
+        // this apart from the function itself returning 404.
+        return invoked === 1
+          ? [404, { error: 'function not found' }]
+          : [200, { ok: true }, { 'X-Volcano-Function-Invoked': 'true' }];
       }),
     );
 
@@ -186,6 +194,28 @@ describe('function invocation over HTTP', () => {
     expect(api.targets()).toEqual([
       '/functions/resolve?name=my-function',
       `/functions/${FUNCTION_ID}/invoke`,
+      '/functions/resolve?name=my-function',
+      `/functions/${FUNCTION_ID}/invoke`,
+    ]);
+  });
+
+  it('returns a function-authored 404 without invoking it twice', async () => {
+    const api = track(
+      await startServer((target) => {
+        if (target.startsWith('/functions/resolve')) {
+          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
+        }
+        // The function ran and chose 404. Retrying would repeat whatever it did
+        // on the way to deciding that.
+        return [404, { error: 'no such record' }, { 'X-Volcano-Function-Invoked': 'true' }];
+      }),
+    );
+
+    const { status, error } = await client(api.url).functions.invoke('my-function', {});
+
+    expect(status).toBe(404);
+    expect(error).toBeNull();
+    expect(api.targets()).toEqual([
       '/functions/resolve?name=my-function',
       `/functions/${FUNCTION_ID}/invoke`,
     ]);
