@@ -92,18 +92,22 @@ Installing `@volcano.dev/sdk` pulls in two packages, both for realtime:
 | [`centrifuge`](https://www.npmjs.com/package/centrifuge) | The realtime protocol client                                         |
 | [`ws`](https://www.npmjs.com/package/ws)                 | WebSocket transport outside the browser, loaded only when it is used |
 
-Authoring a [durable function](./docs/durable-functions.md) adds one more, in
-the function you deploy:
+Writing a [durable function](./docs/durable-functions.md) needs one more, and
+you do not install it: Volcano adds it when it builds a function deployed as
+durable.
 
-| Package                                                      | Why                                                                                                                                                            |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@volcano.dev/durable-runtime`](./packages/durable-runtime) | Checkpointing. A re-export of [`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js), which it installs on your behalf |
+| Package                                                                                        | Why                                             |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js) | Checkpointing, under `@volcano.dev/sdk/durable` |
 
-That one is an optional peer dependency, so nothing else installs it: a browser
-bundle and a standard function stay as small as they were. It is ~1.5 MB and
-brings an AWS Lambda client of its own, which is why it is not a base
-dependency. A function that depends on `@aws/durable-execution-sdk-js` directly
-also works — the SDK accepts either.
+The SDK declares it as an optional peer dependency, which is what lets the SDK
+resolve it in the deployed function without anything else installing it: a
+browser bundle and a standard function stay as small as they were. Its install
+closure is ~19 MB, which is why it belongs in durable functions rather than in
+everyone's `node_modules`.
+
+A function that declares it explicitly is left alone by the build, version
+included, which is the way to pin a specific runtime.
 
 ## Contributing
 

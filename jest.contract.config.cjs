@@ -1,7 +1,9 @@
 module.exports = {
   testEnvironment: '<rootDir>/__tests__/node-environment.cjs',
   testMatch: ['**/__tests__/contract/**/*.test.js'],
-  testTimeout: 30000,
+  // The durable scenarios poll a real execution to a terminal status, which the
+  // world bounds at 300s. Anything shorter here would cut that short.
+  testTimeout: 360000,
   reporters: [
     'default',
     [
