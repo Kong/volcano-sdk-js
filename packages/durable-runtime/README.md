@@ -19,7 +19,16 @@ exports.handler = durable(async (input, ctx) => {
 });
 ```
 
-The SDK does not depend on this package, so a browser bundle or a standard
-function never pulls it in. See the
+## What this is
+
+A re-export of
+[`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js),
+which is its only dependency and which it installs for you. Nothing is wrapped
+or renamed: this package exists so a durable function's dependencies name only
+Volcano, and so the runtime resolves under a strict `node_modules` layout, where
+`@volcano.dev/sdk` cannot reach a package it does not declare.
+
+`@volcano.dev/sdk` does not depend on this package, so a browser bundle or a
+standard function never pulls it in. See the
 [durable functions guide](https://github.com/Kong/volcano-sdk-js/blob/main/docs/durable-functions.md)
 for the full authoring API.

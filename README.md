@@ -83,6 +83,28 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 | [TypeScript](./docs/typescript.md)               | Type definitions                  |
 | [Error Handling](./docs/error-handling.md)       | Error patterns                    |
 
+## Dependencies
+
+Installing `@volcano.dev/sdk` pulls in two packages, both for realtime:
+
+| Package                                                  | Why                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`centrifuge`](https://www.npmjs.com/package/centrifuge) | The realtime protocol client                                         |
+| [`ws`](https://www.npmjs.com/package/ws)                 | WebSocket transport outside the browser, loaded only when it is used |
+
+Authoring a [durable function](./docs/durable-functions.md) adds one more, in
+the function you deploy:
+
+| Package                                                      | Why                                                                                                                                                            |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@volcano.dev/durable-runtime`](./packages/durable-runtime) | Checkpointing. A re-export of [`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js), which it installs on your behalf |
+
+That one is an optional peer dependency, so nothing else installs it: a browser
+bundle and a standard function stay as small as they were. It is ~1.5 MB and
+brings an AWS Lambda client of its own, which is why it is not a base
+dependency. A function that depends on `@aws/durable-execution-sdk-js` directly
+also works — the SDK accepts either.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for local workflows, package
