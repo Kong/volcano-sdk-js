@@ -72,6 +72,21 @@ components:
         type: string
         format: uuid
       description: Function ID
+    DurableFunctionId:
+      name: functionId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Durable function ID, or its name within the project
+    DurableExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Durable execution ID
     Limit:
       name: limit
       in: query

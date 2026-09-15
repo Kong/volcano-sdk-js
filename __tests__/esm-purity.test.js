@@ -22,8 +22,13 @@ const { execSync } = require('child_process');
 //     rollup/plugin/config change that injects impurity without touching a
 //     source file — the residual gap a source-only scan leaves).
 const ROOT = path.join(__dirname, '..');
-const SOURCES = ['src/index.js', 'src/realtime.js', 'src/next/middleware.js'];
-const ESM_BUILDS = ['dist/index.esm.mjs', 'dist/realtime.esm.mjs', 'dist/next/middleware.esm.mjs'];
+const SOURCES = ['src/index.js', 'src/realtime.js', 'src/durable.js', 'src/next/middleware.js'];
+const ESM_BUILDS = [
+  'dist/index.esm.mjs',
+  'dist/realtime.esm.mjs',
+  'dist/durable.esm.mjs',
+  'dist/next/middleware.esm.mjs',
+];
 
 const FORBIDDEN = [
   /\bmodule\.exports\b/, // the direct clobber cause

@@ -76,6 +76,24 @@ export default [
       },
     ],
   },
+  // Durable function authoring bundle. The durable runtime stays external and
+  // is imported lazily at runtime: it is an optional peer dependency only a
+  // durable function installs.
+  {
+    input: 'src/durable.js',
+    external: ['@aws/durable-execution-sdk-js'],
+    output: [
+      {
+        file: 'dist/durable.js',
+        format: 'cjs',
+        exports: 'named',
+      },
+      {
+        file: 'dist/durable.esm.mjs',
+        format: 'es',
+      },
+    ],
+  },
   // Next.js middleware helpers bundle
   {
     input: 'src/next/middleware.js',

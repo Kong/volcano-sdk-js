@@ -71,6 +71,7 @@ import type {
   CreateDatabaseBranchRequest,
   CreateDatabaseRequest,
   CreateDatabaseRestoreRequest,
+  CreateDurableFunctionBody,
   CreateEmailTemplateRequest,
   CreateFrontendBody,
   CreateFrontendCustomDomainRequest,
@@ -105,6 +106,8 @@ import type {
   DeleteDatabaseBranch202,
   DeleteOAuthConfigParams,
   DeviceAuthorizationResponse,
+  DurableExecution,
+  DurableFunction,
   EmailTemplate,
   Error,
   ExportProjectSourceRequest,
@@ -149,6 +152,9 @@ import type {
   ListDatabaseRegions200Item,
   ListDatabasesParams,
   ListDeploymentsParams,
+  ListDurableExecutionsParams,
+  ListDurableFunctionDeploymentsParams,
+  ListDurableFunctionsParams,
   ListEmailTemplates200,
   ListFrontendDeploymentsParams,
   ListFrontendsParams,
@@ -178,6 +184,8 @@ import type {
   OAuthErrorResponse,
   PaginatedAuthUsers,
   PaginatedDatabases,
+  PaginatedDurableExecutions,
+  PaginatedDurableFunctions,
   PaginatedFrontendDeployments,
   PaginatedFrontends,
   PaginatedFunctionDeployments,
@@ -216,6 +224,7 @@ import type {
   RefreshOAuthProviderToken200,
   RenderAuthPagePreviewParams,
   RenderDefaultManagedAuthPageParams,
+  ReplaceSharedVariablesBody,
   ResetDatabasePassword200,
   ResolveFunctionForInvocationParams,
   ResolveFunctionResponse,
@@ -1886,6 +1895,90 @@ export const getProjectUsage = async (id: string, options?: Parameters<typeof vo
 
 
 
+export type replaceSharedVariablesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type replaceSharedVariablesResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type replaceSharedVariablesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type replaceSharedVariablesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type replaceSharedVariablesResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type replaceSharedVariablesResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type replaceSharedVariablesResponse500 = {
+  data: void
+  status: 500
+}
+
+export type replaceSharedVariablesResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type replaceSharedVariablesResponseSuccess = (replaceSharedVariablesResponse204) & {
+  headers: Headers;
+};
+export type replaceSharedVariablesResponseError = (replaceSharedVariablesResponse400 | replaceSharedVariablesResponse401 | replaceSharedVariablesResponse404 | replaceSharedVariablesResponse409 | replaceSharedVariablesResponse413 | replaceSharedVariablesResponse500 | replaceSharedVariablesResponse503) & {
+  headers: Headers;
+};
+
+export type replaceSharedVariablesResponse = (replaceSharedVariablesResponseSuccess | replaceSharedVariablesResponseError)
+
+export const getReplaceSharedVariablesUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/shared-variables`
+}
+
+/**
+ * Atomically replaces the complete shared function-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * function environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored as non-shared variables.
+ * @summary Replace shared variable names
+ */
+export const replaceSharedVariables = async (id: string,
+    replaceSharedVariablesBody: ReplaceSharedVariablesBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<replaceSharedVariablesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<replaceSharedVariablesResponse>(getReplaceSharedVariablesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replaceSharedVariablesBody)
+  }
+);}
+
+
+
 export type getProjectConfigResponse200ApplicationJson = {
   data: ProjectConfig
   status: 200
@@ -1906,10 +1999,15 @@ export type getProjectConfigResponse404 = {
   status: 404
 }
 
+export type getProjectConfigResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type getProjectConfigResponseSuccess = (getProjectConfigResponse200ApplicationJson | getProjectConfigResponse200ApplicationYaml) & {
   headers: Headers;
 };
-export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404) & {
+export type getProjectConfigResponseError = (getProjectConfigResponse401 | getProjectConfigResponse404 | getProjectConfigResponse413) & {
   headers: Headers;
 };
 
@@ -1937,8 +2035,8 @@ export const getGetProjectConfigUrl = (id: string,
  * volcano-config.yaml rendering with `Accept: application/yaml` or
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
- * Write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; the YAML rendering adds a header comment
+ * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+ * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -1986,10 +2084,15 @@ export type applyProjectConfigResponse422 = {
   status: 422
 }
 
+export type applyProjectConfigResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type applyProjectConfigResponseSuccess = (applyProjectConfigResponse200) & {
   headers: Headers;
 };
-export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422) & {
+export type applyProjectConfigResponseError = (applyProjectConfigResponse400 | applyProjectConfigResponse401 | applyProjectConfigResponse404 | applyProjectConfigResponse409 | applyProjectConfigResponse422 | applyProjectConfigResponse503) & {
   headers: Headers;
 };
 
@@ -3302,6 +3405,12 @@ if(createFunctionBody.http_auth_mode !== undefined) {
 if(createFunctionBody.openapi_spec !== undefined) {
  formData.append(`openapi_spec`, createFunctionBody.openapi_spec);
  }
+if(createFunctionBody.variable_scope !== undefined) {
+ formData.append(`variable_scope`, createFunctionBody.variable_scope);
+ }
+if(createFunctionBody.variables !== undefined) {
+ formData.append(`variables`, createFunctionBody.variables);
+ }
 
   return volcanoFetch<createFunctionResponse>(getCreateFunctionUrl(id),
   {
@@ -3559,6 +3668,12 @@ export const getInvokeFunctionUrl = (functionId: string,) => {
  *   preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
  * - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
  *   direct operation always requires a Volcano credential.
+ *
+ * **Durable functions are not invocable here.** A durable function's id
+ * answers 404, whatever its visibility, because a synchronous call would
+ * run it with no execution record, no idempotency and no concurrency
+ * accounting. Start one with
+ * `POST /durable-functions/{functionId}/executions`.
  * @summary Invoke a function
  */
 export const invokeFunction = async (functionId: string,
@@ -3576,6 +3691,121 @@ return volcanoFetch<invokeFunctionResponse>(getInvokeFunctionUrl(functionId),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(functionInvocationRequest)
+  }
+);}
+
+
+
+export type startDurableExecutionFromApplicationResponse202 = {
+  data: DurableExecution
+  status: 202
+}
+
+export type startDurableExecutionFromApplicationResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type startDurableExecutionFromApplicationResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type startDurableExecutionFromApplicationResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type startDurableExecutionFromApplicationResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type startDurableExecutionFromApplicationResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type startDurableExecutionFromApplicationResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type startDurableExecutionFromApplicationResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type startDurableExecutionFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type startDurableExecutionFromApplicationResponseSuccess = (startDurableExecutionFromApplicationResponse202) & {
+  headers: Headers;
+};
+export type startDurableExecutionFromApplicationResponseError = (startDurableExecutionFromApplicationResponse400 | startDurableExecutionFromApplicationResponse401 | startDurableExecutionFromApplicationResponse403 | startDurableExecutionFromApplicationResponse404 | startDurableExecutionFromApplicationResponse409 | startDurableExecutionFromApplicationResponse413 | startDurableExecutionFromApplicationResponse429 | startDurableExecutionFromApplicationResponse503) & {
+  headers: Headers;
+};
+
+export type startDurableExecutionFromApplicationResponse = (startDurableExecutionFromApplicationResponseSuccess | startDurableExecutionFromApplicationResponseError)
+
+export const getStartDurableExecutionFromApplicationUrl = (functionId: string,) => {
+
+
+
+
+  return `/durable-functions/${functionId}/executions`
+}
+
+/**
+ * Starts an execution of a durable function using an application
+ * credential, and returns its handle.
+ *
+ * This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+ * and it is the endpoint an application calls. Like that one, it is not
+ * project-scoped: an anon key, a service key and an auth user token each
+ * carry their own project. The project-scoped collection under
+ * `/projects/{id}/durable-functions/...` remains the owner's management
+ * surface.
+ *
+ * **With a service key or an auth user token:** any durable function in
+ * the project.
+ *
+ * **With an anon key:** requires the `functions.invoke` permission, and
+ * the function must have `is_public: true`.
+ *
+ * Starting is all this endpoint does. Reading a result or stopping an
+ * execution requires the project owner's token, because an anon key is
+ * shared by everyone who loads the page and an execution is addressed by
+ * id alone.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+ * a start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts once against the project's durable execution
+ * allowance, however many times the start is retried under the same
+ * execution name, and the number in flight at once is capped by the plan.
+ * The operations the execution performs are counted against the durable
+ * operations allowance when it finishes.
+ * @summary Start a durable execution from an application
+ */
+export const startDurableExecutionFromApplication = async (functionId: string,
+    startDurableExecutionFromApplicationBody?: unknown, options?: Parameters<typeof volcanoFetch>[1]): Promise<startDurableExecutionFromApplicationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<startDurableExecutionFromApplicationResponse>(getStartDurableExecutionFromApplicationUrl(functionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startDurableExecutionFromApplicationBody)
   }
 );}
 
@@ -3921,10 +4151,25 @@ export type createFunctionsBatchResponse400 = {
   status: 400
 }
 
+export type createFunctionsBatchResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createFunctionsBatchResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createFunctionsBatchResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type createFunctionsBatchResponseSuccess = (createFunctionsBatchResponse202 | createFunctionsBatchResponse207) & {
   headers: Headers;
 };
-export type createFunctionsBatchResponseError = (createFunctionsBatchResponse400) & {
+export type createFunctionsBatchResponseError = (createFunctionsBatchResponse400 | createFunctionsBatchResponse403 | createFunctionsBatchResponse409 | createFunctionsBatchResponse503) & {
   headers: Headers;
 };
 
@@ -4025,12 +4270,19 @@ export type listFunctionSchedulersResponse200 = {
   status: 200
 }
 
+export type listFunctionSchedulersResponse404 = {
+  data: Error
+  status: 404
+}
+
 export type listFunctionSchedulersResponseSuccess = (listFunctionSchedulersResponse200) & {
   headers: Headers;
 };
-;
+export type listFunctionSchedulersResponseError = (listFunctionSchedulersResponse404) & {
+  headers: Headers;
+};
 
-export type listFunctionSchedulersResponse = (listFunctionSchedulersResponseSuccess)
+export type listFunctionSchedulersResponse = (listFunctionSchedulersResponseSuccess | listFunctionSchedulersResponseError)
 
 export const getListFunctionSchedulersUrl = (id: string,
     functionId: string,) => {
@@ -4068,10 +4320,20 @@ export type createFunctionSchedulerResponse400 = {
   status: 400
 }
 
+export type createFunctionSchedulerResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
 export type createFunctionSchedulerResponseSuccess = (createFunctionSchedulerResponse201) & {
   headers: Headers;
 };
-export type createFunctionSchedulerResponseError = (createFunctionSchedulerResponse400) & {
+export type createFunctionSchedulerResponseError = (createFunctionSchedulerResponse400 | createFunctionSchedulerResponse403 | createFunctionSchedulerResponse404) & {
   headers: Headers;
 };
 
@@ -4116,12 +4378,19 @@ export type getFunctionSchedulerResponse200 = {
   status: 200
 }
 
+export type getFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
 export type getFunctionSchedulerResponseSuccess = (getFunctionSchedulerResponse200) & {
   headers: Headers;
 };
-;
+export type getFunctionSchedulerResponseError = (getFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
 
-export type getFunctionSchedulerResponse = (getFunctionSchedulerResponseSuccess)
+export type getFunctionSchedulerResponse = (getFunctionSchedulerResponseSuccess | getFunctionSchedulerResponseError)
 
 export const getGetFunctionSchedulerUrl = (id: string,
     functionId: string,
@@ -4156,12 +4425,24 @@ export type updateFunctionSchedulerResponse200 = {
   status: 200
 }
 
+export type updateFunctionSchedulerResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
 export type updateFunctionSchedulerResponseSuccess = (updateFunctionSchedulerResponse200) & {
   headers: Headers;
 };
-;
+export type updateFunctionSchedulerResponseError = (updateFunctionSchedulerResponse400 | updateFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
 
-export type updateFunctionSchedulerResponse = (updateFunctionSchedulerResponseSuccess)
+export type updateFunctionSchedulerResponse = (updateFunctionSchedulerResponseSuccess | updateFunctionSchedulerResponseError)
 
 export const getUpdateFunctionSchedulerUrl = (id: string,
     functionId: string,
@@ -4203,12 +4484,19 @@ export type deleteFunctionSchedulerResponse204 = {
   status: 204
 }
 
+export type deleteFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
 export type deleteFunctionSchedulerResponseSuccess = (deleteFunctionSchedulerResponse204) & {
   headers: Headers;
 };
-;
+export type deleteFunctionSchedulerResponseError = (deleteFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
 
-export type deleteFunctionSchedulerResponse = (deleteFunctionSchedulerResponseSuccess)
+export type deleteFunctionSchedulerResponse = (deleteFunctionSchedulerResponseSuccess | deleteFunctionSchedulerResponseError)
 
 export const getDeleteFunctionSchedulerUrl = (id: string,
     functionId: string,
@@ -4285,6 +4573,860 @@ export const listFunctionDeployments = async (id: string,
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listDurableFunctionsResponse200 = {
+  data: PaginatedDurableFunctions
+  status: 200
+}
+
+export type listDurableFunctionsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listDurableFunctionsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDurableFunctionsResponseSuccess = (listDurableFunctionsResponse200) & {
+  headers: Headers;
+};
+export type listDurableFunctionsResponseError = (listDurableFunctionsResponse400 | listDurableFunctionsResponse404) & {
+  headers: Headers;
+};
+
+export type listDurableFunctionsResponse = (listDurableFunctionsResponseSuccess | listDurableFunctionsResponseError)
+
+export const getListDurableFunctionsUrl = (id: string,
+    params?: ListDurableFunctionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions?${stringifiedParams}` : `/projects/${id}/durable-functions`
+}
+
+/**
+ * Standard functions never appear here, and durable functions never appear
+ * under `/projects/{id}/functions`. The two are separate collections.
+ * @summary List all durable functions in a project
+ */
+export const listDurableFunctions = async (id: string,
+    params?: ListDurableFunctionsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDurableFunctionsResponse> => {
+
+  return volcanoFetch<listDurableFunctionsResponse>(getListDurableFunctionsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createDurableFunctionResponse200 = {
+  data: DurableFunction
+  status: 200
+}
+
+export type createDurableFunctionResponse201 = {
+  data: DurableFunction
+  status: 201
+}
+
+export type createDurableFunctionResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createDurableFunctionResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createDurableFunctionResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createDurableFunctionResponse500 = {
+  data: Error
+  status: 500
+}
+
+export type createDurableFunctionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type createDurableFunctionResponseSuccess = (createDurableFunctionResponse200 | createDurableFunctionResponse201) & {
+  headers: Headers;
+};
+export type createDurableFunctionResponseError = (createDurableFunctionResponse400 | createDurableFunctionResponse403 | createDurableFunctionResponse409 | createDurableFunctionResponse500 | createDurableFunctionResponse503) & {
+  headers: Headers;
+};
+
+export type createDurableFunctionResponse = (createDurableFunctionResponseSuccess | createDurableFunctionResponseError)
+
+export const getCreateDurableFunctionUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions`
+}
+
+/**
+ * Upload a durable function source bundle. Creates the function on the
+ * first call for a name and redeploys it on every call after that, the
+ * same create-or-update contract `POST /projects/{id}/functions` has.
+ *
+ * Volcano builds and deploys asynchronously. A deployment that starts
+ * immediately returns `status: provisioning`, then transitions to `active`
+ * or `failed`; a deployment that has to wait for a running one is exposed
+ * through `pending_deployment_id`. Existing executions keep running
+ * against the runtime they started on.
+ *
+ * The `durable` configuration is derived from the project's plan rather
+ * than supplied here, and is fixed once the function exists. A name
+ * already held by a standard function is rejected with 409: a function
+ * cannot change kind.
+ * @summary Create or update a durable function
+ */
+export const createDurableFunction = async (id: string,
+    createDurableFunctionBody: CreateDurableFunctionBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<createDurableFunctionResponse> => {
+    const formData = new FormData();
+formData.append(`name`, createDurableFunctionBody.name);
+formData.append(`code`, createDurableFunctionBody.code);
+formData.append(`runtime`, createDurableFunctionBody.runtime);
+if(createDurableFunctionBody.handler !== undefined) {
+ formData.append(`handler`, createDurableFunctionBody.handler);
+ }
+if(createDurableFunctionBody.is_public !== undefined) {
+ formData.append(`is_public`, createDurableFunctionBody.is_public.toString())
+ }
+if(createDurableFunctionBody.variable_scope !== undefined) {
+ formData.append(`variable_scope`, createDurableFunctionBody.variable_scope);
+ }
+if(createDurableFunctionBody.variables !== undefined) {
+ formData.append(`variables`, createDurableFunctionBody.variables);
+ }
+
+  return volcanoFetch<createDurableFunctionResponse>(getCreateDurableFunctionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+export type getDurableFunctionResponse200 = {
+  data: DurableFunction
+  status: 200
+}
+
+export type getDurableFunctionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDurableFunctionResponseSuccess = (getDurableFunctionResponse200) & {
+  headers: Headers;
+};
+export type getDurableFunctionResponseError = (getDurableFunctionResponse404) & {
+  headers: Headers;
+};
+
+export type getDurableFunctionResponse = (getDurableFunctionResponseSuccess | getDurableFunctionResponseError)
+
+export const getGetDurableFunctionUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}`
+}
+
+/**
+ * @summary Get durable function by ID or name
+ */
+export const getDurableFunction = async (id: string,
+    functionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableFunctionResponse> => {
+
+  return volcanoFetch<getDurableFunctionResponse>(getGetDurableFunctionUrl(id,functionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteDurableFunctionResponse202 = {
+  data: void
+  status: 202
+}
+
+export type deleteDurableFunctionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDurableFunctionResponseSuccess = (deleteDurableFunctionResponse202) & {
+  headers: Headers;
+};
+export type deleteDurableFunctionResponseError = (deleteDurableFunctionResponse404) & {
+  headers: Headers;
+};
+
+export type deleteDurableFunctionResponse = (deleteDurableFunctionResponseSuccess | deleteDurableFunctionResponseError)
+
+export const getDeleteDurableFunctionUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}`
+}
+
+/**
+ * Accepted for asynchronous teardown; the work continues after the
+ * response. The function's executions go with it: history stops being
+ * readable whatever `retention_days` had left, and the executions still
+ * running stop counting against the project's concurrency cap. Stop an
+ * execution first if you need it to end before the function does.
+ * @summary Delete a durable function
+ */
+export const deleteDurableFunction = async (id: string,
+    functionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteDurableFunctionResponse> => {
+
+  return volcanoFetch<deleteDurableFunctionResponse>(getDeleteDurableFunctionUrl(id,functionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listDurableFunctionDeploymentsResponse200 = {
+  data: PaginatedFunctionDeployments
+  status: 200
+}
+
+export type listDurableFunctionDeploymentsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDurableFunctionDeploymentsResponseSuccess = (listDurableFunctionDeploymentsResponse200) & {
+  headers: Headers;
+};
+export type listDurableFunctionDeploymentsResponseError = (listDurableFunctionDeploymentsResponse404) & {
+  headers: Headers;
+};
+
+export type listDurableFunctionDeploymentsResponse = (listDurableFunctionDeploymentsResponseSuccess | listDurableFunctionDeploymentsResponseError)
+
+export const getListDurableFunctionDeploymentsUrl = (id: string,
+    functionId: string,
+    params?: ListDurableFunctionDeploymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions/${functionId}/deployments?${stringifiedParams}` : `/projects/${id}/durable-functions/${functionId}/deployments`
+}
+
+/**
+ * @summary List durable function deployments
+ */
+export const listDurableFunctionDeployments = async (id: string,
+    functionId: string,
+    params?: ListDurableFunctionDeploymentsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDurableFunctionDeploymentsResponse> => {
+
+  return volcanoFetch<listDurableFunctionDeploymentsResponse>(getListDurableFunctionDeploymentsUrl(id,functionId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listDurableFunctionSchedulersResponse200 = {
+  data: FunctionSchedulerListResponse
+  status: 200
+}
+
+export type listDurableFunctionSchedulersResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDurableFunctionSchedulersResponseSuccess = (listDurableFunctionSchedulersResponse200) & {
+  headers: Headers;
+};
+export type listDurableFunctionSchedulersResponseError = (listDurableFunctionSchedulersResponse404) & {
+  headers: Headers;
+};
+
+export type listDurableFunctionSchedulersResponse = (listDurableFunctionSchedulersResponseSuccess | listDurableFunctionSchedulersResponseError)
+
+export const getListDurableFunctionSchedulersUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/schedulers`
+}
+
+/**
+ * The durable collection's counterpart to
+ * `/projects/{id}/functions/{functionId}/schedulers`. A standard
+ * function's id is not accepted here, and a durable function's id is not
+ * accepted there.
+ * @summary List schedulers for a durable function
+ */
+export const listDurableFunctionSchedulers = async (id: string,
+    functionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDurableFunctionSchedulersResponse> => {
+
+  return volcanoFetch<listDurableFunctionSchedulersResponse>(getListDurableFunctionSchedulersUrl(id,functionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createDurableFunctionSchedulerResponse201 = {
+  data: FunctionScheduler
+  status: 201
+}
+
+export type createDurableFunctionSchedulerResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createDurableFunctionSchedulerResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createDurableFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type createDurableFunctionSchedulerResponseSuccess = (createDurableFunctionSchedulerResponse201) & {
+  headers: Headers;
+};
+export type createDurableFunctionSchedulerResponseError = (createDurableFunctionSchedulerResponse400 | createDurableFunctionSchedulerResponse403 | createDurableFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
+
+export type createDurableFunctionSchedulerResponse = (createDurableFunctionSchedulerResponseSuccess | createDurableFunctionSchedulerResponseError)
+
+export const getCreateDurableFunctionSchedulerUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/schedulers`
+}
+
+/**
+ * Each tick starts an execution rather than invoking the function, under
+ * an execution name derived from the run, so a retried tick resolves to
+ * the execution it already started. Requested regions must be a subset of
+ * the function's deployed regions.
+ *
+ * A tick draws on the same durable allowances and concurrency cap a
+ * manual start does, and a tick that would exceed the cap fails that run.
+ * @summary Create a scheduler for a durable function
+ */
+export const createDurableFunctionScheduler = async (id: string,
+    functionId: string,
+    createFunctionSchedulerRequest: CreateFunctionSchedulerRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createDurableFunctionSchedulerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createDurableFunctionSchedulerResponse>(getCreateDurableFunctionSchedulerUrl(id,functionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createFunctionSchedulerRequest)
+  }
+);}
+
+
+
+export type getDurableFunctionSchedulerResponse200 = {
+  data: FunctionScheduler
+  status: 200
+}
+
+export type getDurableFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDurableFunctionSchedulerResponseSuccess = (getDurableFunctionSchedulerResponse200) & {
+  headers: Headers;
+};
+export type getDurableFunctionSchedulerResponseError = (getDurableFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
+
+export type getDurableFunctionSchedulerResponse = (getDurableFunctionSchedulerResponseSuccess | getDurableFunctionSchedulerResponseError)
+
+export const getGetDurableFunctionSchedulerUrl = (id: string,
+    functionId: string,
+    schedulerId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`
+}
+
+/**
+ * @summary Get a durable function scheduler
+ */
+export const getDurableFunctionScheduler = async (id: string,
+    functionId: string,
+    schedulerId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableFunctionSchedulerResponse> => {
+
+  return volcanoFetch<getDurableFunctionSchedulerResponse>(getGetDurableFunctionSchedulerUrl(id,functionId,schedulerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateDurableFunctionSchedulerResponse200 = {
+  data: FunctionScheduler
+  status: 200
+}
+
+export type updateDurableFunctionSchedulerResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type updateDurableFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type updateDurableFunctionSchedulerResponseSuccess = (updateDurableFunctionSchedulerResponse200) & {
+  headers: Headers;
+};
+export type updateDurableFunctionSchedulerResponseError = (updateDurableFunctionSchedulerResponse400 | updateDurableFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
+
+export type updateDurableFunctionSchedulerResponse = (updateDurableFunctionSchedulerResponseSuccess | updateDurableFunctionSchedulerResponseError)
+
+export const getUpdateDurableFunctionSchedulerUrl = (id: string,
+    functionId: string,
+    schedulerId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`
+}
+
+/**
+ * @summary Update a durable function scheduler
+ */
+export const updateDurableFunctionScheduler = async (id: string,
+    functionId: string,
+    schedulerId: string,
+    updateFunctionSchedulerRequest: UpdateFunctionSchedulerRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<updateDurableFunctionSchedulerResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<updateDurableFunctionSchedulerResponse>(getUpdateDurableFunctionSchedulerUrl(id,functionId,schedulerId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateFunctionSchedulerRequest)
+  }
+);}
+
+
+
+export type deleteDurableFunctionSchedulerResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteDurableFunctionSchedulerResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type deleteDurableFunctionSchedulerResponseSuccess = (deleteDurableFunctionSchedulerResponse204) & {
+  headers: Headers;
+};
+export type deleteDurableFunctionSchedulerResponseError = (deleteDurableFunctionSchedulerResponse404) & {
+  headers: Headers;
+};
+
+export type deleteDurableFunctionSchedulerResponse = (deleteDurableFunctionSchedulerResponseSuccess | deleteDurableFunctionSchedulerResponseError)
+
+export const getDeleteDurableFunctionSchedulerUrl = (id: string,
+    functionId: string,
+    schedulerId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/schedulers/${schedulerId}`
+}
+
+/**
+ * @summary Delete a durable function scheduler
+ */
+export const deleteDurableFunctionScheduler = async (id: string,
+    functionId: string,
+    schedulerId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteDurableFunctionSchedulerResponse> => {
+
+  return volcanoFetch<deleteDurableFunctionSchedulerResponse>(getDeleteDurableFunctionSchedulerUrl(id,functionId,schedulerId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type startDurableExecutionResponse202 = {
+  data: DurableExecution
+  status: 202
+}
+
+export type startDurableExecutionResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type startDurableExecutionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type startDurableExecutionResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type startDurableExecutionResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type startDurableExecutionResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type startDurableExecutionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type startDurableExecutionResponseSuccess = (startDurableExecutionResponse202) & {
+  headers: Headers;
+};
+export type startDurableExecutionResponseError = (startDurableExecutionResponse400 | startDurableExecutionResponse404 | startDurableExecutionResponse409 | startDurableExecutionResponse413 | startDurableExecutionResponse429 | startDurableExecutionResponse503) & {
+  headers: Headers;
+};
+
+export type startDurableExecutionResponse = (startDurableExecutionResponseSuccess | startDurableExecutionResponseError)
+
+export const getStartDurableExecutionUrl = (id: string,
+    functionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/executions`
+}
+
+/**
+ * Starts an execution and returns its handle. Never returns a result: an
+ * execution can outlive any request a client could hold open, so the
+ * result is read back from
+ * `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`.
+ *
+ * The request body is the execution's input and must be valid JSON if
+ * present. An empty body starts the execution with no input.
+ *
+ * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating a
+ * start with the same name returns the existing execution instead of
+ * beginning a second one.
+ *
+ * Each execution counts against the project's durable execution
+ * allowance, the operations it performs count against the durable
+ * operations allowance when it finishes, and the number of executions in
+ * flight at once is capped by the plan.
+ * @summary Start a durable execution
+ */
+export const startDurableExecution = async (id: string,
+    functionId: string,
+    startDurableExecutionBody?: unknown, options?: Parameters<typeof volcanoFetch>[1]): Promise<startDurableExecutionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<startDurableExecutionResponse>(getStartDurableExecutionUrl(id,functionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startDurableExecutionBody)
+  }
+);}
+
+
+
+export type listDurableExecutionsResponse200 = {
+  data: PaginatedDurableExecutions
+  status: 200
+}
+
+export type listDurableExecutionsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listDurableExecutionsResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listDurableExecutionsResponseSuccess = (listDurableExecutionsResponse200) & {
+  headers: Headers;
+};
+export type listDurableExecutionsResponseError = (listDurableExecutionsResponse400 | listDurableExecutionsResponse404) & {
+  headers: Headers;
+};
+
+export type listDurableExecutionsResponse = (listDurableExecutionsResponseSuccess | listDurableExecutionsResponseError)
+
+export const getListDurableExecutionsUrl = (id: string,
+    functionId: string,
+    params?: ListDurableExecutionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions/${functionId}/executions?${stringifiedParams}` : `/projects/${id}/durable-functions/${functionId}/executions`
+}
+
+/**
+ * Returns the platform's last observed status for each execution; listing
+ * does not poll each one. Fetch a single execution for its live state.
+ * @summary List a durable function's executions
+ */
+export const listDurableExecutions = async (id: string,
+    functionId: string,
+    params?: ListDurableExecutionsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDurableExecutionsResponse> => {
+
+  return volcanoFetch<listDurableExecutionsResponse>(getListDurableExecutionsUrl(id,functionId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDurableExecutionResponse200 = {
+  data: DurableExecution
+  status: 200
+}
+
+export type getDurableExecutionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDurableExecutionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getDurableExecutionResponseSuccess = (getDurableExecutionResponse200) & {
+  headers: Headers;
+};
+export type getDurableExecutionResponseError = (getDurableExecutionResponse404 | getDurableExecutionResponse503) & {
+  headers: Headers;
+};
+
+export type getDurableExecutionResponse = (getDurableExecutionResponseSuccess | getDurableExecutionResponseError)
+
+export const getGetDurableExecutionUrl = (id: string,
+    functionId: string,
+    executionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/executions/${executionId}`
+}
+
+/**
+ * Returns the execution's current state, including its `result` once it has
+ * succeeded. Poll this to wait for an execution to finish.
+ * @summary Get a durable execution
+ */
+export const getDurableExecution = async (id: string,
+    functionId: string,
+    executionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableExecutionResponse> => {
+
+  return volcanoFetch<getDurableExecutionResponse>(getGetDurableExecutionUrl(id,functionId,executionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type stopDurableExecutionResponse200 = {
+  data: DurableExecution
+  status: 200
+}
+
+export type stopDurableExecutionResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type stopDurableExecutionResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type stopDurableExecutionResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type stopDurableExecutionResponseSuccess = (stopDurableExecutionResponse200) & {
+  headers: Headers;
+};
+export type stopDurableExecutionResponseError = (stopDurableExecutionResponse404 | stopDurableExecutionResponse409 | stopDurableExecutionResponse503) & {
+  headers: Headers;
+};
+
+export type stopDurableExecutionResponse = (stopDurableExecutionResponseSuccess | stopDurableExecutionResponseError)
+
+export const getStopDurableExecutionUrl = (id: string,
+    functionId: string,
+    executionId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-functions/${functionId}/executions/${executionId}/stop`
+}
+
+/**
+ * Cancels a running execution. Its completed steps are not undone.
+ *
+ * The call is accepted rather than awaited: cancellation happens behind
+ * it, so the response reports the execution as it was read back and may
+ * still say `running`. Do not branch on that status — the execution
+ * settles into `stopped` shortly after, and polling
+ * `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+ * is how you see it get there.
+ *
+ * Stopping an execution that already finished is not an error: the
+ * response carries the state it settled in.
+ * @summary Stop a durable execution
+ */
+export const stopDurableExecution = async (id: string,
+    functionId: string,
+    executionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<stopDurableExecutionResponse> => {
+
+  return volcanoFetch<stopDurableExecutionResponse>(getStopDurableExecutionUrl(id,functionId,executionId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }
@@ -4452,7 +5594,7 @@ export const getCreateFrontendUrl = (id: string,) => {
  * 22.x or 24.x. The Node.js runtime is inferred from
  * `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
  * The selected Node.js family must also satisfy the installed Next.js package's
- * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.4 (`>=20.9.0`).
+ * `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
  * Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
  * does not apply its own source archive size limit. After the final container images are
  * built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -5144,10 +6286,15 @@ export type createVariableResponse400 = {
   status: 400
 }
 
+export type createVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type createVariableResponseSuccess = (createVariableResponse201) & {
   headers: Headers;
 };
-export type createVariableResponseError = (createVariableResponse400) & {
+export type createVariableResponseError = (createVariableResponse400 | createVariableResponse503) & {
   headers: Headers;
 };
 
@@ -7518,6 +8665,8 @@ export const getListDatabaseRegionsUrl = () => {
 
 /**
  * Returns the regions enabled for database provisioning in this platform environment.
+ * These are the same regions offered for function deployment, and the only values
+ * the `region` field of a database accepts.
  * This is a public endpoint that doesn't require authentication.
  * @summary List platform-supported regions for database provisioning
  */
@@ -7706,10 +8855,15 @@ export type updateVariableResponse404 = {
   status: 404
 }
 
+export type updateVariableResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type updateVariableResponseSuccess = (updateVariableResponse200) & {
   headers: Headers;
 };
-export type updateVariableResponseError = (updateVariableResponse404) & {
+export type updateVariableResponseError = (updateVariableResponse404 | updateVariableResponse503) & {
   headers: Headers;
 };
 
@@ -12060,7 +13214,9 @@ export const getCallOAuthProviderAPIUrl = (provider: 'google' | 'github' | 'micr
  * An empty provider body is represented as `data: null`; the envelope
  * preserves the provider's HTTP status in `status_code`, including errors.
  * Provider response bodies are limited to 8 MiB after decompression.
- * Transport failures, invalid JSON, and oversized bodies return `502`.
+ * Transport failures, invalid JSON (including invalid UTF-8), and oversized
+ * bodies return `502`. Provider redirects to another origin are blocked and
+ * return `400`.
  * @summary Call OAuth provider API
  */
 export const callOAuthProviderAPI = async (provider: 'google' | 'github' | 'microsoft' | 'apple',

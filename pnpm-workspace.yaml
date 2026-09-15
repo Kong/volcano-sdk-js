@@ -1,6 +1,12 @@
 packages:
   - examples/nextjs-notes-app
 
+# The durable runtime is an optional peer that Volcano installs into a durable
+# function at build time, and nothing here loads it — the durable tests stand a
+# double in its place. pnpm installs optional peers anyway (pnpm/pnpm#11155),
+# which pulled a package requiring Node >=22 into a workspace tested on Node 20.
+autoInstallPeers: false
+
 allowBuilds:
   protobufjs: true
   sharp: true

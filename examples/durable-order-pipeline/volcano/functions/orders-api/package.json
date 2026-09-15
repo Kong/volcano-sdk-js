@@ -1,0 +1,10 @@
+{
+  "name": "orders-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Starts the durable order pipeline and reports on it",
+  "main": "index.js",
+  "dependencies": {
+    "@volcano.dev/sdk": "^1.7.0"
+  }
+}

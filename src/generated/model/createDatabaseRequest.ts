@@ -9,7 +9,6 @@
  */
 import type { CreateDatabaseRequestDatabaseType } from './createDatabaseRequestDatabaseType';
 import type { CreateDatabaseRequestPgVersion } from './createDatabaseRequestPgVersion';
-import type { CreateDatabaseRequestRegion } from './createDatabaseRequestRegion';
 
 /**
  * Create a new PostgreSQL database. Volcano automatically sets up:
@@ -25,8 +24,13 @@ export interface CreateDatabaseRequest {
      * @pattern ^[a-z0-9_]+$
      */
   name: string;
-  /** Region for database hosting */
-  region: CreateDatabaseRequestRegion;
+  /**
+     * Region for database hosting. The accepted values are the regions this
+     * environment runs in, so read them from `GET /databases/regions` rather
+     * than hardcoding a list. A region the environment does not offer is
+     * rejected with 400.
+     */
+  region: string;
   /** PostgreSQL major version */
   pg_version: CreateDatabaseRequestPgVersion;
   /**
