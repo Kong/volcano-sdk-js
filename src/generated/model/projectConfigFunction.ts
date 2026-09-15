@@ -10,19 +10,40 @@
 import type { FunctionHTTPAuthMode } from './functionHTTPAuthMode';
 import type { FunctionInvocationMode } from './functionInvocationMode';
 import type { ProjectConfigFunctionOpenapiSpec } from './projectConfigFunctionOpenapiSpec';
+import type { ProjectConfigFunctionVariableScope } from './projectConfigFunctionVariableScope';
 import type { ProjectConfigScheduler } from './projectConfigScheduler';
 
 /**
  * Configuration for an existing (deployed) function. Functions are never
  * created or deleted through the manifest. When `schedulers` is declared
  * it is fully synced (schedulers absent from the list are deleted);
- * omitting `schedulers` leaves the function's schedulers untouched.
+ * omitting `schedulers` leaves the function's schedulers untouched. The
+ * same applies to `variables`: declaring it replaces the function's
+ * declared variable names, and omitting it leaves them untouched.
  */
 export interface ProjectConfigFunction {
   /** @minLength 1 */
   name: string;
   /** Function visibility for anon-key invocation */
   public?: boolean;
+  /**
+     * Which project variables this function receives. `all` (the default)
+     * gives it the project variables marked `shared: true`. `scoped` gives it only the variables
+     * it selects: every name declared in `variables`, plus the names
+     * Volcano detects in its source that the project defines.
+     */
+  variable_scope?: ProjectConfigFunctionVariableScope;
+  /**
+     * Project variable names this function requires, on top of the ones
+     * detected in its source. Declare a name here when the function reads
+     * it through a computed key, which detection cannot see, or when the
+     * function must not deploy without it: a declared name the project does
+     * not define fails the apply, while a detected name it does not define
+     * is ignored. Only used when `variable_scope` is `scoped`.
+     * @items.minLength 1
+     * @items.maxLength 256
+     */
+  variables?: string[];
   invocation_mode?: FunctionInvocationMode;
   http_auth_mode?: FunctionHTTPAuthMode;
   /**
