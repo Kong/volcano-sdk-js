@@ -26,27 +26,40 @@
  */
 
 /**
- * The durable protocol is implemented by `@aws/durable-execution-sdk-js`, an
- * optional peer dependency a durable function installs alongside the SDK. It
- * is loaded on the first invocation rather than imported, for two reasons: the
- * SDK also runs in browsers and in standard functions, where a static import
- * would break the bundle or the install, and a missing engine is worth a real
- * error message instead of a module-resolution failure.
+ * The durable protocol arrives as `@volcano.dev/durable-runtime`, an optional
+ * peer dependency a durable function installs alongside the SDK. It is loaded
+ * on the first invocation rather than imported, for two reasons: the SDK also
+ * runs in browsers and in standard functions, where a static import would break
+ * the bundle or the install, and a missing runtime is worth a real error message
+ * instead of a module-resolution failure.
+ *
+ * The underlying runtime is tried second, for a function that depends on it
+ * directly. That order matters under a strict node_modules layout: the runtime
+ * is a real dependency of the package above, so it resolves there even where it
+ * would not resolve on its own.
  */
-const engineSpecifier = '@aws/durable-execution-sdk-js';
+const runtimeSpecifiers = ['@volcano.dev/durable-runtime', '@aws/durable-execution-sdk-js'];
 
 let enginePromise = null;
 
 function loadEngine() {
-  // The engine ships both formats, so the loaded namespace is either its own
-  // exports or, for the CommonJS build, those exports under `default`.
-  enginePromise ??= import(engineSpecifier).then(
-    (loaded) => (loaded.withDurableExecution ? loaded : loaded.default),
-    (cause) => {
-      throw new DurableRuntimeMissingError(cause);
-    },
-  );
+  enginePromise ??= resolveEngine();
   return enginePromise;
+}
+
+async function resolveEngine() {
+  let firstFailure;
+  for (const specifier of runtimeSpecifiers) {
+    try {
+      // Both packages ship both formats, so the loaded namespace is either its
+      // own exports or, for the CommonJS build, those exports under `default`.
+      const loaded = await import(specifier);
+      return loaded.withDurableExecution ? loaded : loaded.default;
+    } catch (cause) {
+      firstFailure ??= cause;
+    }
+  }
+  throw new DurableRuntimeMissingError(firstFailure);
 }
 
 /**
@@ -57,7 +70,7 @@ function loadEngine() {
 class DurableRuntimeMissingError extends Error {
   constructor(cause) {
     super(
-      `Durable functions need the durable runtime: install it with \`npm install ${engineSpecifier}\` ` +
+      `Durable functions need the durable runtime: install it with \`npm install ${runtimeSpecifiers[0]}\` ` +
         'and deploy the function as durable (`volcano cloud durable deploy`, or `kind: durable` in ' +
         'volcano-config.yaml). Durable execution is a cloud capability and does not run locally.',
     );

@@ -1,5 +1,14 @@
 packages:
   - examples/nextjs-notes-app
+  - packages/durable-runtime
+
+# The SDK declares the durable runtime as an optional peer so pnpm can resolve
+# it from inside the SDK, which is the whole reason that package exists. Here
+# the peer is satisfied by the checkout rather than the registry, so a working
+# tree tests against the runtime it is about to publish. Not published: only
+# the registry range in package.json is.
+overrides:
+  '@volcano.dev/durable-runtime': 'workspace:*'
 
 allowBuilds:
   protobufjs: true

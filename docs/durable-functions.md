@@ -24,12 +24,14 @@ exports.handler = durable(async (input, ctx) => {
 ## Install
 
 ```bash
-npm install @volcano.dev/sdk @aws/durable-execution-sdk-js
+npm install @volcano.dev/sdk @volcano.dev/durable-runtime
 ```
 
-The second package is the durable runtime the platform's checkpointing protocol
-is implemented by. It is an optional peer dependency, so only functions that
-need it install it, and it must be a dependency of the function you deploy.
+The second package is the durable runtime, which does the checkpointing. You
+never import it — the handler is written against `@volcano.dev/sdk/durable` —
+but it has to be a dependency of the function you deploy. It is an optional peer
+dependency of the SDK, so nothing else installs it: a browser bundle and a
+standard function stay as small as they were.
 
 Deploy the result as a durable function — `volcano cloud durable deploy`, or
 `kind: durable` in `volcano-config.yaml`. A durable handler deployed as a

@@ -102,10 +102,14 @@
     "ws": "^8.0.0"
   },
   "peerDependencies": {
-    "@aws/durable-execution-sdk-js": ">=2 <3"
+    "@aws/durable-execution-sdk-js": ">=2 <3",
+    "@volcano.dev/durable-runtime": ">=0.1.0 <1"
   },
   "peerDependenciesMeta": {
     "@aws/durable-execution-sdk-js": {
+      "optional": true
+    },
+    "@volcano.dev/durable-runtime": {
       "optional": true
     }
   },
