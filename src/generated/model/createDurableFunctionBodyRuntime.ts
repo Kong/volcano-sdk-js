@@ -10,9 +10,12 @@
 
 /**
  * Runtime environment. Required. Durable execution needs the
- * durable authoring API, which ships for the Node runtimes;
+ * durable authoring API, which ships for these runtimes only;
  * any other runtime is rejected with 400 and the response
- * names the ones that work.
+ * names the ones that work. Note that a durable Python
+ * function needs a newer runtime than a standard one defaults
+ * to. `GET /functions/runtimes` reports `durable_capable` per
+ * runtime.
  */
 export type CreateDurableFunctionBodyRuntime = typeof CreateDurableFunctionBodyRuntime[keyof typeof CreateDurableFunctionBodyRuntime];
 
@@ -20,4 +23,6 @@ export type CreateDurableFunctionBodyRuntime = typeof CreateDurableFunctionBodyR
 export const CreateDurableFunctionBodyRuntime = {
   nodejs22x: 'nodejs22.x',
   nodejs24x: 'nodejs24.x',
+  python313: 'python3.13',
+  python314: 'python3.14',
 } as const;

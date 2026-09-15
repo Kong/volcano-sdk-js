@@ -7,9 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const CreateDurableFunctionBodyRuntime = {
-    nodejs22x: 'nodejs22.x',
-    nodejs24x: 'nodejs24.x',
-    python313: 'python3.13',
-    python314: 'python3.14',
-};
+
+export type ListProjectsIncludeItem = typeof ListProjectsIncludeItem[keyof typeof ListProjectsIncludeItem];
+
+
+export const ListProjectsIncludeItem = {
+  git_connection: 'git_connection',
+  health: 'health',
+} as const;

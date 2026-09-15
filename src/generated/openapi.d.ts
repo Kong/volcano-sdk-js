@@ -295,7 +295,9 @@ export interface paths {
          *     `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
          *     `offset` past the cursor anchor. Supplying `limit` without `page`
          *     selects cursor mode. `search` applies a case-insensitive project-name
-         *     filter in either mode. Sending `page` with `cursor` or `ending_before`,
+         *     filter in either mode. `include` optionally expands each returned
+         *     project with its Git connection and/or aggregate health summary using
+         *     `git_connection` and `health`. Sending `page` with `cursor` or `ending_before`,
          *     or sending both cursor directions, returns 400.
          */
         get: operations["listProjects"];
@@ -7307,6 +7309,10 @@ export interface components {
              * @example /projects/3fa85f64-5717-4562-b3fc-2c963f66afa6/logo?v=1718524800
              */
             logo_url?: string;
+            /** @description Present for connected projects when `git_connection` is requested through the list endpoint's `include` parameter. */
+            git_connection?: components["schemas"]["ProjectGitConnectionSummary"];
+            /** @description Present when `health` is requested through the list endpoint's `include` parameter. */
+            health?: components["schemas"]["ProjectHealthSummary"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8587,6 +8593,20 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ProjectGitConnectionSummary: {
+            /** Format: int64 */
+            repo_installation_id: number;
+            /** Format: int64 */
+            repo_id: number;
+            repo_full_name: string;
+            root_directory: string;
+            production_branch: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProjectHealthSummary: {
+            status: components["schemas"]["ProjectHealthStatus"];
         };
         /**
          * @description Which kind of function this is. `standard` runs once per invocation.
@@ -10021,6 +10041,8 @@ export interface operations {
                  *     endpoint description for supported pagination modes.
                  */
                 search?: components["parameters"]["Search"];
+                /** @description Optional comma-separated project metadata expansions. */
+                include?: ("git_connection" | "health")[];
             };
             header?: never;
             path?: never;
@@ -13318,13 +13340,16 @@ export interface operations {
                     code: string;
                     /**
                      * @description Runtime environment. Required. Durable execution needs the
-                     *     durable authoring API, which ships for the Node runtimes;
+                     *     durable authoring API, which ships for these runtimes only;
                      *     any other runtime is rejected with 400 and the response
-                     *     names the ones that work.
+                     *     names the ones that work. Note that a durable Python
+                     *     function needs a newer runtime than a standard one defaults
+                     *     to. `GET /functions/runtimes` reports `durable_capable` per
+                     *     runtime.
                      * @example nodejs24.x
                      * @enum {string}
                      */
-                    runtime: "nodejs22.x" | "nodejs24.x";
+                    runtime: "nodejs22.x" | "nodejs24.x" | "python3.13" | "python3.14";
                     /**
                      * @description The name of the function to invoke. Defaults to "handler" if not specified.
                      * @default handler

@@ -261,7 +261,9 @@ export const getListProjectsUrl = (params) => {
  * `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
  * `offset` past the cursor anchor. Supplying `limit` without `page`
  * selects cursor mode. `search` applies a case-insensitive project-name
- * filter in either mode. Sending `page` with `cursor` or `ending_before`,
+ * filter in either mode. `include` optionally expands each returned
+ * project with its Git connection and/or aggregate health summary using
+ * `git_connection` and `health`. Sending `page` with `cursor` or `ending_before`,
  * or sending both cursor directions, returns 400.
  * @summary List all projects for authenticated user
  */

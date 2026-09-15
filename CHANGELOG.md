@@ -44,6 +44,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.8.0](https://github.com/Kong/volcano-sdk-js/compare/v1.7.6...v1.8.0) (2026-09-14)
+
+### Features
+
+- **projects:** add list metadata expansions ([#78](https://github.com/Kong/volcano-sdk-js/issues/78)) ([5b095e2](https://github.com/Kong/volcano-sdk-js/commit/5b095e263b2691e3191306d6a73f85cff32631c9))
+
 ## [1.7.6](https://github.com/Kong/volcano-sdk-js/compare/v1.7.5...v1.7.6) (2026-09-11)
 
 ### Bug Fixes
