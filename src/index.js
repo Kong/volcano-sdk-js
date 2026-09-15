@@ -93,6 +93,10 @@ const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
+// The idempotency header's documented limit. Checked here so a name that is too
+// long fails before the start is sent, rather than coming back as a 400 the
+// caller has to read.
+const MAX_EXECUTION_NAME_LENGTH = 255;
 // Both codes mean the lock is unavailable right now rather than that the request
 // failed: another live holder, or this caller's own lapsed lease still inside
 // the takeover grace window.
@@ -2477,6 +2481,15 @@ class VolcanoAuth {
         data: null,
         status: null,
         error: new Error('executionName must be a non-empty string when provided'),
+      };
+    }
+    // The name the platform sees is the trimmed one, so the limit is checked
+    // against that rather than against what the caller passed.
+    if (executionName !== undefined && executionName.trim().length > MAX_EXECUTION_NAME_LENGTH) {
+      return {
+        data: null,
+        status: null,
+        error: new Error(`executionName must be at most ${MAX_EXECUTION_NAME_LENGTH} characters`),
       };
     }
 

@@ -423,7 +423,7 @@ export interface Durable {
    * @param input - JSON-serializable input handed to the function.
    * @param options.executionName - Idempotency key. Starting again under the
    *        same name returns the execution that already exists rather than
-   *        beginning a second one, and is charged once.
+   *        beginning a second one, and is charged once. Up to 255 characters.
    *
    * @example
    * ```typescript

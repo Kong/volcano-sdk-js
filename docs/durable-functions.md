@@ -440,11 +440,13 @@ console.log(data.id, data.status); // 'running'
 
 The execution name is the idempotency key: starting again under the same name
 returns the execution that already exists rather than beginning a second one,
-and is charged once.
+and is charged once. It is trimmed, holds letters, digits, `-`, `_` and `.`, and
+is at most 255 characters; a longer one is refused by `start` itself, with
+`status` null because nothing was sent.
 
 `start` resolves rather than throws when the platform refuses. `status` carries
-why — `400` for input that is not JSON, or an execution name over 255
-characters or holding anything but letters, digits, `-`, `_` and `.`,
+why — `400` for input that is not JSON, or an execution name holding anything
+but letters, digits, `-`, `_` and `.`,
 `401` for a credential the endpoint does not accept, `403` for an anon key
 starting a durable function that is not public, `404` for a name that is not a
 durable function in this project, `409` while the function is still

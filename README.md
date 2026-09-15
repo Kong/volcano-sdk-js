@@ -104,7 +104,9 @@ The SDK declares it as an optional peer dependency, which is what lets the SDK
 resolve it in the deployed function without anything else installing it: a
 browser bundle and a standard function stay as small as they were. Its install
 closure is ~19 MB, which is why it belongs in durable functions rather than in
-everyone's `node_modules`.
+everyone's `node_modules`. It also requires Node 22, where this SDK supports
+Node 20, so it is only ever installed on the runtimes that can host a durable
+function (`nodejs22.x` and `nodejs24.x`).
 
 A function that declares it explicitly is left alone by the build, version
 included, which is the way to pin a specific runtime.

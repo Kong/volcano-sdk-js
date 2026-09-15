@@ -87,6 +87,25 @@ describe('durable.start', () => {
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
 
+  // The name is an idempotency key the caller has to be able to reproduce, so a
+  // name it cannot use is worth saying locally instead of spending a start on a
+  // 400. 255 is what the API documents, measured after the trim the SDK applies.
+  test('refuses an execution name longer than the platform accepts', async () => {
+    const { volcano, transport } = clientWithTransport();
+
+    const { error } = await volcano.durable.start(
+      'order-pipeline',
+      {},
+      { executionName: 'o'.repeat(256) },
+    );
+
+    expect(error.message).toContain('executionName must be at most 255 characters');
+    expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
+
+    await volcano.durable.start('order-pipeline', {}, { executionName: ` ${'o'.repeat(255)} ` });
+    expect(transport.startDurableExecutionFromApplication).toHaveBeenCalledTimes(1);
+  });
+
   // A refused start is not an exception: the caller gets the platform's status
   // so it can tell a private function (403) from a plan's concurrency cap (429).
   test('surfaces a platform refusal with its status', async () => {
