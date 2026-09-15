@@ -4847,6 +4847,43 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it.each([
+      ['an unclosed IPv6 literal', 'https://['],
+      ['a port out of range', 'https://example.test:99999/'],
+      ['whitespace in the host', 'https://exa mple.test/'],
+    ])('should fall back to the API path for %s', async (_label, invokeUrl) => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: invokeUrl,
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
+      // A malformed endpoint is unusable, not fatal: the invocation still goes
+      // through the API path rather than raising out of invoke().
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
     it('should refuse a plaintext invoke_url when the API is https', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
