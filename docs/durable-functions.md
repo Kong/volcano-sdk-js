@@ -33,6 +33,11 @@ but it has to be a dependency of the function you deploy. It is an optional peer
 dependency of the SDK, so nothing else installs it: a browser bundle and a
 standard function stay as small as they were.
 
+It is a re-export of
+[`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js),
+which it installs for you. A function that depends on that package directly
+works too — the SDK resolves either.
+
 Deploy the result as a durable function — `volcano cloud durable deploy`, or
 `kind: durable` in `volcano-config.yaml`. A durable handler deployed as a
 standard function fails on its first invocation with `DurableRuntimeMissingError`,
