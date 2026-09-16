@@ -3,7 +3,7 @@ title: 'Durable functions'
 description: 'Write functions that checkpoint their progress and resume where they left off, so one execution can run for hours across many invocations.'
 ---
 
-A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to 24 hours, far longer than a single invocation is allowed.
+A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to a year, far longer than a single invocation is allowed.
 
 `@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — is owner-scoped, so it belongs on your backend, the [CLI](/cli/durable-functions), or the dashboard.
 
