@@ -323,18 +323,43 @@ const checks = await ctx.parallel(
 `map` and `parallel` both resolve to the same plain object, so it logs and
 returns cleanly:
 
-| Field             | Type     | Description                                                              |
-| ----------------- | -------- | ------------------------------------------------------------------------ |
-| `items`           | array    | Every item in input order: `{ index, status, result, error }`.           |
-| `results`         | array    | The results that succeeded, so not aligned with the input if any failed. |
-| `errors`          | array    | The failures.                                                            |
-| `succeeded`       | `number` | How many succeeded.                                                      |
-| `failed`          | `number` | How many failed.                                                         |
-| `total`           | `number` | How many were in the batch.                                              |
-| `throwIfFailed()` | function | Throws the first failure, if there was one.                              |
+| Field              | Type     | Description                                                                  |
+| ------------------ | -------- | ---------------------------------------------------------------------------- |
+| `items`            | array    | The items that finished, in input order: `{ index, status, result, error }`. |
+| `results`          | array    | The results that succeeded, so not aligned with the input if any failed.     |
+| `errors`           | array    | The failures, as `{ name, message, type, data }`.                            |
+| `succeeded`        | `number` | How many succeeded.                                                          |
+| `failed`           | `number` | How many failed.                                                             |
+| `completed`        | `number` | How many finished, which is `succeeded + failed`.                            |
+| `completionReason` | `string` | Why the batch ended.                                                         |
+| `throwIfFailed()`  | function | Throws the first failure, if there was one.                                  |
 
-An item's `status` is `succeeded`, `failed`, or `started` — the last one only
-appears when `minSucceeded` finished the batch while others were still running.
+An item's `status` is `succeeded` or `failed`.
+
+`minSucceeded` ends the batch while other items are still running, and those
+items are not in the result. Whether the platform can reproduce an in-flight
+item when the execution resumes is not guaranteed, so a handler that branched on
+one would take a different path on the replay and undo the point of durable
+execution. `completionReason` is how to tell why the batch ended:
+
+```javascript
+const shipped = await ctx.map('ship', input.items, shipItem, { minSucceeded: 2 });
+
+if (shipped.completionReason === 'min_successful_reached') {
+  ctx.log.info('shipped enough to proceed', { completed: shipped.completed });
+}
+```
+
+| `completionReason`           | Meaning                                               |
+| ---------------------------- | ----------------------------------------------------- |
+| `all_completed`              | Every item finished.                                  |
+| `min_successful_reached`     | `minSucceeded` was reached and the rest were dropped. |
+| `failure_tolerance_exceeded` | Too many items failed.                                |
+
+Failures are plain objects rather than `Error` instances, so the result can be
+logged or returned from the handler as it is — an `Error` loses its `message` to
+`JSON.stringify`. To propagate the failure instead of reporting it, call
+`throwIfFailed()`, which throws the real error.
 
 ## `ctx.log`
 

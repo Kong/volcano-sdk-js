@@ -220,24 +220,66 @@ function parallelBranches(branches, engine) {
  * to plain data: it is usually inspected, logged, and returned from the
  * handler, and a result that survives `JSON.stringify` is worth more here than
  * the convenience methods.
+ *
+ * Only the parts that survive a replay are carried over. A batch that finishes
+ * early -- `minSucceeded` reached, say -- leaves items still in flight, and the
+ * engine does not promise to reproduce those when the execution resumes: the
+ * in-flight entries and the total count it observed live can both come back
+ * different. Handing them to a handler would be handing it a value that changes
+ * under replay, and a handler that branches on one takes a different path the
+ * second time through. So the item list is the completed items, the count is how
+ * many completed, and why the batch ended is `completionReason`, which is
+ * stable.
  */
 function batchResult(batch) {
-  const items = batch.all.map((item) => ({
-    index: item.index,
-    status: item.status.toLowerCase(),
-    result: item.result,
-    error: item.error,
-  }));
+  const items = batch.all
+    .filter((item) => item.status !== 'STARTED')
+    .map((item) => ({
+      index: item.index,
+      status: item.status.toLowerCase(),
+      result: item.result,
+      error: item.error === undefined ? undefined : failureDetail(item.error),
+    }));
 
   return {
     items,
     results: batch.getResults(),
-    errors: batch.getErrors(),
+    errors: batch.getErrors().map((error) => failureDetail(error)),
     succeeded: batch.successCount,
     failed: batch.failureCount,
-    total: batch.totalCount,
+    completed: batch.successCount + batch.failureCount,
+    completionReason: completionReason(batch),
     throwIfFailed: () => batch.throwIfError(),
   };
+}
+
+function completionReason(batch) {
+  return typeof batch.completionReason === 'string'
+    ? batch.completionReason.toLowerCase()
+    : undefined;
+}
+
+/**
+ * A failure as data, because the result is documented as surviving
+ * `JSON.stringify` and an Error does not: `message` and `name` live on the
+ * prototype and are non-enumerable, so serializing the engine's error kept its
+ * `errorType` and dropped the one field anybody reads.
+ *
+ * `throwIfFailed` still throws the engine's own error, so nothing is lost for a
+ * handler that wants to propagate the failure rather than report it.
+ */
+function failureDetail(error) {
+  if (!(error instanceof Error)) {
+    return { name: 'Error', message: String(error) };
+  }
+  const detail = { name: error.name, message: error.message };
+  if (error.errorType !== undefined) {
+    detail.type = error.errorType;
+  }
+  if (error.errorData !== undefined) {
+    detail.data = error.errorData;
+  }
+  return detail;
 }
 
 /**

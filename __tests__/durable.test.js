@@ -22,17 +22,32 @@ const fakeBatchItem = (settled, index) =>
     ? { index, status: 'SUCCEEDED', result: settled.value }
     : { index, status: 'FAILED', error: settled.reason };
 
-const fakeBatch = (items) => ({
+const fakeBatch = (items, completionReason = 'ALL_COMPLETED') => ({
   all: items,
   getResults: () => items.filter((item) => item.status === 'SUCCEEDED').map((item) => item.result),
   getErrors: () => items.filter((item) => item.error).map((item) => item.error),
   successCount: items.filter((item) => item.status === 'SUCCEEDED').length,
   failureCount: items.filter((item) => item.status === 'FAILED').length,
+  startedCount: items.filter((item) => item.status === 'STARTED').length,
   totalCount: items.length,
+  completionReason,
   throwIfError: () => {
     engineCalls.push({ op: 'throwIfError' });
   },
 });
+
+// A batch the test hands back verbatim, for the shapes the double cannot reach
+// by running mappers: an early completion with items still in flight, and the
+// same batch as the engine rebuilds it on a replay.
+let stagedBatch = null;
+const stageBatch = (batch) => {
+  stagedBatch = batch;
+};
+const takeStagedBatch = () => {
+  const batch = stagedBatch;
+  stagedBatch = null;
+  return batch;
+};
 
 let lastContext = null;
 
@@ -63,6 +78,10 @@ const fakeContext = () => {
 
     map(name, items, mapFn, config) {
       engineCalls.push({ op: 'map', name, items, config });
+      const staged = takeStagedBatch();
+      if (staged) {
+        return Promise.resolve(staged);
+      }
       return Promise.allSettled(
         items.map((item, index) => mapFn(context, item, index, items)),
       ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
@@ -125,6 +144,7 @@ const callsOf = (op) => engineCalls.filter((call) => call.op === op);
 
 beforeEach(() => {
   engineCalls.length = 0;
+  stagedBatch = null;
 });
 
 describe('durable()', () => {
@@ -454,7 +474,13 @@ describe('ctx.map', () => {
       { index: 0, status: 'succeeded', result: 'A', error: undefined },
       { index: 1, status: 'succeeded', result: 'B', error: undefined },
     ]);
-    expect(result).toMatchObject({ succeeded: 2, failed: 0, total: 2, errors: [] });
+    expect(result).toMatchObject({
+      succeeded: 2,
+      failed: 0,
+      completed: 2,
+      completionReason: 'all_completed',
+      errors: [],
+    });
   });
 
   it('translates the batch options', async () => {
@@ -496,15 +522,110 @@ describe('ctx.map', () => {
     expect(result.results).toEqual(['A']);
     expect(result.items).toEqual([
       { index: 0, status: 'succeeded', result: 'A', error: undefined },
-      { index: 1, status: 'failed', result: undefined, error: failure },
+      {
+        index: 1,
+        status: 'failed',
+        result: undefined,
+        error: { name: 'Error', message: 'cannot ship b' },
+      },
     ]);
-    expect(result).toMatchObject({ succeeded: 1, failed: 1, total: 2, errors: [failure] });
+    expect(result).toMatchObject({
+      succeeded: 1,
+      failed: 1,
+      completed: 2,
+      errors: [{ name: 'Error', message: 'cannot ship b' }],
+    });
   });
 
   it('delegates throwIfFailed to the batch', async () => {
     const result = await run((_input, ctx) => ctx.map('ship', [1], async (item) => item));
     result.throwIfFailed();
 
+    expect(callsOf('throwIfError')).toHaveLength(1);
+  });
+
+  // `minSucceeded` ends the batch with items still running, and the engine does
+  // not promise to rebuild those when the execution resumes: the in-flight
+  // entries and the total it counted live can both come back different. A
+  // handler that saw them would branch one way live and another way on the
+  // replay, which is the one thing durable execution is supposed to rule out.
+  // So the result a handler is given has to be the same both times.
+  it('gives the same result live and on the replay of an early completion', async () => {
+    const shipped = (batch) => {
+      stageBatch(batch);
+      return run((_input, ctx) =>
+        ctx.map('ship', ['a', 'b', 'c'], async (item) => item, { minSucceeded: 2 }),
+      );
+    };
+
+    // Live: two finished, the third was still going when the batch completed.
+    const live = await shipped(
+      fakeBatch(
+        [
+          { index: 0, status: 'SUCCEEDED', result: 'a' },
+          { index: 1, status: 'SUCCEEDED', result: 'b' },
+          { index: 2, status: 'STARTED' },
+        ],
+        'MIN_SUCCESSFUL_REACHED',
+      ),
+    );
+
+    // Resumed: the engine rebuilt the completed items only.
+    const replayed = await shipped(
+      fakeBatch(
+        [
+          { index: 0, status: 'SUCCEEDED', result: 'a' },
+          { index: 1, status: 'SUCCEEDED', result: 'b' },
+        ],
+        'MIN_SUCCESSFUL_REACHED',
+      ),
+    );
+
+    expect(live.items).toEqual([
+      { index: 0, status: 'succeeded', result: 'a', error: undefined },
+      { index: 1, status: 'succeeded', result: 'b', error: undefined },
+    ]);
+    expect(live.completed).toBe(2);
+    expect(live.completionReason).toBe('min_successful_reached');
+    expect(JSON.stringify(live)).toEqual(JSON.stringify(replayed));
+  });
+
+  // The result is documented as surviving JSON.stringify, and an Error does not:
+  // `message` and `name` are non-enumerable, so serializing the engine's own
+  // error kept its errorType and dropped the field anybody actually reads.
+  it('keeps a failure readable through JSON', async () => {
+    // The engine's shape: an Error subclass carrying its own classification.
+    class ChildContextError extends Error {
+      constructor(message) {
+        super(message);
+        this.name = 'ChildContextError';
+        this.errorType = 'ChildContextError';
+        this.errorData = '{"code":"card_declined"}';
+      }
+    }
+
+    stageBatch(
+      fakeBatch([{ index: 0, status: 'FAILED', error: new ChildContextError('cannot ship a') }]),
+    );
+    const result = await run((_input, ctx) => ctx.map('ship', ['a'], async (item) => item));
+
+    const serialized = JSON.parse(JSON.stringify(result));
+    expect(serialized.items[0].error).toEqual({
+      name: 'ChildContextError',
+      message: 'cannot ship a',
+      type: 'ChildContextError',
+      data: '{"code":"card_declined"}',
+    });
+    expect(serialized.errors).toEqual([serialized.items[0].error]);
+  });
+
+  // Throwing is not reporting: a handler that wants to propagate the failure
+  // gets the engine's own error, stack and all.
+  it('still throws the engine error from throwIfFailed', async () => {
+    stageBatch(fakeBatch([{ index: 0, status: 'FAILED', error: new Error('cannot ship a') }]));
+    const result = await run((_input, ctx) => ctx.map('ship', ['a'], async (item) => item));
+
+    result.throwIfFailed();
     expect(callsOf('throwIfError')).toHaveLength(1);
   });
 });

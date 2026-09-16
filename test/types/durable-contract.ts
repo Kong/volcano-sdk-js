@@ -38,6 +38,13 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       { concurrency: 4 },
     );
     shipped.throwIfFailed();
+    // The stable parts of a batch result, which is all the facade exposes: the
+    // in-flight items and the count the live run observed are not on it,
+    // because a replay is not obliged to reproduce them.
+    if (shipped.completionReason === 'min_successful_reached') {
+      void shipped.completed;
+    }
+    void shipped.errors.map((failure) => `${failure.name}: ${failure.message}`);
 
     const checks = await ctx.parallel([
       (branch) => branch.step('fraud', async () => 'clear'),
