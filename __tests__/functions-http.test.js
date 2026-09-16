@@ -199,6 +199,47 @@ describe('function invocation over HTTP', () => {
     ]);
   });
 
+  // The server stamps x-volcano-version on every response, so a check keyed on
+  // its absence never fires and every platform failure would be handed back as
+  // though the function had answered.
+  it('surfaces a platform refusal as a system error', async () => {
+    const api = track(
+      await startServer((target) => {
+        if (target.startsWith('/functions/resolve')) {
+          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
+        }
+        // No dispatch marker: the platform refused before the function ran.
+        return [400, { error: 'function cannot be invoked (status: failed)' }];
+      }),
+    );
+
+    const { data, status, error } = await client(api.url).functions.invoke('my-function', {});
+
+    expect(data).toBeNull();
+    expect(status).toBe(400);
+    expect(error).not.toBeNull();
+    expect(error.isSystemError).toBe(true);
+    expect(error.message).toBe('function cannot be invoked (status: failed)');
+  });
+
+  it('returns a function-authored error as data, not a system error', async () => {
+    const api = track(
+      await startServer((target) => {
+        if (target.startsWith('/functions/resolve')) {
+          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
+        }
+        // The function ran and chose 400, so this is its answer.
+        return [400, { error: 'bad input' }, { 'X-Volcano-Function-Invoked': 'true' }];
+      }),
+    );
+
+    const { data, status, error } = await client(api.url).functions.invoke('my-function', {});
+
+    expect(error).toBeNull();
+    expect(status).toBe(400);
+    expect(data).toEqual({ error: 'bad input' });
+  });
+
   it('returns a function-authored 404 without invoking it twice', async () => {
     const api = track(
       await startServer((target) => {

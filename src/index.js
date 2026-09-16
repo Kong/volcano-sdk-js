@@ -2268,8 +2268,12 @@ class VolcanoAuth {
         );
 
         const versionHeader = getHeaderValue(response, 'x-volcano-version');
-        functionDispatched = Boolean(getHeaderValue(response, FUNCTION_INVOKED_HEADER));
-        if (response.status === 401 && allowRefresh && !versionHeader) {
+        const dispatched = Boolean(getHeaderValue(response, FUNCTION_INVOKED_HEADER));
+        functionDispatched = dispatched;
+        // A 401 the platform raised means this token was rejected before the
+        // function ran, so refreshing can help. A 401 the function chose is its
+        // answer, and refreshing would re-run it.
+        if (response.status === 401 && allowRefresh && !dispatched) {
           const refreshed = await this._refreshSessionForContext(context);
           if (AuthRefreshDiscardedError.is(refreshed.error)) {
             return {
@@ -2299,18 +2303,18 @@ class VolcanoAuth {
         const headers = responseHeadersToObject(response);
         const version = versionHeader || null;
 
-        // A non-2xx response with no version header never reached a running
-        // function — the platform blocked it (failed/provisioning deploy,
-        // gateway down, etc.). Surface it as a system error, distinct from a
-        // function's own error response (which comes back as `data`).
+        // A non-2xx response the platform produced never reached a running
+        // function — a failed or provisioning deploy, a quota refusal, a
+        // gateway that could not route. Surface it as a system error, distinct
+        // from a function's own error response, which comes back as `data`.
         //
-        // This split is load-bearing on a gateway invariant: `x-volcano-version`
-        // must be set ONLY by the function runtime after dispatch (never by the
-        // gateway pre-dispatch), and must be CORS-exposed
-        // (`Access-Control-Expose-Headers: x-volcano-version`) on the invoke
-        // domain — otherwise a browser can't read it and a healthy function's
-        // own 4xx would be misread as a system error.
-        if (!response.ok && !versionHeader) {
+        // The split keys on x-volcano-function-invoked, which the platform sets
+        // only after dispatch. It cannot key on x-volcano-version: the server
+        // stamps that on every response, errors included, so the branch would
+        // never be taken and every platform failure would be returned as though
+        // the function had answered. Both headers are CORS-exposed on the
+        // invoke domain, without which a browser cannot read either.
+        if (!response.ok && !dispatched) {
           const message =
             data && typeof data === 'object' && data.error
               ? data.error

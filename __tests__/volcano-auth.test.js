@@ -4703,18 +4703,22 @@ describe('VolcanoAuth', () => {
             cache_ttl_seconds: 300,
           }),
       });
-      // ...but the invocation is blocked by the platform: 400 with an error body
-      // and NO x-volcano-version header (request never reached a running version).
+      // ...but the platform blocks the invocation: 400 carrying the version
+      // stamp, which every response gets, and no dispatch marker, because
+      // nothing ran. Omitting the version header here would be a shape the
+      // server never produces, and would let a check keyed on it pass.
       global.fetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         headers: {
-          get: (name) => {
-            if (name?.toLowerCase() === 'content-type') return 'application/json';
-            return null;
-          },
+          get: (name) =>
+            ({
+              'content-type': 'application/json',
+              'x-volcano-version': 'v1',
+            })[name?.toLowerCase()] ?? null,
           forEach: (callback) => {
             callback('application/json', 'content-type');
+            callback('v1', 'x-volcano-version');
           },
         },
         json: () => Promise.resolve({ error: 'function cannot be invoked (status: failed)' }),
@@ -5163,7 +5167,7 @@ describe('VolcanoAuth', () => {
       expect(error).toBeDefined();
     });
 
-    it('should passthrough non-2xx function response when version header is present', async () => {
+    it('should passthrough a non-2xx the function itself returned', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
       global.fetch.mockResolvedValueOnce({
@@ -5177,18 +5181,23 @@ describe('VolcanoAuth', () => {
             cache_ttl_seconds: 300,
           }),
       });
+      // The dispatch marker is what makes this the function's answer. The
+      // version stamp alone cannot: the server puts it on every response,
+      // including the ones it refuses before the function runs.
       global.fetch.mockResolvedValueOnce({
         ok: false,
         status: 402,
         headers: {
-          get: (name) => {
-            if (name?.toLowerCase() === 'x-volcano-version') return 'staging-xyz';
-            if (name?.toLowerCase() === 'content-type') return 'application/json';
-            return null;
-          },
+          get: (name) =>
+            ({
+              'x-volcano-version': 'staging-xyz',
+              'content-type': 'application/json',
+              'x-volcano-function-invoked': 'true',
+            })[name?.toLowerCase()] ?? null,
           forEach: (callback) => {
             callback('staging-xyz', 'x-volcano-version');
             callback('application/json', 'content-type');
+            callback('true', 'x-volcano-function-invoked');
           },
         },
         json: () => Promise.resolve({ error: 'payment required' }),
