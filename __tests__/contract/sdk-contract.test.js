@@ -509,6 +509,23 @@ autoBindSteps(features, [
       expect(context.world.lastOutcome.value.state.held).toBe(false);
     });
 
+    when('the client invokes the contract function by name', async () => {
+      const result = await context.world.serviceClient.functions.invoke(
+        context.world.functionName,
+        { value: 'contract' },
+      );
+      recordOutcome(context.world, result, result.error);
+    });
+
+    // The function is reachable only at the endpoint the platform resolved, on
+    // a domain the API URL does not name, so an echo coming back is what proves
+    // the SDK sent the request there rather than somewhere it guessed.
+    then('the function echoes the payload', () => {
+      const response = context.world.lastOutcome.value;
+      expect(response.status).toBe(200);
+      expect(response.data).toEqual({ echoed: 'contract' });
+    });
+
     given('two authenticated realtime clients', async () => {
       const world = startScenario(context);
       await world.createRealtimeClients();
