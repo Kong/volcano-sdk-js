@@ -963,6 +963,60 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - profile refresh replay', () => {
+    it.each(['getUser', 'updateUser', 'convertAnonymous', 'confirmEmailChange'])(
+      '%s replays the original request after one refresh and caches the user',
+      async (operation) => {
+        const metadata = { roles: ['editor'] };
+        const profile = { id: 'user-123', email: 'updated@example.com' };
+        await volcano.auth.setSession({
+          access_token: 'old-access',
+          refresh_token: 'old-refresh',
+          user: { id: profile.id },
+        });
+        const invoke = {
+          getUser: () => volcano.auth.getUser(),
+          updateUser: () => volcano.auth.updateUser({ password: 'secret', metadata }),
+          convertAnonymous: () =>
+            volcano.auth.convertAnonymous({
+              email: profile.email,
+              password: 'secret',
+              metadata,
+            }),
+          confirmEmailChange: () => volcano.auth.confirmEmailChange('confirmation'),
+        };
+        global.fetch
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'expired' }),
+          })
+          .mockImplementationOnce(async () => {
+            metadata.roles.push('changed while refreshing');
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                access_token: 'new-access',
+                refresh_token: 'new-refresh',
+                user: { id: profile.id, email: 'before-profile@example.com' },
+              }),
+            };
+          })
+          .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: profile }) });
+        const result = await invoke[operation]();
+        expect(result.error).toBeNull();
+        expect(result.user).toEqual(profile);
+        expect(volcano.currentUser).toEqual(profile);
+        expect(volcano.accessToken).toBe('new-access');
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(global.fetch.mock.calls[0][0]).toBe(global.fetch.mock.calls[2][0]);
+        expect(global.fetch.mock.calls[0][1].body).toBe(global.fetch.mock.calls[2][1].body);
+        expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer new-access');
+      },
+    );
+  });
+
   describe('Authentication - getUser', () => {
     it('should return user when authenticated', async () => {
       volcano.accessToken = 'valid-token';
@@ -2168,6 +2222,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4251,6 +4306,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4290,7 +4346,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ payload: { action: 'getData' } }),
@@ -4311,6 +4367,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4336,7 +4393,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: `Bearer ${TEST_ANON_KEY}` }),
         }),
@@ -4358,6 +4415,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'public-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4404,6 +4462,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4442,6 +4501,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4489,6 +4549,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'public-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4524,6 +4585,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4570,6 +4632,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4599,7 +4662,7 @@ describe('VolcanoAuth', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(global.fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: `Bearer ${TEST_ACCESS_TOKEN_PROJECT_A}`,
@@ -4625,6 +4688,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -4689,21 +4753,26 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
-      // ...but the invocation is blocked by the platform: 400 with an error body
-      // and NO x-volcano-version header (request never reached a running version).
+      // ...but the platform blocks the invocation: 400 carrying the version
+      // stamp, which every response gets, and no dispatch marker, because
+      // nothing ran. Omitting the version header here would be a shape the
+      // server never produces, and would let a check keyed on it pass.
       global.fetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         headers: {
-          get: (name) => {
-            if (name?.toLowerCase() === 'content-type') return 'application/json';
-            return null;
-          },
+          get: (name) =>
+            ({
+              'content-type': 'application/json',
+              'x-volcano-version': 'v1',
+            })[name?.toLowerCase()] ?? null,
           forEach: (callback) => {
             callback('application/json', 'content-type');
+            callback('v1', 'x-volcano-version');
           },
         },
         json: () => Promise.resolve({ error: 'function cannot be invoked (status: failed)' }),
@@ -4750,6 +4819,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -4770,21 +4840,142 @@ describe('VolcanoAuth', () => {
       expect(error.cause).toBe(networkError);
     });
 
-    it('should reject invoke when apiUrl does not follow api.<domain> pattern', async () => {
+    it('should invoke on any apiUrl because the server supplies the invocation URL', async () => {
       const customVolcano = new VolcanoAuth({
         apiUrl: 'https://edge.example.com',
         anonKey: 'ak-test-anon-key',
       });
       customVolcano.accessToken = TEST_ACCESS_TOKEN;
 
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
       const { error } = await customVolcano.functions.invoke('my-function', {});
 
-      expect(error).toBeDefined();
-      expect(error.message).toContain('api.<domain>');
-      expect(fetch).not.toHaveBeenCalled();
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
 
-    it('should use direct invoke path when apiUrl points to localhost', async () => {
+    it('should invoke through the API path when the resolve response omits invoke_url', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it.each([
+      ['an unclosed IPv6 literal', 'https://['],
+      ['a port out of range', 'https://example.test:99999/'],
+      ['whitespace in the host', 'https://exa mple.test/'],
+    ])('should fall back to the API path for %s', async (_label, invokeUrl) => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: invokeUrl,
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
+      // A malformed endpoint is unusable, not fatal: the invocation still goes
+      // through the API path rather than raising out of invoke().
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should refuse a plaintext invoke_url when the API is https', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            name: 'my-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'http://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+            cache_ttl_seconds: 300,
+          }),
+      });
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        json: () => Promise.resolve({ ok: true }),
+      });
+
+      const { error } = await volcano.functions.invoke('my-function', {});
+
+      // Sending the bearer token in the clear would downgrade a credential the
+      // https API keeps encrypted, so the API path is used instead.
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        `${volcano.apiUrl}/functions/3cd3e058-e3ff-42a5-ae4d-650ef9b45746/invoke`,
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should use direct invoke path on localhost, where resolve omits invoke_url', async () => {
       const localVolcano = new VolcanoAuth({
         apiUrl: 'http://localhost:8000',
         anonKey: 'ak-test-anon-key',
@@ -4988,6 +5179,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -5013,6 +5205,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
@@ -5028,7 +5221,7 @@ describe('VolcanoAuth', () => {
       expect(error).toBeDefined();
     });
 
-    it('should passthrough non-2xx function response when version header is present', async () => {
+    it('should passthrough a non-2xx the function itself returned', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
       global.fetch.mockResolvedValueOnce({
@@ -5038,21 +5231,27 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             name: 'my-function',
             function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
             cache_ttl_seconds: 300,
           }),
       });
+      // The dispatch marker is what makes this the function's answer. The
+      // version stamp alone cannot: the server puts it on every response,
+      // including the ones it refuses before the function runs.
       global.fetch.mockResolvedValueOnce({
         ok: false,
         status: 402,
         headers: {
-          get: (name) => {
-            if (name?.toLowerCase() === 'x-volcano-version') return 'staging-xyz';
-            if (name?.toLowerCase() === 'content-type') return 'application/json';
-            return null;
-          },
+          get: (name) =>
+            ({
+              'x-volcano-version': 'staging-xyz',
+              'content-type': 'application/json',
+              'x-volcano-function-invoked': 'true',
+            })[name?.toLowerCase()] ?? null,
           forEach: (callback) => {
             callback('staging-xyz', 'x-volcano-version');
             callback('application/json', 'content-type');
+            callback('true', 'x-volcano-function-invoked');
           },
         },
         json: () => Promise.resolve({ error: 'payment required' }),
@@ -5080,6 +5279,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5102,12 +5302,12 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
         3,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5159,6 +5359,44 @@ describe('VolcanoAuth', () => {
       );
     });
 
+    it('should return a function-owned 404 without invoking twice', async () => {
+      volcano.accessToken = TEST_ACCESS_TOKEN;
+
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              name: 'my-function',
+              function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
+              cache_ttl_seconds: 300,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          // What the server sends once a function has run: the dispatch marker
+          // alongside the version stamp every response carries.
+          headers: {
+            get: (name) =>
+              ({ 'x-volcano-version': 'v1', 'x-volcano-function-invoked': 'true' })[
+                name.toLowerCase()
+              ] ?? null,
+          },
+          json: () => Promise.resolve({ error: 'no such route' }),
+        });
+
+      const { status, version, error } = await volcano.functions.invoke('my-function', {});
+
+      expect(error).toBeNull();
+      expect(status).toBe(404);
+      expect(version).toBe('v1');
+      // Resolve plus one invocation: a retry would run the caller's function twice.
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
     it('should invalidate stale function ID mapping on invoke 404 and retry with fresh resolve', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
@@ -5170,12 +5408,17 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
         .mockResolvedValueOnce({
           ok: false,
           status: 404,
+          // A platform 404 still carries the version stamp — every response
+          // does. Only the dispatch marker is missing, and keying the retry on
+          // the version header instead would never fire against a real server.
+          headers: { get: (name) => (name.toLowerCase() === 'x-volcano-version' ? 'v1' : null) },
           json: () => Promise.resolve({ error: 'function not found' }),
         })
         .mockResolvedValueOnce({
@@ -5185,6 +5428,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '22222222-2222-2222-2222-222222222222',
+              invoke_url: 'https://22222222-2222-2222-2222-222222222222.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5206,7 +5450,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://11111111-1111-1111-1111-111111111111.functions.test.com/',
+        'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5216,7 +5460,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://22222222-2222-2222-2222-222222222222.functions.test.com/',
+        'https://22222222-2222-2222-2222-222222222222.functions.test.run/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ payload: { action: 'retry' } }),
@@ -5235,6 +5479,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '11111111-1111-1111-1111-111111111111',
+              invoke_url: 'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5262,7 +5507,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://11111111-1111-1111-1111-111111111111.functions.test.com/',
+        'https://11111111-1111-1111-1111-111111111111.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5294,6 +5539,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5316,12 +5562,12 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
         3,
-        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.com/',
+        'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(localStorage.getItem).not.toHaveBeenCalled();
@@ -5348,6 +5594,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'shared-name',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5363,6 +5610,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'shared-name',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5385,7 +5633,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5395,7 +5643,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5424,6 +5672,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'same-name',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5439,6 +5688,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'same-name',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5461,7 +5711,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5471,7 +5721,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5488,6 +5738,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              invoke_url: 'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5503,6 +5754,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               name: 'my-function',
               function_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              invoke_url: 'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
               cache_ttl_seconds: 300,
             }),
         })
@@ -5526,7 +5778,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         2,
-        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.com/',
+        'https://aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
       expect(fetch).toHaveBeenNthCalledWith(
@@ -5536,7 +5788,7 @@ describe('VolcanoAuth', () => {
       );
       expect(fetch).toHaveBeenNthCalledWith(
         4,
-        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.com/',
+        'https://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.functions.test.run/',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -5573,6 +5825,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name: 'my-function',
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           };
@@ -5687,6 +5940,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name: 'my-function',
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           };
@@ -5758,6 +6012,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 name,
                 function_id: idByName[name],
+                invoke_url: `https://${idByName[name]}.functions.test.run/`,
                 cache_ttl_seconds: 300,
               }),
           });
@@ -5854,6 +6109,7 @@ describe('VolcanoAuth', () => {
             json: () =>
               Promise.resolve({
                 function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+                invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
                 cache_ttl_seconds: 300,
               }),
           });

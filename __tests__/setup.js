@@ -1,6 +1,8 @@
 const { VolcanoAuth } = require('../src/index.js');
 
-// Mock fetch globally
+// Mock fetch globally. Suites that drive the SDK against a real local server
+// restore this reference instead.
+global.__realFetch = global.fetch;
 global.fetch = jest.fn();
 
 // Mock localStorage

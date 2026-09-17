@@ -65,14 +65,16 @@ autoBindSteps(features, [
       if (adopted.error) throw adopted.error;
     });
 
-    then('the database read replaces the rejected token for the same user', async () => {
-      const { data, error } = await context.world.client.auth.getSession();
-      expect(error).toBeNull();
-      expect(data.session.access_token).toBeTruthy();
-      expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
-      expect(data.session.refresh_token).toBeTruthy();
-      expect(data.session.user.id).toBe(context.world.fixture.user_id);
-    });
+    for (const operation of ['database read', 'storage operation', 'profile read']) {
+      then(`the ${operation} replaces the rejected token for the same user`, async () => {
+        const { data, error } = await context.world.client.auth.getSession();
+        expect(error).toBeNull();
+        expect(data.session.access_token).toBeTruthy();
+        expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+        expect(data.session.refresh_token).toBeTruthy();
+        expect(data.session.user.id).toBe(context.world.fixture.user_id);
+      });
+    }
 
     when(
       'one client pauses delivery for 1 second and then resumes with the same handler',
@@ -84,6 +86,16 @@ autoBindSteps(features, [
         }
       },
     );
+
+    when('the client loads its server-validated profile', async () => {
+      const result = await context.world.client.auth.getUser();
+      recordOutcome(context.world, result.user, result.error);
+    });
+
+    then('the returned and cached profiles belong to the contract user', () => {
+      expect(context.world.lastOutcome.value.id).toBe(context.world.fixture.user_id);
+      expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
+    });
 
     given('the confirmed contract user', () => {
       startScenario(context);
@@ -592,6 +604,23 @@ autoBindSteps(features, [
     then('the listed executions include the started execution', () => {
       const { world } = context;
       expect(world.lastOutcome.value.data.map(({ id }) => id)).toContain(world.startedExecution.id);
+    });
+
+    when('the client invokes the contract function by name', async () => {
+      const result = await context.world.serviceClient.functions.invoke(
+        context.world.functionName,
+        { value: 'contract' },
+      );
+      recordOutcome(context.world, result, result.error);
+    });
+
+    // The function is reachable only at the endpoint the platform resolved, on
+    // a domain the API URL does not name, so an echo coming back is what proves
+    // the SDK sent the request there rather than somewhere it guessed.
+    then('the function echoes the payload', () => {
+      const response = context.world.lastOutcome.value;
+      expect(response.status).toBe(200);
+      expect(response.data).toEqual({ echoed: 'contract' });
     });
 
     given('two authenticated realtime clients', async () => {

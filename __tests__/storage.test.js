@@ -66,6 +66,44 @@ describe('Storage', () => {
       );
     });
 
+    it('replays the same upload file after an authentication rejection', async () => {
+      volcano.refreshToken = 'valid-refresh';
+      const file = new File(['hello\u0000\u00ff'], 'file.bin', {
+        type: 'application/octet-stream',
+      });
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          json: async () => ({ error: 'expired' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'new-access',
+            refresh_token: 'new-refresh',
+            expires_in: 3600,
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 201,
+          json: async () => ({ name: 'file.bin' }),
+        });
+
+      const result = await volcano.storage.from('files').upload('file.bin', file);
+
+      expect(result.error).toBeNull();
+      expect(fetch).toHaveBeenCalledTimes(3);
+      const first = fetch.mock.calls[0];
+      const replay = fetch.mock.calls[2];
+      expect(replay[0]).toBe(first[0]);
+      expect(replay[1].headers.Authorization).toBe('Bearer new-access');
+      expect(first[1].body.get('file')).toBe(file);
+      expect(replay[1].body.get('file')).toBe(file);
+    });
+
     it('should upload a Blob successfully', async () => {
       const mockResponse = {
         id: 'obj-123',
