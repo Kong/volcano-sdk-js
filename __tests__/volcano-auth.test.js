@@ -251,6 +251,55 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - token-only bootstrap', () => {
+    it('validates and caches the profile without inventing refresh credentials', async () => {
+      const client = new VolcanoAuth({ ...config, accessToken: 'supplied-access' });
+      const initial = await client.auth.getSession();
+      const user = { id: 'user-123', email: 'test@example.com' };
+      expect(global.fetch).not.toHaveBeenCalled();
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user }),
+      });
+
+      await expect(client.auth.getUser()).resolves.toEqual({ user, error: null });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${config.apiUrl}/auth/user`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer supplied-access' }),
+        }),
+      );
+      const current = await client.auth.getSession();
+      expect(current.data.session).toEqual({
+        access_token: 'supplied-access',
+        refresh_token: null,
+        user,
+      });
+      expect(initial.data.session.user).toBeNull();
+    });
+
+    it('preserves a rejected access token until local sign-out without refresh or revocation', async () => {
+      const client = new VolcanoAuth({ ...config, accessToken: 'supplied-access' });
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'Expired supplied token' }),
+      });
+
+      const profile = await client.auth.getUser();
+      expect(profile.error).toBeTruthy();
+      const refresh = await client.auth.refreshSession();
+      expect(refresh.error).toMatchObject({ message: 'No refresh token' });
+      expect(client.accessToken).toBe('supplied-access');
+      await expect(client.auth.signOut()).resolves.toEqual({ error: null });
+      await expect(client.auth.getSession()).resolves.toEqual({
+        data: { session: null },
+        error: null,
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('Authentication - local session adoption', () => {
     function completeSession() {
       return {

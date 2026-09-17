@@ -151,6 +151,39 @@ autoBindSteps(features, [
       recordOutcome(context.world, { session, user: session?.user ?? null }, current.error);
     });
 
+    when('a fresh client starts with only the current access token', async () => {
+      const world = context.world;
+      const source = world.client;
+      const current = await source.auth.getSession();
+      if (current.error) throw current.error;
+      world.previousSession = current.data.session;
+      world.cleanupCallbacks.push(async () => {
+        const result = await source.auth.signOut();
+        if (result.error) throw result.error;
+      });
+      world.client = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: world.previousSession.access_token,
+      });
+      const result = await world.client.auth.getSession();
+      recordOutcome(world, result.data.session, result.error);
+    });
+
+    then('the token-only session has no cached user', async () => {
+      const result = await context.world.client.auth.getSession();
+      expect(result.error).toBeNull();
+      expect(result.data.session.user).toBeNull();
+    });
+
+    then('the session retains only the supplied access token', async () => {
+      const world = context.world;
+      const result = await world.client.auth.getSession();
+      expect(result.error).toBeNull();
+      expect(result.data.session.access_token).toBe(world.previousSession.access_token);
+      expect(result.data.session.refresh_token).toBeNull();
+    });
+
     then('the refreshed session becomes current', () => {
       expect(context.world.refreshedSession).not.toBe(context.world.previousSession);
       expect(context.world.refreshedSession.access_token).not.toBe(

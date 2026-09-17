@@ -140,6 +140,30 @@ if (!error && session) {
 `getSession()` reads local SDK state. It does not refresh or validate the access token; use
 `getUser()` when server validation is required.
 
+### Start with a Supplied Access Token
+
+Create a separate client for each server request that carries a user's access token:
+
+```javascript
+import { VolcanoClient } from '@volcano.dev/sdk';
+
+const client = new VolcanoClient({
+  anonKey: process.env.VOLCANO_ANON_KEY,
+  accessToken: process.env.VOLCANO_ACCESS_TOKEN,
+});
+const { user, error } = await client.auth.getUser();
+if (error) throw error;
+console.log(user.id);
+await client.auth.signOut();
+```
+
+Construction makes no request and does not persist the supplied credentials.
+`getSession()` initially returns the access token with `refresh_token: null` and `user: null`.
+A successful `getUser()` caches the server-validated profile without changing the token.
+Without a refresh token, an HTTP 401 remains an authentication error, `refreshSession()` returns an error, and `signOut()` clears only the local session without a request.
+Pass `refreshToken` alongside `accessToken` when the client should refresh or revoke that session.
+`setSession()` still requires a complete session.
+
 ### Adopt an Existing Session
 
 Copy a complete session into another client:
