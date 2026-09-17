@@ -39,7 +39,7 @@ export interface Function {
   /** Whether OpenAPI metadata is configured; list responses omit the document itself. */
   has_openapi_spec: boolean;
   aws_function_arn?: string;
-  /** Canonical GeoDNS endpoint URL for invoking this function (always HTTPS) */
+  /** Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Empty when the deployment serves no public invocation domain, as in local development. */
   invoke_url?: string;
   /** Regions where this function is currently deployed */
   deployed_regions: string[];

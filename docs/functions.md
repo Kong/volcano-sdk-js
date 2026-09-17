@@ -67,6 +67,28 @@ if (data) {
 const { data, status, headers, version, error } = await volcano.functions.invoke('health-check');
 ```
 
+### Where the request goes
+
+Functions answer on their own domain, not on your API URL. `invoke` looks the
+name up once, then sends the invocation to the endpoint the platform returned:
+
+```text
+https://<function-id>.functions.volcano.run/
+```
+
+If you restrict outbound requests, allow that domain alongside your API host.
+In a browser, it needs a `connect-src` entry in your Content Security Policy;
+on a server, it needs an egress rule. A request blocked here comes back as a
+`VolcanoSystemError` with `status: null`, which is how you tell it apart from a
+function that ran and returned an error of its own.
+
+The lookup is cached for as long as the platform says it is valid, so repeated
+calls to the same function do not repeat it. Nothing to configure: the SDK never
+builds the host from `apiUrl`, because the two differ per deployment.
+
+Deployments without a public function domain — local development, for one —
+invoke through the API host instead. Same call, same result.
+
 ## Authentication
 
 The SDK uses the user's access token when a user is signed in. The function receives the user's context and can:

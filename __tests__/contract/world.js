@@ -57,6 +57,9 @@ class ContractWorld {
     this.storagePath = `${fixture.storage_path}.${suffix}`;
     this.realtimeChannel = `${fixture.realtime_channel}-${suffix}`;
     this.lockKey = `${fixture.lock_key}-${suffix}`;
+    // No suffix: the fixture deploys one function and every language shares it,
+    // where the names above are per-scenario resources.
+    this.functionName = fixture.function_name;
     this.storageBytes = Buffer.from(`volcano-sdk-contract-${suffix}`, 'utf8');
     this.realtimeMessage = { event: 'message', value: `volcano-sdk-contract-${suffix}` };
   }
