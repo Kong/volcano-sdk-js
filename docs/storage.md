@@ -5,6 +5,10 @@ description: 'Volcano Storage provides secure file storage with access control. 
 
 Volcano Storage provides secure file storage with access control. Upload user avatars, documents, media files, and more with built-in security policies.
 
+Authenticated storage requests refresh the current session after an HTTP 401
+and retry the request once. Upload retries preserve the original file bytes.
+Network failures do not trigger an upload retry.
+
 ## Overview
 
 The storage module offers:

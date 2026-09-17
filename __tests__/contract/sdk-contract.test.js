@@ -65,14 +65,16 @@ autoBindSteps(features, [
       if (adopted.error) throw adopted.error;
     });
 
-    then('the database read replaces the rejected token for the same user', async () => {
-      const { data, error } = await context.world.client.auth.getSession();
-      expect(error).toBeNull();
-      expect(data.session.access_token).toBeTruthy();
-      expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
-      expect(data.session.refresh_token).toBeTruthy();
-      expect(data.session.user.id).toBe(context.world.fixture.user_id);
-    });
+    for (const operation of ['database read', 'storage operation']) {
+      then(`the ${operation} replaces the rejected token for the same user`, async () => {
+        const { data, error } = await context.world.client.auth.getSession();
+        expect(error).toBeNull();
+        expect(data.session.access_token).toBeTruthy();
+        expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+        expect(data.session.refresh_token).toBeTruthy();
+        expect(data.session.user.id).toBe(context.world.fixture.user_id);
+      });
+    }
 
     when(
       'one client pauses delivery for 1 second and then resumes with the same handler',
