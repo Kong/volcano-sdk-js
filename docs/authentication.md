@@ -94,6 +94,9 @@ After successful sign-in, the SDK automatically:
 2. Sets up automatic token refresh before expiration
 3. Makes the user available via `volcano.auth.user()`
 
+Profile operations (`getUser`, `updateUser`, `convertAnonymous`, and `confirmEmailChange`) refresh a rejected access token once when the session has a usable refresh token, then replay the original request values.
+They do not retry other HTTP failures or ambiguous network failures, and they do not retry under a replacement session.
+
 ### Sign Out
 
 End the current session:

@@ -65,7 +65,7 @@ autoBindSteps(features, [
       if (adopted.error) throw adopted.error;
     });
 
-    for (const operation of ['database read', 'storage operation']) {
+    for (const operation of ['database read', 'storage operation', 'profile read']) {
       then(`the ${operation} replaces the rejected token for the same user`, async () => {
         const { data, error } = await context.world.client.auth.getSession();
         expect(error).toBeNull();
@@ -86,6 +86,16 @@ autoBindSteps(features, [
         }
       },
     );
+
+    when('the client loads its server-validated profile', async () => {
+      const result = await context.world.client.auth.getUser();
+      recordOutcome(context.world, result.user, result.error);
+    });
+
+    then('the returned and cached profiles belong to the contract user', () => {
+      expect(context.world.lastOutcome.value.id).toBe(context.world.fixture.user_id);
+      expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
+    });
 
     given('the confirmed contract user', () => {
       startScenario(context);

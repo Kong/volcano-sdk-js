@@ -963,6 +963,60 @@ describe('VolcanoAuth', () => {
     });
   });
 
+  describe('Authentication - profile refresh replay', () => {
+    it.each(['getUser', 'updateUser', 'convertAnonymous', 'confirmEmailChange'])(
+      '%s replays the original request after one refresh and caches the user',
+      async (operation) => {
+        const metadata = { roles: ['editor'] };
+        const profile = { id: 'user-123', email: 'updated@example.com' };
+        await volcano.auth.setSession({
+          access_token: 'old-access',
+          refresh_token: 'old-refresh',
+          user: { id: profile.id },
+        });
+        const invoke = {
+          getUser: () => volcano.auth.getUser(),
+          updateUser: () => volcano.auth.updateUser({ password: 'secret', metadata }),
+          convertAnonymous: () =>
+            volcano.auth.convertAnonymous({
+              email: profile.email,
+              password: 'secret',
+              metadata,
+            }),
+          confirmEmailChange: () => volcano.auth.confirmEmailChange('confirmation'),
+        };
+        global.fetch
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'expired' }),
+          })
+          .mockImplementationOnce(async () => {
+            metadata.roles.push('changed while refreshing');
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                access_token: 'new-access',
+                refresh_token: 'new-refresh',
+                user: { id: profile.id, email: 'before-profile@example.com' },
+              }),
+            };
+          })
+          .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: profile }) });
+        const result = await invoke[operation]();
+        expect(result.error).toBeNull();
+        expect(result.user).toEqual(profile);
+        expect(volcano.currentUser).toEqual(profile);
+        expect(volcano.accessToken).toBe('new-access');
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(global.fetch.mock.calls[0][0]).toBe(global.fetch.mock.calls[2][0]);
+        expect(global.fetch.mock.calls[0][1].body).toBe(global.fetch.mock.calls[2][1].body);
+        expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer new-access');
+      },
+    );
+  });
+
   describe('Authentication - getUser', () => {
     it('should return user when authenticated', async () => {
       volcano.accessToken = 'valid-token';
