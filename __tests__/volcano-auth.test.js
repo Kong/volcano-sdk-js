@@ -999,7 +999,7 @@ describe('VolcanoAuth', () => {
               json: async () => ({
                 access_token: 'new-access',
                 refresh_token: 'new-refresh',
-                user: profile,
+                user: { id: profile.id, email: 'before-profile@example.com' },
               }),
             };
           })
@@ -1012,6 +1012,7 @@ describe('VolcanoAuth', () => {
         expect(global.fetch).toHaveBeenCalledTimes(3);
         expect(global.fetch.mock.calls[0][0]).toBe(global.fetch.mock.calls[2][0]);
         expect(global.fetch.mock.calls[0][1].body).toBe(global.fetch.mock.calls[2][1].body);
+        expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer new-access');
       },
     );
   });
