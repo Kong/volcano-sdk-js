@@ -47,7 +47,6 @@ a caller can tell it apart from a failure inside the handler.
 ## How a durable function runs
 
 Your handler runs more than once. Each time it is invoked it starts from the
-
 top, and every operation it already completed returns its recorded result
 immediately instead of running again. When it reaches an operation that has not
 run, that one executes for real.
@@ -70,7 +69,6 @@ if (branch === 'a') {
 ```
 
 Anything non-deterministic belongs inside a step: `Date.now()`, `Math.random()`,
-
 a UUID, a database read whose answer you branch on. Everything a step returns
 must survive `JSON.stringify` — it is stored and handed back on replay.
 
@@ -81,7 +79,6 @@ and an interrupted attempt can run it twice. Make the work idempotent, or read
 ## `durable(handler, options?)`
 
 Wraps a handler so Volcano runs it as a durable execution. The handler is
-
 called with the execution's input and a durable context, matching a standard
 function's `(event, context)`.
 
@@ -498,7 +495,8 @@ if (!error && data.status === 'succeeded') {
 An execution is `running` until it finishes, including while it is suspended in
 a wait with nothing invoked, so polling it is how you follow one. It reads
 `pending` only in the moment between being accepted and being started, and
-finishes as one of `succeeded`, `failed`, `timed_out` or `stopped`.
+finishes as one of `succeeded`, `failed`, `timed_out`, `stopped` or `unknown`
+(the outcome the platform could not establish).
 
 `result` is what the handler returned. It is absent while the execution runs,
 and absent on one that failed, timed out or was stopped — those carry

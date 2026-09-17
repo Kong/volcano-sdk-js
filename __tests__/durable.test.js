@@ -340,6 +340,34 @@ describe('ctx.wait', () => {
   });
 });
 
+describe('ctx.wait bounds', () => {
+  // A zero wait passes every shape check and is refused by the platform, which
+  // means the execution fails partway through -- after earlier steps have run
+  // and been charged -- rather than at the call that was wrong.
+  it.each([0, '0s', { seconds: 0 }, { minutes: 0, seconds: 0 }])(
+    'refuses a wait of nothing (%p)',
+    async (duration) => {
+      await expect(run((_input, ctx) => ctx.wait('cool-off', duration))).rejects.toThrow(
+        /wait must be at least 1 second/,
+      );
+    },
+  );
+
+  // The other end is the execution ceiling: a wait longer than an execution may
+  // live cannot elapse.
+  it('refuses a wait longer than an execution may run', async () => {
+    await expect(run((_input, ctx) => ctx.wait('cool-off', { days: 367 }))).rejects.toThrow(
+      /wait must be at most 31622400 seconds/,
+    );
+  });
+
+  it('takes the shortest wait the platform accepts', async () => {
+    await run((_input, ctx) => ctx.wait('cool-off', '1s'));
+
+    expect(callsOf('wait')[0].duration).toEqual({ seconds: 1 });
+  });
+});
+
 describe('ctx.child', () => {
   it('runs the child against a durable context of its own', async () => {
     const result = await run((_input, ctx) =>

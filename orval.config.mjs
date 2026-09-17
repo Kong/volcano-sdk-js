@@ -7,15 +7,11 @@ export default defineConfig({
         'openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write',
     },
     input: {
-      parserOptions: {
-        externalRefs: {
-          allow: [
-            './components/common/parameters.yaml',
-            './components/common/schemas.yaml',
-            './components/common/security-schemes.yaml',
-          ],
-        },
-      },
+      // The vendored spec is a single bundled file: hosting's own spec is split
+      // across components, but what lands here is already resolved, so there is
+      // nothing external to allow. A second copy of those components used to
+      // sit beside it, unread by any tool and free to drift from the bundle,
+      // which is exactly what it did.
       target: './openapi/openapi.yaml',
     },
     output: {

@@ -376,14 +376,14 @@ const { data, status, error } = await volcano.durable.start(
 if (error) {
   switch (status) {
     case 409:
-      // Usually a function still provisioning after a deploy, which the same
-      // start clears once it is active. The exception is a name already in use
-      // with a different input: that one needs a different execution name.
-      if (error.message.includes('already in use')) {
-        console.error('Execution name taken:', error.message);
-      } else {
-        scheduleRetry();
-      }
+      // The function is still provisioning after a deploy, it has no deployed
+      // region yet, or two starts raced for one name. All three clear on their
+      // own, so the same start works shortly.
+      //
+      // A repeated executionName is not an error: the name is the idempotency
+      // key, so a retry answers 202 with the execution the first start created,
+      // whatever input the retry carried.
+      scheduleRetry();
       break;
     case 429:
       // The project is at its concurrent-execution cap or out of allowance.

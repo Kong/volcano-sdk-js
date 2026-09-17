@@ -5,9 +5,11 @@
 //
 // Volcano installs the runtime when it builds a durable function, so this is no
 // longer something the reader can fix by installing a package, and the message
-// must not send them after one. The runtime is an optional peer dependency and
-// this repo's own dev install has it, so it is failed here on purpose: the
-// assertion is about the facade's answer, not about what happens to be present.
+// must not send them after one. The runtime is never installed in this repo --
+// `pnpm-workspace.yaml` sets `autoInstallPeers: false` and
+// durable-runtime-packaging.test.js asserts the lockfile does not resolve it --
+// so the virtual mock below is what makes the missing-module path testable at
+// all, rather than a way of hiding a module that is really there.
 jest.mock(
   '@aws/durable-execution-sdk-js',
   () => {

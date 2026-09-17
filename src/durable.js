@@ -133,7 +133,7 @@ function durableContext(context, engine) {
     // strings, so `wait('30s')` would otherwise be ambiguous.
     wait(name, duration) {
       if (duration === undefined) {
-        return context.wait(toDuration(name, 'wait'));
+        return context.wait(waitDuration(name));
       }
       // The engine decides which argument is which by testing the first for a
       // string, so anything else here is read as the duration and fails on a
@@ -141,7 +141,7 @@ function durableContext(context, engine) {
       if (typeof name !== 'string') {
         throw new TypeError('ctx.wait() takes a name and a duration, or a duration alone');
       }
-      return context.wait(name, toDuration(duration, 'wait'));
+      return context.wait(name, waitDuration(duration));
     },
 
     child(name, fn) {
@@ -428,8 +428,43 @@ const durationUnits = {
 
 const durationFields = ['days', 'hours', 'minutes', 'seconds'];
 
+// The bounds the platform puts on one wait: at least a second, and no longer
+// than an execution may live.
+const minWaitSeconds = 1;
+const maxWaitSeconds = 31622400;
+
 function optionalDuration(value, field) {
   return value === undefined ? undefined : toDuration(value, field);
+}
+
+/**
+ * A wait's own bounds, which the platform enforces and the engine does not
+ * clamp: at least one second, at most 366 days.
+ *
+ * Checked here because the alternative is worse than a refused call. A zero
+ * wait passes every shape check, reaches the platform as a wait of nothing, and
+ * fails the execution partway through -- after earlier steps have run and been
+ * charged. Retry and poll delays are left alone: the engine clamps those itself.
+ */
+function waitDuration(value) {
+  const duration = toDuration(value, 'wait');
+  const seconds = durationSeconds(duration);
+  if (seconds < minWaitSeconds) {
+    throw new TypeError(`wait must be at least ${minWaitSeconds} second`);
+  }
+  if (seconds > maxWaitSeconds) {
+    throw new TypeError(`wait must be at most ${maxWaitSeconds} seconds (366 days)`);
+  }
+  return duration;
+}
+
+function durationSeconds(duration) {
+  return (
+    (duration.days ?? 0) * 86400 +
+    (duration.hours ?? 0) * 3600 +
+    (duration.minutes ?? 0) * 60 +
+    (duration.seconds ?? 0)
+  );
 }
 
 /**
@@ -484,15 +519,6 @@ function toSeconds(value, field) {
       throw new TypeError(`${field} must be a non-negative whole number of seconds`);
     }
     return value;
-  }
-  if (typeof value === 'object' && value !== null) {
-    checkedDurationObject(value, field);
-    return (
-      (value.days ?? 0) * 86400 +
-      (value.hours ?? 0) * 3600 +
-      (value.minutes ?? 0) * 60 +
-      (value.seconds ?? 0)
-    );
   }
   if (typeof value !== 'string') {
     throw new TypeError(
