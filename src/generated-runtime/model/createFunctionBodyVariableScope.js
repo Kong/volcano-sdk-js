@@ -7,9 +7,7 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-
-export interface UpdateVariableRequest {
-  /** Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
-  shared?: boolean;
-  value: string;
-}
+export const CreateFunctionBodyVariableScope = {
+    all: 'all',
+    scoped: 'scoped',
+};
