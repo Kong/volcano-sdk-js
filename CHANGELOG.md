@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.9.2](https://github.com/Kong/volcano-sdk-js/compare/v1.9.1...v1.9.2) (2026-09-18)
 
-
 ### Bug Fixes
 
-* **auth:** enforce session continuity through refresh and sign-out ([#123](https://github.com/Kong/volcano-sdk-js/issues/123)) ([fd50562](https://github.com/Kong/volcano-sdk-js/commit/fd5056290f2a69dc693a584bcc516cd817d24732))
+- **auth:** enforce session continuity through refresh and sign-out ([#123](https://github.com/Kong/volcano-sdk-js/issues/123)) ([fd50562](https://github.com/Kong/volcano-sdk-js/commit/fd5056290f2a69dc693a584bcc516cd817d24732))
 
 ## [1.9.1](https://github.com/Kong/volcano-sdk-js/compare/v1.9.0...v1.9.1) (2026-09-18)
 
