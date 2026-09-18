@@ -713,6 +713,12 @@ class ProjectLocksApi {
     const token = options.token || crypto.randomUUID();
     const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null, fencingToken: null };
+    await this.client._completeOAuthExchange();
+    const requestOptions = this.client._generatedOptions('anon', {
+      Authorization: `Bearer ${this.client.accessToken}`,
+      'X-Volcano-Lock-Token': token,
+      'X-Volcano-Request-Id': requestId,
+    });
     let response;
     let requestError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -720,10 +726,7 @@ class ProjectLocksApi {
         response = await this.client._transport.acquireProjectLock(
           encodeURIComponent(key),
           { ttl_seconds: ttl },
-          this.client._generatedOptions('session', {
-            'X-Volcano-Lock-Token': token,
-            'X-Volcano-Request-Id': requestId,
-          }),
+          requestOptions,
         );
         requestError = null;
         break;
@@ -2456,13 +2459,11 @@ class VolcanoAuth {
    * `durable.get`.
    */
   async startDurableExecution(functionName, input = {}, options = {}) {
-    const identifier = typeof functionName === 'string' ? functionName.trim() : '';
-    if (!identifier) {
-      return {
-        data: null,
-        status: null,
-        error: new Error('functionName must be a non-empty string'),
-      };
+    // Through the same helper as the owner-scoped reads, so a later tightening
+    // of the segment rule reaches the start too.
+    const { segments, error: segmentError } = durablePathSegments({ functionName });
+    if (segmentError) {
+      return { data: null, status: null, error: segmentError };
     }
 
     const executionName = options.executionName;
@@ -2499,7 +2500,7 @@ class VolcanoAuth {
 
     return this._durableResult('Failed to start durable execution', () =>
       this._transport.startDurableExecutionFromApplication(
-        encodeURIComponent(identifier),
+        segments.functionName,
         input,
         this._generatedOptions(useAnonKey ? 'anon' : 'session', headers),
       ),
@@ -2635,7 +2636,10 @@ class VolcanoAuth {
       return {
         data: null,
         status: typeof error?.status === 'number' ? error.status : null,
-        error: error instanceof Error ? error : new Error(failureMessage),
+        // A transport that rejects with a string or a plain object still has to
+        // leave the reason recoverable, so it rides as `cause` rather than
+        // being replaced by the generic message.
+        error: error instanceof Error ? error : new Error(failureMessage, { cause: error }),
       };
     }
   }

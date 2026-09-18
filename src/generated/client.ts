@@ -4166,15 +4166,10 @@ export type createFunctionsBatchResponse409 = {
   status: 409
 }
 
-export type createFunctionsBatchResponse503 = {
-  data: Error
-  status: 503
-}
-
 export type createFunctionsBatchResponseSuccess = (createFunctionsBatchResponse202 | createFunctionsBatchResponse207) & {
   headers: Headers;
 };
-export type createFunctionsBatchResponseError = (createFunctionsBatchResponse400 | createFunctionsBatchResponse403 | createFunctionsBatchResponse409 | createFunctionsBatchResponse503) & {
+export type createFunctionsBatchResponseError = (createFunctionsBatchResponse400 | createFunctionsBatchResponse403 | createFunctionsBatchResponse409) & {
   headers: Headers;
 };
 

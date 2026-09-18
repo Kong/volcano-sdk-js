@@ -7,7 +7,12 @@
 // this function calls Volcano.
 const { VolcanoClient } = require('@volcano.dev/sdk');
 
-const { DURABLE_FUNCTION_ID, VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY } = process.env;
+const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY } = process.env;
+
+// `durable.start` takes a durable function's name or its id, so the name the
+// manifest declares is enough and there is no id to thread through the
+// environment.
+const DURABLE_FUNCTION = 'order-pipeline';
 
 exports.handler = async (event) => {
   const input = event && typeof event === 'object' ? event : {};
@@ -21,9 +26,9 @@ exports.handler = async (event) => {
       case 'submit':
         return json(202, await submitOrder(auth, input));
       case 'status':
-        return json(200, await orderStatus(input));
+        return json(200, await orderStatus(auth, input));
       case 'review':
-        return json(200, await review(input));
+        return json(200, await review(auth, input));
       default:
         return json(400, { error: "action must be 'submit', 'status' or 'review'" });
     }
@@ -34,8 +39,10 @@ exports.handler = async (event) => {
 };
 
 // Creating the order and starting the execution are two writes, so the order id
-// is the execution name: a client that retries the submit resolves to the
-// execution that already exists instead of starting a second pipeline.
+// is the execution name: one order gets one pipeline however many times the
+// start is retried. A retried *submit* is a new order and a new pipeline -- make
+// the submit itself idempotent, with a client-supplied key, if that matters to
+// you.
 async function submitOrder(auth, input) {
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) {
@@ -75,7 +82,7 @@ async function submitOrder(auth, input) {
 // keeps up to date instead.
 async function startExecution(orderId) {
   const { data, error, status } = await starter().durable.start(
-    DURABLE_FUNCTION_ID,
+    DURABLE_FUNCTION,
     { order_id: orderId },
     { executionName: `order-${orderId}` },
   );
@@ -97,10 +104,18 @@ function starter() {
   });
 }
 
-async function orderStatus(input) {
+// Scoped to the caller. The service key is what reads the pipeline's own
+// columns -- `orders` gives a signed-in user select on their own rows only -- so
+// the `user_id` filter is the authorization, not the key.
+async function orderStatus(auth, input) {
   const volcano = client(VOLCANO_SERVICE_KEY);
   const [order] = unwrap(
-    await volcano.from('orders').select('*').eq('id', input.order_id).limit(1),
+    await volcano
+      .from('orders')
+      .select('*')
+      .eq('id', input.order_id)
+      .eq('user_id', auth.user_id)
+      .limit(1),
   );
   if (!order) {
     throw withStatus(new Error('order not found'), 404);
@@ -115,13 +130,21 @@ async function orderStatus(input) {
 
 // What the pipeline's `waitUntil` is watching. The execution notices within its
 // polling interval; nothing has to signal it.
-async function review(input) {
+//
+// Scoped to the caller for the same reason as the read above. A real deployment
+// reviews orders as staff rather than as the customer who placed them, which is
+// a different authorization check -- a role claim on the session, say -- and not
+// the absence of one.
+async function review(auth, input) {
   if (input.decision !== 'approved' && input.decision !== 'rejected') {
     throw badRequest("decision must be 'approved' or 'rejected'");
   }
   const volcano = client(VOLCANO_SERVICE_KEY);
   const [order] = unwrap(
-    await volcano.update('orders', { review_status: input.decision }).eq('id', input.order_id),
+    await volcano
+      .update('orders', { review_status: input.decision })
+      .eq('id', input.order_id)
+      .eq('user_id', auth.user_id),
   );
   if (!order) {
     throw withStatus(new Error('order not found'), 404);

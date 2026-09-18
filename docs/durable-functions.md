@@ -546,12 +546,13 @@ having the browser poll the execution. See
 | --------------------------------- | --------------- | --------------- |
 | Execution allowance               | 5,000 / month   | 10,000 / month  |
 | Operation allowance               | 100,000 / month | 200,000 / month |
+| Compute allowance                 | 10,000 GB-s     | 100,000 GB-s    |
 | Operations per execution          | 3,000           | 3,000           |
 | Step timeout                      | 300 s           | 900 s           |
-| Execution timeout                 | 24 h            | 24 h            |
+| Execution timeout                 | 366 days        | 366 days        |
 | Concurrent executions per project | 10              | 100             |
 
-Durable work is metered on those two allowances rather than on the request
+Durable work is metered on those three allowances rather than on the request
 allowance a standard invocation spends. Every context operation is one
 operation: the execution itself, each `step` attempt — a retry is another
 attempt — each `wait`, each `waitUntil` check, each `child` context, and each

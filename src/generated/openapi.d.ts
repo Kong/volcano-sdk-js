@@ -12933,18 +12933,6 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /**
-             * @description The batch carries a durable function and durable deploys are paused
-             *     platform-wide. The same request succeeds once they are re-enabled.
-             */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
         };
     };
     listProjectSchedulers: {

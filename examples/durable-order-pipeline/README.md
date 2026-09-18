@@ -61,19 +61,16 @@ plus `volcano use <project>`.
 cp volcano/volcano.env.example volcano/volcano.env   # then fill it in
 volcano cloud variables deploy
 
-# 2. The durable function. Its own package.json pulls in the durable runtime.
+# 2. The durable function. Its package.json declares the SDK; Volcano installs
+#    the durable runtime itself when it builds a durable function.
 volcano cloud durable deploy -f order-pipeline
 
-# 3. Record the id it printed, and redeploy variables so orders-api has it.
-#    `volcano cloud durable list` prints it again if you lose it.
-echo "DURABLE_FUNCTION_ID=<the id>" >> volcano/volcano.env
-volcano cloud variables deploy
-
-# 4. The standard function. --all skips order-pipeline, because the manifest
-#    declares it durable.
+# 3. The standard function. --all skips order-pipeline, because the manifest
+#    declares it durable. orders-api starts executions by function name, so
+#    there is no id to record.
 volcano cloud functions deploy --all
 
-# 5. Visibility, then the schema.
+# 4. Visibility, then the schema.
 volcano cloud config deploy
 volcano cloud migrations deploy --all -d app
 ```
