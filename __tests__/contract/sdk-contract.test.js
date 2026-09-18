@@ -544,11 +544,12 @@ autoBindSteps(features, [
         requestId: randomUUID(),
       });
       if (released.error) throw released.error;
-      world.cleanupCallbacks = world.cleanupCallbacks.filter((callback) => callback !== cleanup);
       const available = await locks.get(world.lockKey, { requestId: randomUUID() });
       recordOutcome(
         world,
         {
+          token: options.token,
+          cleanup,
           acquired: acquired.lease,
           recovered: recovered.lease,
           held: held.state,
@@ -563,6 +564,11 @@ autoBindSteps(features, [
       const value = context.world.lastOutcome.value;
       expect(value.held.held).toBe(true);
       expect(value.available.held).toBe(false);
+      const world = context.world;
+      world.cleanupCallbacks = world.cleanupCallbacks.filter(
+        (callback) => callback !== value.cleanup,
+      );
+      expect(value.acquired.token).toBe(value.token);
       expect(value.acquired.token).toBe(value.recovered.token);
       expect(value.acquired.token).toBe(value.renewed.token);
       expect(value.acquired.fencingToken).not.toBeNull();
@@ -583,13 +589,38 @@ autoBindSteps(features, [
         requestId: randomUUID(),
       });
       if (released.error) throw released.error;
-      world.cleanupCallbacks = world.cleanupCallbacks.filter((callback) => callback !== cleanup);
       const available = await world.serviceClient.locks.get(world.lockKey);
-      recordOutcome(world, available.state, available.error);
+      recordOutcome(
+        world,
+        { lease: acquired.lease, cleanup, available: available.state },
+        available.error,
+      );
     });
 
     then('the force-released lock is available', () => {
-      expect(context.world.lastOutcome.value.held).toBe(false);
+      const world = context.world;
+      const value = world.lastOutcome.value;
+      expect(value.available.held).toBe(false);
+      world.cleanupCallbacks = world.cleanupCallbacks.filter(
+        (callback) => callback !== value.cleanup,
+      );
+    });
+
+    when('the client reacquires the force-released contract lock', async () => {
+      const world = context.world;
+      const original = world.lastOutcome.value.lease;
+      const acquired = await world.serviceClient.locks.acquire(world.lockKey, { ttl: 30 });
+      if (!acquired.acquired || acquired.error)
+        throw acquired.error || new Error('Lock not acquired');
+      world.registerLockCleanup(world.lockKey, acquired.lease);
+      recordOutcome(world, { original, replacement: acquired.lease }, null);
+    });
+
+    then('the replacement owner receives a higher fencing token', () => {
+      const { original, replacement } = context.world.lastOutcome.value;
+      expect(replacement.token).not.toBe(original.token);
+      expect(original.fencingToken).not.toBeNull();
+      expect(replacement.fencingToken).toBeGreaterThan(original.fencingToken);
     });
 
     when('the client invokes the contract function by name', async () => {
