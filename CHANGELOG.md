@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.9.4](https://github.com/Kong/volcano-sdk-js/compare/v1.9.3...v1.9.4) (2026-09-18)
 
-
 ### Bug Fixes
 
-* **storage:** align upload envelopes and preserve HTTP errors ([#130](https://github.com/Kong/volcano-sdk-js/issues/130)) ([f4fe72f](https://github.com/Kong/volcano-sdk-js/commit/f4fe72fcc8112b6b6d8803fe466aafc4cd636b65))
+- **storage:** align upload envelopes and preserve HTTP errors ([#130](https://github.com/Kong/volcano-sdk-js/issues/130)) ([f4fe72f](https://github.com/Kong/volcano-sdk-js/commit/f4fe72fcc8112b6b6d8803fe466aafc4cd636b65))
 
 ## [1.9.3](https://github.com/Kong/volcano-sdk-js/compare/v1.9.2...v1.9.3) (2026-09-18)
 
