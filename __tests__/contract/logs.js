@@ -32,7 +32,7 @@ class LogContract {
     this.request = {
       resource: { type: 'function', ids: [world.fixture.function_id] },
       q: this.marker,
-      start_time: new Date(Date.now() - 5000).toISOString(),
+      start_time: new Date(Date.now() - 300000).toISOString(),
     };
   }
 
@@ -46,7 +46,7 @@ class LogContract {
       expect(response.status).toBe(200);
       expect(response.data).toEqual({ echoed: 'contract' });
     }
-    this.request.end_time = new Date(Date.now() + 1000).toISOString();
+    this.request.end_time = new Date(Date.now() + 300000).toISOString();
   }
 
   async search() {

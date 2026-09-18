@@ -40,3 +40,23 @@ test('log activity contract rejects counts from a different resource', () => {
   response.data[0].counts.resource_ids = { 'another-function': 1 };
   expect(() => contract.verifyActivity(response)).toThrow();
 });
+
+test.each([-120000, 120000])('log bounds allow server clock skew of %s ms', async (skew) => {
+  const fixture = {
+    api_url: 'https://api.test',
+    anon_key: 'anon',
+    logs_access_token: 'project-token',
+    function_id: 'function-id',
+    function_name: 'function',
+  };
+  const serviceClient = {
+    functions: {
+      invoke: jest.fn().mockResolvedValue({ status: 200, data: { echoed: 'contract' } }),
+    },
+  };
+  const contract = new LogContract({ fixture, serviceClient });
+  const serverTime = Date.now() + skew;
+  await contract.emit(1);
+  expect(Date.parse(contract.request.start_time)).toBeLessThan(serverTime);
+  expect(Date.parse(contract.request.end_time)).toBeGreaterThan(serverTime);
+});
