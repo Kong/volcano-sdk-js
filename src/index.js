@@ -3460,19 +3460,24 @@ class StorageFileApi {
       });
 
       if (result.error) {
-        errors.push({ path, error: result.error.message });
+        errors.push({ path, error: result.error });
       } else {
         deleted.push(path);
       }
     }
 
     if (errors.length > 0) {
-      return {
-        data: { deleted },
-        error: new Error(
-          `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
-        ),
-      };
+      const firstError = errors[0].error;
+      const error = new Error(
+        `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
+      );
+      error.failures = errors;
+      for (const field of ['status', 'code', 'retryAfter']) {
+        if (firstError[field] !== undefined) {
+          error[field] = firstError[field];
+        }
+      }
+      return { data: { deleted }, error };
     }
 
     return { data: { deleted }, error: null };

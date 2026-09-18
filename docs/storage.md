@@ -626,3 +626,7 @@ await volcano.storage.from('uploads').uploadResumable('video.mp4', file, {
 Storage HTTP errors preserve the response status as `error.status` and any
 server error code as `error.code`. An aborted or missing upload session returns 404. `completeUploadSession()` and `uploadResumable()` return completed metadata
 inside `data.object`; a single-request `upload()` returns it directly in `data`.
+
+For `remove()`, top-level error metadata describes the first failed path.
+`error.failures` preserves each failed path and its original error; `data.deleted`
+contains the paths successfully removed. Local validation errors have no failure list.

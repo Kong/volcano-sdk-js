@@ -399,6 +399,46 @@ describe('Storage', () => {
   });
 
   describe('remove()', () => {
+    it('preserves each failed deletion and the first failure metadata', async () => {
+      global.fetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          json: async () => ({ error: 'missing', code: 'not_found' }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: () => '7' },
+          json: async () => ({ error: 'slow down', code: 'rate_limited' }),
+        });
+      const result = await volcano.storage.from('files').remove(['missing', 'removed', 'limited']);
+      expect(result.data.deleted).toEqual(['removed']);
+      expect(result.error).toMatchObject({
+        status: 404,
+        code: 'not_found',
+        failures: [
+          { path: 'missing', error: { status: 404, code: 'not_found' } },
+          { path: 'limited', error: { status: 429, code: 'rate_limited', retryAfter: 7 } },
+        ],
+      });
+      expect(result.error.retryAfter).toBeUndefined();
+      expect(fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('preserves metadata when deleting one file fails', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: () => '7' },
+        json: async () => ({ error: 'slow down', code: 'rate_limited' }),
+      });
+      const result = await volcano.storage.from('files').remove('limited');
+      expect(result.error).toMatchObject({ status: 429, code: 'rate_limited', retryAfter: 7 });
+      expect(result.data.deleted).toEqual([]);
+    });
+
     it('should delete a single file successfully', async () => {
       global.fetch.mockResolvedValueOnce({
         ok: true,

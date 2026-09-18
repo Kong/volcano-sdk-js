@@ -628,9 +628,14 @@ export interface StorageListResponse {
 }
 
 /** Remove response */
+export interface StorageRemoveError extends StorageError {
+  /** Per-path failures when deletion reached the server; top-level metadata describes the first failure. */
+  failures?: { path: string; error: StorageError }[];
+}
+
 export interface StorageRemoveResponse {
   data: { deleted: string[] } | null;
-  error: StorageError | null;
+  error: StorageRemoveError | null;
 }
 
 /** Move/Copy response */

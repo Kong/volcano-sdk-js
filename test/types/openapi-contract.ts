@@ -224,3 +224,13 @@ async function storageErrorMetadata() {
   }
 }
 void storageErrorMetadata;
+
+async function removalFailureMetadata() {
+  const removed = await bucket.remove(['one.bin', 'two.bin']);
+  for (const failure of removed.error?.failures ?? []) {
+    const path: string = failure.path;
+    const status: number | undefined = failure.error.status;
+    void [path, status];
+  }
+}
+void removalFailureMetadata;
