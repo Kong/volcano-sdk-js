@@ -6476,7 +6476,7 @@ export interface components {
             /** @description Whether OpenAPI metadata is configured; list responses omit the document itself. */
             has_openapi_spec: boolean;
             aws_function_arn?: string;
-            /** @description Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Empty when the deployment serves no public invocation domain, as in local development. */
+            /** @description Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development, so a client testing for an empty string never matches. */
             invoke_url?: string;
             /** @description Regions where this function is currently deployed */
             deployed_regions: string[];
