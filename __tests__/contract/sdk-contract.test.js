@@ -59,11 +59,14 @@ autoBindSteps(features, [
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
       if (error) throw error;
+      const parts = data.session.access_token.split('.');
+      expect(parts).toHaveLength(3);
       const adopted = await context.world.client.auth.setSession({
         ...data.session,
-        access_token: REJECTED_ACCESS_TOKEN,
+        access_token: `${parts[0]}.${parts[1]}.sdk-contract-rejected-signature`,
       });
       if (adopted.error) throw adopted.error;
+      context.world.previousSession = adopted.data.session;
     });
 
     for (const operation of ['database read', 'storage operation', 'profile read']) {
@@ -71,7 +74,7 @@ autoBindSteps(features, [
         const { data, error } = await context.world.client.auth.getSession();
         expect(error).toBeNull();
         expect(data.session.access_token).toBeTruthy();
-        expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+        expect(data.session.access_token).not.toBe(context.world.previousSession.access_token);
         expect(data.session.refresh_token).toBeTruthy();
         expect(data.session.user.id).toBe(context.world.fixture.user_id);
       });
