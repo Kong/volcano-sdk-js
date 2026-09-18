@@ -1179,6 +1179,42 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - getUser', () => {
+    it.each(['missing refresh token', 'rejected refresh', 'malformed rejection'])(
+      'preserves authentication error metadata with %s',
+      async (mode) => {
+        volcano.accessToken = sessionToken();
+        if (mode === 'rejected refresh') volcano.refreshToken = 'refresh-token';
+        global.fetch.mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          headers: new Headers({ 'Retry-After': '7' }),
+          json: async () => {
+            if (mode === 'malformed rejection') throw new SyntaxError('Invalid JSON');
+            return { error: 'Session revoked', code: 'SESSION_REVOKED' };
+          },
+        });
+        if (mode === 'rejected refresh') {
+          global.fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Refresh rejected', code: 'REFRESH_REJECTED' }),
+          });
+        }
+
+        const result = await volcano.auth.getUser();
+        expect(result.user).toBeNull();
+        expect(result.error).toMatchObject({
+          message: 'Session expired',
+          status: 401,
+          retryAfter: 7,
+        });
+        expect(result.error.code).toBe(
+          mode === 'malformed rejection' ? undefined : 'SESSION_REVOKED',
+        );
+        expect(global.fetch).toHaveBeenCalledTimes(mode === 'rejected refresh' ? 2 : 1);
+      },
+    );
+
     it('should return user when authenticated', async () => {
       volcano.accessToken = 'valid-token';
 
