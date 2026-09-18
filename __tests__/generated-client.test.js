@@ -107,10 +107,11 @@ describe('generated transport boundary', () => {
       { ttl_seconds: 10 },
       expect.objectContaining({
         headers: {
+          Authorization: 'Bearer access-token',
           'X-Volcano-Lock-Token': lockOptions.token,
           'X-Volcano-Request-Id': lockOptions.requestId,
         },
-        volcanoAuthorization: 'session',
+        volcanoAuthorization: 'anon',
         volcanoClient: volcano,
       }),
     );

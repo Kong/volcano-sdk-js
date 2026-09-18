@@ -81,6 +81,33 @@ describe('project locks', () => {
     ]);
   });
 
+  test('keeps the original credential when an ambiguous acquire is retried', async () => {
+    fetch
+      .mockImplementationOnce(async () => {
+        volcano.accessToken = 'sk-replacement';
+        throw new Error('response lost');
+      })
+      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }));
+
+    const result = await volcano.locks.acquire('leader', { ttl: 30 });
+
+    expect(result.acquired).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.map((call) => call[1].headers.Authorization)).toEqual([
+      'Bearer sk-service-role',
+      'Bearer sk-service-role',
+    ]);
+    expect(fetch.mock.calls[0][1].body).toBe(fetch.mock.calls[1][1].body);
+  });
+
+  test.each([400, 401, 403, 409, 429, 500])('does not retry acquire status %s', async (status) => {
+    volcano.refreshToken = 'must-not-refresh';
+    fetch.mockResolvedValue(response(status, { error: 'rejected', code: 'lock_failure' }));
+    const result = await volcano.locks.acquire('leader', { ttl: 30 });
+    expect(result.error.status).toBe(status);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   test('maps lock contention to acquired false without an error', async () => {
     fetch.mockResolvedValue(response(409, { error: 'Lock is held', code: 'lock_held' }));
 
