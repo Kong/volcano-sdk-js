@@ -9,6 +9,7 @@ const { ContractWorld, recordOutcome } = require('./world.js');
 const { verifyBroadcastPause } = require('./broadcast-pause.js');
 const { LogContract } = require('./logs.js');
 const { verifyPresenceMembership } = require('./presence-membership.js');
+const { verifyPostgresChanges } = require('./postgres-changes.js');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];
@@ -172,6 +173,17 @@ autoBindSteps(features, [
         expect(context.world.lastOutcome.value).toEqual([1, 2, 1]);
       },
     );
+    when('the clients observe an inserted and updated contract row', async () => {
+      const world = context.world;
+      try {
+        recordOutcome(world, await verifyPostgresChanges(world), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+    then('automatic and lightweight notifications retain metadata and row identity', () => {
+      expect(context.world.lastOutcome.value).toEqual(['INSERT', 'UPDATE']);
+    });
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
       if (error) throw error;

@@ -41,3 +41,12 @@ test.each([
 ])('requires the original callback membership sequence: %j', (snapshots, expected) => {
   expect(observedMembership(snapshots, ['first'], ['first', 'second'])).toBe(expected);
 });
+
+test('stages the canonical Postgres change feature', () => {
+  const feature = readFileSync(
+    path.join(__dirname, '../features/staged/realtime-postgres.feature'),
+  );
+  expect(createHash('sha256').update(feature).digest('hex')).toBe(
+    '794c2ecbb94fd262a37840f4c3fe3bd9f9ee58c22fda9df2a46de60f93e52c91',
+  );
+});

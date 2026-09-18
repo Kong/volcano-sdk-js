@@ -275,3 +275,9 @@ function presenceIdentity(state: PresenceState) {
 }
 presenceChannel.onPresenceSync(presenceIdentity);
 presenceIdentity(presenceChannel.getPresenceState());
+
+import type { PostgresChange } from '../../src/realtime.js';
+declare const postgresChange: PostgresChange;
+const primaryKey: string | number | undefined = postgresChange.id;
+const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
+void [primaryKey, deliveryMode];

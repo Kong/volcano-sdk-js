@@ -105,6 +105,10 @@ export interface ChannelOptions {
 }
 
 export interface PostgresChange {
+  /** Primary key in a lightweight notification */
+  id?: string | number;
+  /** Present when row data has not been fetched */
+  mode?: 'lightweight';
   /** Table name */
   table: string;
   /** Schema name */
