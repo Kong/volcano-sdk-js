@@ -48,6 +48,23 @@ function registerDatabaseCleanup(world, operation) {
   });
 }
 
+function queryFixture(world) {
+  return world.client.from(world.fixture.query_table_name).select('slug').order('rank');
+}
+
+async function recordQuerySet(world, queries) {
+  const rows = new Map();
+  for (const [name, query] of Object.entries(queries)) {
+    const result = await query;
+    if (result.error) {
+      recordOutcome(world, null, result.error);
+      return;
+    }
+    rows.set(name, result.data);
+  }
+  recordOutcome(world, Object.fromEntries(rows), null);
+}
+
 afterEach(async () => {
   const world = activeWorld;
   activeWorld = undefined;
@@ -345,6 +362,87 @@ autoBindSteps(features, [
 
     then('exactly the fixture row is returned', () => {
       expect(context.world.lastOutcome.value).toEqual([context.world.fixture.fixture_row]);
+    });
+
+    when('the client selects a projected page of query fixture members', async () => {
+      const { world } = context;
+      const result = await world.client
+        .from(world.fixture.query_table_name)
+        .select('slug,rank')
+        .in('slug', ['alpha', 'beta', 'gamma', 'delta'])
+        .order('enabled')
+        .order('rank', { ascending: false })
+        .offset(1)
+        .limit(2);
+      recordOutcome(world, result.data, result.error);
+    });
+
+    then('the projected page contains only beta and gamma in that order', () => {
+      expect(context.world.lastOutcome.value).toEqual([
+        { slug: 'beta', rank: 20 },
+        { slug: 'gamma', rank: 30 },
+      ]);
+    });
+
+    when('the client selects query fixture rows with each comparison filter', async () => {
+      const { world } = context;
+      await recordQuerySet(world, {
+        neq: queryFixture(world).neq('rank', 20),
+        gt: queryFixture(world).gt('rank', 20),
+        gte: queryFixture(world).gte('rank', 20),
+        lt: queryFixture(world).lt('rank', 30),
+        lte: queryFixture(world).lte('rank', 30),
+      });
+    });
+
+    then('each comparison returns exactly the matching query fixture rows', () => {
+      const expected = {
+        neq: ['alpha', 'gamma', 'delta', 'epsilon'],
+        gt: ['gamma', 'delta', 'epsilon'],
+        gte: ['beta', 'gamma', 'delta', 'epsilon'],
+        lt: ['alpha', 'beta'],
+        lte: ['alpha', 'beta', 'gamma'],
+      };
+      expect(context.world.lastOutcome.value).toEqual(
+        Object.fromEntries(
+          Object.entries(expected).map(([name, slugs]) => [name, slugs.map((slug) => ({ slug }))]),
+        ),
+      );
+    });
+
+    when(
+      'the client selects query fixture rows with case-sensitive and insensitive patterns',
+      async () => {
+        const { world } = context;
+        await recordQuerySet(world, {
+          like: queryFixture(world).like('label', 'Case_%'),
+          ilike: queryFixture(world).ilike('label', 'case_%'),
+        });
+      },
+    );
+
+    then('each pattern returns exactly the matching query fixture rows', () => {
+      expect(context.world.lastOutcome.value).toEqual({
+        like: [{ slug: 'alpha' }, { slug: 'epsilon' }],
+        ilike: [{ slug: 'alpha' }, { slug: 'beta' }, { slug: 'epsilon' }],
+      });
+    });
+
+    when('the client selects query fixture rows with null and boolean filters', async () => {
+      const { world } = context;
+      await recordQuerySet(world, {
+        null: queryFixture(world).is('label', null),
+        enabled: queryFixture(world).is('enabled', true),
+        disabled: queryFixture(world).is('enabled', false),
+      });
+    });
+
+    then('each identity filter returns exactly the matching query fixture rows', () => {
+      expect(context.world.lastOutcome.value).toEqual({
+        null: [{ slug: 'gamma' }],
+        enabled: [{ slug: 'alpha' }, { slug: 'gamma' }, { slug: 'epsilon' }],
+        disabled: [{ slug: 'beta' }, { slug: 'delta' }],
+      });
     });
 
     when('the client inserts its contract row', async () => {

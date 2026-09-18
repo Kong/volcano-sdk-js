@@ -4,6 +4,8 @@ import type {
   CreateUploadSessionResponse,
   OpenAPIComponents,
   OpenAPIOperations,
+  QueryBuilder,
+  MutationBuilder,
   UploadSessionStatusResponse,
 } from '../../src/index.js';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
@@ -169,3 +171,12 @@ if (AuthSessionChangedError.is(sessionChangedError)) {
   const name: 'AuthSessionChangedError' = sessionChangedError.name;
   void [code, status, name];
 }
+
+declare const query: QueryBuilder;
+declare const mutation: MutationBuilder;
+query.is('deleted_at', null).is('enabled', true).is('enabled', false);
+mutation.is('deleted_at', null).is('enabled', true).is('enabled', false);
+// @ts-expect-error SQL identity values are native booleans or null, not strings.
+query.is('enabled', 'true');
+// @ts-expect-error Numeric values require comparison filters.
+mutation.is('enabled', 1);

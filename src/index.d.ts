@@ -830,8 +830,8 @@ export interface QueryBuilder<T = Record<string, JsonValue>> {
   like(column: string, pattern: string): QueryBuilder<T>;
   /** Filter where column matches pattern (case-insensitive) */
   ilike(column: string, pattern: string): QueryBuilder<T>;
-  /** Filter where column is null or not null */
-  is(column: string, value: null): QueryBuilder<T>;
+  /** Filter by SQL IS NULL, IS TRUE, or IS FALSE. */
+  is(column: string, value: null | boolean): QueryBuilder<T>;
   /** Filter where column is in array of values */
   in(column: string, values: FilterValue[]): QueryBuilder<T>;
   /** Order results */
@@ -861,8 +861,8 @@ export interface MutationBuilder<T = Record<string, JsonValue>> {
   like(column: string, pattern: string): MutationBuilder<T>;
   /** Filter where column matches pattern (case-insensitive) */
   ilike(column: string, pattern: string): MutationBuilder<T>;
-  /** Filter where column is null or not null */
-  is(column: string, value: null): MutationBuilder<T>;
+  /** Filter by SQL IS NULL, IS TRUE, or IS FALSE. */
+  is(column: string, value: null | boolean): MutationBuilder<T>;
   /** Filter where column is in array of values */
   in(column: string, values: FilterValue[]): MutationBuilder<T>;
   /** Execute mutation and return results */
