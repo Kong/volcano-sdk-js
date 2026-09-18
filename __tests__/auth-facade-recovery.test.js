@@ -144,6 +144,66 @@ it('captures ownership before serializing a provider API body', async () => {
   expect(global.fetch).not.toHaveBeenCalled();
 });
 
+describe.each(['updateUser', 'convertAnonymous'])('%s profile ownership', (method) => {
+  it.each(['getter', 'toJSON'])('captures ownership before a profile %s', async (boundary) => {
+    const current = client();
+    global.fetch.mockResolvedValue(reply(200, { user: { id: 'other' } }));
+    const replaceSession = () => {
+      void current.auth.setSession(replacement);
+      return { name: 'original' };
+    };
+    const options =
+      boundary === 'getter'
+        ? {
+            get metadata() {
+              return replaceSession();
+            },
+          }
+        : { metadata: { toJSON: replaceSession } };
+    const result = await current.auth[method](options);
+    expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+it('captures ownership before serializing email confirmation', async () => {
+  const current = client();
+  global.fetch.mockResolvedValue(reply(200, { user: { id: 'other' } }));
+  const token = {
+    toJSON() {
+      void current.auth.setSession(replacement);
+      return 'confirmation';
+    },
+  };
+  const result = await current.auth.confirmEmailChange(token);
+  expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
+it('captures ownership after an OAuth exchange settles without another auth call', async () => {
+  window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+  window.sessionStorage.setItem(
+    'volcano_auth_redirect_url',
+    `${window.location.origin}/auth/callback`,
+  );
+  window.history.replaceState(null, '', '/auth/callback?code=one-time&state=oauth-nonce');
+  try {
+    global.fetch.mockResolvedValueOnce(renewed()).mockResolvedValue(reply(200));
+    const current = new VolcanoAuth({ apiUrl: 'https://api.test', anonKey: 'anon' });
+    // Await the constructor exchange itself without asking an auth API to drain it.
+    await current._oauthExchangePromise;
+    const request = current.auth.requestEmailChange('original@example.com');
+    await current.auth.setSession(replacement);
+    expect((await request).error).toBeInstanceOf(AuthSessionChangedError);
+    for (const [, options] of global.fetch.mock.calls.slice(1)) {
+      expect(options.headers.Authorization).toBe(`Bearer ${sessionToken(SESSION, true)}`);
+    }
+  } finally {
+    window.history.replaceState(null, '', '/');
+    window.sessionStorage.clear();
+  }
+});
+
 it('replays a provider API body snapshot after refresh', async () => {
   const current = client();
   const body = { names: ['original'] };

@@ -926,6 +926,8 @@ class VolcanoAuth {
     }
     if (!config.accessToken && this._hasOAuthCallbackInUrl()) {
       this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
+      // Clear a settled exchange even if no auth method has awaited it yet.
+      this._completeOAuthExchange();
     }
 
     // Sub-objects for organization
@@ -1652,10 +1654,13 @@ class VolcanoAuth {
     return { user: result.data.user, error: null };
   }
 
-  async updateUser({ password, metadata }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user', {
-      method: 'PUT',
-      body: JSON.stringify({ password, user_metadata: metadata }),
+  async updateUser(options) {
+    const { result, context } = await this._authFetchWithContext('/auth/user', () => {
+      const { password, metadata } = options;
+      return {
+        method: 'PUT',
+        body: JSON.stringify({ password, user_metadata: metadata }),
+      };
     });
 
     if (!result.ok) {
@@ -1826,11 +1831,17 @@ class VolcanoAuth {
     return this.signInAnonymously(metadata);
   }
 
-  async convertAnonymous({ email, password, metadata = {} }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/convert-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+  async convertAnonymous(options) {
+    const { result, context } = await this._authFetchWithContext(
+      '/auth/user/convert-anonymous',
+      () => {
+        const { email, password, metadata = {} } = options;
+        return {
+          method: 'POST',
+          body: JSON.stringify({ email, password, user_metadata: metadata }),
+        };
+      },
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1930,10 +1941,10 @@ class VolcanoAuth {
   async confirmEmailChange(emailChangeToken) {
     const { result, context } = await this._authFetchWithContext(
       '/auth/user/confirm-email-change',
-      {
+      () => ({
         method: 'POST',
         body: JSON.stringify({ email_change_token: emailChangeToken }),
-      },
+      }),
     );
 
     if (!result.ok) {

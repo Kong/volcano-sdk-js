@@ -96,6 +96,8 @@ After successful sign-in, the SDK automatically:
 
 Profile operations (`getUser`, `updateUser`, `convertAnonymous`, and `confirmEmailChange`) refresh a rejected access token once when the session has a usable refresh token, then replay the original request values.
 They do not retry other HTTP failures or ambiguous network failures, and they do not retry under a replacement session.
+Authenticated mutations capture the session before reading or serializing your options and metadata.
+If a getter or `toJSON()` replaces the session, the operation returns `AuthSessionChangedError` before sending the request.
 
 ### Sign Out
 
