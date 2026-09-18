@@ -27,6 +27,7 @@ Object.defineProperty(global, 'localStorage', {
 // Reset mocks before each test
 beforeEach(() => {
   jest.clearAllMocks();
+  if (jest.isMockFunction(global.fetch)) global.fetch.mockReset();
   localStorageMock.store = {};
   if (typeof VolcanoAuth.__resetFunctionResolveCacheForTests === 'function') {
     VolcanoAuth.__resetFunctionResolveCacheForTests();

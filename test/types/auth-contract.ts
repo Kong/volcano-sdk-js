@@ -1,4 +1,5 @@
 import type { Auth, ProjectLockLease, ProjectLocks, User, UserStatus } from '../../src/index.js';
+import { VolcanoClient } from '../../src/index.js';
 
 declare const user: User;
 declare const auth: Auth;
@@ -16,4 +17,6 @@ const lastSignInAt: string | undefined = user.last_sign_in_at;
 
 void [projectId, emailConfirmed, appMetadata, avatarUrl, status, bannedUntil, lastSignInAt];
 void auth.resetPasswordForEmail('alice@example.com');
+const tokenClient = new VolcanoClient({ anonKey: 'example', accessToken: 'supplied-access' });
+void tokenClient.auth.getSession();
 void locks.renew('leader', lease, { ttl: 5, signal });

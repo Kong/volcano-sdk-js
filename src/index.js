@@ -1,3 +1,4 @@
+import { AuthSessionOperations } from './auth-session.js';
 import {
   acquireProjectLock,
   authSignin,
@@ -502,9 +503,35 @@ function extractSessionIdFromToken(token) {
   }
   try {
     const sessionId = JSON.parse(decodeBase64Url(parts[1]))?.session_id;
-    return typeof sessionId === 'string' && sessionId.trim() !== '' ? sessionId.trim() : null;
+    return typeof sessionId === 'string' &&
+      /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(sessionId)
+      ? sessionId.toLowerCase()
+      : null;
   } catch {
     return null;
+  }
+}
+
+function validateRefreshSource(context) {
+  if (
+    !context.operations.hasVerifiedPair(context.accessToken, context.refreshToken) &&
+    !extractSessionIdFromToken(context.accessToken)
+  ) {
+    throw new Error('Cannot refresh supplied credentials without a session identifier');
+  }
+}
+
+function validateSessionContinuation(data, context, userId) {
+  const invalid = validateCompleteSession(data);
+  if (invalid) {
+    throw invalid;
+  }
+  const expected = extractSessionIdFromToken(context.accessToken);
+  if (expected && !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))) {
+    throw new Error('Refreshed credentials belong to a different server session');
+  }
+  if (userId && data.user.id !== userId) {
+    throw new Error('Refreshed session belongs to a different user');
   }
 }
 
@@ -905,7 +932,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    this._refreshInFlight = null;
+    this._sessionOperations = new AuthSessionOperations();
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
@@ -928,6 +955,8 @@ class VolcanoAuth {
     }
     if (!config.accessToken && this._hasOAuthCallbackInUrl()) {
       this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
+      // Clear a settled exchange even if no auth method has awaited it yet.
+      this._completeOAuthExchange();
     }
 
     // Sub-objects for organization
@@ -1060,7 +1089,9 @@ class VolcanoAuth {
   }
 
   async _authFetchWithContext(path, options = {}) {
-    await this._completeOAuthExchange();
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+    }
     const context = this._captureAuthContext();
     if (!context.accessToken) {
       return {
@@ -1074,7 +1105,12 @@ class VolcanoAuth {
       };
     }
 
-    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, options);
+    const requestPath = typeof path === 'function' ? path() : path;
+    const requestOptions = typeof options === 'function' ? options() : options;
+    if (!this._isAuthContextCurrent(context)) {
+      return { result: authSessionChangedResult(), context };
+    }
+    const result = await this._authFetchUrl(`${this.apiUrl}${requestPath}`, requestOptions);
     return { result, context };
   }
 
@@ -1552,15 +1588,43 @@ class VolcanoAuth {
   async signOut() {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
-    let logoutError = null;
-    if (context.refreshToken) {
-      const result = await this._anonFetch('/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: context.refreshToken }),
-      });
-      logoutError = result.error;
+    if (!context.accessToken && !context.refreshToken) {
+      return context.operations.pendingSignOut() || { error: null };
     }
-    if (!this._clearSession(context)) {
+    return context.operations.signOut((refreshing) => this._signOutCaptured(context, refreshing));
+  }
+
+  async _signOutCaptured(context, refreshing) {
+    let logoutError = null;
+    const sessionId = extractSessionIdFromToken(context.accessToken);
+    try {
+      const preceding = refreshing
+        ? await refreshing.catch((error) => ({ ok: false, error }))
+        : null;
+      const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
+      const refreshToken = preceding?.ok ? preceding.data.refresh_token : context.refreshToken;
+      const verified = context.operations.hasVerifiedPair(accessToken, refreshToken);
+      if (sessionId && !verified) {
+        logoutError = await this._revokeAccessSession(context, sessionId, preceding);
+      } else if (refreshToken) {
+        if (preceding && !preceding.ok && !verified) {
+          throw preceding.error;
+        }
+        const result = await this._anonFetch('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+          }),
+        });
+        logoutError = result.error;
+      }
+    } catch (error) {
+      logoutError = error instanceof Error ? error : new Error('Session revocation failed');
+    }
+    const cleared = sessionId
+      ? this._clearSessionAtGeneration(context.generation)
+      : this._clearSession(context);
+    if (!cleared) {
       const sessionChangedError = new AuthSessionChangedError();
       if (logoutError) {
         Object.defineProperty(sessionChangedError, 'cause', {
@@ -1574,6 +1638,30 @@ class VolcanoAuth {
     return { error: logoutError };
   }
 
+  async _revokeAccessSession(context, sessionId, preceding) {
+    // Claiming sign-out prevents new refreshes. Retain the one already running
+    // even if explicit adoption replaces the client's current session.
+    const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
+    const path = `/auth/user/sessions/${encodeURIComponent(sessionId)}`;
+    const remove = (credential) =>
+      this._anonFetch(path, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${credential}` },
+      });
+    let result = await remove(accessToken);
+    if (result.status === 401 && context.refreshToken) {
+      if (preceding) {
+        return preceding.error || result.error;
+      }
+      const refreshed = await this._fetchSessionRefresh(context);
+      if (!refreshed.ok) {
+        return refreshed.error;
+      }
+      result = await remove(refreshed.data.access_token);
+    }
+    return result.error;
+  }
+
   async getUser() {
     // Transparently adopt a session handed off by the managed hosted auth pages
     // (tokens in the URL fragment) so callers only ever need getUser().
@@ -1584,7 +1672,10 @@ class VolcanoAuth {
     if (!result.ok) {
       return { user: null, error: result.error };
     }
-    if (!this._isAuthContextCurrent(context)) {
+    if (
+      !this._isAuthContextCurrent(context) ||
+      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
+    ) {
       return { user: null, error: new AuthSessionChangedError() };
     }
 
@@ -1599,16 +1690,22 @@ class VolcanoAuth {
     return { user: result.data.user, error: null };
   }
 
-  async updateUser({ password, metadata }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user', {
-      method: 'PUT',
-      body: JSON.stringify({ password, user_metadata: metadata }),
+  async updateUser(options) {
+    const { result, context } = await this._authFetchWithContext('/auth/user', () => {
+      const { password, metadata } = options;
+      return {
+        method: 'PUT',
+        body: JSON.stringify({ password, user_metadata: metadata }),
+      };
     });
 
     if (!result.ok) {
       return { user: null, error: result.error };
     }
-    if (!this._isAuthContextCurrent(context)) {
+    if (
+      !this._isAuthContextCurrent(context) ||
+      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
+    ) {
       return { user: null, error: new AuthSessionChangedError() };
     }
 
@@ -1642,45 +1739,60 @@ class VolcanoAuth {
       return { session: null, error: new Error('No refresh token') };
     }
 
-    if (
-      this._refreshInFlight?.generation === context.generation &&
-      this._refreshInFlight.refreshToken === context.refreshToken
-    ) {
-      return this._refreshInFlight.promise;
+    try {
+      validateRefreshSource(context);
+    } catch (error) {
+      return { session: null, error };
     }
 
-    const inFlight = {
-      generation: context.generation,
-      refreshToken: context.refreshToken,
-      promise: null,
-    };
-    inFlight.promise = this._performSessionRefresh(context).finally(() => {
-      if (this._refreshInFlight === inFlight) {
-        this._refreshInFlight = null;
-      }
+    return this._performSessionRefresh(context);
+  }
+
+  async _fetchSessionRefresh(context) {
+    const verified = context.operations.hasVerifiedPair(context.accessToken, context.refreshToken);
+    context.operations.verifyPair(null);
+    const result = await this._anonFetch('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: context.refreshToken }),
     });
-    this._refreshInFlight = inFlight;
-    return inFlight.promise;
+    if (result.ok) {
+      validateSessionContinuation(
+        result.data,
+        context,
+        this._isAuthContextCurrent(context) ? this.currentUser?.id : context.userId,
+      );
+      context.operations.verifyPair(result.data);
+    } else if (result.status === 429 && verified) {
+      // The rate-limit gate rejects before token rotation.
+      context.operations.verifyPair({
+        access_token: context.accessToken,
+        refresh_token: context.refreshToken,
+      });
+    }
+    return result;
   }
 
   async _performSessionRefresh(context) {
     try {
-      const result = await this._anonFetch('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: context.refreshToken }),
-      });
-
-      if (!result.ok) {
-        if (result.status === 401 || result.status === 403) {
-          this._clearSession(context);
+      const refreshing = context.operations.refresh(async () => {
+        const result = await this._fetchSessionRefresh(context);
+        if (!context.operations.signingOut) {
+          if (result.ok) {
+            this._setRefreshedSession(result.data, context);
+          } else if (result.status === 401 || result.status === 403) {
+            this._clearSession(context);
+          }
         }
+        return result;
+      });
+      if (!refreshing) {
+        return { session: null, error: new AuthRefreshDiscardedError() };
+      }
+      const result = await refreshing;
+      if (!result.ok) {
         return { session: null, error: result.error };
       }
-
-      if (
-        !this._setRefreshedSession(result.data, context) ||
-        !this._isAuthContextCurrent(context)
-      ) {
+      if (!this._isAuthContextCurrent(context) || context.operations.signingOut) {
         return { session: null, error: new AuthRefreshDiscardedError() };
       }
       return {
@@ -1692,6 +1804,9 @@ class VolcanoAuth {
         error: null,
       };
     } catch (error) {
+      if (!this._isAuthContextCurrent(context)) {
+        return { session: null, error: new AuthRefreshDiscardedError() };
+      }
       return { session: null, error: error instanceof Error ? error : new Error('Refresh failed') };
     }
   }
@@ -1752,11 +1867,17 @@ class VolcanoAuth {
     return this.signInAnonymously(metadata);
   }
 
-  async convertAnonymous({ email, password, metadata = {} }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/convert-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+  async convertAnonymous(options) {
+    const { result, context } = await this._authFetchWithContext(
+      '/auth/user/convert-anonymous',
+      () => {
+        const { email, password, metadata = {} } = options;
+        return {
+          method: 'POST',
+          body: JSON.stringify({ email, password, user_metadata: metadata }),
+        };
+      },
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1834,10 +1955,10 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', () => ({
       method: 'POST',
       body: JSON.stringify({ new_email: newEmail }),
-    });
+    }));
 
     if (!result.ok) {
       return { message: null, newEmail: null, error: result.error };
@@ -1856,10 +1977,10 @@ class VolcanoAuth {
   async confirmEmailChange(emailChangeToken) {
     const { result, context } = await this._authFetchWithContext(
       '/auth/user/confirm-email-change',
-      {
+      () => ({
         method: 'POST',
         body: JSON.stringify({ email_change_token: emailChangeToken }),
-      },
+      }),
     );
 
     if (!result.ok) {
@@ -2107,13 +2228,13 @@ class VolcanoAuth {
     };
   }
 
-  async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
+  async callOAuthAPI(provider, params) {
     sanitizeProvider(provider);
     const { result, context } = await this._authFetchWithContext(
       `/auth/oauth/${provider}/call-api`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ endpoint, method, body }),
+      () => {
+        const { endpoint, method = 'GET', body = null } = params;
+        return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
       },
     );
 
@@ -2132,18 +2253,18 @@ class VolcanoAuth {
   // ========================================================================
 
   async getSessions(options = {}) {
-    const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = new URLSearchParams();
-    if (page > 1) {
-      params.set('page', page.toString());
-    }
-    if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.set('limit', limit.toString());
-    }
-
-    const queryString = params.toString();
-    const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const { result, context } = await this._authFetchWithContext(url);
+    const { result, context } = await this._authFetchWithContext(() => {
+      const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
+      const params = new URLSearchParams();
+      if (page > 1) {
+        params.set('page', page.toString());
+      }
+      if (limit !== DEFAULT_SESSIONS_LIMIT) {
+        params.set('limit', limit.toString());
+      }
+      const queryString = params.toString();
+      return `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
+    });
 
     if (!this._isAuthContextCurrent(context)) {
       return {
@@ -2651,6 +2772,8 @@ class VolcanoAuth {
   _captureAuthContext() {
     return Object.freeze({
       generation: this._sessionGeneration,
+      operations: this._sessionOperations,
+      userId: this.currentUser?.id ?? null,
       accessToken: this.accessToken,
       refreshToken: this.refreshToken,
     });
@@ -2658,6 +2781,7 @@ class VolcanoAuth {
 
   _adoptSessionInMemory(session) {
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations();
     this._oauthExchangeError = null;
     this._pendingUrlAuthNotify = false;
     this.accessToken = session.access_token;
@@ -2679,6 +2803,7 @@ class VolcanoAuth {
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations(data);
     this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
@@ -2692,6 +2817,8 @@ class VolcanoAuth {
     if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
       return false;
     }
+
+    validateSessionContinuation(data, context, this.currentUser?.id);
 
     this._oauthExchangeError = null;
     this.accessToken = data.access_token;
@@ -2720,6 +2847,7 @@ class VolcanoAuth {
     }
 
     this._oauthExchangeError = null;
+    this._sessionOperations.clearLocalCredentials();
     this.accessToken = null;
     this.refreshToken = null;
     this.currentUser = null;
@@ -2935,6 +3063,7 @@ class VolcanoAuth {
     this.refreshToken = refreshToken || null;
     this.currentUser = null;
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations();
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
       this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
@@ -3433,7 +3562,7 @@ class StorageFileApi {
       if (options.responseType === 'blob') {
         if (!response.ok) {
           const errorData = await safeJsonParse(response);
-          return { data: null, error: new Error(errorData.error || 'Request failed') };
+          return { data: null, error: apiRequestError(response, errorData) };
         }
         const blob = await response.blob();
         return { data: blob, error: null };
@@ -3442,7 +3571,7 @@ class StorageFileApi {
       const data = await safeJsonParse(response);
 
       if (!response.ok) {
-        return { data: null, error: new Error(data.error || 'Request failed') };
+        return { data: null, error: apiRequestError(response, data) };
       }
 
       return { data, error: null };
@@ -3568,19 +3697,24 @@ class StorageFileApi {
       });
 
       if (result.error) {
-        errors.push({ path, error: result.error.message });
+        errors.push({ path, error: result.error });
       } else {
         deleted.push(path);
       }
     }
 
     if (errors.length > 0) {
-      return {
-        data: { deleted },
-        error: new Error(
-          `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
-        ),
-      };
+      const firstError = errors[0].error;
+      const error = new Error(
+        `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
+      );
+      error.failures = errors;
+      for (const field of ['status', 'code', 'retryAfter']) {
+        if (firstError[field] !== undefined) {
+          error[field] = firstError[field];
+        }
+      }
+      return { data: { deleted }, error };
     }
 
     return { data: { deleted }, error: null };

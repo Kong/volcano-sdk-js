@@ -1,3 +1,4 @@
+const { sessionToken } = require('./session-fixtures.js');
 const { AuthRefreshDiscardedError, VolcanoAuth } = require('../src/index.js');
 
 function createDeferred() {
@@ -184,7 +185,7 @@ describe('QueryBuilder', () => {
     });
 
     it('should refresh token on 401 and retry', async () => {
-      volcano.accessToken = 'expired-token';
+      volcano.accessToken = sessionToken();
       volcano.refreshToken = 'valid-refresh';
 
       // First call returns 401
@@ -199,9 +200,10 @@ describe('QueryBuilder', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            access_token: 'new-access-token',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'new-refresh-token',
             expires_in: 3600,
+            user: { id: 'user-123' },
           }),
       });
 
@@ -215,7 +217,7 @@ describe('QueryBuilder', () => {
 
       expect(result.error).toBeNull();
       expect(result.data).toEqual([{ id: 1 }]);
-      expect(volcano.accessToken).toBe('new-access-token');
+      expect(volcano.accessToken).toBe(sessionToken(undefined, true));
     });
 
     it('preserves an access-token-only session after a 401', async () => {
