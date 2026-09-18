@@ -601,41 +601,48 @@ export interface StorageListOptions {
   cursor?: string;
 }
 
+/** Storage errors include HTTP metadata when a server response is available. */
+export interface StorageError extends Error {
+  status?: number;
+  code?: string;
+  retryAfter?: number;
+}
+
 /** Upload response */
 export interface StorageUploadResponse {
   data: StorageObject | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Download response */
 export interface StorageDownloadResponse {
   data: Blob | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** List response */
 export interface StorageListResponse {
   data: StorageObject[] | null;
-  error: Error | null;
+  error: StorageError | null;
   nextCursor: string | null;
 }
 
 /** Remove response */
 export interface StorageRemoveResponse {
   data: { deleted: string[] } | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Move/Copy response */
 export interface StorageMoveResponse {
   data: StorageObject | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Visibility update response */
 export interface StorageVisibilityResponse {
   data: StorageObject | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Options for creating a resumable upload session */
@@ -656,7 +663,7 @@ export interface CreateUploadSessionResponse {
     total_parts: number;
     expires_at: string;
   } | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Response from uploading a part */
@@ -666,13 +673,13 @@ export interface UploadPartResponse {
     etag: string;
     size: number;
   } | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Response from completing an upload session */
 export interface CompleteUploadSessionResponse {
   data: { object: StorageObject } | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Response from getting upload session status */
@@ -695,7 +702,7 @@ export interface UploadSessionStatusResponse {
     expires_at: string;
     created_at: string;
   } | null;
-  error: Error | null;
+  error: StorageError | null;
 }
 
 /** Options for resumable upload */
@@ -737,7 +744,7 @@ export interface StorageFileApi {
    * NOTE: The list() and updateVisibility() methods return file objects with
    * a public_url field already set by the API. Using that field is preferred.
    */
-  getPublicUrl(path: string): { data: { publicUrl: string } | null; error: Error | null };
+  getPublicUrl(path: string): { data: { publicUrl: string } | null; error: StorageError | null };
 
   /** Update the visibility (public/private) of a file */
   updateVisibility(path: string, isPublic: boolean): Promise<StorageVisibilityResponse>;
@@ -783,7 +790,7 @@ export interface StorageFileApi {
   /**
    * Abort a resumable upload session and clean up any uploaded parts.
    */
-  abortUploadSession(path: string, sessionId: string): Promise<{ error: Error | null }>;
+  abortUploadSession(path: string, sessionId: string): Promise<{ error: StorageError | null }>;
 
   /**
    * Upload a large file using resumable upload with automatic chunking.

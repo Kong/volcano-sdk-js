@@ -199,3 +199,28 @@ async function uploadResponseEnvelopes() {
   void names;
 }
 void uploadResponseEnvelopes;
+
+async function storageErrorMetadata() {
+  const results = [
+    await bucket.upload('file.bin', new Blob(['bytes'])),
+    await bucket.download('file.bin'),
+    await bucket.list(),
+    await bucket.remove(['file.bin']),
+    await bucket.move('file.bin', 'moved.bin'),
+    await bucket.copy('file.bin', 'copy.bin'),
+    await bucket.updateVisibility('file.bin', false),
+    await bucket.createUploadSession('file.bin', { totalSize: 5 }),
+    await bucket.uploadPart('file.bin', 'session', 1, new Blob(['bytes'])),
+    await bucket.getUploadSession('file.bin', 'session'),
+    await bucket.completeUploadSession('file.bin', 'session'),
+    await bucket.abortUploadSession('file.bin', 'session'),
+    await bucket.uploadResumable('file.bin', new Blob(['bytes'])),
+  ];
+  for (const { error } of results) {
+    const status: number | undefined = error?.status;
+    const code: string | undefined = error?.code;
+    const retryAfter: number | undefined = error?.retryAfter;
+    void [status, code, retryAfter];
+  }
+}
+void storageErrorMetadata;
