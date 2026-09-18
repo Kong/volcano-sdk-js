@@ -926,6 +926,8 @@ class VolcanoAuth {
     }
     if (!config.accessToken && this._hasOAuthCallbackInUrl()) {
       this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
+      // Clear a settled exchange even if no auth method has awaited it yet.
+      this._completeOAuthExchange();
     }
 
     // Sub-objects for organization
@@ -1051,7 +1053,9 @@ class VolcanoAuth {
   }
 
   async _authFetchWithContext(path, options = {}) {
-    await this._completeOAuthExchange();
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+    }
     const context = this._captureAuthContext();
     if (!context.accessToken) {
       return {
@@ -1065,7 +1069,12 @@ class VolcanoAuth {
       };
     }
 
-    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, options);
+    const requestPath = typeof path === 'function' ? path() : path;
+    const requestOptions = typeof options === 'function' ? options() : options;
+    if (!this._isAuthContextCurrent(context)) {
+      return { result: authSessionChangedResult(), context };
+    }
+    const result = await this._authFetchUrl(`${this.apiUrl}${requestPath}`, requestOptions);
     return { result, context };
   }
 
@@ -1645,10 +1654,13 @@ class VolcanoAuth {
     return { user: result.data.user, error: null };
   }
 
-  async updateUser({ password, metadata }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user', {
-      method: 'PUT',
-      body: JSON.stringify({ password, user_metadata: metadata }),
+  async updateUser(options) {
+    const { result, context } = await this._authFetchWithContext('/auth/user', () => {
+      const { password, metadata } = options;
+      return {
+        method: 'PUT',
+        body: JSON.stringify({ password, user_metadata: metadata }),
+      };
     });
 
     if (!result.ok) {
@@ -1819,11 +1831,17 @@ class VolcanoAuth {
     return this.signInAnonymously(metadata);
   }
 
-  async convertAnonymous({ email, password, metadata = {} }) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/convert-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
+  async convertAnonymous(options) {
+    const { result, context } = await this._authFetchWithContext(
+      '/auth/user/convert-anonymous',
+      () => {
+        const { email, password, metadata = {} } = options;
+        return {
+          method: 'POST',
+          body: JSON.stringify({ email, password, user_metadata: metadata }),
+        };
+      },
+    );
 
     if (!result.ok) {
       return { user: null, error: result.error };
@@ -1901,10 +1919,10 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', () => ({
       method: 'POST',
       body: JSON.stringify({ new_email: newEmail }),
-    });
+    }));
 
     if (!result.ok) {
       return { message: null, newEmail: null, error: result.error };
@@ -1923,10 +1941,10 @@ class VolcanoAuth {
   async confirmEmailChange(emailChangeToken) {
     const { result, context } = await this._authFetchWithContext(
       '/auth/user/confirm-email-change',
-      {
+      () => ({
         method: 'POST',
         body: JSON.stringify({ email_change_token: emailChangeToken }),
-      },
+      }),
     );
 
     if (!result.ok) {
@@ -2174,13 +2192,13 @@ class VolcanoAuth {
     };
   }
 
-  async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
+  async callOAuthAPI(provider, params) {
     sanitizeProvider(provider);
     const { result, context } = await this._authFetchWithContext(
       `/auth/oauth/${provider}/call-api`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ endpoint, method, body }),
+      () => {
+        const { endpoint, method = 'GET', body = null } = params;
+        return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
       },
     );
 
@@ -2199,18 +2217,18 @@ class VolcanoAuth {
   // ========================================================================
 
   async getSessions(options = {}) {
-    const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = new URLSearchParams();
-    if (page > 1) {
-      params.set('page', page.toString());
-    }
-    if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.set('limit', limit.toString());
-    }
-
-    const queryString = params.toString();
-    const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const { result, context } = await this._authFetchWithContext(url);
+    const { result, context } = await this._authFetchWithContext(() => {
+      const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
+      const params = new URLSearchParams();
+      if (page > 1) {
+        params.set('page', page.toString());
+      }
+      if (limit !== DEFAULT_SESSIONS_LIMIT) {
+        params.set('limit', limit.toString());
+      }
+      const queryString = params.toString();
+      return `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
+    });
 
     if (!this._isAuthContextCurrent(context)) {
       return {

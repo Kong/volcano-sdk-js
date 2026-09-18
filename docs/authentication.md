@@ -96,6 +96,8 @@ After successful sign-in, the SDK automatically:
 
 Profile operations (`getUser`, `updateUser`, `convertAnonymous`, and `confirmEmailChange`) refresh a rejected access token once when the session has a usable refresh token, then replay the original request values.
 They do not retry other HTTP failures or ambiguous network failures, and they do not retry under a replacement session.
+Authenticated mutations capture the session before reading or serializing your options and metadata.
+If a getter or `toJSON()` replaces the session, the operation returns `AuthSessionChangedError` before sending the request.
 
 ### Sign Out
 
@@ -294,6 +296,13 @@ including its user, with `getSession()`.
 If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. A transport
 error or server failure leaves the current session unchanged so the application can retry. A late
 refresh response never replaces a newer session.
+
+Authenticated profile, session-list/deletion, email-change request/cancellation,
+linked-provider, provider-token, and provider-API operations refresh a usable
+session once after HTTP 401 and replay the original request values. They preserve
+an explicitly replaced session and do not retry other HTTP failures or ambiguous
+network failures. Deleting the current server session also clears its refreshed
+local credentials; a separately adopted session remains current.
 
 ## Hosted Auth Pages (Managed Login)
 
