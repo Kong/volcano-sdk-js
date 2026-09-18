@@ -161,11 +161,7 @@ autoBindSteps(features, [
     });
     when('one presence client joins and leaves while the other remains subscribed', async () => {
       const world = context.world;
-      try {
-        recordOutcome(world, await verifyPresenceMembership(world), null);
-      } catch (error) {
-        recordOutcome(world, null, error);
-      }
+      recordOutcome(world, await verifyPresenceMembership(world), null);
     });
     then(
       'both rosters identify the contract user and the original handler observes membership changes',
@@ -175,11 +171,7 @@ autoBindSteps(features, [
     );
     when('the clients observe an inserted and updated contract row', async () => {
       const world = context.world;
-      try {
-        recordOutcome(world, await verifyPostgresChanges(world), null);
-      } catch (error) {
-        recordOutcome(world, null, error);
-      }
+      recordOutcome(world, await verifyPostgresChanges(world), null);
     });
     then('automatic and lightweight notifications retain metadata and row identity', () => {
       expect(context.world.lastOutcome.value).toEqual(['INSERT', 'UPDATE']);
