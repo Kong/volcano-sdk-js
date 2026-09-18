@@ -260,3 +260,18 @@ async function authErrorMetadata() {
   }
 }
 void authErrorMetadata;
+
+import type { PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.js';
+declare const presenceChannel: RealtimeChannel;
+function presenceIdentity(state: PresenceState) {
+  for (const info of Object.values(state)) {
+    const id: string = info.client;
+    const user: string | undefined = info.user;
+    const connection: Record<string, unknown> | undefined = info.connInfo;
+    const subscription: Record<string, unknown> | undefined = info.chanInfo;
+    const same: PresenceInfo = info;
+    void [id, user, connection, subscription, same];
+  }
+}
+presenceChannel.onPresenceSync(presenceIdentity);
+presenceIdentity(presenceChannel.getPresenceState());

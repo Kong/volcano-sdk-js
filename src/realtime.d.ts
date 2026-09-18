@@ -121,7 +121,7 @@ export interface PostgresChange {
   timestamp: string;
 }
 
-export type PresenceState = Record<string, Record<string, unknown>>;
+export type PresenceState = Record<string, PresenceInfo>;
 
 export interface PublicationContext<T = unknown> {
   /** Publication data */
@@ -165,7 +165,11 @@ export interface PresenceInfo {
   client: string;
   /** User ID */
   user?: string;
-  /** Connection data */
+  /** Server connection metadata */
+  connInfo?: Record<string, unknown>;
+  /** Server subscription metadata */
+  chanInfo?: Record<string, unknown>;
+  /** Legacy transport data, when supplied */
   data?: Record<string, unknown>;
 }
 
