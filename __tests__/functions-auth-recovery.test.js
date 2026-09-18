@@ -229,6 +229,8 @@ test('retains an owned metadata snapshot for negative resolution cache hits', as
     code: 'not_found',
     retryAfter: 7,
   });
+  const cached = [...target._functionResolveState.cache.values()][0];
+  expect(new Error(cached.error).message).toBe('Function not found');
   Object.assign(first.error, { message: 'changed', status: 500, code: 'changed', retryAfter: 99 });
   const second = await target.functions.invoke('missing');
   expect(second.error).toMatchObject({
@@ -239,4 +241,19 @@ test('retains an owned metadata snapshot for negative resolution cache hits', as
   });
   expect(second.error).not.toBe(first.error);
   expect(global.fetch).toHaveBeenCalledTimes(1);
+});
+
+test('reads string-valued failures from the shared legacy resolver cache', async () => {
+  const target = client();
+  target._functionResolveState.cache.set(
+    target._functionResolveCacheKey('missing', token(), false),
+    {
+      functionId: null,
+      error: 'function not found',
+      expiresAt: Date.now() + 30000,
+    },
+  );
+  const result = await target.functions.invoke('missing');
+  expect(result.error).toMatchObject({ message: 'function not found', status: 404 });
+  expect(global.fetch).not.toHaveBeenCalled();
 });

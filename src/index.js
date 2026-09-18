@@ -1251,7 +1251,7 @@ class VolcanoAuth {
     const cached = this._functionResolveState.cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       if (cached.error) {
-        throw Object.assign(new Error(cached.error.message), cached.error);
+        throw Object.assign(new Error(cached.error), { status: 404 }, cached.errorMetadata);
       }
       return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
@@ -1275,8 +1275,9 @@ class VolcanoAuth {
           if (result.status === 404) {
             this._functionResolveState.cache.set(cacheKey, {
               functionId: null,
-              error: {
-                message: result.error?.message || 'function not found',
+              // Keep the string shape readable by older bundles sharing the V1 cache.
+              error: result.error?.message || 'function not found',
+              errorMetadata: {
                 status: result.status,
                 code: result.error?.code,
                 retryAfter: result.error?.retryAfter,
