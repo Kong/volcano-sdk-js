@@ -1251,7 +1251,7 @@ class VolcanoAuth {
     const cached = this._functionResolveState.cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       if (cached.error) {
-        throw new Error(cached.error);
+        throw Object.assign(new Error(cached.error.message), cached.error);
       }
       return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
@@ -1275,7 +1275,12 @@ class VolcanoAuth {
           if (result.status === 404) {
             this._functionResolveState.cache.set(cacheKey, {
               functionId: null,
-              error: 'function not found',
+              error: {
+                message: result.error?.message || 'function not found',
+                status: result.status,
+                code: result.error?.code,
+                retryAfter: result.error?.retryAfter,
+              },
               expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
             });
             pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
@@ -2348,7 +2353,10 @@ class VolcanoAuth {
         ),
       };
     }
-    if (!this._isAuthContextCurrent(operationContext) || operationContext.operations.signingOut) {
+    if (
+      !this._isAuthContextCurrent(operationContext) ||
+      operationContext.operations.pendingSignOut()
+    ) {
       return authSessionChangedResult();
     }
     if (this._oauthExchangePromise) {
@@ -2399,7 +2407,7 @@ class VolcanoAuth {
     let functionDispatched = false;
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
       functionDispatched = false;
-      if (!accessToken || context.operations.signingOut) {
+      if (!accessToken || context.operations.pendingSignOut()) {
         const error = new AuthSessionChangedError();
         return { data: null, status: error.status, headers: {}, version: null, error };
       }

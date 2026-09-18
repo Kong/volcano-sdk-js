@@ -204,3 +204,39 @@ test.each([401, 403])(
     expect(global.fetch.mock.calls.filter(([url]) => url.endsWith('/invoke'))).toHaveLength(1);
   },
 );
+
+test('allows anonymous invocation after sign-out has settled', async () => {
+  const target = client();
+  global.fetch.mockResolvedValueOnce(reply(204, {}));
+  expect((await target.auth.signOut()).error).toBeNull();
+  global.fetch.mockClear();
+  global.fetch.mockResolvedValueOnce(resolved()).mockResolvedValueOnce(reply(200, { ok: true }));
+  expect((await target.functions.invoke('echo')).error).toBeNull();
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+  for (const [, options] of global.fetch.mock.calls)
+    expect(options.headers.Authorization).toBe('Bearer anon');
+});
+
+test('retains an owned metadata snapshot for negative resolution cache hits', async () => {
+  const target = client();
+  global.fetch.mockResolvedValue(
+    reply(404, { error: 'Function not found', code: 'not_found' }, { 'retry-after': '7' }),
+  );
+  const first = await target.functions.invoke('missing');
+  expect(first.error).toMatchObject({
+    message: 'Function not found',
+    status: 404,
+    code: 'not_found',
+    retryAfter: 7,
+  });
+  Object.assign(first.error, { message: 'changed', status: 500, code: 'changed', retryAfter: 99 });
+  const second = await target.functions.invoke('missing');
+  expect(second.error).toMatchObject({
+    message: 'Function not found',
+    status: 404,
+    code: 'not_found',
+    retryAfter: 7,
+  });
+  expect(second.error).not.toBe(first.error);
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+});
