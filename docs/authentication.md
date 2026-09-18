@@ -295,6 +295,13 @@ If Volcano rejects the refresh token with `401` or `403`, the SDK clears that se
 error or server failure leaves the current session unchanged so the application can retry. A late
 refresh response never replaces a newer session.
 
+Authenticated profile, session-list/deletion, email-change request/cancellation,
+linked-provider, provider-token, and provider-API operations refresh a usable
+session once after HTTP 401 and replay the original request values. They preserve
+an explicitly replaced session and do not retry other HTTP failures or ambiguous
+network failures. Deleting the current server session also clears its refreshed
+local credentials; a separately adopted session remains current.
+
 ## Hosted Auth Pages (Managed Login)
 
 Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. **Always start the flow with `signInWithHostedAuth()`** (or `getHostedAuthUrl()`): it stores a one-time nonce and passes it as `state`, which the SDK validates when the session comes back. This binds the returned session to the flow you started and prevents an attacker from tricking a user into adopting an attacker-controlled session (login CSRF / session fixation).

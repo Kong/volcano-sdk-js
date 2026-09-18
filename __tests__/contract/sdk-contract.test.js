@@ -69,7 +69,12 @@ autoBindSteps(features, [
       context.world.previousSession = adopted.data.session;
     });
 
-    for (const operation of ['database read', 'storage operation', 'profile read']) {
+    for (const operation of [
+      'database read',
+      'storage operation',
+      'profile read',
+      'session list',
+    ]) {
       then(`the ${operation} replaces the rejected token for the same user`, async () => {
         const { data, error } = await context.world.client.auth.getSession();
         expect(error).toBeNull();
@@ -90,6 +95,24 @@ autoBindSteps(features, [
         }
       },
     );
+
+    when('the client lists its server sessions', async () => {
+      const world = context.world;
+      const result = await world.client.auth.getSessions({ page: 1, limit: 100 });
+      recordOutcome(world, result, result.error);
+    });
+
+    then('the session list contains the current session for the contract user', () => {
+      const world = context.world;
+      const page = world.lastOutcome.value;
+      expect(page.page).toBe(1);
+      expect(page.sessions.length).toBeGreaterThan(0);
+      expect(page.total).toBeGreaterThanOrEqual(page.sessions.length);
+      expect(page.sessions.every((session) => session.user_id === world.fixture.user_id)).toBe(
+        true,
+      );
+      expect(page.sessions.filter((session) => session.is_current)).toHaveLength(1);
+    });
 
     when('the client loads its server-validated profile', async () => {
       const result = await context.world.client.auth.getUser();

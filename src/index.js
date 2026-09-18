@@ -1067,11 +1067,12 @@ class VolcanoAuth {
       };
     }
 
+    const requestPath = typeof path === 'function' ? path() : path;
     const requestOptions = typeof options === 'function' ? options() : options;
     if (!this._isAuthContextCurrent(context)) {
       return { result: authSessionChangedResult(), context };
     }
-    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, requestOptions);
+    const result = await this._authFetchUrl(`${this.apiUrl}${requestPath}`, requestOptions);
     return { result, context };
   }
 
@@ -2205,18 +2206,18 @@ class VolcanoAuth {
   // ========================================================================
 
   async getSessions(options = {}) {
-    const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-    const params = new URLSearchParams();
-    if (page > 1) {
-      params.set('page', page.toString());
-    }
-    if (limit !== DEFAULT_SESSIONS_LIMIT) {
-      params.set('limit', limit.toString());
-    }
-
-    const queryString = params.toString();
-    const url = `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    const { result, context } = await this._authFetchWithContext(url);
+    const { result, context } = await this._authFetchWithContext(() => {
+      const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
+      const params = new URLSearchParams();
+      if (page > 1) {
+        params.set('page', page.toString());
+      }
+      if (limit !== DEFAULT_SESSIONS_LIMIT) {
+        params.set('limit', limit.toString());
+      }
+      const queryString = params.toString();
+      return `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
+    });
 
     if (!this._isAuthContextCurrent(context)) {
       return {

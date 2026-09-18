@@ -167,3 +167,17 @@ it('clears the current session after refreshing an authenticated deletion', asyn
   expect((await current.auth.deleteSession(SESSION)).error).toBeNull();
   expect(current.accessToken).toBeNull();
 });
+
+it('captures ownership before reading session-list options', async () => {
+  const current = client();
+  global.fetch.mockResolvedValue(reply(200, { sessions: [] }));
+  const options = {
+    get page() {
+      void current.auth.setSession(replacement);
+      return 2;
+    },
+  };
+  const result = await current.auth.getSessions(options);
+  expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+  expect(global.fetch).not.toHaveBeenCalled();
+});
