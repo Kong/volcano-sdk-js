@@ -364,6 +364,12 @@ class VolcanoSystemError extends Error {
     // see new keys. Still read normally: `err.isSystemError`, `err.status`.
     Object.defineProperty(this, 'isSystemError', { value: true });
     Object.defineProperty(this, 'status', { value: options.status ?? null });
+    if (options.code !== undefined) {
+      Object.defineProperty(this, 'code', { value: options.code });
+    }
+    if (options.retryAfter !== undefined) {
+      Object.defineProperty(this, 'retryAfter', { value: options.retryAfter });
+    }
   }
 
   /**
@@ -1245,7 +1251,7 @@ class VolcanoAuth {
     const cached = this._functionResolveState.cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       if (cached.error) {
-        throw new Error(cached.error);
+        throw Object.assign(new Error(cached.error), { status: 404 }, cached.errorMetadata);
       }
       return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
@@ -1269,7 +1275,13 @@ class VolcanoAuth {
           if (result.status === 404) {
             this._functionResolveState.cache.set(cacheKey, {
               functionId: null,
-              error: 'function not found',
+              // Keep the string shape readable by older bundles sharing the V1 cache.
+              error: result.error?.message || 'function not found',
+              errorMetadata: {
+                status: result.status,
+                code: result.error?.code,
+                retryAfter: result.error?.retryAfter,
+              },
               expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
             });
             pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
@@ -1330,7 +1342,7 @@ class VolcanoAuth {
 
       if (outcome.error) {
         if (outcome.status === 401 && !useAnonKey && allowRefresh) {
-          const sessionExpiredError = new Error('Session expired');
+          const sessionExpiredError = Object.assign(new Error('Session expired'), outcome.error);
           if (!authContext.refreshToken) {
             throw sessionExpiredError;
           }
@@ -1550,7 +1562,9 @@ class VolcanoAuth {
   }
 
   async signOut() {
-    await this._completeOAuthExchange();
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+    }
     const context = this._captureAuthContext();
     if (!context.accessToken && !context.refreshToken) {
       return context.operations.pendingSignOut() || { error: null };
@@ -1744,7 +1758,7 @@ class VolcanoAuth {
           if (result.ok) {
             this._setRefreshedSession(result.data, context);
           } else if (result.status === 401 || result.status === 403) {
-            this._clearSession(context);
+            context.operations.refreshClearedSession = this._clearSession(context);
           }
         }
         return result;
@@ -2323,8 +2337,33 @@ class VolcanoAuth {
         error: new Error('functionName must be a non-empty string'),
       };
     }
-    await this._completeOAuthExchange();
-    const operationContext = this._captureAuthContext();
+    let operationContext = this._captureAuthContext();
+    let requestBody;
+    try {
+      // Snapshot before yielding so resolution and auth recovery cannot change the payload.
+      requestBody = JSON.stringify({ payload });
+    } catch (error) {
+      return {
+        data: null,
+        status: null,
+        headers: {},
+        version: null,
+        error: new VolcanoSystemError(
+          error instanceof Error ? error.message : 'Invalid function payload',
+          { cause: error },
+        ),
+      };
+    }
+    if (
+      !this._isAuthContextCurrent(operationContext) ||
+      operationContext.operations.pendingSignOut()
+    ) {
+      return authSessionChangedResult();
+    }
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+      operationContext = this._captureAuthContext();
+    }
     const useAnonKey = !operationContext.accessToken;
     let resolutionContext = operationContext;
     let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
@@ -2369,7 +2408,7 @@ class VolcanoAuth {
     let functionDispatched = false;
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
       functionDispatched = false;
-      if (!accessToken) {
+      if (!accessToken || context.operations.pendingSignOut()) {
         const error = new AuthSessionChangedError();
         return { data: null, status: error.status, headers: {}, version: null, error };
       }
@@ -2386,7 +2425,7 @@ class VolcanoAuth {
             // (FunctionInvocationRequest). Sending the raw payload leaves the
             // server's req.Payload empty, so the function only receives
             // __volcano_auth and never the caller's fields.
-            body: JSON.stringify({ payload }),
+            body: requestBody,
           },
           this.timeout,
         );
@@ -2421,6 +2460,14 @@ class VolcanoAuth {
             }
             return invokeOnce(url, false, context, this.accessToken);
           }
+          if (
+            context.operations.refreshClearedSession &&
+            this._sessionOperations === context.operations &&
+            this._sessionGeneration === context.generation + 1
+          ) {
+            // Preserve the original rejection only when this refresh cleared its owner.
+            operationContext = this._captureAuthContext();
+          }
         }
 
         const data = await parseResponseBody(response);
@@ -2448,7 +2495,7 @@ class VolcanoAuth {
             status: response.status,
             headers,
             version,
-            error: new VolcanoSystemError(message, { status: response.status }),
+            error: new VolcanoSystemError(message, apiRequestError(response, data, message)),
           };
         }
 

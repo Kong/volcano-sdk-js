@@ -370,6 +370,13 @@ export interface Auth {
   deleteAllOtherSessions(): Promise<DeleteSessionResponse>;
 }
 
+/** Error metadata from function resolution, invocation, or authentication recovery. */
+export interface FunctionError extends Error {
+  status?: number | null;
+  code?: string;
+  retryAfter?: number;
+}
+
 export interface Functions {
   /**
    * Invoke a serverless function.
@@ -402,12 +409,12 @@ export interface Functions {
     /**
      * A platform-layer invocation failure (the deploy is failed/provisioning,
      * the gateway is down, or the network call failed) is a
-     * {@link VolcanoSystemError} — detect it via `error.isSystemError`. A
+     * {@link VolcanoSystemError} — detect it via `VolcanoSystemError.is(error)`. A
      * function's own non-2xx response is not an error here; it comes back as
-     * `data` with `error` null. (Union stays `Error` because
-     * `VolcanoSystemError extends Error`; narrow at runtime, not by type.)
+     * `data` with `error` null. Pre-dispatch HTTP errors retain optional status,
+     * code, and retry metadata.
      */
-    error: Error | null;
+    error: FunctionError | null;
   }>;
 }
 
@@ -424,9 +431,16 @@ export class VolcanoSystemError extends Error {
   readonly isSystemError: true;
   /** HTTP status of the blocked invocation, or null for transport failures. */
   readonly status: number | null;
+  /** Platform error code, when supplied by the server. */
+  readonly code?: string;
+  /** Retry-After delay in seconds, when supplied by the server. */
+  readonly retryAfter?: number;
   /** Underlying error for transport failures (network/timeout); undefined otherwise. */
   readonly cause?: unknown;
-  constructor(message: string, options?: { status?: number | null; cause?: unknown });
+  constructor(
+    message: string,
+    options?: { status?: number | null; code?: string; retryAfter?: number; cause?: unknown },
+  );
   /**
    * Type guard for platform-layer invocation failures. Prefer over `instanceof`
    * (holds across duplicate SDK copies in a bundle).
