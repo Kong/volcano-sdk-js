@@ -281,3 +281,12 @@ declare const postgresChange: PostgresChange;
 const primaryKey: string | number | undefined = postgresChange.id;
 const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
 void [primaryKey, deliveryMode];
+
+async function functionErrorMetadata(functions: import('../../src/index.js').Functions) {
+  const { error } = await functions.invoke('echo', { value: 'contract' });
+  const status: number | null | undefined = error?.status;
+  const code: string | undefined = error?.code;
+  const retryAfter: number | undefined = error?.retryAfter;
+  void [status, code, retryAfter];
+}
+void functionErrorMetadata;
