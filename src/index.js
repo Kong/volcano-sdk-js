@@ -1542,7 +1542,7 @@ class VolcanoAuth {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
     if (!context.accessToken && !context.refreshToken) {
-      return { error: null };
+      return context.operations.pendingSignOut() || { error: null };
     }
     return context.operations.signOut((refreshing) => this._signOutCaptured(context, refreshing));
   }
@@ -1556,10 +1556,11 @@ class VolcanoAuth {
         : null;
       const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
       const refreshToken = preceding?.ok ? preceding.data.refresh_token : context.refreshToken;
-      if (sessionId && !context.operations.hasVerifiedPair(accessToken, refreshToken)) {
+      const verified = context.operations.hasVerifiedPair(accessToken, refreshToken);
+      if (sessionId && !verified) {
         logoutError = await this._revokeAccessSession(context, sessionId, preceding);
       } else if (refreshToken) {
-        if (preceding && !preceding.ok) {
+        if (preceding && !preceding.ok && !verified) {
           throw preceding.error;
         }
         const result = await this._anonFetch('/auth/logout', {
@@ -1698,6 +1699,7 @@ class VolcanoAuth {
   }
 
   async _fetchSessionRefresh(context) {
+    const verified = context.operations.hasVerifiedPair(context.accessToken, context.refreshToken);
     context.operations.verifyPair(null);
     const result = await this._anonFetch('/auth/refresh', {
       method: 'POST',
@@ -1710,6 +1712,12 @@ class VolcanoAuth {
         this._isAuthContextCurrent(context) ? this.currentUser?.id : context.userId,
       );
       context.operations.verifyPair(result.data);
+    } else if (result.status === 429 && verified) {
+      // The rate-limit gate rejects before token rotation.
+      context.operations.verifyPair({
+        access_token: context.accessToken,
+        refresh_token: context.refreshToken,
+      });
     }
     return result;
   }

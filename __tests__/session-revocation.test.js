@@ -175,3 +175,61 @@ it('does not use pair provenance after credentials are explicitly replaced or ch
     ]);
   }
 });
+
+it.each([false, true])(
+  'revokes a verified pair after refresh throttling, joined: %s',
+  async (joined) => {
+    const current = client();
+    const entered = deferred();
+    const response = deferred();
+    global.fetch = jest.fn((url) => {
+      if (url.endsWith('/auth/signin')) return Promise.resolve(renewed());
+      if (url.endsWith('/auth/refresh')) {
+        entered.resolve();
+        return response.promise;
+      }
+      return Promise.resolve(reply(url.endsWith('/auth/logout') ? 204 : 401));
+    });
+    await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
+    const refreshing = current.auth.refreshSession();
+    await entered.promise;
+    const pendingLogout = joined ? current.auth.signOut() : null;
+    await Promise.resolve();
+    response.resolve(reply(429, { error: 'throttled' }));
+    await refreshing;
+    expect((await (pendingLogout || current.auth.signOut())).error).toBeNull();
+    expect(global.fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+      '/auth/signin',
+      '/auth/refresh',
+      '/auth/logout',
+    ]);
+  },
+);
+
+it.each([204, 503])('forgets captured revocation credentials after status %s', async (status) => {
+  const current = client();
+  global.fetch = jest.fn((url) =>
+    Promise.resolve(url.endsWith('/auth/signin') ? renewed() : reply(status)),
+  );
+  await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
+  const owner = current._sessionOperations;
+  await current.auth.signOut();
+  expect(owner.verifiedPair).toBeNull();
+  expect(owner.refreshing).toBeNull();
+});
+
+it('shares a pending sign-out failure after its local session is cleared', async () => {
+  const current = client();
+  global.fetch = jest.fn(() => Promise.resolve(reply(503, { error: 'unavailable' })));
+  const clear = current._clearSessionAtGeneration.bind(current);
+  let second;
+  jest.spyOn(current, '_clearSessionAtGeneration').mockImplementation((generation) => {
+    const cleared = clear(generation);
+    second = current.auth.signOut();
+    return cleared;
+  });
+  const first = await current.auth.signOut();
+  expect(first.error.message).toBe('unavailable');
+  expect(await second).toEqual(first);
+  expect((await current.auth.signOut()).error).toBeNull();
+});

@@ -34,10 +34,21 @@ export class AuthSessionOperations {
   signOut(operation) {
     if (!this.signingOut) {
       const refreshing = this.refreshing;
-      this.signingOut = Promise.resolve().then(() => operation(refreshing));
+      this.signingOut = Promise.resolve()
+        .then(() => operation(refreshing))
+        .finally(() => {
+          this.verifyPair(null);
+          this.refreshing = null;
+          this.signOutSettled = true;
+        });
     }
     return this.signingOut;
   }
+  pendingSignOut() {
+    return this.signOutSettled ? null : this.signingOut;
+  }
+
   refreshing = null;
   signingOut = null;
+  signOutSettled = false;
 }
