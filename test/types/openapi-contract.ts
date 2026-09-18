@@ -1,6 +1,7 @@
 import type {
   Auth,
   CompleteSession,
+  StorageFileApi,
   CreateUploadSessionResponse,
   OpenAPIComponents,
   OpenAPIOperations,
@@ -180,3 +181,56 @@ mutation.is('deleted_at', null).is('enabled', true).is('enabled', false);
 query.is('enabled', 'true');
 // @ts-expect-error Numeric values require comparison filters.
 mutation.is('enabled', 1);
+
+declare const bucket: StorageFileApi;
+async function uploadResponseEnvelopes() {
+  const completed = await bucket.completeUploadSession('file.bin', 'session');
+  const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
+  const uploaded = await bucket.upload('file.bin', new Blob(['bytes']));
+  const names: (string | undefined)[] = [
+    completed.data?.object.name,
+    resumed.data?.object.name,
+    uploaded.data?.name,
+  ];
+  // @ts-expect-error Completion returns an object envelope, not flattened metadata.
+  completed.data?.name;
+  // @ts-expect-error Resumable upload preserves the completion envelope.
+  resumed.data?.name;
+  void names;
+}
+void uploadResponseEnvelopes;
+
+async function storageErrorMetadata() {
+  const results = [
+    await bucket.upload('file.bin', new Blob(['bytes'])),
+    await bucket.download('file.bin'),
+    await bucket.list(),
+    await bucket.remove(['file.bin']),
+    await bucket.move('file.bin', 'moved.bin'),
+    await bucket.copy('file.bin', 'copy.bin'),
+    await bucket.updateVisibility('file.bin', false),
+    await bucket.createUploadSession('file.bin', { totalSize: 5 }),
+    await bucket.uploadPart('file.bin', 'session', 1, new Blob(['bytes'])),
+    await bucket.getUploadSession('file.bin', 'session'),
+    await bucket.completeUploadSession('file.bin', 'session'),
+    await bucket.abortUploadSession('file.bin', 'session'),
+    await bucket.uploadResumable('file.bin', new Blob(['bytes'])),
+  ];
+  for (const { error } of results) {
+    const status: number | undefined = error?.status;
+    const code: string | undefined = error?.code;
+    const retryAfter: number | undefined = error?.retryAfter;
+    void [status, code, retryAfter];
+  }
+}
+void storageErrorMetadata;
+
+async function removalFailureMetadata() {
+  const removed = await bucket.remove(['one.bin', 'two.bin']);
+  for (const failure of removed.error?.failures ?? []) {
+    const path: string = failure.path;
+    const status: number | undefined = failure.error.status;
+    void [path, status];
+  }
+}
+void removalFailureMetadata;

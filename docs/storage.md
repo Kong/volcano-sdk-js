@@ -336,7 +336,7 @@ The public URL:
 - Requires no authentication
 - Works in any browser
 - Can be cached by CDNs
-- Returns 403 if the file is made private later
+- Returns 404 if the file is made private later
 
 ### Get Public URL
 
@@ -372,7 +372,7 @@ const { data, error } = await volcano.storage
   });
 
 if (data) {
-  console.log('Upload complete:', data.name);
+  console.log('Upload complete:', data.object.name);
 }
 ```
 
@@ -404,9 +404,8 @@ for (let i = 1; i <= session.total_parts; i++) {
     .uploadPart('large-video.mp4', session.session_id, i, partData);
 
   if (error) {
-    console.error(`Part ${i} failed:`, error.message);
-    // Can retry this part later
-    break;
+    // Retain the session ID to resume the failed part later.
+    throw error;
   }
 
   console.log(`Part ${i}/${session.total_parts} uploaded`);
@@ -418,7 +417,7 @@ const { data, error } = await volcano.storage
   .completeUploadSession('large-video.mp4', session.session_id);
 
 if (data) {
-  console.log('Upload complete!', data.name);
+  console.log('Upload complete!', data.object.name);
 }
 ```
 
@@ -461,7 +460,8 @@ await volcano.storage.from('uploads').completeUploadSession('large-video.mp4', s
 
 ### Abort Upload
 
-Cancel an in-progress upload and clean up:
+Cancel an in-progress upload and discard its parts without publishing an object.
+Further session-status requests report not found:
 
 ```javascript
 const { error } = await volcano.storage
@@ -622,3 +622,11 @@ await volcano.storage.from('uploads').uploadResumable('video.mp4', file, {
 - [Database](./database.md) - Store file metadata in your database
 - [Realtime](./realtime.md) - Get notified when files are uploaded
 - [Functions](./functions.md) - Process files with serverless functions
+
+Storage HTTP errors preserve the response status as `error.status` and any
+server error code as `error.code`. An aborted or missing upload session returns 404. `completeUploadSession()` and `uploadResumable()` return completed metadata
+inside `data.object`; a single-request `upload()` returns it directly in `data`.
+
+For `remove()`, top-level error metadata describes the first failed path.
+`error.failures` preserves each failed path and its original error; `data.deleted`
+contains the paths successfully removed. Local validation errors have no failure list.

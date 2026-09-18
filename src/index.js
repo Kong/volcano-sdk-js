@@ -3325,7 +3325,7 @@ class StorageFileApi {
       if (options.responseType === 'blob') {
         if (!response.ok) {
           const errorData = await safeJsonParse(response);
-          return { data: null, error: new Error(errorData.error || 'Request failed') };
+          return { data: null, error: apiRequestError(response, errorData) };
         }
         const blob = await response.blob();
         return { data: blob, error: null };
@@ -3334,7 +3334,7 @@ class StorageFileApi {
       const data = await safeJsonParse(response);
 
       if (!response.ok) {
-        return { data: null, error: new Error(data.error || 'Request failed') };
+        return { data: null, error: apiRequestError(response, data) };
       }
 
       return { data, error: null };
@@ -3460,19 +3460,24 @@ class StorageFileApi {
       });
 
       if (result.error) {
-        errors.push({ path, error: result.error.message });
+        errors.push({ path, error: result.error });
       } else {
         deleted.push(path);
       }
     }
 
     if (errors.length > 0) {
-      return {
-        data: { deleted },
-        error: new Error(
-          `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
-        ),
-      };
+      const firstError = errors[0].error;
+      const error = new Error(
+        `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
+      );
+      error.failures = errors;
+      for (const field of ['status', 'code', 'retryAfter']) {
+        if (firstError[field] !== undefined) {
+          error[field] = firstError[field];
+        }
+      }
+      return { data: { deleted }, error };
     }
 
     return { data: { deleted }, error: null };
