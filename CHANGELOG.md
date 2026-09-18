@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.9.1](https://github.com/Kong/volcano-sdk-js/compare/v1.9.0...v1.9.1) (2026-09-18)
 
-
 ### Bug Fixes
 
-* **locks:** preserve acquisition identity through recovery ([#124](https://github.com/Kong/volcano-sdk-js/issues/124)) ([cdfa379](https://github.com/Kong/volcano-sdk-js/commit/cdfa379de842e2d34769a5f20f3be32eb96a71a8))
+- **locks:** preserve acquisition identity through recovery ([#124](https://github.com/Kong/volcano-sdk-js/issues/124)) ([cdfa379](https://github.com/Kong/volcano-sdk-js/commit/cdfa379de842e2d34769a5f20f3be32eb96a71a8))
 
 ## [1.9.0](https://github.com/Kong/volcano-sdk-js/compare/v1.8.0...v1.9.0) (2026-09-17)
 
