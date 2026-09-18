@@ -149,3 +149,58 @@ test('does not adopt a replacement session from a rejected-refresh callback', as
   expect(target.accessToken).toBe(token(true));
   expect(global.fetch).toHaveBeenCalledTimes(3);
 });
+
+test.each(['getter', 'toJSON'])(
+  'blocks cached invocation after payload %s starts sign-out',
+  async (boundary) => {
+    const target = client();
+    global.fetch.mockResolvedValueOnce(resolved()).mockResolvedValueOnce(reply(200, {}));
+    expect((await target.functions.invoke('echo')).error).toBeNull();
+    global.fetch.mockClear();
+    global.fetch.mockResolvedValue(reply(200, {}));
+    let signOut;
+    const revoke = () => {
+      signOut = target.auth.signOut();
+      return 'value';
+    };
+    const payload =
+      boundary === 'getter'
+        ? Object.defineProperty({}, 'value', { enumerable: true, get: revoke })
+        : { toJSON: revoke };
+    const result = await target.functions.invoke('echo', payload);
+    await signOut;
+    expect(result.error).toMatchObject({ code: 'auth_session_changed' });
+    expect(global.fetch.mock.calls.filter(([url]) => url.endsWith('/invoke'))).toHaveLength(0);
+  },
+);
+
+test.each([401, 403])(
+  'does not confuse concurrent deletion with refresh %s clearing',
+  async (status) => {
+    const target = client();
+    let finishRefresh;
+    let refreshStarted;
+    const refreshing = new Promise((resolve) => {
+      refreshStarted = resolve;
+    });
+    global.fetch.mockImplementation(async (url, options) => {
+      if (url.includes('/functions/resolve')) return resolved();
+      if (url.endsWith('/invoke')) return reply(401, { error: 'denied', code: 'original' });
+      if (url.endsWith('/auth/refresh')) {
+        refreshStarted();
+        return new Promise((resolve) => {
+          finishRefresh = resolve;
+        });
+      }
+      expect(options.method).toBe('DELETE');
+      return reply(204, {});
+    });
+    const pending = target.functions.invoke('echo');
+    await refreshing;
+    expect((await target.auth.deleteSession(SESSION_ID)).error).toBeNull();
+    finishRefresh(reply(status, { error: 'refresh denied' }));
+    const result = await pending;
+    expect(result.error).toMatchObject({ code: 'auth_session_changed' });
+    expect(global.fetch.mock.calls.filter(([url]) => url.endsWith('/invoke'))).toHaveLength(1);
+  },
+);

@@ -63,4 +63,5 @@ export class AuthSessionOperations {
   signingOut = null;
   signOutSettled = false;
   locallyCleared = false;
+  refreshClearedSession = false;
 }

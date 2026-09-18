@@ -1556,7 +1556,9 @@ class VolcanoAuth {
   }
 
   async signOut() {
-    await this._completeOAuthExchange();
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+    }
     const context = this._captureAuthContext();
     if (!context.accessToken && !context.refreshToken) {
       return context.operations.pendingSignOut() || { error: null };
@@ -1750,7 +1752,7 @@ class VolcanoAuth {
           if (result.ok) {
             this._setRefreshedSession(result.data, context);
           } else if (result.status === 401 || result.status === 403) {
-            this._clearSession(context);
+            context.operations.refreshClearedSession = this._clearSession(context);
           }
         }
         return result;
@@ -2346,7 +2348,7 @@ class VolcanoAuth {
         ),
       };
     }
-    if (!this._isAuthContextCurrent(operationContext)) {
+    if (!this._isAuthContextCurrent(operationContext) || operationContext.operations.signingOut) {
       return authSessionChangedResult();
     }
     if (this._oauthExchangePromise) {
@@ -2397,7 +2399,7 @@ class VolcanoAuth {
     let functionDispatched = false;
     const invokeOnce = async (url, allowRefresh, context, accessToken) => {
       functionDispatched = false;
-      if (!accessToken) {
+      if (!accessToken || context.operations.signingOut) {
         const error = new AuthSessionChangedError();
         return { data: null, status: error.status, headers: {}, version: null, error };
       }
@@ -2450,11 +2452,11 @@ class VolcanoAuth {
             return invokeOnce(url, false, context, this.accessToken);
           }
           if (
-            [401, 403].includes(refreshed.error.status) &&
+            context.operations.refreshClearedSession &&
             this._sessionOperations === context.operations &&
             this._sessionGeneration === context.generation + 1
           ) {
-            // Clearing increments the generation without replacing the session owner.
+            // Preserve the original rejection only when this refresh cleared its owner.
             operationContext = this._captureAuthContext();
           }
         }

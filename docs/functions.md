@@ -44,6 +44,9 @@ prevents replay under another identity. The call preserves its original payload 
 A function's own response, HTTP 403, or a network failure never triggers this retry.
 Anonymous and service keys do not refresh.
 
+Starting sign-out prevents a pending invocation from dispatching. An invocation
+already sent to the function cannot be cancelled by changing the local session.
+
 ### With Typed Response
 
 ```typescript
