@@ -252,6 +252,108 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - token-only bootstrap', () => {
+    it.each([204, 401, 503])(
+      'revokes a token-only session and clears locally after status %s',
+      async (status) => {
+        const token = createTestJwtToken('project-id', { session_id: 'original-session' });
+        const client = new VolcanoAuth({ ...config, accessToken: token });
+        global.fetch.mockResolvedValueOnce({
+          ok: status === 204,
+          status,
+          json: async () => ({ error: 'revocation failed' }),
+        });
+        const result = await client.auth.signOut();
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${config.apiUrl}/auth/user/sessions/original-session`,
+          expect.objectContaining({
+            method: 'DELETE',
+            headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
+          }),
+        );
+        expect(Boolean(result.error)).toBe(status !== 204);
+        expect(client.accessToken).toBeNull();
+      },
+    );
+
+    it('preserves a replacement made while token-only revocation is in flight', async () => {
+      const token = createTestJwtToken('project-id', { session_id: 'original-session' });
+      const client = new VolcanoAuth({ ...config, accessToken: token });
+      global.fetch.mockImplementationOnce(async () => {
+        await client.auth.setSession({
+          access_token: 'replacement',
+          refresh_token: 'refresh',
+          user: { id: 'other-user' },
+        });
+        return { ok: true, status: 204 };
+      });
+      const result = await client.auth.signOut();
+      expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+      expect(client.accessToken).toBe('replacement');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not replay a rejected request under another user after refresh', async () => {
+      const client = new VolcanoAuth({
+        ...config,
+        accessToken: 'supplied-access',
+        refreshToken: 'supplied-refresh',
+      });
+      const user = { id: 'user-123', email: 'test@example.com' };
+      global.fetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ user }) })
+        .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ error: 'Expired' }) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            access_token: 'other-access',
+            refresh_token: 'other-refresh',
+            user: { id: 'other-user' },
+          }),
+        });
+      await client.auth.getUser();
+
+      const result = await client.auth.getUser();
+      expect(result.user).toBeNull();
+      expect(result.error).toBeTruthy();
+      expect(client.currentUser).toEqual(user);
+      expect(client.accessToken).toBe('supplied-access');
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it.each([false, true])(
+      'rejects a refresh for another user with concurrent profile enrichment: %s',
+      async (enrichDuringRefresh) => {
+        const client = new VolcanoAuth({
+          ...config,
+          accessToken: 'supplied-access',
+          refreshToken: 'supplied-refresh',
+        });
+        const profile = { id: 'user-123', email: 'test@example.com' };
+        global.fetch.mockImplementation(async (url) => {
+          if (url.endsWith('/auth/user'))
+            return { ok: true, json: async () => ({ user: profile }) };
+          if (enrichDuringRefresh) await client.auth.getUser();
+          return {
+            ok: true,
+            json: async () => ({
+              access_token: 'other-access',
+              refresh_token: 'other-refresh',
+              user: { id: 'other-user' },
+            }),
+          };
+        });
+        if (!enrichDuringRefresh) await client.auth.getUser();
+
+        const refreshed = await client.auth.refreshSession();
+        expect(refreshed.error).toMatchObject({
+          message: expect.stringContaining('different user'),
+        });
+        expect(client.currentUser).toEqual(profile);
+        expect(client.accessToken).toBe('supplied-access');
+      },
+    );
+
     it('validates and caches the profile without inventing refresh credentials', async () => {
       const client = new VolcanoAuth({ ...config, accessToken: 'supplied-access' });
       const initial = await client.auth.getSession();
@@ -1295,7 +1397,7 @@ describe('VolcanoAuth', () => {
         user: { id: 'old-user' },
       });
       volcano.auth.onAuthStateChange((user) => {
-        if (!replaced && user?.id === 'refreshed-user') {
+        if (!replaced && user?.refreshed === true) {
           replaced = true;
           volcano._setSession({
             access_token: 'replacement-access',
@@ -1317,7 +1419,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'refreshed-access',
               refresh_token: 'refreshed-refresh',
-              user: { id: 'refreshed-user' },
+              user: { id: 'old-user', refreshed: true },
               expires_in: 3600,
             }),
         });
@@ -2153,6 +2255,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'refreshed-access',
               refresh_token: 'refreshed-refresh',
+              user: { id: 'oauth-user', email: 'oauth@example.com' },
               expires_in: 3600,
             }),
         });

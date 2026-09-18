@@ -1523,6 +1523,18 @@ class VolcanoAuth {
         body: JSON.stringify({ refresh_token: context.refreshToken }),
       });
       logoutError = result.error;
+    } else {
+      const sessionId = extractSessionIdFromToken(context.accessToken);
+      if (sessionId) {
+        const result = await this._anonFetch(
+          `/auth/user/sessions/${encodeURIComponent(sessionId)}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${context.accessToken}` },
+          },
+        );
+        logoutError = result.error;
+      }
     }
     if (!this._clearSession(context)) {
       const sessionChangedError = new AuthSessionChangedError();
@@ -2454,6 +2466,10 @@ class VolcanoAuth {
   _setRefreshedSession(data, context) {
     if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
       return false;
+    }
+
+    if (this.currentUser?.id && data.user?.id !== this.currentUser.id) {
+      throw new Error('Refreshed session belongs to a different user');
     }
 
     this._oauthExchangeError = null;

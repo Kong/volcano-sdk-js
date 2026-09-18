@@ -147,21 +147,30 @@ Create a separate client for each server request that carries a user's access to
 ```javascript
 import { VolcanoClient } from '@volcano.dev/sdk';
 
-const client = new VolcanoClient({
-  anonKey: process.env.VOLCANO_ANON_KEY,
-  accessToken: process.env.VOLCANO_ACCESS_TOKEN,
-});
-const { user, error } = await client.auth.getUser();
-if (error) throw error;
-console.log(user.id);
-await client.auth.signOut();
+export async function loadRequestUser(accessToken) {
+  if (typeof accessToken !== 'string' || !accessToken.trim()) {
+    throw new Error('An access token from the current request is required');
+  }
+  const client = new VolcanoClient({
+    anonKey: process.env.VOLCANO_ANON_KEY,
+    accessToken,
+  });
+  const { user, error } = await client.auth.getUser();
+  if (error) throw error;
+  return user;
+}
 ```
 
+Call this helper from your request handler with the bearer token from that request.
+For a Volcano function, use the access token in `event.__volcano_auth` supplied for that invocation.
+The helper validates the token with Volcano before returning the user.
+
+Once a user identity has been validated, a refresh response for another user is rejected and leaves the current credentials unchanged.
 Construction makes no request and does not persist the supplied credentials.
 `getSession()` initially returns the access token with `refresh_token: null` and `user: null`.
 A successful `getUser()` caches the server-validated profile without changing the token.
-Without a refresh token, an HTTP 401 remains an authentication error, `refreshSession()` returns an error, and `signOut()` clears only the local session without a request.
-Pass `refreshToken` alongside `accessToken` when the client should refresh or revoke that session.
+Without a refresh token, an HTTP 401 remains an authentication error, `refreshSession()` returns an error, and `signOut()` revokes the server session identified by the access token before clearing local state.
+Pass `refreshToken` alongside `accessToken` when the client should refresh that session.
 `setSession()` still requires a complete session.
 
 ### Adopt an Existing Session

@@ -176,6 +176,18 @@ autoBindSteps(features, [
       expect(result.data.session.user).toBeNull();
     });
 
+    when('a fresh client starts with a rejected access token', async () => {
+      const world = context.world;
+      world.client = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: REJECTED_ACCESS_TOKEN,
+      });
+      const result = await world.client.auth.getSession();
+      world.previousSession = result.data.session;
+      recordOutcome(world, result.data.session, result.error);
+    });
+
     then('the session retains only the supplied access token', async () => {
       const world = context.world;
       const result = await world.client.auth.getSession();
@@ -207,6 +219,17 @@ autoBindSteps(features, [
       expect(current).toEqual({ data: { session: null }, error: null });
     });
 
+    when('a fresh client loads a profile with the signed-out access token', async () => {
+      const world = context.world;
+      const target = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: world.signedOutSession.access_token,
+      });
+      const result = await target.auth.getUser();
+      recordOutcome(world, result.user, result.error);
+    });
+
     when('a fresh client tries to refresh the signed-out session', async () => {
       const target = new VolcanoClient({
         apiUrl: context.world.fixture.api_url,
@@ -227,6 +250,10 @@ autoBindSteps(features, [
 
     then('the SDK operation succeeds', () => {
       expect(context.world.lastOutcome).toMatchObject({ ok: true });
+    });
+
+    then('the SDK operation fails', () => {
+      expect(context.world.lastOutcome).toMatchObject({ ok: false });
     });
 
     then('the current session belongs to the contract user', () => {
