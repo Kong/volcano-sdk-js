@@ -1,3 +1,4 @@
+const { sessionToken } = require('./session-fixtures.js');
 const { VolcanoAuth } = require('../src/index.js');
 
 describe('Storage', () => {
@@ -67,6 +68,7 @@ describe('Storage', () => {
     });
 
     it('replays the same upload file after an authentication rejection', async () => {
+      volcano.accessToken = sessionToken();
       volcano.refreshToken = 'valid-refresh';
       const file = new File(['hello\u0000\u00ff'], 'file.bin', {
         type: 'application/octet-stream',
@@ -81,9 +83,10 @@ describe('Storage', () => {
           ok: true,
           status: 200,
           json: async () => ({
-            access_token: 'new-access',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'new-refresh',
             expires_in: 3600,
+            user: { id: 'user-123' },
           }),
         })
         .mockResolvedValueOnce({
@@ -99,7 +102,7 @@ describe('Storage', () => {
       const first = fetch.mock.calls[0];
       const replay = fetch.mock.calls[2];
       expect(replay[0]).toBe(first[0]);
-      expect(replay[1].headers.Authorization).toBe('Bearer new-access');
+      expect(replay[1].headers.Authorization).toBe(`Bearer ${sessionToken(undefined, true)}`);
       expect(first[1].body.get('file')).toBe(file);
       expect(replay[1].body.get('file')).toBe(file);
     });
@@ -283,7 +286,7 @@ describe('Storage', () => {
     });
 
     it('should refresh token on 401 and retry', async () => {
-      volcano.accessToken = 'expired-token';
+      volcano.accessToken = sessionToken();
       volcano.refreshToken = 'valid-refresh';
 
       // First call returns 401
@@ -298,9 +301,10 @@ describe('Storage', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            access_token: 'new-access-token',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'new-refresh-token',
             expires_in: 3600,
+            user: { id: 'user-123' },
           }),
       });
 
@@ -313,7 +317,7 @@ describe('Storage', () => {
       const { error } = await volcano.storage.from('files').list();
 
       expect(error).toBeNull();
-      expect(volcano.accessToken).toBe('new-access-token');
+      expect(volcano.accessToken).toBe(sessionToken(undefined, true));
     });
 
     it('should list files with prefix', async () => {

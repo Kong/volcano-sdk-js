@@ -59,11 +59,14 @@ autoBindSteps(features, [
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
       if (error) throw error;
+      const parts = data.session.access_token.split('.');
+      expect(parts).toHaveLength(3);
       const adopted = await context.world.client.auth.setSession({
         ...data.session,
-        access_token: REJECTED_ACCESS_TOKEN,
+        access_token: `${parts[0]}.${parts[1]}.sdk-contract-rejected-signature`,
       });
       if (adopted.error) throw adopted.error;
+      context.world.previousSession = adopted.data.session;
     });
 
     for (const operation of ['database read', 'storage operation', 'profile read']) {
@@ -71,7 +74,7 @@ autoBindSteps(features, [
         const { data, error } = await context.world.client.auth.getSession();
         expect(error).toBeNull();
         expect(data.session.access_token).toBeTruthy();
-        expect(data.session.access_token).not.toBe(REJECTED_ACCESS_TOKEN);
+        expect(data.session.access_token).not.toBe(context.world.previousSession.access_token);
         expect(data.session.refresh_token).toBeTruthy();
         expect(data.session.user.id).toBe(context.world.fixture.user_id);
       });
@@ -151,6 +154,71 @@ autoBindSteps(features, [
       recordOutcome(context.world, { session, user: session?.user ?? null }, current.error);
     });
 
+    when(
+      'a fresh client tries to refresh a supplied profile without a session identifier',
+      async () => {
+        const world = context.world;
+        const source = await world.client.auth.getSession();
+        if (source.error) throw source.error;
+        const target = new VolcanoClient({
+          apiUrl: world.fixture.api_url,
+          anonKey: world.fixture.anon_key,
+        });
+        const supplied = { ...source.data.session, access_token: REJECTED_ACCESS_TOKEN };
+        const adopted = await target.auth.setSession(supplied);
+        if (adopted.error) throw adopted.error;
+        const result = await target.auth.refreshSession();
+        recordOutcome(world, result.session, result.error);
+        expect((await target.auth.getSession()).data.session).toEqual(supplied);
+      },
+    );
+
+    when('a fresh client starts with only the current access token', async () => {
+      const world = context.world;
+      const source = world.client;
+      const current = await source.auth.getSession();
+      if (current.error) throw current.error;
+      world.previousSession = current.data.session;
+      world.bootstrapCleanup = async () => {
+        const result = await source.auth.signOut();
+        if (result.error) throw result.error;
+      };
+      world.cleanupCallbacks.push(world.bootstrapCleanup);
+      world.client = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: world.previousSession.access_token,
+      });
+      const result = await world.client.auth.getSession();
+      recordOutcome(world, result.data.session, result.error);
+    });
+
+    then('the token-only session has no cached user', async () => {
+      const result = await context.world.client.auth.getSession();
+      expect(result.error).toBeNull();
+      expect(result.data.session.user).toBeNull();
+    });
+
+    when('a fresh client starts with a rejected access token', async () => {
+      const world = context.world;
+      world.client = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: REJECTED_ACCESS_TOKEN,
+      });
+      const result = await world.client.auth.getSession();
+      world.previousSession = result.data.session;
+      recordOutcome(world, result.data.session, result.error);
+    });
+
+    then('the session retains only the supplied access token', async () => {
+      const world = context.world;
+      const result = await world.client.auth.getSession();
+      expect(result.error).toBeNull();
+      expect(result.data.session.access_token).toBe(world.previousSession.access_token);
+      expect(result.data.session.refresh_token).toBeNull();
+    });
+
     then('the refreshed session becomes current', () => {
       expect(context.world.refreshedSession).not.toBe(context.world.previousSession);
       expect(context.world.refreshedSession.access_token).not.toBe(
@@ -167,11 +235,29 @@ autoBindSteps(features, [
       context.world.signedOutSession = current.data.session;
       const result = await context.world.client.auth.signOut();
       recordOutcome(context.world, null, result.error);
+      if (!result.error && context.world.bootstrapCleanup) {
+        const world = context.world;
+        world.cleanupCallbacks = world.cleanupCallbacks.filter(
+          (callback) => callback !== world.bootstrapCleanup,
+        );
+        world.bootstrapCleanup = null;
+      }
     });
 
     then('the current session is empty', async () => {
       const current = await context.world.client.auth.getSession();
       expect(current).toEqual({ data: { session: null }, error: null });
+    });
+
+    when('a fresh client loads a profile with the signed-out access token', async () => {
+      const world = context.world;
+      const target = new VolcanoClient({
+        apiUrl: world.fixture.api_url,
+        anonKey: world.fixture.anon_key,
+        accessToken: world.signedOutSession.access_token,
+      });
+      const result = await target.auth.getUser();
+      recordOutcome(world, result.user, result.error);
     });
 
     when('a fresh client tries to refresh the signed-out session', async () => {
@@ -194,6 +280,10 @@ autoBindSteps(features, [
 
     then('the SDK operation succeeds', () => {
       expect(context.world.lastOutcome).toMatchObject({ ok: true });
+    });
+
+    then('the SDK operation fails', () => {
+      expect(context.world.lastOutcome).toMatchObject({ ok: false });
     });
 
     then('the current session belongs to the contract user', () => {
