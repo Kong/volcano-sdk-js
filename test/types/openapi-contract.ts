@@ -234,3 +234,29 @@ async function removalFailureMetadata() {
   }
 }
 void removalFailureMetadata;
+
+async function authErrorMetadata() {
+  const responses = [
+    await sourceAuth.getUser(),
+    await sourceAuth.updateUser({ metadata: {} }),
+    await sourceAuth.confirmEmailChange('token'),
+    await sourceAuth.cancelEmailChange(),
+    await sourceAuth.requestEmailChange('user@example.com'),
+    await sourceAuth.getSessions(),
+    await sourceAuth.deleteSession('session'),
+    await sourceAuth.deleteAllOtherSessions(),
+    await sourceAuth.linkOAuthProvider('github'),
+    await sourceAuth.unlinkOAuthProvider('github'),
+    await sourceAuth.getLinkedOAuthProviders(),
+    await sourceAuth.getOAuthProviderToken('github'),
+    await sourceAuth.refreshOAuthToken('github'),
+    await sourceAuth.callOAuthAPI('github', { endpoint: '/user' }),
+  ];
+  for (const { error } of responses) {
+    const status: number | undefined = error?.status;
+    const code: string | undefined = error?.code;
+    const retryAfter: number | undefined = error?.retryAfter;
+    void [status, code, retryAfter];
+  }
+}
+void authErrorMetadata;

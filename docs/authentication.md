@@ -821,6 +821,8 @@ await volcano.auth.signUp({ email, password });
 
 ### Handle Token Expiration
 
+If an authenticated request receives HTTP 401 and cannot refresh successfully, its error retains `status: 401` and any server `code` and `retryAfter` metadata. The compatible message remains `Session expired`. A network failure has no HTTP status.
+
 Access tokens expire after a configured time (default: 1 hour). The SDK handles refresh automatically, but you should handle the case where refresh fails:
 
 ```javascript
