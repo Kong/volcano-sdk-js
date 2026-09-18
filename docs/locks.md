@@ -74,6 +74,24 @@ try {
 Abort `renewal` to cancel the in-flight renewal request. Cancellation is
 reported through `renewed.error`; the existing lease remains unchanged.
 
+## Recover an uncertain acquisition
+
+Acquisition retries a transport failure or HTTP 503 once with the original key,
+TTL, ownership token, request ID, and credential. Other HTTP errors are returned
+without retrying acquisition. Generate and retain IDs before acquiring if you need
+to recover after both attempts fail:
+
+```javascript
+const token = crypto.randomUUID();
+const requestId = crypto.randomUUID();
+const result = await volcano.locks.acquire('migration', { ttl: 30, token, requestId });
+```
+
+Reuse those IDs for the same uncertain acquisition. Use a new ownership token
+for a new lease after release or expiry. Keep the token private. Every lock
+method accepts `requestId`; `withLock` forwards its `token` and `requestId` only
+to acquisition, and generates separate request IDs for renewal and release.
+
 ## Fencing token
 
 `lease.fencingToken` rises whenever the lock changes hands and stays the same

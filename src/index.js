@@ -684,6 +684,12 @@ class ProjectLocksApi {
     const token = options.token || crypto.randomUUID();
     const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null, fencingToken: null };
+    await this.client._completeOAuthExchange();
+    const requestOptions = this.client._generatedOptions('anon', {
+      Authorization: `Bearer ${this.client.accessToken}`,
+      'X-Volcano-Lock-Token': token,
+      'X-Volcano-Request-Id': requestId,
+    });
     let response;
     let requestError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -691,10 +697,7 @@ class ProjectLocksApi {
         response = await this.client._transport.acquireProjectLock(
           encodeURIComponent(key),
           { ttl_seconds: ttl },
-          this.client._generatedOptions('session', {
-            'X-Volcano-Lock-Token': token,
-            'X-Volcano-Request-Id': requestId,
-          }),
+          requestOptions,
         );
         requestError = null;
         break;
