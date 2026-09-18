@@ -7,6 +7,7 @@ const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 const { VolcanoClient } = require('../../src/index.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
 const { verifyBroadcastPause } = require('./broadcast-pause.js');
+const { LogContract } = require('./logs.js');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];
@@ -124,6 +125,38 @@ afterEach(async () => {
 
 autoBindSteps(features, [
   ({ given, when, then, context }) => {
+    given('a read-only project logs client', () => {
+      const world = startScenario(context);
+      world.logsContract = new LogContract(world);
+    });
+    when('the contract function emits three unique structured log events', async () => {
+      await context.world.logsContract.emit(3);
+    });
+    when('the contract function emits one unique structured log event', async () => {
+      await context.world.logsContract.emit(1);
+    });
+    when('the client searches and paginates those events within 240 seconds', async () => {
+      const world = context.world;
+      try {
+        recordOutcome(world, await world.logsContract.search(), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+    when('the client reads matching log activity within 120 seconds', async () => {
+      const world = context.world;
+      try {
+        recordOutcome(world, await world.logsContract.activity(), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+    then('all three structured events retain their metadata without duplicates', () => {
+      context.world.logsContract.verifyEvents(context.world.lastOutcome.value);
+    });
+    then('activity counts exactly that event in its function and level buckets', () => {
+      context.world.logsContract.verifyActivity(context.world.lastOutcome.value);
+    });
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
       if (error) throw error;
