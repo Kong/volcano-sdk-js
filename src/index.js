@@ -662,8 +662,8 @@ function durablePathSegments(fields) {
   return { segments };
 }
 
-function apiRequestError(response, data) {
-  const error = new Error(data?.error || 'Request failed');
+function apiRequestError(response, data, message = data?.error || 'Request failed') {
+  const error = new Error(message);
   error.status = response.status;
   if (data?.code) {
     error.code = data.code;
@@ -1145,7 +1145,7 @@ class VolcanoAuth {
             retryFailure = {
               ok: false,
               status: response.status,
-              error: new Error('Session expired'),
+              error: apiRequestError(response, data, 'Session expired'),
               data,
             };
             if (!context.refreshToken) {

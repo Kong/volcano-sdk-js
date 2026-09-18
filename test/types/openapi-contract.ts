@@ -297,3 +297,50 @@ async function removalFailureMetadata() {
   }
 }
 void removalFailureMetadata;
+
+async function authErrorMetadata() {
+  const responses = [
+    await sourceAuth.getUser(),
+    await sourceAuth.updateUser({ metadata: {} }),
+    await sourceAuth.confirmEmailChange('token'),
+    await sourceAuth.cancelEmailChange(),
+    await sourceAuth.requestEmailChange('user@example.com'),
+    await sourceAuth.getSessions(),
+    await sourceAuth.deleteSession('session'),
+    await sourceAuth.deleteAllOtherSessions(),
+    await sourceAuth.linkOAuthProvider('github'),
+    await sourceAuth.unlinkOAuthProvider('github'),
+    await sourceAuth.getLinkedOAuthProviders(),
+    await sourceAuth.getOAuthProviderToken('github'),
+    await sourceAuth.refreshOAuthToken('github'),
+    await sourceAuth.callOAuthAPI('github', { endpoint: '/user' }),
+  ];
+  for (const { error } of responses) {
+    const status: number | undefined = error?.status;
+    const code: string | undefined = error?.code;
+    const retryAfter: number | undefined = error?.retryAfter;
+    void [status, code, retryAfter];
+  }
+}
+void authErrorMetadata;
+
+import type { PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.js';
+declare const presenceChannel: RealtimeChannel;
+function presenceIdentity(state: PresenceState) {
+  for (const info of Object.values(state)) {
+    const id: string = info.client;
+    const user: string | undefined = info.user;
+    const connection: Record<string, unknown> | undefined = info.connInfo;
+    const subscription: Record<string, unknown> | undefined = info.chanInfo;
+    const same: PresenceInfo = info;
+    void [id, user, connection, subscription, same];
+  }
+}
+presenceChannel.onPresenceSync(presenceIdentity);
+presenceIdentity(presenceChannel.getPresenceState());
+
+import type { PostgresChange } from '../../src/realtime.js';
+declare const postgresChange: PostgresChange;
+const primaryKey: string | number | undefined = postgresChange.id;
+const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
+void [primaryKey, deliveryMode];

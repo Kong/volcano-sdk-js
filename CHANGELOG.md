@@ -44,6 +44,18 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.9.6](https://github.com/Kong/volcano-sdk-js/compare/v1.9.5...v1.9.6) (2026-09-18)
+
+### Bug Fixes
+
+- **realtime:** retain presence identity across membership changes ([#134](https://github.com/Kong/volcano-sdk-js/issues/134)) ([e1defa2](https://github.com/Kong/volcano-sdk-js/commit/e1defa2e0c7aecea68c28b5d46c94fef0661e149))
+
+## [1.9.5](https://github.com/Kong/volcano-sdk-js/compare/v1.9.4...v1.9.5) (2026-09-18)
+
+### Bug Fixes
+
+- **auth:** retain metadata on unrefreshed rejections ([#133](https://github.com/Kong/volcano-sdk-js/issues/133)) ([fa080ba](https://github.com/Kong/volcano-sdk-js/commit/fa080ba96703427d29641351b4c2b7e519d4f960))
+
 ## [1.9.4](https://github.com/Kong/volcano-sdk-js/compare/v1.9.3...v1.9.4) (2026-09-18)
 
 ### Bug Fixes

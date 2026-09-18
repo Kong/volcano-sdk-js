@@ -38,6 +38,28 @@ function createRealtime() {
 }
 
 describe('realtime in-flight work', () => {
+  test.each(['presence', 'join'])(
+    'preserves full client identity from %s events',
+    async (event) => {
+      const { realtime, subscriptions } = createRealtime();
+      const channel = realtime.channel('lobby', { type: 'presence' });
+      const onSync = jest.fn();
+      channel.onPresenceSync(onSync);
+      await channel.subscribe();
+      const info = {
+        client: 'remote-client',
+        user: 'user-id',
+        connInfo: { user_metadata: { display_name: 'Contract' } },
+      };
+      subscriptions[0].handlers.get(event)(
+        event === 'join' ? { info } : { clients: { 'remote-client': info } },
+      );
+      expect(channel.getPresenceState()).toEqual({ 'remote-client': info });
+      expect(onSync).toHaveBeenLastCalledWith({ 'remote-client': info });
+      channel.unsubscribe();
+    },
+  );
+
   test.each(['resolve', 'reject'])(
     'ignores a stale row fetch that will %s after resubscribing',
     async (settle) => {

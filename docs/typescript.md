@@ -311,6 +311,8 @@ interface PostgresChange {
   old_record?: Record<string, unknown>;
   columns?: string[];
   timestamp: string;
+  id?: string | number;
+  mode?: 'lightweight';
 }
 ```
 
@@ -333,24 +335,18 @@ channel.onPostgresChanges('INSERT', 'public', 'messages', (change: PostgresChang
 ### Presence State
 
 ```typescript
-interface PresenceState {
-  [clientId: string]: Record<string, unknown>;
-}
-
-// Type your presence data
-interface UserPresence {
-  user_id: string;
-  username: string;
-  status: 'online' | 'away' | 'busy';
-}
+import type { PresenceState } from '@volcano.dev/sdk/realtime';
 
 channel.onPresenceSync((state: PresenceState) => {
-  const users = Object.values(state) as UserPresence[];
-  users.forEach((user) => {
-    console.log(`${user.username} is ${user.status}`);
-  });
+  for (const connection of Object.values(state)) {
+    console.log(connection.client, connection.user, connection.connInfo);
+  }
 });
 ```
+
+Each entry is a server connection record. One user can have multiple connections.
+`connInfo` and `chanInfo` contain server metadata when present. `track()` keeps
+local application state; it does not place custom fields on these records.
 
 ## Functions Types
 

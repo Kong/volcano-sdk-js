@@ -90,9 +90,16 @@ export interface CompleteSession extends CurrentSession {
   user: User;
 }
 
+/** HTTP metadata is absent for local validation and transport errors. */
+export interface AuthError extends Error {
+  status?: number;
+  code?: string;
+  retryAfter?: number;
+}
+
 export interface CurrentSessionResponse {
   data: { session: CurrentSession | null };
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface SignUpOptions {
@@ -134,26 +141,26 @@ export interface ResetPasswordOptions {
 
 export interface MessageResponse {
   message: string | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface EmailChangeResponse {
   message: string | null;
   newEmail: string | null;
   emailChangeToken?: string;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface OAuthTokenResponse {
   message: string | null;
   provider: string | null;
   expiresIn: number | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface OAuthAPIResponse<T = unknown> {
   data: T | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface OAuthAPIParams {
@@ -165,7 +172,7 @@ export interface OAuthAPIParams {
 export interface AuthResponse {
   user: User | null;
   session: Session | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 /**
@@ -180,17 +187,17 @@ export interface SignUpResponse {
   session: Session | null;
   confirmationRequired: boolean;
   message: string | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface UserResponse {
   user: User | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface SessionResponse {
   session: Session | null;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface AuthSession {
@@ -215,7 +222,7 @@ export interface SessionsResponse {
   page: number;
   limit: number;
   total_pages: number;
-  error: Error | null;
+  error: AuthError | null;
 }
 
 export interface GetSessionsOptions {
@@ -226,7 +233,7 @@ export interface GetSessionsOptions {
 }
 
 export interface DeleteSessionResponse {
-  error: Error | null;
+  error: AuthError | null;
 }
 
 /** Valid OAuth provider names */
@@ -254,7 +261,7 @@ export interface Auth {
   /** Adopt a complete session into local memory without network, storage, or listener effects. */
   setSession(session: CompleteSession): Promise<CurrentSessionResponse>;
   /** Sign out current user */
-  signOut(): Promise<{ error: Error | null }>;
+  signOut(): Promise<{ error: AuthError | null }>;
   /**
    * Get current user data.
    *
@@ -347,11 +354,14 @@ export interface Auth {
   /** Link OAuth provider to current user. Throws if provider is invalid. */
   linkOAuthProvider(
     provider: OAuthProviderName,
-  ): Promise<{ data: LinkProviderResponse | null; error: Error | null }>;
+  ): Promise<{ data: LinkProviderResponse | null; error: AuthError | null }>;
   /** Unlink OAuth provider. Throws if provider is invalid. */
-  unlinkOAuthProvider(provider: OAuthProviderName): Promise<{ error: Error | null }>;
+  unlinkOAuthProvider(provider: OAuthProviderName): Promise<{ error: AuthError | null }>;
   /** Get linked OAuth providers */
-  getLinkedOAuthProviders(): Promise<{ providers: OAuthProvider[] | null; error: Error | null }>;
+  getLinkedOAuthProviders(): Promise<{
+    providers: OAuthProvider[] | null;
+    error: AuthError | null;
+  }>;
   /** Refresh a server-held OAuth provider token and return status metadata. */
   refreshOAuthToken(provider: OAuthProviderName): Promise<OAuthTokenResponse>;
   /** Get server-held OAuth provider token status. Auto-refreshes if expired; never exposes the token. */

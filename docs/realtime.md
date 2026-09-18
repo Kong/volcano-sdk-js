@@ -106,126 +106,68 @@ The client automatically reconnects with exponential backoff when disconnected.
 
 ## Postgres Changes
 
-Subscribe to database changes and get notified in real-time when data is modified.
-
-### Setup
-
-```javascript
-const channel = realtime.channel('my-changes', { type: 'postgres' });
-```
-
-### Listen for All Changes
+Subscribe using a `schema:table` channel name. For automatic row loading, bind the
+signed-in `volcano` client from the [quickstart](./README.md) and select its database.
+Enable Postgres changes for the project and grant that user access to the table.
 
 ```javascript
+realtime.setVolcanoClient(volcano);
+realtime.setDatabaseName('app');
+const channel = realtime.channel('public:posts', { type: 'postgres' });
+
 channel.onPostgresChanges('*', 'public', 'posts', (change) => {
-  console.log('Change type:', change.type); // INSERT, UPDATE, or DELETE
-  console.log('Table:', change.table);
-  console.log('Schema:', change.schema);
-  console.log('Timestamp:', change.timestamp);
-
-  if (change.type === 'INSERT') {
-    console.log('New record:', change.record);
-  }
-
-  if (change.type === 'UPDATE') {
-    console.log('Updated record:', change.record);
-    console.log('Previous record:', change.old_record);
-    console.log('Changed columns:', change.columns);
-  }
-
-  if (change.type === 'DELETE') {
-    console.log('Deleted record:', change.old_record);
+  console.log(change.type, change.schema, change.table, change.timestamp);
+  if (change.record) {
+    console.log('Current row:', change.record);
+  } else {
+    console.log('Changed row ID:', change.id);
   }
 });
-
 await channel.subscribe();
 ```
 
-### Filter by Event Type
+Insert and update notifications can load the current row through the authenticated
+client. Automatic lookup requires a primary key named `id`; rapid updates may
+have changed the row by the time the lookup runs. A failed lookup leaves the
+lightweight notification available to the callback.
 
-Listen only for specific operations:
+Set `autoFetch: false` when first creating a channel to receive its row ID and
+`mode: 'lightweight'` without a row lookup. The `PostgresChange` type exposes both fields.
+
+### Filter events and tables
 
 ```javascript
-// Only INSERTs
-channel.onPostgresChanges('INSERT', 'public', 'messages', (change) => {
-  console.log('New message:', change.record);
-  addMessageToUI(change.record);
+channel.onPostgresChanges('INSERT', 'public', 'posts', (change) => {
+  console.log('Inserted:', change.record ?? change.id);
 });
-
-// Only UPDATEs
 channel.onPostgresChanges('UPDATE', 'public', 'posts', (change) => {
-  console.log('Post updated:', change.record.id);
-  updatePostInUI(change.record);
-});
-
-// Only DELETEs
-channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
-  console.log('Post deleted:', change.old_record.id);
-  removePostFromUI(change.old_record.id);
+  console.log('Updated:', change.record ?? change.id);
 });
 ```
 
-### Multiple Tables
-
-Subscribe to changes on different tables:
+A subscription targets one table. Create a channel for each additional table:
 
 ```javascript
-const channel = realtime.channel('app-changes', { type: 'postgres' });
-
-channel.onPostgresChanges('*', 'public', 'posts', handlePostChange);
-channel.onPostgresChanges('*', 'public', 'comments', handleCommentChange);
-channel.onPostgresChanges('*', 'public', 'reactions', handleReactionChange);
-
-await channel.subscribe();
+const comments = realtime.channel('public:comments', { type: 'postgres' });
+comments.onPostgresChanges('*', 'public', 'comments', (change) => console.log(change));
+await comments.subscribe();
 ```
 
-### Row-Level Security
+### Row-Level Security and deletion
 
-Postgres changes respect RLS. Users only receive notifications for rows they can see:
+Volcano checks the current row against the subscriber's Row-Level Security policies.
+Authenticated user subscriptions currently do not receive delete notifications after
+the row is gone. Service-key subscriptions can receive deletion events with the
+primary key in `old_record`; other deleted columns are not retained. See
+[Postgres Changes](/platform/realtime/postgres-changes) for platform behavior.
 
-```javascript
-// If RLS policy is: user_id = auth.uid()
-// Alice will only receive changes for her posts
-// Bob will only receive changes for his posts
-
-// Same channel subscription:
-channel.onPostgresChanges('*', 'public', 'posts', (change) => {
-  // Each user only sees their own data
-  console.log('My post changed:', change.record.title);
-});
-```
-
-### Example: Live Chat
+Do not treat realtime delivery as a durable record of every database change.
+Unsubscribe or remove channels during cleanup:
 
 ```javascript
-const realtime = new VolcanoRealtime({
-  apiUrl: 'https://api.example.com',
-  anonKey: 'anon-key',
-  accessToken: volcano.accessToken,
-});
-
-await realtime.connect();
-
-const channel = realtime.channel('chat', { type: 'postgres' });
-
-channel.onPostgresChanges('INSERT', 'public', 'messages', (change) => {
-  const message = change.record;
-  displayMessage({
-    id: message.id,
-    text: message.content,
-    author: message.author_name,
-    time: message.created_at,
-  });
-});
-
-await channel.subscribe();
-
-// Send a message (through normal database insert)
-await volcano.insert('messages', {
-  content: 'Hello everyone!',
-  channel_id: 'general',
-});
-// All subscribers receive the INSERT notification
+channel.unsubscribe();
+realtime.removeChannel('public:posts', 'postgres');
+realtime.removeChannel('public:comments', 'postgres');
 ```
 
 ## Broadcast
@@ -256,7 +198,7 @@ await channel.subscribe();
 
 // Send a message
 await channel.send({
-  type: 'notification',
+  event: 'notification',
   title: 'New Feature!',
   message: 'Check out our latest update',
 });
@@ -293,14 +235,14 @@ await channel.subscribe();
 let typingTimeout;
 function onInputChange() {
   channel.send({
-    type: 'typing',
+    event: 'typing',
     user_id: currentUser.id,
   });
 
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => {
     channel.send({
-      type: 'stopped_typing',
+      event: 'stopped_typing',
       user_id: currentUser.id,
     });
   }, 2000);
@@ -309,105 +251,37 @@ function onInputChange() {
 
 ## Presence
 
-Track which users are online and their current state.
-
-### Setup
+Observe the connections currently subscribed to a presence channel. The server
+supplies each connection's `client` ID, authenticated `user` ID, and connection
+metadata (`connInfo`). A user can have several connections.
 
 ```javascript
 const channel = realtime.channel('lobby', { type: 'presence' });
-```
-
-### Track Your Presence
-
-```javascript
-await channel.subscribe();
-
-// Announce your presence
-await channel.track({
-  user_id: currentUser.id,
-  username: currentUser.name,
-  status: 'online',
-  avatar: currentUser.avatar_url,
-});
-```
-
-### Listen for Presence Updates
-
-```javascript
 channel.onPresenceSync((state) => {
-  // state is an object: { clientId: userData, ... }
-  const onlineUsers = Object.entries(state).map(([clientId, data]) => ({
-    clientId,
-    ...data,
-  }));
-
-  console.log('Online users:', onlineUsers.length);
-  updateOnlineUsersList(onlineUsers);
+  for (const [clientId, info] of Object.entries(state)) {
+    console.log(clientId, info.user, info.connInfo);
+  }
 });
-
+channel.on('join', (info) => console.log('Joined', info.client, info.user));
+channel.on('leave', (info) => console.log('Left', info.client, info.user));
 await channel.subscribe();
-```
 
-### Get Current State
-
-```javascript
-// Get presence state at any time
 const state = channel.getPresenceState();
-
-for (const [clientId, userData] of Object.entries(state)) {
-  console.log(`${userData.username} is ${userData.status}`);
-}
+console.log('Online connections:', Object.keys(state).length);
 ```
 
-### Update Your State
+Initial snapshots and join updates retain the same full client record. The
+original handler continues to receive membership updates as other connections
+join and leave. Unsubscribing clears the local roster; resubscribing reloads it.
+
+`track(state)` stores application state locally. It does not publish that state
+or replace the server's authenticated identity and metadata. Use a broadcast
+channel to share application updates such as cursor positions.
 
 ```javascript
-// Update your presence (e.g., change status)
-await channel.track({
-  user_id: currentUser.id,
-  username: currentUser.name,
-  status: 'away',
-  last_seen: new Date().toISOString(),
-});
-```
-
-### Example: Online Users
-
-```javascript
-const realtime = new VolcanoRealtime({ ... });
-await realtime.connect();
-
-const channel = realtime.channel('app-presence', { type: 'presence' });
-
-channel.onPresenceSync((state) => {
-  const users = Object.values(state);
-
-  document.getElementById('online-count').textContent = users.length;
-
-  const list = document.getElementById('online-users');
-  list.innerHTML = users
-    .map(u => `<li>${u.username} (${u.status})</li>`)
-    .join('');
-});
-
-await channel.subscribe();
-
-// Track this user
-await channel.track({
-  user_id: user.id,
-  username: user.name,
-  status: 'online'
-});
-
-// Update status on visibility change
-document.addEventListener('visibilitychange', () => {
-  const status = document.hidden ? 'away' : 'online';
-  channel.track({
-    user_id: user.id,
-    username: user.name,
-    status
-  });
-});
+await channel.track({ status: 'working' });
+// When this view is finished:
+channel.unsubscribe();
 ```
 
 ## Managing Channels
@@ -537,7 +411,7 @@ realtime.onConnect((ctx: ConnectContext) => {
   console.log('Connected:', ctx.client);
 });
 
-const channel: RealtimeChannel = realtime.channel('updates', { type: 'postgres' });
+const channel: RealtimeChannel = realtime.channel('public:posts', { type: 'postgres' });
 
 channel.onPostgresChanges('INSERT', 'public', 'posts', (change: PostgresChange) => {
   console.log('New post:', change.record);
@@ -574,7 +448,7 @@ useEffect(() => {
   const realtime = new VolcanoRealtime({ ... });
   realtime.connect();
 
-  const channel = realtime.channel('updates', { type: 'postgres' });
+  const channel = realtime.channel('public:posts', { type: 'postgres' });
   channel.onPostgresChanges('*', 'public', 'posts', handleChange);
   channel.subscribe();
 
@@ -622,25 +496,6 @@ channel.onPostgresChanges('UPDATE', 'public', 'posts', (change) => {
 
 channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
   setPosts((current) => current.filter((p) => p.id !== change.old_record.id));
-});
-```
-
-### Throttle Presence Updates
-
-Don't update presence too frequently:
-
-```javascript
-import { throttle } from 'lodash';
-
-const updatePresence = throttle((state) => {
-  channel.track(state);
-}, 1000); // At most once per second
-
-window.addEventListener('mousemove', (e) => {
-  updatePresence({
-    user_id: user.id,
-    cursor: { x: e.clientX, y: e.clientY },
-  });
 });
 ```
 
