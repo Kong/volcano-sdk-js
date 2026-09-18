@@ -724,7 +724,7 @@ class RealtimeChannel {
         if (this._paused) {
           return;
         }
-        this._presenceState[ctx.info.client] = ctx.info.data;
+        this._presenceState[ctx.info.client] = ctx.info;
         this._triggerPresenceSync();
         this._triggerEvent('join', ctx.info);
       };
@@ -1188,7 +1188,7 @@ class RealtimeChannel {
     this._presenceState = {};
     if (ctx.clients) {
       for (const [clientId, info] of Object.entries(ctx.clients)) {
-        this._presenceState[clientId] = info.data;
+        this._presenceState[clientId] = info;
       }
     }
   }

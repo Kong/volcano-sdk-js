@@ -309,105 +309,37 @@ function onInputChange() {
 
 ## Presence
 
-Track which users are online and their current state.
-
-### Setup
+Observe the connections currently subscribed to a presence channel. The server
+supplies each connection's `client` ID, authenticated `user` ID, and connection
+metadata (`connInfo`). A user can have several connections.
 
 ```javascript
 const channel = realtime.channel('lobby', { type: 'presence' });
-```
-
-### Track Your Presence
-
-```javascript
-await channel.subscribe();
-
-// Announce your presence
-await channel.track({
-  user_id: currentUser.id,
-  username: currentUser.name,
-  status: 'online',
-  avatar: currentUser.avatar_url,
-});
-```
-
-### Listen for Presence Updates
-
-```javascript
 channel.onPresenceSync((state) => {
-  // state is an object: { clientId: userData, ... }
-  const onlineUsers = Object.entries(state).map(([clientId, data]) => ({
-    clientId,
-    ...data,
-  }));
-
-  console.log('Online users:', onlineUsers.length);
-  updateOnlineUsersList(onlineUsers);
+  for (const [clientId, info] of Object.entries(state)) {
+    console.log(clientId, info.user, info.connInfo);
+  }
 });
-
+channel.on('join', (info) => console.log('Joined', info.client, info.user));
+channel.on('leave', (info) => console.log('Left', info.client, info.user));
 await channel.subscribe();
-```
 
-### Get Current State
-
-```javascript
-// Get presence state at any time
 const state = channel.getPresenceState();
-
-for (const [clientId, userData] of Object.entries(state)) {
-  console.log(`${userData.username} is ${userData.status}`);
-}
+console.log('Online connections:', Object.keys(state).length);
 ```
 
-### Update Your State
+Initial snapshots and join updates retain the same full client record. The
+original handler continues to receive membership updates as other connections
+join and leave. Unsubscribing clears the local roster; resubscribing reloads it.
+
+`track(state)` stores application state locally. It does not publish that state
+or replace the server's authenticated identity and metadata. Use a broadcast
+channel to share application updates such as cursor positions.
 
 ```javascript
-// Update your presence (e.g., change status)
-await channel.track({
-  user_id: currentUser.id,
-  username: currentUser.name,
-  status: 'away',
-  last_seen: new Date().toISOString(),
-});
-```
-
-### Example: Online Users
-
-```javascript
-const realtime = new VolcanoRealtime({ ... });
-await realtime.connect();
-
-const channel = realtime.channel('app-presence', { type: 'presence' });
-
-channel.onPresenceSync((state) => {
-  const users = Object.values(state);
-
-  document.getElementById('online-count').textContent = users.length;
-
-  const list = document.getElementById('online-users');
-  list.innerHTML = users
-    .map(u => `<li>${u.username} (${u.status})</li>`)
-    .join('');
-});
-
-await channel.subscribe();
-
-// Track this user
-await channel.track({
-  user_id: user.id,
-  username: user.name,
-  status: 'online'
-});
-
-// Update status on visibility change
-document.addEventListener('visibilitychange', () => {
-  const status = document.hidden ? 'away' : 'online';
-  channel.track({
-    user_id: user.id,
-    username: user.name,
-    status
-  });
-});
+await channel.track({ status: 'working' });
+// When this view is finished:
+channel.unsubscribe();
 ```
 
 ## Managing Channels
@@ -622,25 +554,6 @@ channel.onPostgresChanges('UPDATE', 'public', 'posts', (change) => {
 
 channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
   setPosts((current) => current.filter((p) => p.id !== change.old_record.id));
-});
-```
-
-### Throttle Presence Updates
-
-Don't update presence too frequently:
-
-```javascript
-import { throttle } from 'lodash';
-
-const updatePresence = throttle((state) => {
-  channel.track(state);
-}, 1000); // At most once per second
-
-window.addEventListener('mousemove', (e) => {
-  updatePresence({
-    user_id: user.id,
-    cursor: { x: e.clientX, y: e.clientY },
-  });
 });
 ```
 

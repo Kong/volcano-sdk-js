@@ -8,6 +8,7 @@ const { VolcanoClient } = require('../../src/index.js');
 const { ContractWorld, recordOutcome } = require('./world.js');
 const { verifyBroadcastPause } = require('./broadcast-pause.js');
 const { LogContract } = require('./logs.js');
+const { verifyPresenceMembership } = require('./presence-membership.js');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];
@@ -157,6 +158,20 @@ autoBindSteps(features, [
     then('activity counts exactly that event in its function and level buckets', () => {
       context.world.logsContract.verifyActivity(context.world.lastOutcome.value);
     });
+    when('one presence client joins and leaves while the other remains subscribed', async () => {
+      const world = context.world;
+      try {
+        recordOutcome(world, await verifyPresenceMembership(world), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+    then(
+      'both rosters identify the contract user and the original handler observes membership changes',
+      () => {
+        expect(context.world.lastOutcome.value).toEqual([1, 2, 1]);
+      },
+    );
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
       if (error) throw error;
