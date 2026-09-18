@@ -26,6 +26,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.9.3](https://github.com/Kong/volcano-sdk-js/compare/v1.9.2...v1.9.3) (2026-09-18)
+
+### Bug Fixes
+
+- **auth:** capture authenticated request ownership before yielding ([#127](https://github.com/Kong/volcano-sdk-js/issues/127)) ([3c1f34f](https://github.com/Kong/volcano-sdk-js/commit/3c1f34f446a177e54f3be445b3eaa1af8d3396a1))
+
 ## [1.9.2](https://github.com/Kong/volcano-sdk-js/compare/v1.9.1...v1.9.2) (2026-09-18)
 
 ### Bug Fixes
