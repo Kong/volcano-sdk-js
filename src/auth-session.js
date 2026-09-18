@@ -29,7 +29,7 @@ export class AuthSessionOperations {
   }
 
   refresh(operation) {
-    if (this.signingOut) {
+    if (this.signingOut || this.locallyCleared) {
       return null;
     }
     if (!this.refreshing) {
