@@ -37,6 +37,13 @@ console.log('Result:', data);
 
 `version` maps to the `X-Volcano-Version` response header (`<version>` in production, `<env>-<version>` in non-production).
 
+Function resolution and invocation recover from a platform HTTP 401 before dispatch:
+the SDK refreshes the captured session and retries the rejected request once.
+Concurrent calls share successful recovery. Replacing or signing out that session
+prevents replay under another identity. The call preserves its original payload values.
+A function's own response, HTTP 403, or a network failure never triggers this retry.
+Anonymous and service keys do not refresh.
+
 ### With Typed Response
 
 ```typescript

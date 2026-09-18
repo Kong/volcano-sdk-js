@@ -194,6 +194,7 @@ autoBindSteps(features, [
       'storage operation',
       'profile read',
       'session list',
+      'function invocation',
     ]) {
       then(`the ${operation} replaces the rejected token for the same user`, async () => {
         const { data, error } = await context.world.client.auth.getSession();
@@ -1047,6 +1048,13 @@ autoBindSteps(features, [
       expect(replacement.token).not.toBe(original.token);
       expect(original.fencingToken).not.toBeNull();
       expect(replacement.fencingToken).toBeGreaterThan(original.fencingToken);
+    });
+
+    when('the authenticated client invokes the contract function by name', async () => {
+      const result = await context.world.client.functions.invoke(context.world.functionName, {
+        value: 'contract',
+      });
+      recordOutcome(context.world, result, result.error);
     });
 
     when('the client invokes the contract function by name', async () => {

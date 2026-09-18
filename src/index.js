@@ -1330,7 +1330,7 @@ class VolcanoAuth {
 
       if (outcome.error) {
         if (outcome.status === 401 && !useAnonKey && allowRefresh) {
-          const sessionExpiredError = new Error('Session expired');
+          const sessionExpiredError = Object.assign(new Error('Session expired'), outcome.error);
           if (!authContext.refreshToken) {
             throw sessionExpiredError;
           }
@@ -2323,6 +2323,22 @@ class VolcanoAuth {
         error: new Error('functionName must be a non-empty string'),
       };
     }
+    let requestBody;
+    try {
+      // Snapshot before yielding so resolution and auth recovery cannot change the payload.
+      requestBody = JSON.stringify({ payload });
+    } catch (error) {
+      return {
+        data: null,
+        status: null,
+        headers: {},
+        version: null,
+        error: new VolcanoSystemError(
+          error instanceof Error ? error.message : 'Invalid function payload',
+          { cause: error },
+        ),
+      };
+    }
     await this._completeOAuthExchange();
     const operationContext = this._captureAuthContext();
     const useAnonKey = !operationContext.accessToken;
@@ -2386,7 +2402,7 @@ class VolcanoAuth {
             // (FunctionInvocationRequest). Sending the raw payload leaves the
             // server's req.Payload empty, so the function only receives
             // __volcano_auth and never the caller's fields.
-            body: JSON.stringify({ payload }),
+            body: requestBody,
           },
           this.timeout,
         );
