@@ -56,7 +56,7 @@ function observedMembership(snapshots, initial, joined) {
 
 async function verifyPresenceMembership(world) {
   const [first, second] = world.realtimeClients.map((client) =>
-    client.channel(`${world.realtimeChannel}-presence`, { type: 'presence' }),
+    client.channel(world.realtimeChannel, { type: 'presence' }),
   );
   const firstObserver = new PresenceObserver(first, world.fixture.user_id);
   const secondObserver = new PresenceObserver(second, world.fixture.user_id);

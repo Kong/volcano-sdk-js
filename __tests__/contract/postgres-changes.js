@@ -63,9 +63,9 @@ function verifyChange(event, type, table, row, automatic) {
 async function verifyPostgresChanges(world) {
   const tableName = world.fixture.realtime_table_name;
   const row = { id: randomUUID(), value: 'inserted', owner_id: world.fixture.user_id };
-  const table = () => world.client.database(world.fixture.database_name).from(tableName);
+  const database = () => world.client.database(world.fixture.database_name);
   world.cleanupCallbacks.push(async () => {
-    const result = await table().delete().eq('id', row.id);
+    const result = await database().delete(tableName).eq('id', row.id);
     if (result.error) throw result.error;
   });
   const channels = world.realtimeClients.map((client, index) => {
@@ -80,8 +80,8 @@ async function verifyPostgresChanges(world) {
       const expected = { ...row, value: index === 0 ? 'inserted' : 'updated' };
       const result =
         index === 0
-          ? await table().insert(expected)
-          : await table().update({ value: expected.value }).eq('id', row.id);
+          ? await database().insert(tableName, expected)
+          : await database().update(tableName, { value: expected.value }).eq('id', row.id);
       if (result.error) throw result.error;
       expect(result.data).toEqual([expected]);
       const events = await Promise.all(observers.map((observer) => observer.next(index)));
