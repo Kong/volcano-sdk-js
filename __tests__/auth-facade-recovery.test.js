@@ -181,3 +181,23 @@ it('captures ownership before reading session-list options', async () => {
   expect(result.error).toBeInstanceOf(AuthSessionChangedError);
   expect(global.fetch).not.toHaveBeenCalled();
 });
+
+it.each(['sign out', 'rejected refresh'])(
+  'rejects another-session deletion after local clearing by %s',
+  async (clearing) => {
+    const current = client();
+    let clearingResult;
+    global.fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/auth/refresh')) return reply(401, { error: 'expired refresh' });
+      if (url.endsWith(OTHER)) {
+        clearingResult = await (clearing === 'sign out'
+          ? current.auth.signOut()
+          : current.auth.refreshSession());
+      }
+      return reply(204);
+    });
+    expect((await current.auth.deleteSession(OTHER)).error).toBeInstanceOf(AuthSessionChangedError);
+    expect(clearingResult.error?.status ?? null).toBe(clearing === 'sign out' ? null : 401);
+    expect(current.accessToken).toBeNull();
+  },
+);
