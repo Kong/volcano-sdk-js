@@ -167,7 +167,7 @@ Call this helper from your request handler with the bearer token from that reque
 For a Volcano function, use the access token in `event.__volcano_auth.access_token` supplied for that invocation.
 The helper validates the token with Volcano before returning the user.
 
-Refresh must preserve the server session identified by the access JWT, even before a profile is loaded. A different session is rejected, including another session for the same user. An unknown identity without a readable session identifier cannot refresh.
+Refresh must preserve the server session identified by the access JWT, even before a profile is loaded. A different session is rejected, including another session for the same user. Supplied credentials need a readable session identifier to refresh, even when you provide a user profile or load it from the server. Profile data does not prove that access and refresh tokens belong together.
 Once a user identity has been validated, a refresh response for another user is also rejected.
 Construction makes no request and does not persist the supplied credentials.
 `getSession()` initially returns the access token with `refresh_token: null` and `user: null`.

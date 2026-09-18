@@ -301,7 +301,7 @@ describe('VolcanoAuth', () => {
     it('does not replay a rejected request under another user after refresh', async () => {
       const client = new VolcanoAuth({
         ...config,
-        accessToken: 'supplied-access',
+        accessToken: sessionToken(),
         refreshToken: 'supplied-refresh',
       });
       const user = { id: 'user-123', email: 'test@example.com' };
@@ -311,7 +311,7 @@ describe('VolcanoAuth', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            access_token: 'other-access',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'other-refresh',
             user: { id: 'other-user' },
           }),
@@ -322,7 +322,7 @@ describe('VolcanoAuth', () => {
       expect(result.user).toBeNull();
       expect(result.error).toBeTruthy();
       expect(client.currentUser).toEqual(user);
-      expect(client.accessToken).toBe('supplied-access');
+      expect(client.accessToken).toBe(sessionToken());
       expect(global.fetch).toHaveBeenCalledTimes(3);
     });
 
@@ -1129,7 +1129,7 @@ describe('VolcanoAuth', () => {
         const metadata = { roles: ['editor'] };
         const profile = { id: 'user-123', email: 'updated@example.com' };
         await volcano.auth.setSession({
-          access_token: 'old-access',
+          access_token: sessionToken(),
           refresh_token: 'old-refresh',
           user: { id: profile.id },
         });
@@ -1156,7 +1156,7 @@ describe('VolcanoAuth', () => {
               ok: true,
               status: 200,
               json: async () => ({
-                access_token: 'new-access',
+                access_token: sessionToken(undefined, true),
                 refresh_token: 'new-refresh',
                 user: { id: profile.id, email: 'before-profile@example.com' },
               }),
@@ -1167,11 +1167,13 @@ describe('VolcanoAuth', () => {
         expect(result.error).toBeNull();
         expect(result.user).toEqual(profile);
         expect(volcano.currentUser).toEqual(profile);
-        expect(volcano.accessToken).toBe('new-access');
+        expect(volcano.accessToken).toBe(sessionToken(undefined, true));
         expect(global.fetch).toHaveBeenCalledTimes(3);
         expect(global.fetch.mock.calls[0][0]).toBe(global.fetch.mock.calls[2][0]);
         expect(global.fetch.mock.calls[0][1].body).toBe(global.fetch.mock.calls[2][1].body);
-        expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer new-access');
+        expect(global.fetch.mock.calls[2][1].headers.Authorization).toBe(
+          `Bearer ${sessionToken(undefined, true)}`,
+        );
       },
     );
   });

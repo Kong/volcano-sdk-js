@@ -233,3 +233,46 @@ it('shares a pending sign-out failure after its local session is cleared', async
   expect(await second).toEqual(first);
   expect((await current.auth.signOut()).error).toBeNull();
 });
+
+it.each([false, true])(
+  'drops retained credentials after deleting the current session, failure: %s',
+  async (fails) => {
+    const current = client();
+    global.fetch = jest.fn((url) => {
+      if (url.endsWith('/auth/signin') || url.endsWith('/auth/refresh'))
+        return Promise.resolve(renewed());
+      if (fails) return Promise.reject(new Error('response lost'));
+      return Promise.resolve(reply(204));
+    });
+    await current.auth.signIn({ email: 'u@example.com', password: 'synthetic' });
+    await current.auth.refreshSession();
+    const owner = current._sessionOperations;
+    const outcome = await current.auth.deleteSession(SESSION);
+    expect(Boolean(outcome.error)).toBe(fails);
+    expect(current.accessToken).toBeNull();
+    expect(owner.verifiedPair).toBeNull();
+    expect(owner.refreshing).toBeNull();
+  },
+);
+
+it('does not retain credentials when refresh finishes after current-session deletion', async () => {
+  const current = client();
+  const entered = deferred();
+  const response = deferred();
+  global.fetch = jest.fn((url) => {
+    if (url.endsWith('/auth/refresh')) {
+      entered.resolve();
+      return response.promise;
+    }
+    return Promise.resolve(reply(204));
+  });
+  const owner = current._sessionOperations;
+  const refreshing = current.auth.refreshSession();
+  await entered.promise;
+  expect((await current.auth.deleteSession(SESSION)).error).toBeNull();
+  response.resolve(renewed());
+  await refreshing;
+  expect(current.accessToken).toBeNull();
+  expect(owner.verifiedPair).toBeNull();
+  expect(owner.refreshing).toBeNull();
+});

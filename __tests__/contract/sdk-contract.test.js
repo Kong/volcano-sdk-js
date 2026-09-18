@@ -151,6 +151,25 @@ autoBindSteps(features, [
       recordOutcome(context.world, { session, user: session?.user ?? null }, current.error);
     });
 
+    when(
+      'a fresh client tries to refresh a supplied profile without a session identifier',
+      async () => {
+        const world = context.world;
+        const source = await world.client.auth.getSession();
+        if (source.error) throw source.error;
+        const target = new VolcanoClient({
+          apiUrl: world.fixture.api_url,
+          anonKey: world.fixture.anon_key,
+        });
+        const supplied = { ...source.data.session, access_token: REJECTED_ACCESS_TOKEN };
+        const adopted = await target.auth.setSession(supplied);
+        if (adopted.error) throw adopted.error;
+        const result = await target.auth.refreshSession();
+        recordOutcome(world, result.session, result.error);
+        expect((await target.auth.getSession()).data.session).toEqual(supplied);
+      },
+    );
+
     when('a fresh client starts with only the current access token', async () => {
       const world = context.world;
       const source = world.client;

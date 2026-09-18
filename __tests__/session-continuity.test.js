@@ -212,3 +212,25 @@ describe('server session continuity', () => {
     expect(current.currentUser.id).toBe('user-b');
   });
 });
+
+it.each([false, true])(
+  'does not trust a supplied profile without a session ID, enriched: %s',
+  async (enriched) => {
+    const current = client();
+    global.fetch = jest.fn().mockResolvedValue(refresh());
+    await current.auth.setSession({
+      access_token: 'opaque',
+      refresh_token: 'foreign-refresh',
+      user: { id: 'user-a' },
+    });
+    if (enriched) {
+      global.fetch.mockResolvedValueOnce(reply(200, { user: { id: 'user-a' } }));
+      await current.auth.getUser();
+      global.fetch.mockClear();
+    }
+    const outcome = await current.auth.refreshSession();
+    expect(outcome.error?.message).toContain('session identifier');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(current.accessToken).toBe('opaque');
+  },
+);

@@ -6,7 +6,18 @@ export class AuthSessionOperations {
   }
 
   verifyPair(data) {
+    if (this.locallyCleared) {
+      return;
+    }
     this.verifiedPair = data ? [data.access_token, data.refresh_token] : null;
+  }
+
+  clearLocalCredentials() {
+    if (this.signingOut) {
+      return;
+    }
+    this.locallyCleared = true;
+    this.verifiedPair = null;
   }
 
   hasVerifiedPair(accessToken, refreshToken) {
@@ -51,4 +62,5 @@ export class AuthSessionOperations {
   refreshing = null;
   signingOut = null;
   signOutSettled = false;
+  locallyCleared = false;
 }

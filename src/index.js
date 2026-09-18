@@ -500,9 +500,12 @@ function extractSessionIdFromToken(token) {
   }
 }
 
-function validateRefreshSource(context, userId) {
-  if (!userId && !extractSessionIdFromToken(context.accessToken)) {
-    throw new Error('Cannot refresh unknown identity without a session identifier');
+function validateRefreshSource(context) {
+  if (
+    !context.operations.hasVerifiedPair(context.accessToken, context.refreshToken) &&
+    !extractSessionIdFromToken(context.accessToken)
+  ) {
+    throw new Error('Cannot refresh supplied credentials without a session identifier');
   }
 }
 
@@ -511,7 +514,6 @@ function validateSessionContinuation(data, context, userId) {
   if (invalid) {
     throw invalid;
   }
-  validateRefreshSource(context, userId);
   const expected = extractSessionIdFromToken(context.accessToken);
   if (expected && !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))) {
     throw new Error('Refreshed credentials belong to a different server session');
@@ -1690,7 +1692,7 @@ class VolcanoAuth {
     }
 
     try {
-      validateRefreshSource(context, this.currentUser?.id);
+      validateRefreshSource(context);
     } catch (error) {
       return { session: null, error };
     }
@@ -2590,6 +2592,7 @@ class VolcanoAuth {
     }
 
     this._oauthExchangeError = null;
+    this._sessionOperations.clearLocalCredentials();
     this.accessToken = null;
     this.refreshToken = null;
     this.currentUser = null;
