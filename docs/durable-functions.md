@@ -496,7 +496,9 @@ An execution is `running` until it finishes, including while it is suspended in
 a wait with nothing invoked, so polling it is how you follow one. It reads
 `pending` only in the moment between being accepted and being started, and
 finishes as one of `succeeded`, `failed`, `timed_out`, `stopped` or `unknown`
-(the outcome the platform could not establish).
+(the outcome the platform could not establish). Retry an `unknown` start under
+the same name: the platform resumes that execution rather than starting a
+second one.
 
 `result` is what the handler returned. It is absent while the execution runs,
 and absent on one that failed, timed out or was stopped — those carry
