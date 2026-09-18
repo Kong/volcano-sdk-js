@@ -671,7 +671,7 @@ export interface UploadPartResponse {
 
 /** Response from completing an upload session */
 export interface CompleteUploadSessionResponse {
-  data: StorageObject | null;
+  data: { object: StorageObject } | null;
   error: Error | null;
 }
 
@@ -793,7 +793,7 @@ export interface StorageFileApi {
     path: string,
     fileBody: File | Blob,
     options?: ResumableUploadOptions,
-  ): Promise<StorageUploadResponse>;
+  ): Promise<CompleteUploadSessionResponse>;
 }
 
 /** Storage API */

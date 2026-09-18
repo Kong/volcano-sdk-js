@@ -3325,7 +3325,7 @@ class StorageFileApi {
       if (options.responseType === 'blob') {
         if (!response.ok) {
           const errorData = await safeJsonParse(response);
-          return { data: null, error: new Error(errorData.error || 'Request failed') };
+          return { data: null, error: apiRequestError(response, errorData) };
         }
         const blob = await response.blob();
         return { data: blob, error: null };
@@ -3334,7 +3334,7 @@ class StorageFileApi {
       const data = await safeJsonParse(response);
 
       if (!response.ok) {
-        return { data: null, error: new Error(data.error || 'Request failed') };
+        return { data: null, error: apiRequestError(response, data) };
       }
 
       return { data, error: null };

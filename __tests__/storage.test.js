@@ -14,6 +14,30 @@ describe('Storage', () => {
     volcano.accessToken = 'test-access-token';
   });
 
+  it.each(['status', 'abort', 'download'])(
+    'preserves a missing object HTTP status for %s',
+    async (operation) => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'not found', code: 'storage_not_found' }),
+      });
+      const bucket = volcano.storage.from('uploads');
+      const operations = {
+        status: () => bucket.getUploadSession('missing.bin', 'missing-session'),
+        abort: () => bucket.abortUploadSession('missing.bin', 'missing-session'),
+        download: () => bucket.download('missing.bin'),
+      };
+      const result = await operations[operation]();
+      expect(result.error).toMatchObject({
+        status: 404,
+        message: 'not found',
+        code: 'storage_not_found',
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   describe('storage.from()', () => {
     it('should return StorageFileApi instance', () => {
       const bucket = volcano.storage.from('avatars');

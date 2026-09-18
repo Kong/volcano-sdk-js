@@ -1,6 +1,7 @@
 import type {
   Auth,
   CompleteSession,
+  StorageFileApi,
   CreateUploadSessionResponse,
   OpenAPIComponents,
   OpenAPIOperations,
@@ -180,3 +181,21 @@ mutation.is('deleted_at', null).is('enabled', true).is('enabled', false);
 query.is('enabled', 'true');
 // @ts-expect-error Numeric values require comparison filters.
 mutation.is('enabled', 1);
+
+declare const bucket: StorageFileApi;
+async function uploadResponseEnvelopes() {
+  const completed = await bucket.completeUploadSession('file.bin', 'session');
+  const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
+  const uploaded = await bucket.upload('file.bin', new Blob(['bytes']));
+  const names: (string | undefined)[] = [
+    completed.data?.object.name,
+    resumed.data?.object.name,
+    uploaded.data?.name,
+  ];
+  // @ts-expect-error Completion returns an object envelope, not flattened metadata.
+  completed.data?.name;
+  // @ts-expect-error Resumable upload preserves the completion envelope.
+  resumed.data?.name;
+  void names;
+}
+void uploadResponseEnvelopes;

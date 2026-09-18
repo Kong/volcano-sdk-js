@@ -336,7 +336,7 @@ The public URL:
 - Requires no authentication
 - Works in any browser
 - Can be cached by CDNs
-- Returns 403 if the file is made private later
+- Returns 404 if the file is made private later
 
 ### Get Public URL
 
@@ -622,3 +622,7 @@ await volcano.storage.from('uploads').uploadResumable('video.mp4', file, {
 - [Database](./database.md) - Store file metadata in your database
 - [Realtime](./realtime.md) - Get notified when files are uploaded
 - [Functions](./functions.md) - Process files with serverless functions
+
+Storage HTTP errors preserve the response status as `error.status` and any
+server error code as `error.code`. An aborted or missing upload session returns 404. `completeUploadSession()` and `uploadResumable()` return completed metadata
+inside `data.object`; a single-request `upload()` returns it directly in `data`.
