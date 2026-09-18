@@ -1,8 +1,8 @@
 module.exports = {
   testEnvironment: '<rootDir>/__tests__/node-environment.cjs',
   testMatch: ['**/__tests__/contract/**/*.test.js'],
-  // Retained log ingestion may take four minutes; each poll has its own deadline.
-  testTimeout: 300000,
+  // Allow three 60s invokes, a 240s ingestion poll, pagination, and cleanup.
+  testTimeout: 600000,
   reporters: [
     'default',
     [
