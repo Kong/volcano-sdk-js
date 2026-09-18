@@ -28,10 +28,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.9.7](https://github.com/Kong/volcano-sdk-js/compare/v1.9.6...v1.9.7) (2026-09-18)
 
-
 ### Bug Fixes
 
-* **functions:** preserve payload and auth rejection metadata ([#139](https://github.com/Kong/volcano-sdk-js/issues/139)) ([23bb2c2](https://github.com/Kong/volcano-sdk-js/commit/23bb2c23f68fe731f5e8bef04472e33d1788bccd))
+- **functions:** preserve payload and auth rejection metadata ([#139](https://github.com/Kong/volcano-sdk-js/issues/139)) ([23bb2c2](https://github.com/Kong/volcano-sdk-js/commit/23bb2c23f68fe731f5e8bef04472e33d1788bccd))
 
 ## [1.9.6](https://github.com/Kong/volcano-sdk-js/compare/v1.9.5...v1.9.6) (2026-09-18)
 
