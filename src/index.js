@@ -2452,11 +2452,9 @@ class VolcanoAuth {
           if (
             [401, 403].includes(refreshed.error.status) &&
             this._sessionOperations === context.operations &&
-            this._sessionGeneration === context.generation + 1 &&
-            !this.accessToken &&
-            !this.refreshToken
+            this._sessionGeneration === context.generation + 1
           ) {
-            // Keep the invocation rejection when this refresh cleared its own session.
+            // Clearing increments the generation without replacing the session owner.
             operationContext = this._captureAuthContext();
           }
         }
