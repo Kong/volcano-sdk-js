@@ -354,6 +354,58 @@ describe('VolcanoAuth', () => {
       },
     );
 
+    it.each(['getUser', 'updateUser'])(
+      'discards a stale %s profile when refresh wins first',
+      async (method) => {
+        const client = new VolcanoAuth({
+          ...config,
+          accessToken: 'access-a',
+          refreshToken: 'refresh-b',
+        });
+        const pending = createDeferred();
+        const started = createDeferred();
+        global.fetch.mockImplementationOnce(() => {
+          started.resolve();
+          return pending.promise;
+        });
+        const profile = client.auth[method]({ metadata: { name: 'example' } });
+        await started.promise;
+        global.fetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            access_token: 'access-b',
+            refresh_token: 'rotated-b',
+            user: { id: 'user-b' },
+          }),
+        });
+        expect((await client.auth.refreshSession()).error).toBeNull();
+        pending.resolve({ ok: true, json: async () => ({ user: { id: 'user-a' } }) });
+        expect((await profile).error).toBeInstanceOf(AuthSessionChangedError);
+        expect(client.currentUser.id).toBe('user-b');
+        expect(client.accessToken).toBe('access-b');
+      },
+    );
+
+    it('revokes the access-token session when the supplied refresh token belongs elsewhere', async () => {
+      const token = createTestJwtToken('project-id', { session_id: 'original-session' });
+      const client = new VolcanoAuth({
+        ...config,
+        accessToken: token,
+        refreshToken: 'different-session-refresh',
+      });
+      global.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+      expect((await client.auth.signOut()).error).toBeNull();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${config.apiUrl}/auth/user/sessions/original-session`,
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
+        }),
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(client.accessToken).toBeNull();
+    });
+
     it('validates and caches the profile without inventing refresh credentials', async () => {
       const client = new VolcanoAuth({ ...config, accessToken: 'supplied-access' });
       const initial = await client.auth.getSession();

@@ -109,16 +109,18 @@ if (!error) {
 }
 ```
 
-This invalidates the refresh token on the server and clears local storage.
+This revokes the session identified by the access token and clears local storage.
+The access-token session takes precedence even when a refresh token was supplied.
+An expired access token can make revocation fail; local clearing still occurs and the error is returned.
 Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
 the SDK still clears the captured local session and returns the error so the application can report
-it. The cleared session no longer contains the refresh token needed to retry revocation. A session
+it. The cleared session no longer contains credentials needed to retry revocation. A session
 established while sign-out is pending remains current.
 
 If a concurrent refresh rotates the refresh token before sign-out completes, the rotated session
 remains current and `signOut()` returns `AuthSessionChangedError`. Read the current session before
-deciding whether to retry. If the refresh reuses the token that sign-out revoked, the SDK clears the
-session normally.
+deciding whether to retry: revoking the access-token session can also invalidate its refreshed
+credentials. If the refresh token remains unchanged, the SDK clears the local session normally.
 
 ## Session Management
 

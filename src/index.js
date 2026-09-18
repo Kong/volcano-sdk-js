@@ -1517,24 +1517,19 @@ class VolcanoAuth {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
     let logoutError = null;
-    if (context.refreshToken) {
+    const sessionId = extractSessionIdFromToken(context.accessToken);
+    if (sessionId) {
+      const result = await this._anonFetch(`/auth/user/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${context.accessToken}` },
+      });
+      logoutError = result.error;
+    } else if (context.refreshToken) {
       const result = await this._anonFetch('/auth/logout', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: context.refreshToken }),
       });
       logoutError = result.error;
-    } else {
-      const sessionId = extractSessionIdFromToken(context.accessToken);
-      if (sessionId) {
-        const result = await this._anonFetch(
-          `/auth/user/sessions/${encodeURIComponent(sessionId)}`,
-          {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${context.accessToken}` },
-          },
-        );
-        logoutError = result.error;
-      }
     }
     if (!this._clearSession(context)) {
       const sessionChangedError = new AuthSessionChangedError();
@@ -1560,7 +1555,10 @@ class VolcanoAuth {
     if (!result.ok) {
       return { user: null, error: result.error };
     }
-    if (!this._isAuthContextCurrent(context)) {
+    if (
+      !this._isAuthContextCurrent(context) ||
+      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
+    ) {
       return { user: null, error: new AuthSessionChangedError() };
     }
 
@@ -1584,7 +1582,10 @@ class VolcanoAuth {
     if (!result.ok) {
       return { user: null, error: result.error };
     }
-    if (!this._isAuthContextCurrent(context)) {
+    if (
+      !this._isAuthContextCurrent(context) ||
+      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
+    ) {
       return { user: null, error: new AuthSessionChangedError() };
     }
 
