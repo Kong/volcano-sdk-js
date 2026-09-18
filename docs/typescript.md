@@ -311,6 +311,8 @@ interface PostgresChange {
   old_record?: Record<string, unknown>;
   columns?: string[];
   timestamp: string;
+  id?: string | number;
+  mode?: 'lightweight';
 }
 ```
 

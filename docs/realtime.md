@@ -411,7 +411,7 @@ realtime.onConnect((ctx: ConnectContext) => {
   console.log('Connected:', ctx.client);
 });
 
-const channel: RealtimeChannel = realtime.channel('updates', { type: 'postgres' });
+const channel: RealtimeChannel = realtime.channel('public:posts', { type: 'postgres' });
 
 channel.onPostgresChanges('INSERT', 'public', 'posts', (change: PostgresChange) => {
   console.log('New post:', change.record);
@@ -448,7 +448,7 @@ useEffect(() => {
   const realtime = new VolcanoRealtime({ ... });
   realtime.connect();
 
-  const channel = realtime.channel('updates', { type: 'postgres' });
+  const channel = realtime.channel('public:posts', { type: 'postgres' });
   channel.onPostgresChanges('*', 'public', 'posts', handleChange);
   channel.subscribe();
 

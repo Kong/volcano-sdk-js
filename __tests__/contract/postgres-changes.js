@@ -1,18 +1,24 @@
 const { randomUUID } = require('node:crypto');
 
 class ChangeObserver {
-  constructor(channel, table) {
+  constructor(channel, table, rowId) {
     this.events = [];
     this.changed = null;
     this.inserts = 0;
     this.wrongTable = 0;
+    const owns = (event) => (event.record?.id ?? event.id) === rowId;
     this.stops = [
       channel.onPostgresChanges('*', 'public', table, (event) => {
+        if (!owns(event)) return;
         this.events.push(event);
         this.changed?.();
       }),
-      channel.onPostgresChanges('INSERT', 'public', table, () => this.inserts++),
-      channel.onPostgresChanges('*', 'public', `${table}_other`, () => this.wrongTable++),
+      channel.onPostgresChanges('INSERT', 'public', table, (event) => {
+        if (owns(event)) this.inserts++;
+      }),
+      channel.onPostgresChanges('*', 'public', `${table}_other`, (event) => {
+        if (owns(event)) this.wrongTable++;
+      }),
     ];
   }
 
@@ -46,6 +52,8 @@ function verifyChange(event, type, table, row, automatic) {
   expect(Number.isFinite(Date.parse(event.timestamp))).toBe(true);
   if (automatic) {
     expect(event.record).toEqual(row);
+    expect(event.id ?? null).toBeNull();
+    expect(event.mode ?? null).toBeNull();
   } else {
     expect(event).toMatchObject({ id: row.id, mode: 'lightweight' });
     expect(event.record ?? null).toBeNull();
@@ -65,7 +73,7 @@ async function verifyPostgresChanges(world) {
     client.setDatabaseName(world.fixture.database_name);
     return client.channel(`public:${tableName}`, { type: 'postgres', autoFetch: index === 0 });
   });
-  const observers = channels.map((channel) => new ChangeObserver(channel, tableName));
+  const observers = channels.map((channel) => new ChangeObserver(channel, tableName, row.id));
   try {
     await Promise.all(channels.map((channel) => channel.subscribe()));
     for (const [index, type] of ['INSERT', 'UPDATE'].entries()) {
@@ -93,4 +101,4 @@ async function verifyPostgresChanges(world) {
   }
 }
 
-module.exports = { verifyPostgresChanges, verifyChange };
+module.exports = { verifyPostgresChanges, verifyChange, ChangeObserver };
