@@ -1,3 +1,4 @@
+const { sessionToken } = require('./session-fixtures.js');
 const {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
@@ -326,7 +327,7 @@ describe('VolcanoAuth', () => {
       async (enrichDuringRefresh) => {
         const client = new VolcanoAuth({
           ...config,
-          accessToken: 'supplied-access',
+          accessToken: createTestJwtToken('project-id', { session_id: 'bootstrap' }),
           refreshToken: 'supplied-refresh',
         });
         const profile = { id: 'user-123', email: 'test@example.com' };
@@ -337,7 +338,7 @@ describe('VolcanoAuth', () => {
           return {
             ok: true,
             json: async () => ({
-              access_token: 'other-access',
+              access_token: createTestJwtToken('project-id', { session_id: 'bootstrap' }),
               refresh_token: 'other-refresh',
               user: { id: 'other-user' },
             }),
@@ -350,7 +351,9 @@ describe('VolcanoAuth', () => {
           message: expect.stringContaining('different user'),
         });
         expect(client.currentUser).toEqual(profile);
-        expect(client.accessToken).toBe('supplied-access');
+        expect(client.accessToken).toBe(
+          createTestJwtToken('project-id', { session_id: 'bootstrap' }),
+        );
       },
     );
 
@@ -359,7 +362,7 @@ describe('VolcanoAuth', () => {
       async (method) => {
         const client = new VolcanoAuth({
           ...config,
-          accessToken: 'access-a',
+          accessToken: createTestJwtToken('project-id', { session_id: 'bootstrap' }),
           refreshToken: 'refresh-b',
         });
         const pending = createDeferred();
@@ -373,7 +376,10 @@ describe('VolcanoAuth', () => {
         global.fetch.mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            access_token: 'access-b',
+            access_token: createTestJwtToken('project-id', {
+              session_id: 'bootstrap',
+              renewed: true,
+            }),
             refresh_token: 'rotated-b',
             user: { id: 'user-b' },
           }),
@@ -382,7 +388,9 @@ describe('VolcanoAuth', () => {
         pending.resolve({ ok: true, json: async () => ({ user: { id: 'user-a' } }) });
         expect((await profile).error).toBeInstanceOf(AuthSessionChangedError);
         expect(client.currentUser.id).toBe('user-b');
-        expect(client.accessToken).toBe('access-b');
+        expect(client.accessToken).toBe(
+          createTestJwtToken('project-id', { session_id: 'bootstrap', renewed: true }),
+        );
       },
     );
 
@@ -1245,7 +1253,7 @@ describe('VolcanoAuth', () => {
     });
 
     it('should refresh token on 401 and retry', async () => {
-      volcano.accessToken = 'expired-token';
+      volcano.accessToken = sessionToken();
       volcano.refreshToken = 'valid-refresh';
 
       // First call returns 401
@@ -1260,9 +1268,10 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            access_token: 'new-access-token',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'new-refresh-token',
             expires_in: 3600,
+            user: { id: 'user-123' },
           }),
       });
 
@@ -1275,7 +1284,7 @@ describe('VolcanoAuth', () => {
       const result = await volcano.auth.getUser();
 
       expect(result.user.id).toBe('user-123');
-      expect(volcano.accessToken).toBe('new-access-token');
+      expect(volcano.accessToken).toBe(sessionToken(undefined, true));
     });
 
     it('shares one refresh across concurrent authenticated requests', async () => {
@@ -2259,7 +2268,7 @@ describe('VolcanoAuth', () => {
     });
 
     it('refreshes a valid stored session after an OAuth provider denial', async () => {
-      window.localStorage.setItem('volcano_access_token', 'stored-access');
+      window.localStorage.setItem('volcano_access_token', sessionToken());
       window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
@@ -2268,9 +2277,10 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            access_token: 'refreshed-access',
+            access_token: sessionToken(undefined, true),
             refresh_token: 'refreshed-refresh',
             expires_in: 3600,
+            user: { id: 'user-123' },
           }),
       });
 
@@ -2279,7 +2289,7 @@ describe('VolcanoAuth', () => {
 
       expect(result).toEqual(
         expect.objectContaining({
-          session: expect.objectContaining({ access_token: 'refreshed-access' }),
+          session: expect.objectContaining({ access_token: sessionToken(undefined, true) }),
           error: null,
         }),
       );
@@ -2709,7 +2719,7 @@ describe('VolcanoAuth', () => {
     });
 
     it('should clear session on refresh failure', async () => {
-      volcano.accessToken = 'old-access';
+      volcano.accessToken = sessionToken();
       volcano.refreshToken = 'expired-refresh';
 
       global.fetch.mockResolvedValueOnce({
@@ -6102,7 +6112,10 @@ describe('VolcanoAuth', () => {
 
     it('should refresh a shared resolver 401 in each unchanged caller context', async () => {
       jest.clearAllMocks();
-      const sharedToken = TEST_ACCESS_TOKEN_SHARED_TWO;
+      const sharedToken = createTestJwtToken('00000000-0000-0000-0000-000000000011', {
+        session_id: 'refreshed-session',
+        renewed: false,
+      });
       const refreshedToken = createTestJwtToken('00000000-0000-0000-0000-000000000011', {
         session_id: 'refreshed-session',
       });

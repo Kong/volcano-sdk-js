@@ -111,16 +111,13 @@ if (!error) {
 
 This revokes the session identified by the access token and clears local storage.
 The access-token session takes precedence even when a refresh token was supplied.
-An expired access token can make revocation fail; local clearing still occurs and the error is returned.
+On HTTP 401, sign-out can refresh once and revoke that same session without adopting the renewed credentials locally.
 Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
 the SDK still clears the captured local session and returns the error so the application can report
-it. The cleared session no longer contains credentials needed to retry revocation. A session
-established while sign-out is pending remains current.
+it. The cleared session no longer contains credentials needed to retry revocation.
 
-If a concurrent refresh rotates the refresh token before sign-out completes, the rotated session
-remains current and `signOut()` returns `AuthSessionChangedError`. Read the current session before
-deciding whether to retry: revoking the access-token session can also invalidate its refreshed
-credentials. If the refresh token remains unchanged, the SDK clears the local session normally.
+A concurrent refresh of the revoked server session is cleared. A separate sign-in or explicit
+session adoption remains current and sign-out returns `AuthSessionChangedError`.
 
 ## Session Management
 
@@ -164,10 +161,11 @@ export async function loadRequestUser(accessToken) {
 ```
 
 Call this helper from your request handler with the bearer token from that request.
-For a Volcano function, use the access token in `event.__volcano_auth` supplied for that invocation.
+For a Volcano function, use the access token in `event.__volcano_auth.access_token` supplied for that invocation.
 The helper validates the token with Volcano before returning the user.
 
-Once a user identity has been validated, a refresh response for another user is rejected and leaves the current credentials unchanged.
+Refresh must preserve the server session identified by the access JWT, even before a profile is loaded. A different session is rejected, including another session for the same user. An unknown identity without a readable session identifier cannot refresh.
+Once a user identity has been validated, a refresh response for another user is also rejected.
 Construction makes no request and does not persist the supplied credentials.
 `getSession()` initially returns the access token with `refresh_token: null` and `user: null`.
 A successful `getUser()` caches the server-validated profile without changing the token.

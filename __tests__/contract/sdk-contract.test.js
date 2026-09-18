@@ -157,10 +157,11 @@ autoBindSteps(features, [
       const current = await source.auth.getSession();
       if (current.error) throw current.error;
       world.previousSession = current.data.session;
-      world.cleanupCallbacks.push(async () => {
+      world.bootstrapCleanup = async () => {
         const result = await source.auth.signOut();
         if (result.error) throw result.error;
-      });
+      };
+      world.cleanupCallbacks.push(world.bootstrapCleanup);
       world.client = new VolcanoClient({
         apiUrl: world.fixture.api_url,
         anonKey: world.fixture.anon_key,
@@ -212,6 +213,13 @@ autoBindSteps(features, [
       context.world.signedOutSession = current.data.session;
       const result = await context.world.client.auth.signOut();
       recordOutcome(context.world, null, result.error);
+      if (!result.error && context.world.bootstrapCleanup) {
+        const world = context.world;
+        world.cleanupCallbacks = world.cleanupCallbacks.filter(
+          (callback) => callback !== world.bootstrapCleanup,
+        );
+        world.bootstrapCleanup = null;
+      }
     });
 
     then('the current session is empty', async () => {

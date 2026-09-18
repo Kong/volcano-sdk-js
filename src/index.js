@@ -496,6 +496,27 @@ function extractSessionIdFromToken(token) {
   }
 }
 
+function validateRefreshSource(context, userId) {
+  if (!userId && !extractSessionIdFromToken(context.accessToken)) {
+    throw new Error('Cannot refresh unknown identity without a session identifier');
+  }
+}
+
+function validateSessionContinuation(data, context, userId) {
+  const invalid = validateCompleteSession(data);
+  if (invalid) {
+    throw invalid;
+  }
+  validateRefreshSource(context, userId);
+  const expected = extractSessionIdFromToken(context.accessToken);
+  if (expected && !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))) {
+    throw new Error('Refreshed credentials belong to a different server session');
+  }
+  if (userId && data.user.id !== userId) {
+    throw new Error('Refreshed session belongs to a different user');
+  }
+}
+
 function sessionIdsEqual(left, right) {
   return (
     typeof left === 'string' &&
@@ -1518,20 +1539,23 @@ class VolcanoAuth {
     const context = this._captureAuthContext();
     let logoutError = null;
     const sessionId = extractSessionIdFromToken(context.accessToken);
-    if (sessionId) {
-      const result = await this._anonFetch(`/auth/user/sessions/${encodeURIComponent(sessionId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${context.accessToken}` },
-      });
-      logoutError = result.error;
-    } else if (context.refreshToken) {
-      const result = await this._anonFetch('/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: context.refreshToken }),
-      });
-      logoutError = result.error;
+    try {
+      if (sessionId) {
+        logoutError = await this._revokeAccessSession(context, sessionId);
+      } else if (context.refreshToken) {
+        const result = await this._anonFetch('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: context.refreshToken }),
+        });
+        logoutError = result.error;
+      }
+    } catch (error) {
+      logoutError = error instanceof Error ? error : new Error('Session revocation failed');
     }
-    if (!this._clearSession(context)) {
+    const cleared = sessionId
+      ? this._clearSessionAtGeneration(context.generation)
+      : this._clearSession(context);
+    if (!cleared) {
       const sessionChangedError = new AuthSessionChangedError();
       if (logoutError) {
         Object.defineProperty(sessionChangedError, 'cause', {
@@ -1543,6 +1567,28 @@ class VolcanoAuth {
       return { error: sessionChangedError };
     }
     return { error: logoutError };
+  }
+
+  async _revokeAccessSession(context, sessionId) {
+    const path = `/auth/user/sessions/${encodeURIComponent(sessionId)}`;
+    const remove = (accessToken) =>
+      this._anonFetch(path, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    let result = await remove(context.accessToken);
+    if (result.status === 401 && context.refreshToken) {
+      const refreshed = await this._anonFetch('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: context.refreshToken }),
+      });
+      if (!refreshed.ok) {
+        return refreshed.error;
+      }
+      validateSessionContinuation(refreshed.data, context, context.userId);
+      result = await remove(refreshed.data.access_token);
+    }
+    return result.error;
   }
 
   async getUser() {
@@ -1617,6 +1663,12 @@ class VolcanoAuth {
     }
     if (!context.refreshToken) {
       return { session: null, error: new Error('No refresh token') };
+    }
+
+    try {
+      validateRefreshSource(context, this.currentUser?.id);
+    } catch (error) {
+      return { session: null, error };
     }
 
     if (
@@ -2427,6 +2479,7 @@ class VolcanoAuth {
   _captureAuthContext() {
     return Object.freeze({
       generation: this._sessionGeneration,
+      userId: this.currentUser?.id ?? null,
       accessToken: this.accessToken,
       refreshToken: this.refreshToken,
     });
@@ -2469,9 +2522,7 @@ class VolcanoAuth {
       return false;
     }
 
-    if (this.currentUser?.id && data.user?.id !== this.currentUser.id) {
-      throw new Error('Refreshed session belongs to a different user');
-    }
+    validateSessionContinuation(data, context, this.currentUser?.id);
 
     this._oauthExchangeError = null;
     this.accessToken = data.access_token;
