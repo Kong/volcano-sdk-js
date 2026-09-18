@@ -490,7 +490,10 @@ function extractSessionIdFromToken(token) {
   }
   try {
     const sessionId = JSON.parse(decodeBase64Url(parts[1]))?.session_id;
-    return typeof sessionId === 'string' && sessionId.trim() !== '' ? sessionId.trim() : null;
+    return typeof sessionId === 'string' &&
+      /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(sessionId)
+      ? sessionId.toLowerCase()
+      : null;
   } catch {
     return null;
   }
@@ -897,7 +900,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    this._refreshInFlight = null;
+    this._refreshInFlight = new Map();
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
@@ -1578,15 +1581,26 @@ class VolcanoAuth {
       });
     let result = await remove(context.accessToken);
     if (result.status === 401 && context.refreshToken) {
-      const refreshed = await this._anonFetch('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: context.refreshToken }),
-      });
-      if (!refreshed.ok) {
-        return refreshed.error;
+      const active = this._isAuthContextCurrent(context) ? this._captureAuthContext() : context;
+      if (active.refreshToken !== context.refreshToken) {
+        validateSessionContinuation(
+          {
+            access_token: active.accessToken,
+            refresh_token: active.refreshToken,
+            user: this.currentUser,
+          },
+          context,
+          context.userId,
+        );
+        result = await remove(active.accessToken);
+      } else {
+        const refreshed = await this._requestSessionRefresh(context);
+        if (!refreshed.ok) {
+          return refreshed.error;
+        }
+        validateSessionContinuation(refreshed.data, context, context.userId);
+        result = await remove(refreshed.data.access_token);
       }
-      validateSessionContinuation(refreshed.data, context, context.userId);
-      result = await remove(refreshed.data.access_token);
     }
     return result.error;
   }
@@ -1671,11 +1685,13 @@ class VolcanoAuth {
       return { session: null, error };
     }
 
-    if (
-      this._refreshInFlight?.generation === context.generation &&
-      this._refreshInFlight.refreshToken === context.refreshToken
-    ) {
-      return this._refreshInFlight.promise;
+    return this._performSessionRefresh(context);
+  }
+
+  _requestSessionRefresh(context) {
+    const pending = this._refreshInFlight.get(context.generation);
+    if (pending?.refreshToken === context.refreshToken) {
+      return pending.promise;
     }
 
     const inFlight = {
@@ -1683,21 +1699,21 @@ class VolcanoAuth {
       refreshToken: context.refreshToken,
       promise: null,
     };
-    inFlight.promise = this._performSessionRefresh(context).finally(() => {
-      if (this._refreshInFlight === inFlight) {
-        this._refreshInFlight = null;
+    inFlight.promise = this._anonFetch('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: context.refreshToken }),
+    }).finally(() => {
+      if (this._refreshInFlight.get(context.generation) === inFlight) {
+        this._refreshInFlight.delete(context.generation);
       }
     });
-    this._refreshInFlight = inFlight;
+    this._refreshInFlight.set(context.generation, inFlight);
     return inFlight.promise;
   }
 
   async _performSessionRefresh(context) {
     try {
-      const result = await this._anonFetch('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: context.refreshToken }),
-      });
+      const result = await this._requestSessionRefresh(context);
 
       if (!result.ok) {
         if (result.status === 401 || result.status === 403) {
@@ -1706,8 +1722,13 @@ class VolcanoAuth {
         return { session: null, error: result.error };
       }
 
+      if (!this._isAuthContextCurrent(context)) {
+        return { session: null, error: new AuthRefreshDiscardedError() };
+      }
+      // Another waiter may already have committed this shared refresh result.
       if (
-        !this._setRefreshedSession(result.data, context) ||
+        (context.refreshToken === this.refreshToken &&
+          !this._setRefreshedSession(result.data, context)) ||
         !this._isAuthContextCurrent(context)
       ) {
         return { session: null, error: new AuthRefreshDiscardedError() };
