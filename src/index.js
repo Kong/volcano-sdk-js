@@ -1051,7 +1051,9 @@ class VolcanoAuth {
   }
 
   async _authFetchWithContext(path, options = {}) {
-    await this._completeOAuthExchange();
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+    }
     const context = this._captureAuthContext();
     if (!context.accessToken) {
       return {
@@ -1065,7 +1067,11 @@ class VolcanoAuth {
       };
     }
 
-    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, options);
+    const requestOptions = typeof options === 'function' ? options() : options;
+    if (!this._isAuthContextCurrent(context)) {
+      return { result: authSessionChangedResult(), context };
+    }
+    const result = await this._authFetchUrl(`${this.apiUrl}${path}`, requestOptions);
     return { result, context };
   }
 
@@ -1901,10 +1907,10 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', {
+    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', () => ({
       method: 'POST',
       body: JSON.stringify({ new_email: newEmail }),
-    });
+    }));
 
     if (!result.ok) {
       return { message: null, newEmail: null, error: result.error };
@@ -2174,13 +2180,13 @@ class VolcanoAuth {
     };
   }
 
-  async callOAuthAPI(provider, { endpoint, method = 'GET', body = null }) {
+  async callOAuthAPI(provider, params) {
     sanitizeProvider(provider);
     const { result, context } = await this._authFetchWithContext(
       `/auth/oauth/${provider}/call-api`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ endpoint, method, body }),
+      () => {
+        const { endpoint, method = 'GET', body = null } = params;
+        return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
       },
     );
 
