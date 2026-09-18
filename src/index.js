@@ -364,6 +364,12 @@ class VolcanoSystemError extends Error {
     // see new keys. Still read normally: `err.isSystemError`, `err.status`.
     Object.defineProperty(this, 'isSystemError', { value: true });
     Object.defineProperty(this, 'status', { value: options.status ?? null });
+    if (options.code !== undefined) {
+      Object.defineProperty(this, 'code', { value: options.code });
+    }
+    if (options.retryAfter !== undefined) {
+      Object.defineProperty(this, 'retryAfter', { value: options.retryAfter });
+    }
   }
 
   /**
@@ -2323,6 +2329,7 @@ class VolcanoAuth {
         error: new Error('functionName must be a non-empty string'),
       };
     }
+    let operationContext = this._captureAuthContext();
     let requestBody;
     try {
       // Snapshot before yielding so resolution and auth recovery cannot change the payload.
@@ -2339,8 +2346,13 @@ class VolcanoAuth {
         ),
       };
     }
-    await this._completeOAuthExchange();
-    const operationContext = this._captureAuthContext();
+    if (!this._isAuthContextCurrent(operationContext)) {
+      return authSessionChangedResult();
+    }
+    if (this._oauthExchangePromise) {
+      await this._completeOAuthExchange();
+      operationContext = this._captureAuthContext();
+    }
     const useAnonKey = !operationContext.accessToken;
     let resolutionContext = operationContext;
     let resolutionToken = useAnonKey ? this.anonKey : resolutionContext.accessToken;
@@ -2437,6 +2449,16 @@ class VolcanoAuth {
             }
             return invokeOnce(url, false, context, this.accessToken);
           }
+          if (
+            [401, 403].includes(refreshed.error.status) &&
+            this._sessionOperations === context.operations &&
+            this._sessionGeneration === context.generation + 1 &&
+            !this.accessToken &&
+            !this.refreshToken
+          ) {
+            // Keep the invocation rejection when this refresh cleared its own session.
+            operationContext = this._captureAuthContext();
+          }
         }
 
         const data = await parseResponseBody(response);
@@ -2464,7 +2486,7 @@ class VolcanoAuth {
             status: response.status,
             headers,
             version,
-            error: new VolcanoSystemError(message, { status: response.status }),
+            error: new VolcanoSystemError(message, apiRequestError(response, data, message)),
           };
         }
 

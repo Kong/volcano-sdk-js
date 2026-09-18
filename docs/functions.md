@@ -299,6 +299,13 @@ The browser-based query builder is better for:
 
 ### Client-Side
 
+Resolution and pre-dispatch HTTP errors retain `error.status`, plus `error.code`
+and `error.retryAfter` when the server supplies them. `retryAfter` is a delay in
+seconds. These fields remain available after narrowing an invocation error with
+`VolcanoSystemError.is(error)`. Transport failures have a null status and no HTTP
+metadata. A function's own HTTP response remains in `data` and `status`, with
+`error` set to null.
+
 ```javascript
 const { data, error } = await volcano.functions.invoke('process-payment', {
   amount: 1999,

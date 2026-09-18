@@ -1,4 +1,4 @@
-const { VolcanoAuth } = require('../src/index.js');
+const { VolcanoAuth, VolcanoSystemError } = require('../src/index.js');
 
 const SESSION_ID = '00000000-0000-4000-8000-000000000001';
 const FUNCTION_ID = '00000000-0000-4000-8000-000000000040';
@@ -85,3 +85,67 @@ test.each([null, 401, 503])(
     expect(global.fetch).toHaveBeenCalledTimes(refreshStatus === null ? 1 : 2);
   },
 );
+
+test.each(['getter', 'toJSON'])('captures ownership before payload %s', async (boundary) => {
+  const target = client();
+  const replaceSession = () => {
+    void target.auth.setSession({
+      access_token: token(true),
+      refresh_token: 'replacement-refresh',
+      user: { id: 'other' },
+    });
+    return 'changed';
+  };
+  const payload =
+    boundary === 'getter'
+      ? Object.defineProperty({}, 'value', { enumerable: true, get: replaceSession })
+      : { toJSON: replaceSession };
+  const result = await target.functions.invoke('echo', payload);
+  expect(result.error).toMatchObject({ code: 'auth_session_changed' });
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
+test.each([null, 401, 503])(
+  'keeps invocation rejection metadata when refresh is %s',
+  async (refreshStatus) => {
+    const target = client(refreshStatus === null ? null : 'old-refresh');
+    global.fetch
+      .mockResolvedValueOnce(resolved())
+      .mockResolvedValueOnce(
+        reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }),
+      );
+    if (refreshStatus !== null)
+      global.fetch.mockResolvedValueOnce(reply(refreshStatus, { error: 'refresh failed' }));
+    const result = await target.functions.invoke('echo');
+    expect(VolcanoSystemError.is(result.error)).toBe(true);
+    expect(result.error).toMatchObject({
+      message: 'denied',
+      status: 401,
+      code: 'original',
+      retryAfter: 7,
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(refreshStatus === null ? 2 : 3);
+    expect(JSON.stringify(result.error)).toBe('{}');
+  },
+);
+
+test('does not adopt a replacement session from a rejected-refresh callback', async () => {
+  const target = client();
+  target.onAuthStateChange((user) => {
+    if (user === null && !target.accessToken) {
+      void target.auth.setSession({
+        access_token: token(true),
+        refresh_token: 'replacement-refresh',
+        user: { id: 'other' },
+      });
+    }
+  });
+  global.fetch
+    .mockResolvedValueOnce(resolved())
+    .mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }))
+    .mockResolvedValueOnce(reply(401, { error: 'refresh denied' }));
+  const result = await target.functions.invoke('echo');
+  expect(result.error).toMatchObject({ code: 'auth_session_changed' });
+  expect(target.accessToken).toBe(token(true));
+  expect(global.fetch).toHaveBeenCalledTimes(3);
+});

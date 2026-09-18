@@ -9,7 +9,11 @@ import type {
   MutationBuilder,
   UploadSessionStatusResponse,
 } from '../../src/index.js';
-import { AuthRefreshDiscardedError, AuthSessionChangedError } from '../../src/index.js';
+import {
+  AuthRefreshDiscardedError,
+  AuthSessionChangedError,
+  VolcanoSystemError,
+} from '../../src/index.js';
 
 type Assert<T extends true> = T;
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
@@ -288,5 +292,10 @@ async function functionErrorMetadata(functions: import('../../src/index.js').Fun
   const code: string | undefined = error?.code;
   const retryAfter: number | undefined = error?.retryAfter;
   void [status, code, retryAfter];
+  if (VolcanoSystemError.is(error)) {
+    const code: string | undefined = error.code;
+    const retryAfter: number | undefined = error.retryAfter;
+    void [code, retryAfter];
+  }
 }
 void functionErrorMetadata;

@@ -431,9 +431,16 @@ export class VolcanoSystemError extends Error {
   readonly isSystemError: true;
   /** HTTP status of the blocked invocation, or null for transport failures. */
   readonly status: number | null;
+  /** Platform error code, when supplied by the server. */
+  readonly code?: string;
+  /** Retry-After delay in seconds, when supplied by the server. */
+  readonly retryAfter?: number;
   /** Underlying error for transport failures (network/timeout); undefined otherwise. */
   readonly cause?: unknown;
-  constructor(message: string, options?: { status?: number | null; cause?: unknown });
+  constructor(
+    message: string,
+    options?: { status?: number | null; code?: string; retryAfter?: number; cause?: unknown },
+  );
   /**
    * Type guard for platform-layer invocation failures. Prefer over `instanceof`
    * (holds across duplicate SDK copies in a bundle).
