@@ -109,14 +109,17 @@ if (!error) {
 }
 ```
 
-This revokes the session identified by the access token and clears local storage.
-The access-token session takes precedence even when a refresh token was supplied.
-On HTTP 401, sign-out can refresh once and revoke that same session without adopting the renewed credentials locally.
+Sign-out revokes the captured session and clears local storage. For credentials received together
+from a successful sign-in or validated refresh, it uses the refresh token directly, even if the
+access token has expired. For supplied credentials, it revokes the access-token session.
+On HTTP 401, that path can refresh once and revoke the same session without adopting the renewed credentials locally.
 Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
 the SDK still clears the captured local session and returns the error so the application can report
 it. The cleared session no longer contains credentials needed to retry revocation.
 
-A concurrent refresh of the revoked server session is cleared. A separate sign-in or explicit
+Sign-out waits for an already-running refresh and uses its validated credentials for revocation.
+Later refresh attempts for that session return `AuthRefreshDiscardedError`; they do not send a request.
+Concurrent sign-out calls share the same revocation result. A separate sign-in or explicit
 session adoption remains current and sign-out returns `AuthSessionChangedError`.
 
 ## Session Management

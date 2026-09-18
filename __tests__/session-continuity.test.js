@@ -169,23 +169,12 @@ describe('server session continuity', () => {
   });
   it('shares the old refresh while a replacement session also refreshes', async () => {
     const current = client();
-    let resolveDelete;
-    let resolveOldRefresh;
-    let resolveNewRefresh;
-    let deleteStarted;
-    let oldStarted;
-    let newStarted;
+    let resolveOldRefresh, resolveNewRefresh, oldStarted, newStarted;
     const oldRequested = new Promise((resolve) => {
       oldStarted = resolve;
     });
     const newRequested = new Promise((resolve) => {
       newStarted = resolve;
-    });
-    const started = new Promise((resolve) => {
-      deleteStarted = resolve;
-    });
-    const pendingDelete = new Promise((resolve) => {
-      resolveDelete = resolve;
     });
     const oldRefresh = new Promise((resolve) => {
       resolveOldRefresh = resolve;
@@ -193,24 +182,19 @@ describe('server session continuity', () => {
     const newRefresh = new Promise((resolve) => {
       resolveNewRefresh = resolve;
     });
-    global.fetch
-      .mockImplementationOnce(() => {
-        deleteStarted();
-        return pendingDelete;
-      })
-      .mockImplementationOnce(() => {
+    global.fetch.mockImplementation((url, options) => {
+      if (url.endsWith('/auth/logout')) return Promise.resolve(reply(204));
+      if (JSON.parse(options.body).refresh_token === 'refresh') {
         oldStarted();
         return oldRefresh;
-      })
-      .mockImplementationOnce(() => {
-        newStarted();
-        return newRefresh;
-      })
-      .mockResolvedValueOnce(reply(204));
-    const signingOut = current.auth.signOut();
-    await started;
+      }
+      newStarted();
+      return newRefresh;
+    });
     const refreshingOld = current.auth.refreshSession();
     await oldRequested;
+    const signingOut = current.auth.signOut();
+    await Promise.resolve();
     await current.auth.setSession({
       access_token: token('00000000-0000-4000-8000-000000000002'),
       refresh_token: 'new-refresh',
@@ -218,15 +202,13 @@ describe('server session continuity', () => {
     });
     const refreshingNew = current.auth.refreshSession();
     await newRequested;
-    resolveDelete(reply(401, { error: 'expired' }));
-    await Promise.resolve();
     resolveOldRefresh(refresh());
     await refreshingOld;
     expect((await signingOut).error).toBeInstanceOf(AuthSessionChangedError);
     resolveNewRefresh(refresh('00000000-0000-4000-8000-000000000002', 'user-b'));
     expect((await refreshingNew).error).toBeNull();
-    expect(global.fetch).toHaveBeenCalledTimes(4);
-    expect(global.fetch.mock.calls[3][1].method).toBe('DELETE');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(global.fetch.mock.calls[2][1].body)).toEqual({ refresh_token: 'rotated' });
     expect(current.currentUser.id).toBe('user-b');
   });
 });

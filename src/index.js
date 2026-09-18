@@ -1,3 +1,4 @@
+import { AuthSessionOperations } from './auth-session.js';
 import {
   acquireProjectLock,
   authSignin,
@@ -900,7 +901,7 @@ class VolcanoAuth {
     // that resolves a user announces the SIGNED_IN transition exactly once.
     this._pendingUrlAuthNotify = false;
     this._oauthExchangePromise = null;
-    this._refreshInFlight = new Map();
+    this._sessionOperations = new AuthSessionOperations();
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
@@ -1540,15 +1541,32 @@ class VolcanoAuth {
   async signOut() {
     await this._completeOAuthExchange();
     const context = this._captureAuthContext();
+    if (!context.accessToken && !context.refreshToken) {
+      return { error: null };
+    }
+    return context.operations.signOut((refreshing) => this._signOutCaptured(context, refreshing));
+  }
+
+  async _signOutCaptured(context, refreshing) {
     let logoutError = null;
     const sessionId = extractSessionIdFromToken(context.accessToken);
     try {
-      if (sessionId) {
-        logoutError = await this._revokeAccessSession(context, sessionId);
-      } else if (context.refreshToken) {
+      const preceding = refreshing
+        ? await refreshing.catch((error) => ({ ok: false, error }))
+        : null;
+      const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
+      const refreshToken = preceding?.ok ? preceding.data.refresh_token : context.refreshToken;
+      if (sessionId && !context.operations.hasVerifiedPair(accessToken, refreshToken)) {
+        logoutError = await this._revokeAccessSession(context, sessionId, preceding);
+      } else if (refreshToken) {
+        if (preceding && !preceding.ok) {
+          throw preceding.error;
+        }
         const result = await this._anonFetch('/auth/logout', {
           method: 'POST',
-          body: JSON.stringify({ refresh_token: context.refreshToken }),
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+          }),
         });
         logoutError = result.error;
       }
@@ -1572,35 +1590,26 @@ class VolcanoAuth {
     return { error: logoutError };
   }
 
-  async _revokeAccessSession(context, sessionId) {
+  async _revokeAccessSession(context, sessionId, preceding) {
+    // Claiming sign-out prevents new refreshes. Retain the one already running
+    // even if explicit adoption replaces the client's current session.
+    const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
     const path = `/auth/user/sessions/${encodeURIComponent(sessionId)}`;
-    const remove = (accessToken) =>
+    const remove = (credential) =>
       this._anonFetch(path, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${credential}` },
       });
-    let result = await remove(context.accessToken);
+    let result = await remove(accessToken);
     if (result.status === 401 && context.refreshToken) {
-      const active = this._isAuthContextCurrent(context) ? this._captureAuthContext() : context;
-      if (active.refreshToken !== context.refreshToken) {
-        validateSessionContinuation(
-          {
-            access_token: active.accessToken,
-            refresh_token: active.refreshToken,
-            user: this.currentUser,
-          },
-          context,
-          context.userId,
-        );
-        result = await remove(active.accessToken);
-      } else {
-        const refreshed = await this._requestSessionRefresh(context);
-        if (!refreshed.ok) {
-          return refreshed.error;
-        }
-        validateSessionContinuation(refreshed.data, context, context.userId);
-        result = await remove(refreshed.data.access_token);
+      if (preceding) {
+        return preceding.error || result.error;
       }
+      const refreshed = await this._fetchSessionRefresh(context);
+      if (!refreshed.ok) {
+        return refreshed.error;
+      }
+      result = await remove(refreshed.data.access_token);
     }
     return result.error;
   }
@@ -1688,49 +1697,44 @@ class VolcanoAuth {
     return this._performSessionRefresh(context);
   }
 
-  _requestSessionRefresh(context) {
-    const pending = this._refreshInFlight.get(context.generation);
-    if (pending?.refreshToken === context.refreshToken) {
-      return pending.promise;
-    }
-
-    const inFlight = {
-      generation: context.generation,
-      refreshToken: context.refreshToken,
-      promise: null,
-    };
-    inFlight.promise = this._anonFetch('/auth/refresh', {
+  async _fetchSessionRefresh(context) {
+    context.operations.verifyPair(null);
+    const result = await this._anonFetch('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refresh_token: context.refreshToken }),
-    }).finally(() => {
-      if (this._refreshInFlight.get(context.generation) === inFlight) {
-        this._refreshInFlight.delete(context.generation);
-      }
     });
-    this._refreshInFlight.set(context.generation, inFlight);
-    return inFlight.promise;
+    if (result.ok) {
+      validateSessionContinuation(
+        result.data,
+        context,
+        this._isAuthContextCurrent(context) ? this.currentUser?.id : context.userId,
+      );
+      context.operations.verifyPair(result.data);
+    }
+    return result;
   }
 
   async _performSessionRefresh(context) {
     try {
-      const result = await this._requestSessionRefresh(context);
-
-      if (!result.ok) {
-        if (result.status === 401 || result.status === 403) {
-          this._clearSession(context);
+      const refreshing = context.operations.refresh(async () => {
+        const result = await this._fetchSessionRefresh(context);
+        if (!context.operations.signingOut) {
+          if (result.ok) {
+            this._setRefreshedSession(result.data, context);
+          } else if (result.status === 401 || result.status === 403) {
+            this._clearSession(context);
+          }
         }
-        return { session: null, error: result.error };
-      }
-
-      if (!this._isAuthContextCurrent(context)) {
+        return result;
+      });
+      if (!refreshing) {
         return { session: null, error: new AuthRefreshDiscardedError() };
       }
-      // Another waiter may already have committed this shared refresh result.
-      if (
-        (context.refreshToken === this.refreshToken &&
-          !this._setRefreshedSession(result.data, context)) ||
-        !this._isAuthContextCurrent(context)
-      ) {
+      const result = await refreshing;
+      if (!result.ok) {
+        return { session: null, error: result.error };
+      }
+      if (!this._isAuthContextCurrent(context) || context.operations.signingOut) {
         return { session: null, error: new AuthRefreshDiscardedError() };
       }
       return {
@@ -1742,6 +1746,9 @@ class VolcanoAuth {
         error: null,
       };
     } catch (error) {
+      if (!this._isAuthContextCurrent(context)) {
+        return { session: null, error: new AuthRefreshDiscardedError() };
+      }
       return { session: null, error: error instanceof Error ? error : new Error('Refresh failed') };
     }
   }
@@ -2500,6 +2507,7 @@ class VolcanoAuth {
   _captureAuthContext() {
     return Object.freeze({
       generation: this._sessionGeneration,
+      operations: this._sessionOperations,
       userId: this.currentUser?.id ?? null,
       accessToken: this.accessToken,
       refreshToken: this.refreshToken,
@@ -2508,6 +2516,7 @@ class VolcanoAuth {
 
   _adoptSessionInMemory(session) {
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations();
     this._oauthExchangeError = null;
     this._pendingUrlAuthNotify = false;
     this.accessToken = session.access_token;
@@ -2529,6 +2538,7 @@ class VolcanoAuth {
     this.refreshToken = data.refresh_token;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations(data);
     this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
@@ -2787,6 +2797,7 @@ class VolcanoAuth {
     this.refreshToken = refreshToken || null;
     this.currentUser = null;
     this._sessionGeneration += 1;
+    this._sessionOperations = new AuthSessionOperations();
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
     if (this.refreshToken) {
       this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
