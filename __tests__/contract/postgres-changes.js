@@ -1,14 +1,23 @@
 const { randomUUID } = require('node:crypto');
 
 class ChangeObserver {
-  constructor(channel, table, rowId) {
+  constructor(channel, table, rowId, { client, automatic = false } = {}) {
     this.events = [];
     this.changed = null;
     this.inserts = 0;
     this.wrongTable = 0;
-    const owns = (event) => (event.record?.id ?? event.id) === rowId;
+    this.automatic = automatic;
+    this.diagnostics = {
+      publications: 0,
+      matchingPublications: 0,
+      callbacks: 0,
+      errors: 0,
+      disconnects: 0,
+    };
+    const owns = (event) => (event?.record?.id ?? event?.id) === rowId;
     this.stops = [
       channel.onPostgresChanges('*', 'public', table, (event) => {
+        this.diagnostics.callbacks++;
         if (!owns(event)) return;
         this.events.push(event);
         this.changed?.();
@@ -20,6 +29,28 @@ class ChangeObserver {
         if (owns(event)) this.wrongTable++;
       }),
     ];
+    this.observeTransport(client, owns);
+  }
+
+  observeTransport(client, owns) {
+    if (!client) return;
+    const handlers = {
+      publication: ({ channel, data }) => {
+        if (!channel?.includes(':postgres:')) return;
+        this.diagnostics.publications++;
+        if (owns(data)) this.diagnostics.matchingPublications++;
+      },
+      error: () => {
+        this.diagnostics.errors++;
+      },
+      disconnected: () => {
+        this.diagnostics.disconnects++;
+      },
+    };
+    for (const [event, handler] of Object.entries(handlers)) {
+      client.on(event, handler);
+      this.stops.push(() => client.off(event, handler));
+    }
   }
 
   async next(index) {
@@ -27,7 +58,13 @@ class ChangeObserver {
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           this.changed = null;
-          reject(new Error('Postgres notification did not arrive within 10 seconds'));
+          const operation = index === 0 ? 'INSERT' : 'UPDATE';
+          const mode = this.automatic ? 'automatic' : 'lightweight';
+          reject(
+            new Error(
+              `Postgres ${operation} notification did not arrive within 10 seconds (${mode} client; ${JSON.stringify(this.diagnostics)}; matched=${this.events.length})`,
+            ),
+          );
         }, 10000);
         this.changed = () => {
           if (this.events.length > index) {
@@ -73,7 +110,13 @@ async function verifyPostgresChanges(world) {
     client.setDatabaseName(world.fixture.database_name);
     return client.channel(`public:${tableName}`, { type: 'postgres', autoFetch: index === 0 });
   });
-  const observers = channels.map((channel) => new ChangeObserver(channel, tableName, row.id));
+  const observers = channels.map(
+    (channel, index) =>
+      new ChangeObserver(channel, tableName, row.id, {
+        client: world.realtimeClients[index].getClient?.(),
+        automatic: index === 0,
+      }),
+  );
   try {
     await Promise.all(channels.map((channel) => channel.subscribe()));
     for (const [index, type] of ['INSERT', 'UPDATE'].entries()) {

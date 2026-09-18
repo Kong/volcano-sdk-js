@@ -1,4 +1,5 @@
 const { verifyChange, ChangeObserver } = require('./contract/postgres-changes.js');
+const { EventEmitter } = require('node:events');
 
 const row = { id: 'row', value: 'inserted', owner_id: 'user' };
 const base = {
@@ -49,3 +50,54 @@ test.each([true, false])(
     observer.close();
   },
 );
+
+test('timeout identifies delivery stage without exposing publication data or errors', async () => {
+  jest.useFakeTimers();
+  const callbacks = [];
+  const channel = {
+    onPostgresChanges: (_kind, _schema, _table, callback) => {
+      callbacks.push(callback);
+      return () => {};
+    },
+  };
+  const client = new EventEmitter();
+  const secret = 'private-row-and-credential-canary';
+  const observer = new ChangeObserver(channel, 'records', row.id, { client, automatic: true });
+  try {
+    client.emit('publication', {
+      channel: 'project:postgres:public:records:user',
+      data: { ...base, id: row.id, private: secret },
+    });
+    client.emit('publication', { channel: 'project:broadcast:other', data: { private: secret } });
+    client.emit('error', new Error(secret));
+    client.emit('disconnected', { reason: secret });
+    callbacks[0]({ ...base, id: secret });
+    const result = observer.next(0).catch((error) => error.message);
+    jest.advanceTimersByTime(10000);
+    expect(await result).toBe(
+      'Postgres INSERT notification did not arrive within 10 seconds (automatic client; {"publications":1,"matchingPublications":1,"callbacks":1,"errors":1,"disconnects":1}; matched=0)',
+    );
+    expect(await result).not.toContain(secret);
+  } finally {
+    observer.close();
+    jest.useRealTimers();
+  }
+  expect(
+    ['publication', 'error', 'disconnected'].map((event) => client.listenerCount(event)),
+  ).toEqual([0, 0, 0]);
+});
+
+test('timeout identifies a missing update for the lightweight client', async () => {
+  jest.useFakeTimers();
+  const observer = new ChangeObserver({ onPostgresChanges: () => () => {} }, 'records', row.id);
+  try {
+    const result = observer.next(1).catch((error) => error.message);
+    jest.advanceTimersByTime(10000);
+    expect(await result).toContain(
+      'Postgres UPDATE notification did not arrive within 10 seconds (lightweight client;',
+    );
+  } finally {
+    observer.close();
+    jest.useRealTimers();
+  }
+});
