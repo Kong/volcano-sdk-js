@@ -372,7 +372,7 @@ const { data, error } = await volcano.storage
   });
 
 if (data) {
-  console.log('Upload complete:', data.name);
+  console.log('Upload complete:', data.object.name);
 }
 ```
 
@@ -404,9 +404,8 @@ for (let i = 1; i <= session.total_parts; i++) {
     .uploadPart('large-video.mp4', session.session_id, i, partData);
 
   if (error) {
-    console.error(`Part ${i} failed:`, error.message);
-    // Can retry this part later
-    break;
+    // Retain the session ID to resume the failed part later.
+    throw error;
   }
 
   console.log(`Part ${i}/${session.total_parts} uploaded`);
@@ -418,7 +417,7 @@ const { data, error } = await volcano.storage
   .completeUploadSession('large-video.mp4', session.session_id);
 
 if (data) {
-  console.log('Upload complete!', data.name);
+  console.log('Upload complete!', data.object.name);
 }
 ```
 
@@ -461,7 +460,8 @@ await volcano.storage.from('uploads').completeUploadSession('large-video.mp4', s
 
 ### Abort Upload
 
-Cancel an in-progress upload and clean up:
+Cancel an in-progress upload and discard its parts without publishing an object.
+Further session-status requests report not found:
 
 ```javascript
 const { error } = await volcano.storage

@@ -65,6 +65,57 @@ async function recordQuerySet(world, queries) {
   recordOutcome(world, Object.fromEntries(rows), null);
 }
 
+function storageData(result) {
+  if (result.error) throw result.error;
+  return result.data;
+}
+
+function storageBucket(world) {
+  return world.client.storage.from(world.fixture.bucket_name);
+}
+
+async function cleanStorageObject(world) {
+  const bucket = storageBucket(world);
+  const objects = storageData(await bucket.list(world.storagePath));
+  if (objects.some(({ name }) => name === world.storagePath)) {
+    storageData(await bucket.remove([world.storagePath]));
+  }
+}
+
+async function partialUpload(world) {
+  const bucket = storageBucket(world);
+  const bytes = Buffer.concat([Buffer.alloc(5 * 1024 * 1024, 'x'), world.storageBytes]);
+  const session = storageData(
+    await bucket.createUploadSession(world.storagePath, {
+      totalSize: bytes.length,
+      partSize: 5 * 1024 * 1024,
+      contentType: 'application/octet-stream',
+    }),
+  );
+  world.cleanupCallbacks.push(async () => {
+    const result = await bucket.abortUploadSession(world.storagePath, session.session_id);
+    if (result.error && result.error.status !== 404) throw result.error;
+  });
+  world.cleanupCallbacks.push(() => cleanStorageObject(world));
+  const part = storageData(
+    await bucket.uploadPart(
+      world.storagePath,
+      session.session_id,
+      1,
+      new Blob([bytes.subarray(0, session.part_size)]),
+    ),
+  );
+  return { session, part, bytes };
+}
+
+async function recordStorage(world, operation) {
+  try {
+    recordOutcome(world, await operation(), null);
+  } catch (error) {
+    recordOutcome(world, null, error);
+  }
+}
+
 afterEach(async () => {
   const world = activeWorld;
   activeWorld = undefined;
@@ -695,6 +746,118 @@ autoBindSteps(features, [
     then('removing the moved object leaves the original unchanged', () => {
       expect(context.world.lastOutcome.value.afterRemove).toEqual([context.world.storagePath]);
       expect(context.world.lastOutcome.value.bytes[3]).toEqual(context.world.storageBytes);
+    });
+
+    when('the client uploads one part and resumes the contract upload', async () => {
+      const { world } = context;
+      await recordStorage(world, async () => {
+        const value = await partialUpload(world);
+        const bucket = storageBucket(world);
+        const { session } = value;
+        value.progress = storageData(
+          await bucket.getUploadSession(world.storagePath, session.session_id),
+        );
+        storageData(
+          await bucket.uploadPart(
+            world.storagePath,
+            session.session_id,
+            2,
+            new Blob([value.bytes.subarray(session.part_size)]),
+          ),
+        );
+        value.object = storageData(
+          await bucket.completeUploadSession(world.storagePath, session.session_id),
+        ).object;
+        value.download = Buffer.from(
+          await storageData(await bucket.download(world.storagePath)).arrayBuffer(),
+        );
+        return value;
+      });
+    });
+
+    then('upload progress describes exactly the first uploaded part', () => {
+      const { world } = context;
+      const { progress, session, part, bytes } = world.lastOutcome.value;
+      expect(progress).toMatchObject({
+        session_id: session.session_id,
+        path: world.storagePath,
+        content_type: 'application/octet-stream',
+        status: 'uploading',
+        total_size: bytes.length,
+        part_size: 5 * 1024 * 1024,
+        total_parts: 2,
+        parts_uploaded: 1,
+        bytes_uploaded: 5 * 1024 * 1024,
+      });
+      expect(session).toMatchObject({ part_size: 5 * 1024 * 1024, total_parts: 2 });
+      expect(part).toMatchObject({ part_number: 1, size: session.part_size });
+      expect(part.etag).toBeTruthy();
+      expect(progress.parts).toHaveLength(1);
+      expect(progress.parts[0]).toMatchObject(part);
+    });
+
+    then('the completed multipart object preserves its path, type, and bytes', () => {
+      const { world } = context;
+      const value = world.lastOutcome.value;
+      expect(value.object).toMatchObject({
+        name: world.storagePath,
+        mime_type: 'application/octet-stream',
+        size: value.bytes.length,
+      });
+      expect(value.download).toEqual(value.bytes);
+    });
+
+    when('the client uploads one part and aborts the contract upload', async () => {
+      const { world } = context;
+      await recordStorage(world, async () => {
+        const { session } = await partialUpload(world);
+        const bucket = storageBucket(world);
+        storageData(await bucket.abortUploadSession(world.storagePath, session.session_id));
+        const status = await bucket.getUploadSession(world.storagePath, session.session_id);
+        const object = await bucket.download(world.storagePath);
+        return { session: status.error?.status, object: object.error?.status };
+      });
+    });
+
+    then('the aborted session and unfinished object are not found', () => {
+      expect(context.world.lastOutcome.value).toEqual({ session: 404, object: 404 });
+    });
+
+    when('the client makes the contract object public and private again', async () => {
+      const { world } = context;
+      await recordStorage(world, async () => {
+        const bucket = storageBucket(world);
+        world.cleanupCallbacks.push(() => cleanStorageObject(world));
+        storageData(await bucket.upload(world.storagePath, new Blob([world.storageBytes])));
+        const { publicUrl } = storageData(bucket.getPublicUrl(world.storagePath));
+        const anonymousRead = () => fetch(publicUrl, { signal: AbortSignal.timeout(10_000) });
+        const before = await anonymousRead();
+        const beforeBytes = Buffer.from(await before.arrayBuffer());
+        const publicObject = storageData(await bucket.updateVisibility(world.storagePath, true));
+        const visible = await anonymousRead();
+        const bytes = Buffer.from(await visible.arrayBuffer());
+        const privateObject = storageData(await bucket.updateVisibility(world.storagePath, false));
+        const after = await anonymousRead();
+        const afterBytes = Buffer.from(await after.arrayBuffer());
+        return {
+          statuses: [before.status, visible.status, after.status],
+          bytes,
+          visibility: [publicObject.is_public, privateObject.is_public],
+          privateBytes: [beforeBytes, afterBytes],
+        };
+      });
+    });
+
+    then('anonymous reads return the original bytes only while the object is public', () => {
+      const { privateBytes, ...visible } = context.world.lastOutcome.value;
+      for (const bytes of privateBytes) {
+        expect(bytes.includes(context.world.storageBytes)).toBe(false);
+      }
+      expect(visible).toEqual({
+        statuses: [404, 200, 404],
+        bytes: context.world.storageBytes,
+        visibility: [true, false],
+      });
     });
 
     then('the stored object path equals the contract path', () => {
