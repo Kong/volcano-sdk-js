@@ -15,3 +15,10 @@ test('stages the canonical storage session feature', () => {
     '037c60a8da27ec4cc5777596ba0c669b8309181a54b27aa61882535ed2f6beb1',
   );
 });
+
+test('stages the canonical logs feature', () => {
+  const feature = readFileSync(path.join(__dirname, '../features/staged/logs.feature'));
+  expect(createHash('sha256').update(feature).digest('hex')).toBe(
+    '5616e288fe1a68e13fa70416fe0323a5ce830c0edaa885a387efbf9e5bb2a269',
+  );
+});
