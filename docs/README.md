@@ -39,11 +39,11 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 Here's a complete example showing authentication and database queries:
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { VolcanoClient } from '@volcano.dev/sdk';
 
 // Initialize the client
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.yourproject.volcano.dev',
+const volcano = new VolcanoClient({
+  apiUrl: 'https://api.volcano.dev',
   anonKey: 'your-anon-key',
 });
 
