@@ -104,6 +104,15 @@ test('diagnostics preserve encoded URL boundaries when decoding whitespace', () 
   expect(world.lastFailure.message).toBe('Denied [URL]');
 });
 
+test('diagnostics normalize literal percent credentials and repeatedly encoded URLs', () => {
+  const world = { fixture: { user_password: 'secret%2Fpath' } };
+  const encodedURL = encodeURIComponent(
+    encodeURIComponent('https://api.test/?note=hello world&token=url-secret'),
+  );
+  recordOutcome(world, null, new Error(`Denied secret%252Fpath secret%2Fpath ${encodedURL}`));
+  expect(world.lastFailure.message).toBe('Denied [redacted] [redacted] [URL]');
+});
+
 test('diagnostics redact session snapshots after client credentials are cleared', () => {
   const world = {
     fixture: {},

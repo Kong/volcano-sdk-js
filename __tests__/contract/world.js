@@ -49,15 +49,20 @@ function stringLeaves(value) {
 }
 
 function normalizeDiagnosticEncoding(value) {
-  return value
-    .replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
-      try {
-        return decodeURIComponent(encoded);
-      } catch {
-        return encoded.toUpperCase();
-      }
-    })
-    .replaceAll('+', ' ');
+  let previous;
+  do {
+    previous = value;
+    value = value
+      .replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
+        try {
+          return decodeURIComponent(encoded);
+        } catch {
+          return encoded.toUpperCase();
+        }
+      })
+      .replaceAll('+', ' ');
+  } while (value !== previous);
+  return value;
 }
 
 function diagnosticText(world, value) {
