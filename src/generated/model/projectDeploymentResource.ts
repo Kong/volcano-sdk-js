@@ -7,6 +7,7 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionKind } from './functionKind';
 import type { ProjectDeploymentResourceType } from './projectDeploymentResourceType';
 
 /**
@@ -16,4 +17,11 @@ export interface ProjectDeploymentResource {
   type: ProjectDeploymentResourceType;
   id: string;
   name: string;
+  /**
+     * Which kind of function this deployment belongs to. Both kinds appear
+     * in this feed under `type: function`, because a deployment means the
+     * same thing for either, so this is what tells them apart. Absent when
+     * `type` is `frontend`.
+     */
+  kind?: FunctionKind;
 }

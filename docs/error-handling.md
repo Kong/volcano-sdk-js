@@ -360,6 +360,73 @@ if (data && data.error) {
 }
 ```
 
+## Durable Execution Errors
+
+Every [durable](./durable-functions.md) call answers `{ data, status, error }`
+and never throws. `status` is what separates the cases: the platform's HTTP
+status when the request reached it, and `null` when it did not — a refusal the
+SDK made before sending, or a transport failure.
+
+```javascript
+const { data, status, error } = await volcano.durable.start(
+  'order-pipeline',
+  { order_id: orderId },
+  { executionName: `order-${orderId}` },
+);
+
+if (error) {
+  switch (status) {
+    case 409:
+      // The function is still provisioning after a deploy, it has no deployed
+      // region yet, or two starts raced for one name. All three clear on their
+      // own, so the same start works shortly.
+      //
+      // A repeated executionName is not an error: the name is the idempotency
+      // key, so a retry answers 202 with the execution the first start created,
+      // whatever input the retry carried.
+      scheduleRetry();
+      break;
+    case 429:
+      // The project is at its concurrent-execution cap or out of allowance.
+      showError('Too much work in flight. Try again shortly.');
+      break;
+    case 403:
+    case 404:
+      // A private function started with an anon key, or a name this project
+      // has no durable function for. Neither improves on a retry.
+      console.error('Developer error:', error.message);
+      break;
+    case null:
+      // Nothing was sent: a blank function name, a blank execution name, or
+      // the network. `error.message` says which.
+      console.error('Start not attempted:', error.message);
+      break;
+    default:
+      showError('Could not start the pipeline.');
+  }
+  return;
+}
+
+console.log(data.id, data.status);
+```
+
+`get`, `list` and `stop` are owner-scoped, so they refuse with `status: null`
+and `No active session` when the client holds no session rather than spending a
+round trip on the `401`. Call them from a backend signed in with the project's
+token.
+
+An execution that ran and failed is not an error here: the call succeeds and
+`data.status` is `failed` or `timed_out`, with `data.error` carrying the
+`type` and `message` the function ended on.
+
+```javascript
+const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+
+if (!error && data.status === 'failed') {
+  console.error('Pipeline failed:', data.error?.type, data.error?.message);
+}
+```
+
 ## Realtime Errors
 
 ### Connection Errors

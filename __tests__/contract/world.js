@@ -3,6 +3,14 @@ const { randomBytes } = require('node:crypto');
 const { VolcanoClient } = require('../../src/index.js');
 const { VolcanoRealtime } = require('../../src/realtime.js');
 
+const TERMINAL_DURABLE_STATUSES = ['succeeded', 'failed', 'timed_out', 'stopped', 'unknown'];
+
+// A durable execution is started asynchronously and observed through a status
+// read, so it settles in seconds. Bounded, so a scenario reports a timeout
+// instead of hanging the lane.
+const DURABLE_POLL_INTERVAL_MS = 5_000;
+const DURABLE_POLL_TIMEOUT_MS = 300_000;
+
 function classifyError(error) {
   const status = error?.status ?? error?.response?.status;
   if (status === 401 || status === 403) {
@@ -50,8 +58,17 @@ class ContractWorld {
       anonKey: fixture.service_key,
       accessToken: fixture.service_key,
     });
+    // Reading or stopping an execution is owner-scoped, so its client carries
+    // the project's own token as its session. Neither key above can reach those
+    // routes.
+    this.ownerClient = new VolcanoClient({
+      apiUrl: fixture.api_url,
+      anonKey: fixture.anon_key,
+      accessToken: fixture.platform_token,
+    });
     this.realtimeClients = [];
     this.cleanupCallbacks = [];
+    this.startedExecution = null;
 
     const suffix = `js-${process.pid}-${randomBytes(5).toString('hex')}`;
     this.storagePath = `${fixture.storage_path}.${suffix}`;
@@ -62,6 +79,48 @@ class ContractWorld {
     this.functionName = fixture.function_name;
     this.storageBytes = Buffer.from(`volcano-sdk-contract-${suffix}`, 'utf8');
     this.realtimeMessage = { event: 'message', value: `volcano-sdk-contract-${suffix}` };
+    this.durableExecutionName = `${fixture.durable_function_name}-${suffix}`;
+    this.durablePayload = { value: `volcano-sdk-contract-${suffix}` };
+  }
+
+  async startDurableExecution() {
+    const { data, error } = await this.serviceClient.durable.start(
+      this.fixture.durable_function_name,
+      this.durablePayload,
+      { executionName: this.durableExecutionName },
+    );
+    if (error) {
+      throw error;
+    }
+    this.startedExecution = data;
+    return data;
+  }
+
+  /**
+   * Polls an execution to a terminal status under the owner's credential, which
+   * is also the read that reconciles the stored status against the platform's.
+   */
+  async followDurableExecution(executionId) {
+    const deadline = Date.now() + DURABLE_POLL_TIMEOUT_MS;
+    for (;;) {
+      const { data, error } = await this.ownerClient.durable.get(
+        this.fixture.project_id,
+        this.fixture.durable_function_name,
+        executionId,
+      );
+      if (error) {
+        throw error;
+      }
+      if (TERMINAL_DURABLE_STATUSES.includes(data.status)) {
+        return data;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Durable execution ${executionId} was still ${data.status} after ${DURABLE_POLL_TIMEOUT_MS}ms`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, DURABLE_POLL_INTERVAL_MS));
+    }
   }
 
   async authenticate() {
@@ -124,4 +183,4 @@ class ContractWorld {
   }
 }
 
-module.exports = { classifyError, ContractWorld, recordOutcome };
+module.exports = { classifyError, ContractWorld, recordOutcome, TERMINAL_DURABLE_STATUSES };

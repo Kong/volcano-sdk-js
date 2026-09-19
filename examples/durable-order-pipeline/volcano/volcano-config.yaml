@@ -1,0 +1,11 @@
+version: 1
+
+functions:
+  # kind: durable is what separates the two collections. It is asserted rather
+  # than applied: `volcano cloud durable deploy` deploys this one, and
+  # `volcano cloud functions deploy --all` skips it.
+  - name: order-pipeline
+    kind: durable
+    public: false
+  - name: orders-api
+    public: false

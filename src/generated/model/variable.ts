@@ -11,6 +11,8 @@ import type { VariableDeploySource } from './variableDeploySource';
 import type { VariableStatus } from './variableStatus';
 
 export interface Variable {
+  /** Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+  shared?: boolean;
   id: string;
   project_id: string;
   /** @maxLength 256 */

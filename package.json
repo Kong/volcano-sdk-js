@@ -28,6 +28,16 @@
         "default": "./dist/realtime.js"
       }
     },
+    "./durable": {
+      "import": {
+        "types": "./dist/durable.esm.d.mts",
+        "default": "./dist/durable.esm.mjs"
+      },
+      "require": {
+        "types": "./dist/durable.d.ts",
+        "default": "./dist/durable.js"
+      }
+    },
     "./next/middleware": {
       "import": {
         "types": "./dist/next/middleware.esm.d.mts",
@@ -60,7 +70,7 @@
     "lint": "eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "eslint . --fix && pnpm format",
     "test": "jest",
-    "test:types": "tsc --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts test/types/auth-contract.ts test/types/openapi-contract.ts",
+    "test:types": "tsc --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.d.ts test/types/auth-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
     "test:package": "publint --pack npm --strict",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -90,6 +100,14 @@
   "dependencies": {
     "centrifuge": "^5.0.0",
     "ws": "^8.0.0"
+  },
+  "peerDependencies": {
+    "@aws/durable-execution-sdk-js": ">=2 <3"
+  },
+  "peerDependenciesMeta": {
+    "@aws/durable-execution-sdk-js": {
+      "optional": true
+    }
   },
   "author": "Kong <office@konghq.com>",
   "license": "Apache-2.0",

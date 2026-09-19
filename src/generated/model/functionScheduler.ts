@@ -7,6 +7,7 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { FunctionKind } from './functionKind';
 import type { FunctionSchedulerPayload } from './functionSchedulerPayload';
 import type { FunctionSchedulerScheduleKind } from './functionSchedulerScheduleKind';
 
@@ -14,6 +15,14 @@ export interface FunctionScheduler {
   id?: string;
   project_id?: string;
   function_id?: string;
+  /**
+     * Which collection the scheduled function belongs to. A project-wide
+     * scheduler list mixes both kinds, and this is what says whether the
+     * function is read back from `/projects/{id}/functions` or
+     * `/projects/{id}/durable-functions` — and whether a tick invokes it
+     * or starts a durable execution.
+     */
+  function_kind?: FunctionKind;
   name?: string;
   enabled?: boolean;
   schedule_kind?: FunctionSchedulerScheduleKind;

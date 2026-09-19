@@ -5,7 +5,7 @@ const path = require('node:path');
 const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
 const { VolcanoClient } = require('../../src/index.js');
-const { ContractWorld, recordOutcome } = require('./world.js');
+const { ContractWorld, recordOutcome, TERMINAL_DURABLE_STATUSES } = require('./world.js');
 const { verifyBroadcastPause } = require('./broadcast-pause.js');
 const { LogContract } = require('./logs.js');
 const { verifyPresenceMembership } = require('./presence-membership.js');
@@ -947,6 +947,91 @@ autoBindSteps(features, [
 
     then('the released lease is no longer held', () => {
       expect(context.world.lastOutcome.value.state.held).toBe(false);
+    });
+
+    given('a project-owner client', () => {
+      expect(context.world.fixture.platform_token).toBeTruthy();
+    });
+
+    when('the client starts the contract durable function', async () => {
+      const { world } = context;
+      try {
+        recordOutcome(world, await world.startDurableExecution(), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    when(
+      'the client starts the contract durable function twice under one execution name',
+      async () => {
+        const { world } = context;
+        try {
+          const first = await world.startDurableExecution();
+          const second = await world.startDurableExecution();
+          recordOutcome(world, { first, second }, null);
+        } catch (error) {
+          recordOutcome(world, null, error);
+        }
+      },
+    );
+
+    then('the started execution carries its id, function, name, region, and creation time', () => {
+      const { world } = context;
+      expect(world.lastOutcome.value).toMatchObject({
+        id: expect.any(String),
+        function_id: expect.any(String),
+        name: world.durableExecutionName,
+        region: expect.any(String),
+        created_at: expect.any(String),
+      });
+    });
+
+    then('the started execution is not terminal and carries no result', () => {
+      const execution = context.world.lastOutcome.value;
+      expect(TERMINAL_DURABLE_STATUSES).not.toContain(execution.status);
+      expect(execution.result).toBeUndefined();
+    });
+
+    then('both starts return the same execution', () => {
+      const { first, second } = context.world.lastOutcome.value;
+      expect(second.id).toBe(first.id);
+      expect(second.name).toBe(first.name);
+    });
+
+    when('the owner reads the execution until it is terminal', async () => {
+      const { world } = context;
+      if (!world.lastOutcome?.ok) {
+        return;
+      }
+      try {
+        recordOutcome(world, await world.followDurableExecution(world.startedExecution.id), null);
+      } catch (error) {
+        recordOutcome(world, null, error);
+      }
+    });
+
+    then("the execution succeeded carrying the function's result", () => {
+      const { world } = context;
+      expect(world.lastOutcome.value.status).toBe('succeeded');
+      expect(world.lastOutcome.value.result).toEqual({ echoed: world.durablePayload.value });
+    });
+
+    when("the owner lists the durable function's executions", async () => {
+      const { world } = context;
+      if (!world.lastOutcome?.ok) {
+        return;
+      }
+      const { data, error } = await world.ownerClient.durable.list(
+        world.fixture.project_id,
+        world.fixture.durable_function_name,
+      );
+      recordOutcome(world, data, error);
+    });
+
+    then('the listed executions include the started execution', () => {
+      const { world } = context;
+      expect(world.lastOutcome.value.data.map(({ id }) => id)).toContain(world.startedExecution.id);
     });
 
     when('the client recovers the contract lock with caller-owned tokens', async () => {
