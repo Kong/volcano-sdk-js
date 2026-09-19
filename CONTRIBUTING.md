@@ -66,8 +66,9 @@ method presence alone is not evidence of equivalent behavior. Start behavior
 fixes with a failing native test. Never edit generated clients by hand.
 
 Use the same branch name across affected repositories and link the companion
-PRs. Keep each PR focused and use Conventional Commits. Obtain clean code and
-security reviews and passing required checks on the final commit before merge.
+PRs. Keep each PR focused and use `type(scope): description` for every commit
+and PR title, for example `fix(auth): preserve the current session`. Obtain clean
+code and security reviews and passing required checks on the final commit before merge.
 Hosting changes also require human approval.
 
 ### Roll out shared scenarios
@@ -113,7 +114,8 @@ registry-installed quickstarts and release approval as separate release work.
 ## Pull Requests
 
 - Use draft PRs for work in progress.
-- Use Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...).
+- Use scoped Conventional Commits for commits and PR titles, such as
+  `feat(storage): add upload progress` or `docs(auth): clarify session adoption`.
 - Keep PRs focused to one bug fix, feature, or cohesive documentation update.
 - Include tests for behavior changes.
 - Update docs or examples when changing user-facing APIs.
