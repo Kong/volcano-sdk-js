@@ -7,7 +7,11 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
-};
+import type { Error } from './error';
+
+/**
+ * Too many requests for the specification from one address. The document
+ * carries an `ETag`; revalidate with `If-None-Match` rather than
+ * re-fetching it.
+ */
+export type OpenAPISpecThrottledResponse = Error;

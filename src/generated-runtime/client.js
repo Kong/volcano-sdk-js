@@ -482,6 +482,33 @@ export const replaceSharedVariables = async (id, replaceSharedVariablesBody, opt
         body: JSON.stringify(replaceSharedVariablesBody)
     });
 };
+export const getReplaceFrontendSharedVariablesUrl = (id) => {
+    return `/projects/${id}/frontend-shared-variables`;
+};
+/**
+ * Atomically replaces the complete shared frontend-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * frontend environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored outside the frontend shared list.
+ * @summary Replace frontend shared variable names
+ */
+export const replaceFrontendSharedVariables = async (id, replaceFrontendSharedVariablesBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getReplaceFrontendSharedVariablesUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(replaceFrontendSharedVariablesBody)
+    });
+};
 export const getGetProjectConfigUrl = (id, params) => {
     const normalizedParams = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -499,7 +526,7 @@ export const getGetProjectConfigUrl = (id, params) => {
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
  * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
+ * are omitted from the export; shared_variables and frontend_shared_variables contain names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -1568,10 +1595,14 @@ export const getDeleteDurableFunctionUrl = (id, functionId) => {
 };
 /**
  * Accepted for asynchronous teardown; the work continues after the
- * response. The function's executions go with it: history stops being
- * readable whatever `retention_days` had left, and the executions still
- * running stop counting against the project's concurrency cap. Stop an
- * execution first if you need it to end before the function does.
+ * response. The function's executions go with it: executions still in
+ * flight are stopped, and history stops being readable whatever
+ * `retention_days` had left.
+ *
+ * Stopping is asynchronous at the platform, and it does not interrupt a
+ * step already running -- that step runs to its next checkpoint. So a
+ * delete ends an execution rather than halting it mid-step; stop the
+ * execution yourself first if you need to observe it ending.
  * @summary Delete a durable function
  */
 export const deleteDurableFunction = async (id, functionId, options) => {
@@ -1853,6 +1884,12 @@ export const createFrontend = async (id, createFrontendBody, options) => {
     }
     if (createFrontendBody.app_root !== undefined) {
         formData.append(`app_root`, createFrontendBody.app_root);
+    }
+    if (createFrontendBody.variable_scope !== undefined) {
+        formData.append(`variable_scope`, createFrontendBody.variable_scope);
+    }
+    if (createFrontendBody.variables !== undefined) {
+        createFrontendBody.variables.forEach(value => formData.append(`variables`, value));
     }
     formData.append(`archive`, createFrontendBody.archive);
     return volcanoFetch(getCreateFrontendUrl(id), {
@@ -4710,6 +4747,171 @@ export const setDefaultAnonKey = async (id, keyId, options) => {
         method: 'POST'
     });
 };
+export const getListProjectAccessTokensUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens?${stringifiedParams}` : `/projects/${id}/access-tokens`;
+};
+/**
+ * Lists the project's access tokens, newest first. Secrets are never
+ * returned: only a hash is stored, so a token's value exists solely in the
+ * response to the create call.
+ *
+ * Only tokens that can still authenticate are returned by default, so
+ * revoked and expired ones are hidden. Pass `include_revoked=true` to see
+ * them, which is how you find out what a key did before it stopped working.
+ *
+ * Requires a platform token. A project access token cannot manage project
+ * access tokens, so a leaked credential cannot enumerate or replace itself.
+ * @summary List a project's access tokens
+ */
+export const listProjectAccessTokens = async (id, params, options) => {
+    return volcanoFetch(getListProjectAccessTokensUrl(id, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateProjectAccessTokenUrl = (id) => {
+    return `/projects/${id}/access-tokens`;
+};
+/**
+ * Creates a project access token and returns its secret.
+ *
+ * The secret is in this response and nowhere else. Only its hash is
+ * stored, so it cannot be retrieved, displayed, or recovered later — save
+ * it when you create it.
+ *
+ * The name must be unique within the project, so a retry cannot mint a
+ * second credential. It cannot recover the first one either. A retry that
+ * returns `409` with code `access_token_name_exists` means the original
+ * create committed and its secret is unrecoverable: list the project's
+ * tokens, revoke the one holding that name, and create it again.
+ *
+ * Requires a platform token.
+ * @summary Create a project access token
+ */
+export const createProjectAccessToken = async (id, createProjectAccessTokenRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getCreateProjectAccessTokenUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createProjectAccessTokenRequest)
+    });
+};
+export const getListProjectAccessTokensUsageUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens/usage?${stringifiedParams}` : `/projects/${id}/access-tokens/usage`;
+};
+/**
+ * Returns a zero-filled daily series of request counts for each of the
+ * project's access tokens, oldest first. Every day in the window is
+ * present, so a gap reads as zero rather than missing.
+ *
+ * Revoked tokens are included, because the traffic they made before
+ * revocation is usually the reason you are looking.
+ *
+ * `days` defaults to 30 and is capped at 60, which is also how long per-day
+ * counts are retained — a longer window cannot be answered.
+ *
+ * A platform token sees every token in the project. A project access token
+ * sees only its own row, so it can watch its own traffic without being
+ * able to enumerate the project's other credentials by name.
+ * @summary Per-day request counts for every access token in a project
+ */
+export const listProjectAccessTokensUsage = async (id, params, options) => {
+    return volcanoFetch(getListProjectAccessTokensUsageUrl(id, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetProjectAccessTokenUrl = (id, tokenId) => {
+    return `/projects/${id}/access-tokens/${tokenId}`;
+};
+/**
+ * Returns one token's metadata. Never its secret, which is not stored in a
+ * recoverable form.
+ *
+ * Requires a platform token.
+ * @summary Get a project access token
+ */
+export const getProjectAccessToken = async (id, tokenId, options) => {
+    return volcanoFetch(getGetProjectAccessTokenUrl(id, tokenId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getRevokeProjectAccessTokenUrl = (id, tokenId) => {
+    return `/projects/${id}/access-tokens/${tokenId}`;
+};
+/**
+ * Revokes the token. It stops authenticating immediately in the region
+ * handling this call and within seconds across Volcano's other regions.
+ *
+ * The record is kept rather than deleted, so the token's name, prefix, last
+ * use, and request history stay available — which is what you need if you
+ * are revoking because a secret leaked. Revoking an already-revoked token
+ * succeeds.
+ *
+ * Revoking does not undo anything the token already did. Treat whatever it
+ * could reach as exposed and rotate accordingly.
+ *
+ * Requires a platform token.
+ * @summary Revoke a project access token
+ */
+export const revokeProjectAccessToken = async (id, tokenId, options) => {
+    return volcanoFetch(getRevokeProjectAccessTokenUrl(id, tokenId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getGetProjectAccessTokenUsageUrl = (id, tokenId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens/${tokenId}/usage?${stringifiedParams}` : `/projects/${id}/access-tokens/${tokenId}/usage`;
+};
+/**
+ * Returns a zero-filled daily series of request counts for a single token,
+ * oldest first, so the response always has exactly `days` entries.
+ *
+ * `days` defaults to 30 and is capped at 60, matching how long per-day
+ * counts are retained.
+ *
+ * A project access token may read only its own usage; asking for another
+ * token's returns `403`. A platform token may read any token in the
+ * project.
+ * @summary Per-day request counts for one access token
+ */
+export const getProjectAccessTokenUsage = async (id, tokenId, params, options) => {
+    return volcanoFetch(getGetProjectAccessTokenUsageUrl(id, tokenId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
 ;
 export const getListServiceKeysUrl = (id, params) => {
     const normalizedParams = new URLSearchParams();
@@ -4794,7 +4996,7 @@ export const getRegenerateServiceKeyUrl = (id, keyId) => {
 };
 /**
  * Generate new JWT value for existing key.
- * The old key is immediately invalidated.
+ * The old key stops working within a few seconds.
  * Update your backend services with the new key before regenerating in production.
  * @summary Regenerate service key
  */
@@ -5385,5 +5587,111 @@ export const healthCheck = async (options) => {
     return volcanoFetch(getHealthCheckUrl(), {
         ...options,
         method: 'GET'
+    });
+};
+export const getGetOpenAPISpecJSONUrl = () => {
+    return `/openapi.json`;
+};
+/**
+ * Returns this specification as a self-contained JSON document, with every
+ * reference resolved. It is generated from the same document the server
+ * validates requests against, so a client generated from it cannot
+ * describe a different API than the one that answers.
+ *
+ * No credential is required: a client generator fetches this by URL before
+ * its user has a token, and every path here is already published in the
+ * API reference.
+ *
+ * The response carries a strong `ETag`; send it back as `If-None-Match` to
+ * get `304 Not Modified` instead of the whole document.
+ * @summary Fetch the OpenAPI specification as JSON
+ */
+export const getOpenAPISpecJSON = async (options) => {
+    return volcanoFetch(getGetOpenAPISpecJSONUrl(), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getHeadOpenAPISpecJSONUrl = () => {
+    return `/openapi.json`;
+};
+/**
+ * The headers `GET /openapi.json` would return, so a cache can pick up the
+ * current `ETag` without transferring the document.
+ * @summary Check the JSON OpenAPI specification
+ */
+export const headOpenAPISpecJSON = async (options) => {
+    return volcanoFetch(getHeadOpenAPISpecJSONUrl(), {
+        ...options,
+        method: 'HEAD'
+    });
+};
+export const getGetOpenAPISpecYAMLUrl = () => {
+    return `/openapi.yaml`;
+};
+/**
+ * The same document as `/openapi.json`, serialized as YAML for tools that
+ * prefer it. See that operation for caching and authentication notes.
+ * @summary Fetch the OpenAPI specification as YAML
+ */
+export const getOpenAPISpecYAML = async (options) => {
+    return volcanoFetch(getGetOpenAPISpecYAMLUrl(), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getHeadOpenAPISpecYAMLUrl = () => {
+    return `/openapi.yaml`;
+};
+/**
+ * The headers `GET /openapi.yaml` would return, so a cache can pick up the
+ * current `ETag` without transferring the document.
+ * @summary Check the YAML OpenAPI specification
+ */
+export const headOpenAPISpecYAML = async (options) => {
+    return volcanoFetch(getHeadOpenAPISpecYAMLUrl(), {
+        ...options,
+        method: 'HEAD'
+    });
+};
+export const getCallMCPUrl = () => {
+    return `/mcp`;
+};
+/**
+ * Streamable-HTTP MCP endpoint: one JSON-RPC 2.0 object per request, one
+ * response per request. There is no server-to-client stream, so a `GET`
+ * returns `405`, and a batched array is rejected.
+ *
+ * Authenticated with a **project access token**. The endpoint takes its
+ * project from the credential, so a platform token is refused with `403` —
+ * it names no project, and letting a tool argument choose one would hand an
+ * agent its own blast radius.
+ *
+ * Scope carries over from the REST API. A `read_only` token is not offered
+ * mutating tools or credential-returning reads, and is refused if it calls
+ * one anyway. Revoking the token ends MCP access on the same path it ends
+ * API access.
+ *
+ * Methods: `initialize`, `notifications/initialized`, `ping`,
+ * `tools/list`, `tools/call`. See the
+ * [MCP guide](https://docs.volcano.dev/platform/interfaces/mcp) for the
+ * tool surface and client configuration.
+ * @summary Model Context Protocol endpoint
+ */
+export const callMCP = async (callMCPBody, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Array.isArray(h))
+            return Object.fromEntries(h);
+        return h;
+    };
+    return volcanoFetch(getCallMCPUrl(), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(callMCPBody)
     });
 };

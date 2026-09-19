@@ -7,7 +7,10 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
-};
+
+export type CallMCP200Jsonrpc = typeof CallMCP200Jsonrpc[keyof typeof CallMCP200Jsonrpc];
+
+
+export const CallMCP200Jsonrpc = {
+  '20': '2.0',
+} as const;

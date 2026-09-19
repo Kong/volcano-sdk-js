@@ -7,7 +7,9 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
-};
+
+/**
+ * The headers a `GET` would return, without the document. The declared
+ * `ETag` is the one to revalidate against.
+ */
+export type OpenAPISpecHeadersResponse = void;

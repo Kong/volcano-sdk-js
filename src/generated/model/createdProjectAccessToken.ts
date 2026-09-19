@@ -7,7 +7,12 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
+import type { ProjectAccessToken } from './projectAccessToken';
+
+export type CreatedProjectAccessToken = ProjectAccessToken & {
+  /**
+     * The secret. Returned only here, and not recoverable afterwards:
+     * the server stores a hash rather than the value. Save it now.
+     */
+  token: string;
 };

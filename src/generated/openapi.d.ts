@@ -464,6 +464,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/frontend-shared-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace frontend shared variable names
+         * @description Atomically replaces the complete shared frontend-variable list without
+         *     changing values. Names must already exist. Validates final affected
+         *     frontend environments before membership or propagation side effects.
+         *     An empty list clears membership. Omitted names remain stored outside the frontend shared list.
+         */
+        put: operations["replaceFrontendSharedVariables"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/config": {
         parameters: {
             query?: never;
@@ -479,7 +502,7 @@ export interface paths {
          *     `?format=yaml`; the YAML is returned verbatim as the raw response body
          *     (`Content-Type: application/yaml`) and is meant to be saved as-is.
          *     Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
-         *     are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
+         *     are omitted from the export; shared_variables and frontend_shared_variables contain names only; the YAML rendering adds a header comment
          *     describing how to set them via CLI environment interpolation.
          */
         get: operations["getProjectConfig"];
@@ -1294,10 +1317,14 @@ export interface paths {
         /**
          * Delete a durable function
          * @description Accepted for asynchronous teardown; the work continues after the
-         *     response. The function's executions go with it: history stops being
-         *     readable whatever `retention_days` had left, and the executions still
-         *     running stop counting against the project's concurrency cap. Stop an
-         *     execution first if you need it to end before the function does.
+         *     response. The function's executions go with it: executions still in
+         *     flight are stopped, and history stops being readable whatever
+         *     `retention_days` had left.
+         *
+         *     Stopping is asynchronous at the platform, and it does not interrupt a
+         *     step already running -- that step runs to its next checkpoint. So a
+         *     delete ends an execution rather than halting it mid-step; stop the
+         *     execution yourself first if you need to observe it ending.
          */
         delete: operations["deleteDurableFunction"];
         options?: never;
@@ -4011,6 +4038,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/access-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's access tokens
+         * @description Lists the project's access tokens, newest first. Secrets are never
+         *     returned: only a hash is stored, so a token's value exists solely in the
+         *     response to the create call.
+         *
+         *     Only tokens that can still authenticate are returned by default, so
+         *     revoked and expired ones are hidden. Pass `include_revoked=true` to see
+         *     them, which is how you find out what a key did before it stopped working.
+         *
+         *     Requires a platform token. A project access token cannot manage project
+         *     access tokens, so a leaked credential cannot enumerate or replace itself.
+         */
+        get: operations["listProjectAccessTokens"];
+        put?: never;
+        /**
+         * Create a project access token
+         * @description Creates a project access token and returns its secret.
+         *
+         *     The secret is in this response and nowhere else. Only its hash is
+         *     stored, so it cannot be retrieved, displayed, or recovered later — save
+         *     it when you create it.
+         *
+         *     The name must be unique within the project, so a retry cannot mint a
+         *     second credential. It cannot recover the first one either. A retry that
+         *     returns `409` with code `access_token_name_exists` means the original
+         *     create committed and its secret is unrecoverable: list the project's
+         *     tokens, revoke the one holding that name, and create it again.
+         *
+         *     Requires a platform token.
+         */
+        post: operations["createProjectAccessToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-day request counts for every access token in a project
+         * @description Returns a zero-filled daily series of request counts for each of the
+         *     project's access tokens, oldest first. Every day in the window is
+         *     present, so a gap reads as zero rather than missing.
+         *
+         *     Revoked tokens are included, because the traffic they made before
+         *     revocation is usually the reason you are looking.
+         *
+         *     `days` defaults to 30 and is capped at 60, which is also how long per-day
+         *     counts are retained — a longer window cannot be answered.
+         *
+         *     A platform token sees every token in the project. A project access token
+         *     sees only its own row, so it can watch its own traffic without being
+         *     able to enumerate the project's other credentials by name.
+         */
+        get: operations["listProjectAccessTokensUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a project access token
+         * @description Returns one token's metadata. Never its secret, which is not stored in a
+         *     recoverable form.
+         *
+         *     Requires a platform token.
+         */
+        get: operations["getProjectAccessToken"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a project access token
+         * @description Revokes the token. It stops authenticating immediately in the region
+         *     handling this call and within seconds across Volcano's other regions.
+         *
+         *     The record is kept rather than deleted, so the token's name, prefix, last
+         *     use, and request history stay available — which is what you need if you
+         *     are revoking because a secret leaked. Revoking an already-revoked token
+         *     succeeds.
+         *
+         *     Revoking does not undo anything the token already did. Treat whatever it
+         *     could reach as exposed and rotate accordingly.
+         *
+         *     Requires a platform token.
+         */
+        delete: operations["revokeProjectAccessToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/{tokenId}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-day request counts for one access token
+         * @description Returns a zero-filled daily series of request counts for a single token,
+         *     oldest first, so the response always has exactly `days` entries.
+         *
+         *     `days` defaults to 30 and is capped at 60, matching how long per-day
+         *     counts are retained.
+         *
+         *     A project access token may read only its own usage; asking for another
+         *     token's returns `403`. A platform token may read any token in the
+         *     project.
+         */
+        get: operations["getProjectAccessTokenUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/service-keys": {
         parameters: {
             query?: never;
@@ -4077,7 +4247,7 @@ export interface paths {
         /**
          * Regenerate service key
          * @description Generate new JWT value for existing key.
-         *     The old key is immediately invalidated.
+         *     The old key stops working within a few seconds.
          *     Update your backend services with the new key before regenerating in production.
          */
         post: operations["regenerateServiceKey"];
@@ -4521,6 +4691,104 @@ export interface paths {
         get: operations["healthCheck"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/openapi.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch the OpenAPI specification as JSON
+         * @description Returns this specification as a self-contained JSON document, with every
+         *     reference resolved. It is generated from the same document the server
+         *     validates requests against, so a client generated from it cannot
+         *     describe a different API than the one that answers.
+         *
+         *     No credential is required: a client generator fetches this by URL before
+         *     its user has a token, and every path here is already published in the
+         *     API reference.
+         *
+         *     The response carries a strong `ETag`; send it back as `If-None-Match` to
+         *     get `304 Not Modified` instead of the whole document.
+         */
+        get: operations["getOpenAPISpecJSON"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Check the JSON OpenAPI specification
+         * @description The headers `GET /openapi.json` would return, so a cache can pick up the
+         *     current `ETag` without transferring the document.
+         */
+        head: operations["headOpenAPISpecJSON"];
+        patch?: never;
+        trace?: never;
+    };
+    "/openapi.yaml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch the OpenAPI specification as YAML
+         * @description The same document as `/openapi.json`, serialized as YAML for tools that
+         *     prefer it. See that operation for caching and authentication notes.
+         */
+        get: operations["getOpenAPISpecYAML"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Check the YAML OpenAPI specification
+         * @description The headers `GET /openapi.yaml` would return, so a cache can pick up the
+         *     current `ETag` without transferring the document.
+         */
+        head: operations["headOpenAPISpecYAML"];
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Model Context Protocol endpoint
+         * @description Streamable-HTTP MCP endpoint: one JSON-RPC 2.0 object per request, one
+         *     response per request. There is no server-to-client stream, so a `GET`
+         *     returns `405`, and a batched array is rejected.
+         *
+         *     Authenticated with a **project access token**. The endpoint takes its
+         *     project from the credential, so a platform token is refused with `403` —
+         *     it names no project, and letting a tool argument choose one would hand an
+         *     agent its own blast radius.
+         *
+         *     Scope carries over from the REST API. A `read_only` token is not offered
+         *     mutating tools or credential-returning reads, and is refused if it calls
+         *     one anyway. Revoking the token ends MCP access on the same path it ends
+         *     API access.
+         *
+         *     Methods: `initialize`, `notifications/initialized`, `ping`,
+         *     `tools/list`, `tools/call`. See the
+         *     [MCP guide](https://docs.volcano.dev/platform/interfaces/mcp) for the
+         *     tool surface and client configuration.
+         */
+        post: operations["callMCP"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6259,6 +6527,13 @@ export interface components {
             production_branch?: string;
         };
         Frontend: {
+            /**
+             * @description All preserves access to all project variables. Shared includes the project frontend shared-variable list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "shared" | "scoped";
+            /** @description Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it. */
+            declared_variables?: string[];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -6447,6 +6722,148 @@ export interface components {
             total_errors: number;
             /** Format: int64 */
             total_page_views: number;
+        };
+        /**
+         * @description A project access token: a control-plane credential bound to a single
+         *     project. Unlike a platform token, which acts on every project its owner
+         *     has, this one is limited to the project it was created in.
+         *
+         *     The secret itself is never returned here. Only its hash is stored, so
+         *     the plaintext exists solely in the response to the create call.
+         */
+        ProjectAccessToken: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** @description Unique per project. */
+            name: string;
+            /** @description First 12 characters of the secret, for recognising a token in a list. */
+            token_prefix: string;
+            scope: components["schemas"]["ProjectAccessTokenScope"];
+            /**
+             * @description `revoked` means the token was deliberately revoked, by you or by the
+             *     deletion of its project. `expired` means it simply reached
+             *     `expires_at`; nothing was taken away. Both are refused, and both keep
+             *     their record so a token's name, prefix, last use, and request history
+             *     remain available after a leak.
+             *
+             *     A token revoked before its expiry passed stays `revoked`, because
+             *     that is the fact worth keeping.
+             * @enum {string}
+             */
+            status: "active" | "revoked" | "expired";
+            /**
+             * @description What created the token.
+             * @enum {string}
+             */
+            token_source: "api" | "cli" | "dashboard";
+            /**
+             * Format: date-time
+             * @description Absent for a token that does not expire.
+             */
+            expires_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once every few minutes, so it may lag slightly.
+             */
+            last_used_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description Requests authenticated with this token since it was created.
+             */
+            all_time_requests: number;
+        };
+        /**
+         * @description What a project access token may do within its project.
+         *
+         *     `full` is everything you can do to that one project, up to and including
+         *     deleting it. It cannot manage access tokens, so a leaked token cannot
+         *     mint a replacement or erase the record of its own use, but for a CI or
+         *     agent credential that only deploys, prefer `read_only` where the job
+         *     allows it.
+         *
+         *     `read_only` refuses mutations. It is enforced by route classification
+         *     rather than HTTP method, so the log and metrics query endpoints remain
+         *     available even though they are POST requests that carry body filters.
+         *
+         *     `read_only` also refuses the reads that return a credential — service
+         *     keys, anon keys, variable values, and database connection strings. Those
+         *     grant write access over the project's data and keep working after the
+         *     token that fetched them is revoked, so returning one to a read-only
+         *     credential would make the scope a formality. An anon key is included
+         *     because its permissions are chosen per key and may include uploading,
+         *     deleting, and publishing.
+         * @enum {string}
+         */
+        ProjectAccessTokenScope: "full" | "read_only";
+        CreateProjectAccessTokenRequest: {
+            /**
+             * @description Held by any of the project's tokens you have not revoked, including
+             *     one that has expired. Creating a duplicate returns 409 with code
+             *     `access_token_name_exists`; revoking the holder frees the name, so a
+             *     rotation can keep the name its caller already references.
+             */
+            name: string;
+            scope: components["schemas"]["ProjectAccessTokenScope"];
+            /**
+             * Format: date-time
+             * @description Omit for a token that does not expire.
+             */
+            expires_at?: string;
+        };
+        CreatedProjectAccessToken: components["schemas"]["ProjectAccessToken"] & {
+            /**
+             * @description The secret. Returned only here, and not recoverable afterwards:
+             *     the server stores a hash rather than the value. Save it now.
+             */
+            token: string;
+        };
+        PaginatedProjectAccessTokens: {
+            data: components["schemas"]["ProjectAccessToken"][];
+            page: number;
+            limit: number;
+            total: number;
+            has_more: boolean;
+            next?: string;
+        };
+        /**
+         * @description Zero-filled daily request counts for a single token, oldest first. Every
+         *     day in the window is present, so a gap reads as zero rather than missing.
+         *
+         *     Counts every request the token authenticated, including ones then
+         *     refused — a read-only token attempting a write, or a token presented on
+         *     another project's route. That is deliberate: after a leak, the probing
+         *     is the part you want to see, and a counter that hid it would make a
+         *     token look idle while it was being tried.
+         */
+        ProjectAccessTokenUsage: {
+            /** Format: uuid */
+            token_id: string;
+            name: string;
+            /**
+             * @description The token's display prefix, which identifies the credential when its
+             *     name does not. Revoking frees a name, so a project that rotated
+             *     `ci-deploy` has two entries here both called `ci-deploy`. Not usable
+             *     as a credential.
+             */
+            token_prefix: string;
+            /** @description Number of daily entries returned, always equal to the requested window. */
+            days: number;
+            daily: components["schemas"]["ProjectAccessTokenUsageDailyEntry"][];
+            /** Format: int64 */
+            total_requests: number;
+        };
+        ProjectAccessTokenUsageDailyEntry: {
+            /**
+             * Format: date
+             * @description UTC day.
+             */
+            day: string;
+            /** Format: int64 */
+            requests: number;
         };
         Function: {
             /** Format: uuid */
@@ -7353,6 +7770,8 @@ export interface components {
             databases?: components["schemas"]["ProjectConfigDatabase"][];
             /** @description Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it. */
             shared_variables?: string[];
+            /** @description Replace the complete shared frontend-variable list with existing names. Frontends with variable_scope shared receive this list. Omission keeps membership unchanged; an empty list clears it. */
+            frontend_shared_variables?: string[];
             /** @description Fully synced when declared - variables absent from this list are deleted. */
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
@@ -7618,6 +8037,13 @@ export interface components {
          *     without `custom_domain` deletes an existing custom domain.
          */
         ProjectConfigFrontend: {
+            /**
+             * @description All preserves access to all project variables. Shared includes the project frontend_shared_variables list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "shared" | "scoped";
+            /** @description Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it. */
+            variables?: string[];
             name: string;
             custom_domain?: components["schemas"]["ProjectConfigCustomDomain"];
         };
@@ -8578,6 +9004,8 @@ export interface components {
         Variable: {
             /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
             shared?: boolean;
+            /** @description Whether this name is in the project's shared frontend-variable list. */
+            frontend_shared?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -8608,6 +9036,13 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description This OpenAPI document, with every reference resolved. Shared by the JSON
+         *     and YAML operations, which differ only in serialization.
+         */
+        OpenAPISpecDocument: {
+            [key: string]: unknown;
         };
         ProjectGitConnectionSummary: {
             /** Format: int64 */
@@ -8877,6 +9312,21 @@ export interface components {
     };
     responses: {
         /**
+         * @description Too many requests for the specification from one address. The document
+         *     carries an `ETag`; revalidate with `If-None-Match` rather than
+         *     re-fetching it.
+         */
+        OpenAPISpecThrottled: {
+            headers: {
+                /** @description Seconds to wait before requesting the specification again. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
          * @description The platform user exceeded their billing-cycle bandwidth allowance (aggregate
          *     ingress + egress across owned projects). Enforcement is eventual:
          *     requests are rejected until the allowance increases or the next
@@ -8917,6 +9367,28 @@ export interface components {
             content: {
                 "application/json": components["schemas"]["Error"];
             };
+        };
+        /**
+         * @description The specification still matches the supplied `If-None-Match`, so no body
+         *     is returned.
+         */
+        OpenAPISpecNotModified: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /**
+         * @description The headers a `GET` would return, without the document. The declared
+         *     `ETag` is the one to revalidate against.
+         */
+        OpenAPISpecHeaders: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
         };
     };
     parameters: {
@@ -9011,6 +9483,8 @@ export interface components {
         Page: number;
         /** @description Project ID */
         ProjectId: string;
+        /** @description Project access token ID */
+        TokenId: string;
         /**
          * @description Case-insensitive substring match on the resource `name`. See the
          *     endpoint description for supported pagination modes.
@@ -9022,9 +9496,35 @@ export interface components {
         SchedulerId: string;
         /** @description Variable name */
         VariableName: string;
+        /**
+         * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+         *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+         *     weak tags of the form `W/"tag"`.
+         * @example "9f2c1e0b5a"
+         */
+        IfNoneMatch: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Strong validator for the returned document. Send it back as `If-None-Match`
+         *     to revalidate without transferring the document again.
+         * @example "9f2c1e0b5a"
+         */
+        ETag: string;
+        /**
+         * @description Milliseconds Volcano spent before running the query: authenticating the
+         *     caller, resolving the database, and building the SQL. Does not include
+         *     query execution. Also present when the query itself failed.
+         */
+        DatabaseQueryProxyMs: number;
+        /**
+         * @description Milliseconds the database took to run the query and return its rows.
+         *     Does not include Volcano's preparation. Also present when the query
+         *     itself failed.
+         */
+        DatabaseQueryComputeMs: number;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -10698,6 +11198,85 @@ export interface operations {
             };
         };
     };
+    replaceFrontendSharedVariables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    frontend_shared_variables: string[];
+                    /** @description When present, replace only if the current complete frontend shared list matches this list. */
+                    expected_frontend_shared_variables?: string[];
+                    /** @description SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_frontend_shared_variables for a compact conditional replacement. */
+                    expected_frontend_shared_variables_digest?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Frontend shared list replaced and affected frontend synchronization started. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid names or final frontend environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Frontend shared list changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,194,304 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Persistence or synchronization failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getProjectConfig: {
         parameters: {
             query?: {
@@ -12362,6 +12941,10 @@ export interface operations {
                     "X-Volcano-Version"?: string;
                     /** @description Region the function ran in (for example `us-east-1`) */
                     "X-Volcano-Region"?: string;
+                    /** @description Milliseconds spent in the Volcano invoke proxy before dispatching to the function runtime. Present only when the function was invoked. Does not include runtime execution. */
+                    "X-Volcano-Proxy-Ms"?: number;
+                    /** @description Milliseconds spent running the function, from dispatch until it returned. Present only when the function was invoked. Does not include proxy preparation. */
+                    "X-Volcano-Compute-Ms"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12440,6 +13023,10 @@ export interface operations {
                     "X-Volcano-Version"?: string;
                     /** @description Region the function ran in (for example `us-east-1`) */
                     "X-Volcano-Region"?: string;
+                    /** @description Milliseconds spent in the Volcano invoke proxy before dispatching to the function runtime. Present only when the function was invoked. Does not include runtime execution. */
+                    "X-Volcano-Proxy-Ms"?: number;
+                    /** @description Milliseconds spent running the function, from dispatch until it returned. Present only when the function was invoked. Does not include proxy preparation. */
+                    "X-Volcano-Compute-Ms"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -14195,6 +14782,13 @@ export interface operations {
                      * @example apps/web
                      */
                     app_root?: string;
+                    /**
+                     * @description Variable selection for this deployment. New frontends default to `scoped`; omitting this field for an existing frontend preserves its current selection.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description Project variable names selected when `variable_scope` is `scoped`. Submit each name as a repeated multipart field. */
+                    variables?: string[];
                     /**
                      * Format: binary
                      * @description ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
@@ -16484,6 +17078,8 @@ export interface operations {
             /** @description Database is reachable */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16549,6 +17145,8 @@ export interface operations {
             /** @description Query successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16628,6 +17226,8 @@ export interface operations {
             /** @description Insert successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16707,6 +17307,8 @@ export interface operations {
             /** @description Update successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16784,6 +17386,8 @@ export interface operations {
             /** @description Delete successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16857,6 +17461,8 @@ export interface operations {
             /** @description Database is reachable */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16925,6 +17531,8 @@ export interface operations {
             /** @description Query successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17007,6 +17615,8 @@ export interface operations {
             /** @description Insert successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17089,6 +17699,8 @@ export interface operations {
             /** @description Update successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17169,6 +17781,8 @@ export interface operations {
             /** @description Delete successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -21405,6 +22019,391 @@ export interface operations {
             };
         };
     };
+    listProjectAccessTokens: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Case-insensitive substring match on the resource `name`. See the
+                 *     endpoint description for supported pagination modes.
+                 */
+                search?: components["parameters"]["Search"];
+                /**
+                 * @description Include tokens that can no longer authenticate — both revoked and
+                 *     expired ones.
+                 */
+                include_revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedProjectAccessTokens"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectAccessTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Token created - save the secret now, it cannot be retrieved again */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedProjectAccessToken"];
+                };
+            };
+            /** @description Bad request - invalid name, scope, or expiry */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Duplicate name, token limit reached, or the project is being
+             *     deleted. Tell them apart with `code`, which is one of
+             *     `access_token_name_exists`, `access_token_limit_reached`, or
+             *     `project_deleting` — the message text is not a contract.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listProjectAccessTokensUsage: {
+        parameters: {
+            query?: {
+                /** @description Number of trailing days to return (1-60, default 30). */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessTokenUsage"][];
+                };
+            };
+            /** @description Bad request - invalid window */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessToken"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict - the project is being deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getProjectAccessTokenUsage: {
+        parameters: {
+            query?: {
+                /** @description Number of trailing days to return (1-60, default 30). */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessTokenUsage"];
+                };
+            };
+            /** @description Bad request - invalid window */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listServiceKeys: {
         parameters: {
             query?: {
@@ -22942,6 +23941,196 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+        };
+    };
+    getOpenAPISpecJSON: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The OpenAPI specification */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAPISpecDocument"];
+                };
+            };
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    headOpenAPISpecJSON: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OpenAPISpecHeaders"];
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    getOpenAPISpecYAML: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The OpenAPI specification */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/yaml": components["schemas"]["OpenAPISpecDocument"];
+                };
+            };
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    headOpenAPISpecYAML: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OpenAPISpecHeaders"];
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    callMCP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    jsonrpc: "2.0";
+                    /** @description The MCP method to call. */
+                    method: string;
+                    /**
+                     * @description Request identifier, echoed verbatim. Omit it to send a
+                     *     notification, which is answered with `202` and no body.
+                     */
+                    id?: string | number;
+                    params?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description A JSON-RPC response object */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        jsonrpc: "2.0";
+                        /** @description Echoes the request's id. Null when the request could not be read well enough to determine one. */
+                        id: (string | number) | null;
+                        result?: {
+                            [key: string]: unknown;
+                        };
+                        error?: {
+                            code: number;
+                            message: string;
+                        };
+                    };
+                };
+            };
+            /** @description A notification was accepted; there is no body */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The credential is valid but may not use this endpoint — most often a
+             *     platform token, which names no project.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The JSON-RPC frame exceeds the 1 MiB limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -8,6 +8,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { ProjectConfigCustomDomain } from './projectConfigCustomDomain';
+import type { ProjectConfigFrontendVariableScope } from './projectConfigFrontendVariableScope';
 
 /**
  * Configuration for an existing (deployed) frontend. Frontends are never
@@ -15,6 +16,13 @@ import type { ProjectConfigCustomDomain } from './projectConfigCustomDomain';
  * without `custom_domain` deletes an existing custom domain.
  */
 export interface ProjectConfigFrontend {
+  /** All preserves access to all project variables. Shared includes the project frontend_shared_variables list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection. */
+  variable_scope?: ProjectConfigFrontendVariableScope;
+  /**
+     * Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it.
+     * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
+     */
+  variables?: string[];
   /** @minLength 1 */
   name: string;
   custom_domain?: ProjectConfigCustomDomain;

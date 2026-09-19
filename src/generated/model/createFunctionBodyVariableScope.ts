@@ -15,6 +15,6 @@ export type CreateFunctionBodyVariableScope = typeof CreateFunctionBodyVariableS
 
 
 export const CreateFunctionBodyVariableScope = {
-  all: 'all',
-  scoped: 'scoped',
+  CreateFunctionMultipartBodyVariableScopeAll: 'all',
+  CreateFunctionMultipartBodyVariableScopeScoped: 'scoped',
 } as const;
