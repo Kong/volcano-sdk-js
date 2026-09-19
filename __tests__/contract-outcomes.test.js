@@ -113,6 +113,20 @@ test('diagnostics normalize literal percent credentials and repeatedly encoded U
   expect(world.lastFailure.message).toBe('Denied [redacted] [redacted] [URL]');
 });
 
+test('diagnostics redact valid encoded credentials beside malformed bytes', () => {
+  const world = { fixture: { user_password: 'secret' } };
+  recordOutcome(world, null, new Error('Denied %73%65%63%72%65%74%FF'));
+  expect(world.lastFailure.message).toBe('Denied [redacted]\uFFFD');
+});
+
+test('diagnostics omit oversized input and excessive encoding depth', () => {
+  const world = { fixture: {} };
+  recordOutcome(world, null, new Error('x'.repeat(32_768)));
+  expect(world.lastFailure.message).toBe('[diagnostic omitted: oversized input]');
+  recordOutcome(world, null, new Error(`Denied %${'25'.repeat(32)}41`));
+  expect(world.lastFailure.message).toBe('Denied [redacted]');
+});
+
 test('diagnostics redact session snapshots after client credentials are cleared', () => {
   const world = {
     fixture: {},

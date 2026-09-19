@@ -10,6 +10,8 @@ const TERMINAL_DURABLE_STATUSES = ['succeeded', 'failed', 'timed_out', 'stopped'
 // instead of hanging the lane.
 const DURABLE_POLL_INTERVAL_MS = 5_000;
 const DURABLE_POLL_TIMEOUT_MS = 300_000;
+const MAX_DIAGNOSTIC_INPUT_LENGTH = 16_384;
+const MAX_DIAGNOSTIC_ENCODING_DEPTH = 8;
 
 function classifyError(error) {
   const status = error?.status ?? error?.response?.status;
@@ -49,28 +51,31 @@ function stringLeaves(value) {
 }
 
 function normalizeDiagnosticEncoding(value) {
-  let previous;
-  do {
-    previous = value;
-    value = value
-      .replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
-        try {
-          return decodeURIComponent(encoded);
-        } catch {
-          return encoded.toUpperCase();
-        }
-      })
+  if (value.length > MAX_DIAGNOSTIC_INPUT_LENGTH) return null;
+  for (let depth = 0; depth < MAX_DIAGNOSTIC_ENCODING_DEPTH; depth += 1) {
+    const normalized = value
+      .replace(/(?:%[\da-f]{2})+/gi, (encoded) =>
+        Buffer.from(
+          encoded
+            .split('%')
+            .slice(1)
+            .map((hex) => Number.parseInt(hex, 16)),
+        ).toString('utf8'),
+      )
       .replaceAll('+', ' ');
-  } while (value !== previous);
-  return value;
+    if (normalized === value) return normalized;
+    value = normalized;
+  }
+  return null;
 }
 
 function diagnosticText(world, value) {
+  if (value.length > MAX_DIAGNOSTIC_INPUT_LENGTH) return '[diagnostic omitted: oversized input]';
   // Keep each original word's boundary so decoded spaces cannot split a URL's query.
   value = value
     .split(/(\s+)/)
     .map((part) =>
-      normalizeDiagnosticEncoding(part).replace(
+      (normalizeDiagnosticEncoding(part) ?? '[redacted]').replace(
         /(?:https?|wss?|postgres(?:ql)?|redis):\/\/[\s\S]*/gi,
         '[URL]',
       ),
@@ -89,6 +94,7 @@ function diagnosticText(world, value) {
   ]
     .filter((credential) => typeof credential === 'string' && credential.length >= 4)
     .map(normalizeDiagnosticEncoding)
+    .filter((credential) => credential !== null)
     .sort((left, right) => right.length - left.length);
   for (const credential of credentials) {
     value = value.replaceAll(credential, '[redacted]');
