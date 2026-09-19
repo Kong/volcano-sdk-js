@@ -42,19 +42,29 @@ function recordOutcome(world, data, error) {
   return world.lastOutcome;
 }
 
+function stringLeaves(value) {
+  if (typeof value === 'string') return [value];
+  if (value === null || typeof value !== 'object') return [];
+  return Object.values(value).flatMap(stringLeaves);
+}
+
 function diagnosticText(world, value) {
   value = value
-    .replace(/(?:https?|postgres(?:ql)?|redis):\/\/\S+/gi, '[URL]')
+    .replace(/(?:https?|wss?|postgres(?:ql)?|redis):\/\/\S+/gi, '[URL]')
     .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
   const credentials = [
-    ...Object.values(world.fixture ?? {}),
+    ...stringLeaves(world.fixture),
+    ...stringLeaves(world.previousSession),
+    ...stringLeaves(world.refreshedSession),
+    ...stringLeaves(world.signedOutSession),
     ...[world.client, world.serviceClient, world.ownerClient].flatMap((client) => [
       client?.accessToken,
       client?.refreshToken,
     ]),
-  ];
+  ]
+    .filter((credential) => typeof credential === 'string' && credential.length >= 4)
+    .sort((left, right) => right.length - left.length);
   for (const credential of credentials) {
-    if (typeof credential !== 'string' || credential.length < 4) continue;
     value = value.replaceAll(credential, '[redacted]');
     value = value.replaceAll(encodeURIComponent(credential), '[redacted]');
   }

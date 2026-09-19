@@ -54,3 +54,48 @@ test('diagnostics redact URLs and bearer tokens without serializing error metada
     message: 'Denied [URL] Bearer [redacted]',
   });
 });
+
+test('diagnostics redact WebSocket endpoints including query credentials', () => {
+  const world = { fixture: {} };
+  recordOutcome(
+    world,
+    null,
+    new Error('Failed ws://local.test/?token=secret-one wss://live.test/?token=secret-two'),
+  );
+  expect(world.lastFailure.message).toBe('Failed [URL] [URL]');
+});
+
+test('diagnostics redact nested fixture strings and their encoded forms', () => {
+  const world = {
+    fixture: {
+      fixture_row: { name: 'private fixture value' },
+      mutation_rows: [{ value: 'private mutation value' }],
+    },
+  };
+  recordOutcome(
+    world,
+    null,
+    new Error('Rejected private fixture value private%20mutation%20value'),
+  );
+  expect(world.lastFailure.message).toBe('Rejected [redacted] [redacted]');
+});
+
+test('diagnostics redact session snapshots after client credentials are cleared', () => {
+  const world = {
+    fixture: {},
+    client: { accessToken: null, refreshToken: null },
+    previousSession: { access_token: 'previous-access', refresh_token: 'previous-refresh' },
+    refreshedSession: { access_token: 'refreshed-access', refresh_token: 'refreshed-refresh' },
+    signedOutSession: { access_token: 'signed-out-access', refresh_token: 'signed-out-refresh' },
+  };
+  recordOutcome(
+    world,
+    null,
+    new Error(
+      'Rejected previous-access previous-refresh refreshed-access refreshed-refresh signed-out-access signed-out-refresh',
+    ),
+  );
+  expect(world.lastFailure.message).toBe(
+    'Rejected [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]',
+  );
+});
