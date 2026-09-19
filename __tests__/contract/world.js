@@ -35,16 +35,59 @@ function classifyError(error) {
 }
 
 function recordOutcome(world, data, error) {
+  world.lastFailure = error ? failureSummary(world, error) : null;
   world.lastOutcome = error
     ? { ok: false, category: classifyError(error) }
     : { ok: true, value: data };
   return world.lastOutcome;
 }
 
+function diagnosticText(world, value) {
+  value = value
+    .replace(/(?:https?|postgres(?:ql)?|redis):\/\/\S+/gi, '[URL]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
+  const credentials = [
+    ...Object.values(world.fixture ?? {}),
+    ...[world.client, world.serviceClient, world.ownerClient].flatMap((client) => [
+      client?.accessToken,
+      client?.refreshToken,
+    ]),
+  ];
+  for (const credential of credentials) {
+    if (typeof credential !== 'string' || credential.length < 4) continue;
+    value = value.replaceAll(credential, '[redacted]');
+    value = value.replaceAll(encodeURIComponent(credential), '[redacted]');
+  }
+  return value.slice(0, 1000);
+}
+
+function failureSummary(world, error) {
+  const status = error?.status ?? error?.response?.status;
+  return {
+    category: classifyError(error),
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    code: typeof error?.code === 'string' ? diagnosticText(world, error.code) : null,
+    message: diagnosticText(
+      world,
+      typeof error?.message === 'string' ? error.message : 'Unknown SDK error',
+    ),
+  };
+}
+
+function requireSuccessfulOutcome(world) {
+  if (world.lastOutcome?.ok !== true) {
+    throw new Error(
+      `SDK operation failed: ${JSON.stringify(world.lastFailure ?? { category: 'missing outcome' })}`,
+    );
+  }
+  return world.lastOutcome.value;
+}
+
 class ContractWorld {
   constructor(fixture) {
     this.fixture = fixture;
     this.lastOutcome = null;
+    this.lastFailure = null;
     this.previousSession = null;
     this.refreshedSession = null;
     this.signedOutSession = null;
@@ -183,4 +226,10 @@ class ContractWorld {
   }
 }
 
-module.exports = { classifyError, ContractWorld, recordOutcome, TERMINAL_DURABLE_STATUSES };
+module.exports = {
+  classifyError,
+  ContractWorld,
+  recordOutcome,
+  requireSuccessfulOutcome,
+  TERMINAL_DURABLE_STATUSES,
+};
