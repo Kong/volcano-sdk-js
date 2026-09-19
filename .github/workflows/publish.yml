@@ -58,6 +58,8 @@ jobs:
       - run: pnpm build
       - run: pnpm test:package
       - run: mkdir package && npm pack --ignore-scripts --pack-destination package
+      - name: Run documented quickstart from the release artifact
+        run: node scripts/test-package-quickstart.mjs package/*.tgz
       - name: Check package version against the release
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
