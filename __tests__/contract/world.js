@@ -48,10 +48,27 @@ function stringLeaves(value) {
   return Object.values(value).flatMap(stringLeaves);
 }
 
-function diagnosticText(world, value) {
-  value = value
+function redactDiagnosticURLs(value) {
+  return value
     .replace(/(?:https?|wss?|postgres(?:ql)?|redis):\/\/\S+/gi, '[URL]')
     .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
+}
+
+function normalizeDiagnosticEncoding(value) {
+  return value
+    .replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
+      try {
+        return decodeURIComponent(encoded);
+      } catch {
+        return encoded.toUpperCase();
+      }
+    })
+    .replaceAll('+', ' ');
+}
+
+function diagnosticText(world, value) {
+  // Remove raw URLs before decoding can introduce whitespace into their query values.
+  value = redactDiagnosticURLs(normalizeDiagnosticEncoding(redactDiagnosticURLs(value)));
   const credentials = [
     ...stringLeaves(world.fixture),
     ...stringLeaves(world.previousSession),
@@ -63,10 +80,10 @@ function diagnosticText(world, value) {
     ]),
   ]
     .filter((credential) => typeof credential === 'string' && credential.length >= 4)
+    .map(normalizeDiagnosticEncoding)
     .sort((left, right) => right.length - left.length);
   for (const credential of credentials) {
     value = value.replaceAll(credential, '[redacted]');
-    value = value.replaceAll(encodeURIComponent(credential), '[redacted]');
   }
   return value.slice(0, 1000);
 }

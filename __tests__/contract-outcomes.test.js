@@ -80,6 +80,20 @@ test('diagnostics redact nested fixture strings and their encoded forms', () => 
   expect(world.lastFailure.message).toBe('Rejected [redacted] [redacted]');
 });
 
+test('diagnostics redact equivalent form and percent encodings', () => {
+  const world = { fixture: { storage_path: 'private value/part', user_password: 'secret+plus' } };
+  recordOutcome(
+    world,
+    null,
+    new Error(
+      'Rejected private+value%2fpart private%20value%2Fpart %70rivate+value%2fpart secret+plus secret%2bplus',
+    ),
+  );
+  expect(world.lastFailure.message).toBe(
+    'Rejected [redacted] [redacted] [redacted] [redacted] [redacted]',
+  );
+});
+
 test('diagnostics redact session snapshots after client credentials are cleared', () => {
   const world = {
     fixture: {},
