@@ -5,7 +5,12 @@ const path = require('node:path');
 const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
 const { VolcanoClient } = require('../../src/index.js');
-const { ContractWorld, recordOutcome, TERMINAL_DURABLE_STATUSES } = require('./world.js');
+const {
+  ContractWorld,
+  recordOutcome,
+  requireSuccessfulOutcome,
+  TERMINAL_DURABLE_STATUSES,
+} = require('./world.js');
 const { verifyBroadcastPause } = require('./broadcast-pause.js');
 const { LogContract } = require('./logs.js');
 const { verifyPresenceMembership } = require('./presence-membership.js');
@@ -423,7 +428,7 @@ autoBindSteps(features, [
     });
 
     then('the SDK operation succeeds', () => {
-      expect(context.world.lastOutcome).toMatchObject({ ok: true });
+      requireSuccessfulOutcome(context.world);
     });
 
     then('the SDK operation fails', () => {

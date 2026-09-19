@@ -10,6 +10,8 @@ const TERMINAL_DURABLE_STATUSES = ['succeeded', 'failed', 'timed_out', 'stopped'
 // instead of hanging the lane.
 const DURABLE_POLL_INTERVAL_MS = 5_000;
 const DURABLE_POLL_TIMEOUT_MS = 300_000;
+const MAX_DIAGNOSTIC_INPUT_LENGTH = 16_384;
+const MAX_DIAGNOSTIC_ENCODING_DEPTH = 8;
 
 function classifyError(error) {
   const status = error?.status ?? error?.response?.status;
@@ -35,16 +37,98 @@ function classifyError(error) {
 }
 
 function recordOutcome(world, data, error) {
+  world.lastFailure = error ? failureSummary(world, error) : null;
   world.lastOutcome = error
     ? { ok: false, category: classifyError(error) }
     : { ok: true, value: data };
   return world.lastOutcome;
 }
 
+function stringLeaves(value) {
+  if (typeof value === 'string') return [value];
+  if (value === null || typeof value !== 'object') return [];
+  return Object.values(value).flatMap(stringLeaves);
+}
+
+function normalizeDiagnosticEncoding(value) {
+  if (value.length > MAX_DIAGNOSTIC_INPUT_LENGTH) return null;
+  for (let depth = 0; depth < MAX_DIAGNOSTIC_ENCODING_DEPTH; depth += 1) {
+    const normalized = value
+      .replace(/(?:%[\da-f]{2})+/gi, (encoded) =>
+        Buffer.from(
+          encoded
+            .split('%')
+            .slice(1)
+            .map((hex) => Number.parseInt(hex, 16)),
+        ).toString('utf8'),
+      )
+      .replaceAll('+', ' ');
+    if (normalized === value) return normalized;
+    value = normalized;
+  }
+  return null;
+}
+
+function diagnosticText(world, value) {
+  if (value.length > MAX_DIAGNOSTIC_INPUT_LENGTH) return '[diagnostic omitted: oversized input]';
+  // Keep each original word's boundary so decoded spaces cannot split a URL's query.
+  value = value
+    .split(/(\s+)/)
+    .map((part) =>
+      (normalizeDiagnosticEncoding(part) ?? '[redacted]').replace(
+        /(?:https?|wss?|postgres(?:ql)?|redis):\/\/[\s\S]*/gi,
+        '[URL]',
+      ),
+    )
+    .join('')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
+  const credentials = [
+    ...stringLeaves(world.fixture),
+    ...stringLeaves(world.previousSession),
+    ...stringLeaves(world.refreshedSession),
+    ...stringLeaves(world.signedOutSession),
+    ...[world.client, world.serviceClient, world.ownerClient].flatMap((client) => [
+      client?.accessToken,
+      client?.refreshToken,
+    ]),
+  ]
+    .filter((credential) => typeof credential === 'string' && credential.length >= 4)
+    .map(normalizeDiagnosticEncoding)
+    .filter((credential) => credential !== null)
+    .sort((left, right) => right.length - left.length);
+  for (const credential of credentials) {
+    value = value.replaceAll(credential, '[redacted]');
+  }
+  return value.slice(0, 1000);
+}
+
+function failureSummary(world, error) {
+  const status = error?.status ?? error?.response?.status;
+  return {
+    category: classifyError(error),
+    status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : null,
+    code: typeof error?.code === 'string' ? diagnosticText(world, error.code) : null,
+    message: diagnosticText(
+      world,
+      typeof error?.message === 'string' ? error.message : 'Unknown SDK error',
+    ),
+  };
+}
+
+function requireSuccessfulOutcome(world) {
+  if (world.lastOutcome?.ok !== true) {
+    throw new Error(
+      `SDK operation failed: ${JSON.stringify(world.lastFailure ?? { category: 'missing outcome' })}`,
+    );
+  }
+  return world.lastOutcome.value;
+}
+
 class ContractWorld {
   constructor(fixture) {
     this.fixture = fixture;
     this.lastOutcome = null;
+    this.lastFailure = null;
     this.previousSession = null;
     this.refreshedSession = null;
     this.signedOutSession = null;
@@ -183,4 +267,10 @@ class ContractWorld {
   }
 }
 
-module.exports = { classifyError, ContractWorld, recordOutcome, TERMINAL_DURABLE_STATUSES };
+module.exports = {
+  classifyError,
+  ContractWorld,
+  recordOutcome,
+  requireSuccessfulOutcome,
+  TERMINAL_DURABLE_STATUSES,
+};
