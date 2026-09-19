@@ -89,3 +89,9 @@ jobs:
 
       - name: Smoke test packed package
         run: pnpm test:package
+
+      - name: Run documented quickstart from the built package
+        run: |
+          mkdir package
+          npm pack --ignore-scripts --pack-destination package
+          node scripts/test-package-quickstart.mjs package/*.tgz
