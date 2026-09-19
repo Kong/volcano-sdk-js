@@ -48,12 +48,6 @@ function stringLeaves(value) {
   return Object.values(value).flatMap(stringLeaves);
 }
 
-function redactDiagnosticURLs(value) {
-  return value
-    .replace(/(?:https?|wss?|postgres(?:ql)?|redis):\/\/\S+/gi, '[URL]')
-    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
-}
-
 function normalizeDiagnosticEncoding(value) {
   return value
     .replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
@@ -67,8 +61,17 @@ function normalizeDiagnosticEncoding(value) {
 }
 
 function diagnosticText(world, value) {
-  // Remove raw URLs before decoding can introduce whitespace into their query values.
-  value = redactDiagnosticURLs(normalizeDiagnosticEncoding(redactDiagnosticURLs(value)));
+  // Keep each original word's boundary so decoded spaces cannot split a URL's query.
+  value = value
+    .split(/(\s+)/)
+    .map((part) =>
+      normalizeDiagnosticEncoding(part).replace(
+        /(?:https?|wss?|postgres(?:ql)?|redis):\/\/[\s\S]*/gi,
+        '[URL]',
+      ),
+    )
+    .join('')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]');
   const credentials = [
     ...stringLeaves(world.fixture),
     ...stringLeaves(world.previousSession),

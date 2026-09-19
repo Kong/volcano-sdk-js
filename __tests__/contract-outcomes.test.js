@@ -94,6 +94,16 @@ test('diagnostics redact equivalent form and percent encodings', () => {
   );
 });
 
+test('diagnostics preserve encoded URL boundaries when decoding whitespace', () => {
+  const world = { fixture: {} };
+  recordOutcome(
+    world,
+    null,
+    new Error('Denied https%3A%2F%2Fapi.test%2F%3Fnote%3Dhello%20world%26token%3Durl-secret'),
+  );
+  expect(world.lastFailure.message).toBe('Denied [URL]');
+});
+
 test('diagnostics redact session snapshots after client credentials are cleared', () => {
   const world = {
     fixture: {},
