@@ -18,6 +18,6 @@ export type ProjectConfigFunctionVariableScope = typeof ProjectConfigFunctionVar
 
 
 export const ProjectConfigFunctionVariableScope = {
-  all: 'all',
-  scoped: 'scoped',
+  ProjectConfigFunctionVariableScopeAll: 'all',
+  ProjectConfigFunctionVariableScopeScoped: 'scoped',
 } as const;

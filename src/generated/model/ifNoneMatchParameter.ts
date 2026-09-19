@@ -7,7 +7,10 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
-};
+
+/**
+ * Entity tag from an earlier response, returning `304 Not Modified` while it
+ * still matches. Accepts the full condition: `*`, a comma-separated list, and
+ * weak tags of the form `W/"tag"`.
+ */
+export type IfNoneMatchParameter = string;

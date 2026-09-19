@@ -15,6 +15,6 @@ export type CreateDurableFunctionBodyVariableScope = typeof CreateDurableFunctio
 
 
 export const CreateDurableFunctionBodyVariableScope = {
-  all: 'all',
-  scoped: 'scoped',
+  CreateDurableFunctionMultipartBodyVariableScopeAll: 'all',
+  CreateDurableFunctionMultipartBodyVariableScopeScoped: 'scoped',
 } as const;

@@ -8,6 +8,7 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateFrontendBodyFramework } from './createFrontendBodyFramework';
+import type { CreateFrontendBodyVariableScope } from './createFrontendBodyVariableScope';
 
 export type CreateFrontendBody = {
   /**
@@ -23,6 +24,13 @@ export type CreateFrontendBody = {
      * @maxLength 1024
      */
   app_root?: string;
+  /** Variable selection for this deployment. New frontends default to `scoped`; omitting this field for an existing frontend preserves its current selection. */
+  variable_scope?: CreateFrontendBodyVariableScope;
+  /**
+     * Project variable names selected when `variable_scope` is `scoped`. Submit each name as a repeated multipart field.
+     * @items.pattern ^[A-Za-z_][A-Za-z0-9_]*$
+     */
+  variables?: string[];
   /** ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive. */
   archive: Blob;
 };

@@ -7,7 +7,15 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
-export const ProjectConfigFunctionVariableScope = {
-    ProjectConfigFunctionVariableScopeAll: 'all',
-    ProjectConfigFunctionVariableScopeScoped: 'scoped',
-};
+
+/**
+ * What created the token.
+ */
+export type ProjectAccessTokenTokenSource = typeof ProjectAccessTokenTokenSource[keyof typeof ProjectAccessTokenTokenSource];
+
+
+export const ProjectAccessTokenTokenSource = {
+  api: 'api',
+  cli: 'cli',
+  dashboard: 'dashboard',
+} as const;

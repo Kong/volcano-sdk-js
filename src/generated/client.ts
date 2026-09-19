@@ -61,6 +61,8 @@ import type {
   BanUserResponse,
   BandwidthCapExceededResponse,
   BatchFunctionDeployResponse,
+  CallMCP200,
+  CallMCPBody,
   CallOAuthProviderAPI200,
   CallOAuthProviderAPIBody,
   CompleteImportConnectParams,
@@ -79,11 +81,13 @@ import type {
   CreateFunctionSchedulerRequest,
   CreateFunctionsBatchBody,
   CreateOAuthConfigRequest,
+  CreateProjectAccessTokenRequest,
   CreateProjectRequest,
   CreateServiceKeyBody,
   CreateStorageBucketRequest,
   CreateStoragePolicyRequest,
   CreateVariableRequest,
+  CreatedProjectAccessToken,
   Database,
   DatabaseBackup,
   DatabaseBackupList,
@@ -129,6 +133,7 @@ import type {
   GetHostedLoginOptionsParams,
   GetOAuthConfigParams,
   GetOAuthProviderToken200,
+  GetProjectAccessTokenUsageParams,
   GetProjectConfigParams,
   GetProjectDatabaseQueriesParams,
   GitConnectCallbackParams,
@@ -163,6 +168,8 @@ import type {
   ListImportSourcesParams,
   ListOAuthConfigs200,
   ListPostgresVersions200Item,
+  ListProjectAccessTokensParams,
+  ListProjectAccessTokensUsageParams,
   ListProjectCustomDomainsParams,
   ListProjectDeploymentsParams,
   ListProjectSchedulersParams,
@@ -182,6 +189,10 @@ import type {
   LogStreamRequest,
   OAuthConfig,
   OAuthErrorResponse,
+  OpenAPISpecDocument,
+  OpenAPISpecHeadersResponse,
+  OpenAPISpecNotModifiedResponse,
+  OpenAPISpecThrottledResponse,
   PaginatedAuthUsers,
   PaginatedDatabases,
   PaginatedDurableExecutions,
@@ -190,6 +201,7 @@ import type {
   PaginatedFrontends,
   PaginatedFunctionDeployments,
   PaginatedFunctions,
+  PaginatedProjectAccessTokens,
   PaginatedProjectCustomDomains,
   PaginatedProjectDeployments,
   PaginatedProjects,
@@ -200,6 +212,8 @@ import type {
   PreviewAuthPageRequest,
   PreviewAuthPageResponse,
   Project,
+  ProjectAccessToken,
+  ProjectAccessTokenUsage,
   ProjectConfig,
   ProjectConfigApplyResult,
   ProjectConfigValidationErrorResponse,
@@ -224,6 +238,7 @@ import type {
   RefreshOAuthProviderToken200,
   RenderAuthPagePreviewParams,
   RenderDefaultManagedAuthPageParams,
+  ReplaceFrontendSharedVariablesBody,
   ReplaceSharedVariablesBody,
   ResetDatabasePassword200,
   ResolveFunctionForInvocationParams,
@@ -1979,6 +1994,85 @@ return volcanoFetch<replaceSharedVariablesResponse>(getReplaceSharedVariablesUrl
 
 
 
+export type replaceFrontendSharedVariablesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type replaceFrontendSharedVariablesResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type replaceFrontendSharedVariablesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type replaceFrontendSharedVariablesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type replaceFrontendSharedVariablesResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type replaceFrontendSharedVariablesResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type replaceFrontendSharedVariablesResponse500 = {
+  data: void
+  status: 500
+}
+
+export type replaceFrontendSharedVariablesResponseSuccess = (replaceFrontendSharedVariablesResponse204) & {
+  headers: Headers;
+};
+export type replaceFrontendSharedVariablesResponseError = (replaceFrontendSharedVariablesResponse400 | replaceFrontendSharedVariablesResponse401 | replaceFrontendSharedVariablesResponse404 | replaceFrontendSharedVariablesResponse409 | replaceFrontendSharedVariablesResponse413 | replaceFrontendSharedVariablesResponse500) & {
+  headers: Headers;
+};
+
+export type replaceFrontendSharedVariablesResponse = (replaceFrontendSharedVariablesResponseSuccess | replaceFrontendSharedVariablesResponseError)
+
+export const getReplaceFrontendSharedVariablesUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/frontend-shared-variables`
+}
+
+/**
+ * Atomically replaces the complete shared frontend-variable list without
+ * changing values. Names must already exist. Validates final affected
+ * frontend environments before membership or propagation side effects.
+ * An empty list clears membership. Omitted names remain stored outside the frontend shared list.
+ * @summary Replace frontend shared variable names
+ */
+export const replaceFrontendSharedVariables = async (id: string,
+    replaceFrontendSharedVariablesBody: ReplaceFrontendSharedVariablesBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<replaceFrontendSharedVariablesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<replaceFrontendSharedVariablesResponse>(getReplaceFrontendSharedVariablesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replaceFrontendSharedVariablesBody)
+  }
+);}
+
+
+
 export type getProjectConfigResponse200ApplicationJson = {
   data: ProjectConfig
   status: 200
@@ -2036,7 +2130,7 @@ export const getGetProjectConfigUrl = (id: string,
  * `?format=yaml`; the YAML is returned verbatim as the raw response body
  * (`Content-Type: application/yaml`) and is meant to be saved as-is.
  * Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
- * are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
+ * are omitted from the export; shared_variables and frontend_shared_variables contain names only; the YAML rendering adds a header comment
  * describing how to set them via CLI environment interpolation.
  * @summary Export project configuration
  */
@@ -4813,10 +4907,14 @@ export const getDeleteDurableFunctionUrl = (id: string,
 
 /**
  * Accepted for asynchronous teardown; the work continues after the
- * response. The function's executions go with it: history stops being
- * readable whatever `retention_days` had left, and the executions still
- * running stop counting against the project's concurrency cap. Stop an
- * execution first if you need it to end before the function does.
+ * response. The function's executions go with it: executions still in
+ * flight are stopped, and history stops being readable whatever
+ * `retention_days` had left.
+ *
+ * Stopping is asynchronous at the platform, and it does not interrupt a
+ * step already running -- that step runs to its next checkpoint. So a
+ * delete ends an execution rather than halting it mid-step; stop the
+ * execution yourself first if you need to observe it ending.
  * @summary Delete a durable function
  */
 export const deleteDurableFunction = async (id: string,
@@ -5611,6 +5709,12 @@ if(createFrontendBody.framework !== undefined) {
  }
 if(createFrontendBody.app_root !== undefined) {
  formData.append(`app_root`, createFrontendBody.app_root);
+ }
+if(createFrontendBody.variable_scope !== undefined) {
+ formData.append(`variable_scope`, createFrontendBody.variable_scope);
+ }
+if(createFrontendBody.variables !== undefined) {
+ createFrontendBody.variables.forEach(value => formData.append(`variables`, value));
  }
 formData.append(`archive`, createFrontendBody.archive);
 
@@ -13547,6 +13651,450 @@ export const setDefaultAnonKey = async (id: string,
 
 
 
+export type listProjectAccessTokensResponse200 = {
+  data: PaginatedProjectAccessTokens
+  status: 200
+}
+
+export type listProjectAccessTokensResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listProjectAccessTokensResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listProjectAccessTokensResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listProjectAccessTokensResponseSuccess = (listProjectAccessTokensResponse200) & {
+  headers: Headers;
+};
+export type listProjectAccessTokensResponseError = (listProjectAccessTokensResponse401 | listProjectAccessTokensResponse403 | listProjectAccessTokensResponse404) & {
+  headers: Headers;
+};
+
+export type listProjectAccessTokensResponse = (listProjectAccessTokensResponseSuccess | listProjectAccessTokensResponseError)
+
+export const getListProjectAccessTokensUrl = (id: string,
+    params?: ListProjectAccessTokensParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens?${stringifiedParams}` : `/projects/${id}/access-tokens`
+}
+
+/**
+ * Lists the project's access tokens, newest first. Secrets are never
+ * returned: only a hash is stored, so a token's value exists solely in the
+ * response to the create call.
+ *
+ * Only tokens that can still authenticate are returned by default, so
+ * revoked and expired ones are hidden. Pass `include_revoked=true` to see
+ * them, which is how you find out what a key did before it stopped working.
+ *
+ * Requires a platform token. A project access token cannot manage project
+ * access tokens, so a leaked credential cannot enumerate or replace itself.
+ * @summary List a project's access tokens
+ */
+export const listProjectAccessTokens = async (id: string,
+    params?: ListProjectAccessTokensParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listProjectAccessTokensResponse> => {
+
+  return volcanoFetch<listProjectAccessTokensResponse>(getListProjectAccessTokensUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createProjectAccessTokenResponse201 = {
+  data: CreatedProjectAccessToken
+  status: 201
+}
+
+export type createProjectAccessTokenResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type createProjectAccessTokenResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type createProjectAccessTokenResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type createProjectAccessTokenResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type createProjectAccessTokenResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type createProjectAccessTokenResponseSuccess = (createProjectAccessTokenResponse201) & {
+  headers: Headers;
+};
+export type createProjectAccessTokenResponseError = (createProjectAccessTokenResponse400 | createProjectAccessTokenResponse401 | createProjectAccessTokenResponse403 | createProjectAccessTokenResponse404 | createProjectAccessTokenResponse409) & {
+  headers: Headers;
+};
+
+export type createProjectAccessTokenResponse = (createProjectAccessTokenResponseSuccess | createProjectAccessTokenResponseError)
+
+export const getCreateProjectAccessTokenUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/access-tokens`
+}
+
+/**
+ * Creates a project access token and returns its secret.
+ *
+ * The secret is in this response and nowhere else. Only its hash is
+ * stored, so it cannot be retrieved, displayed, or recovered later — save
+ * it when you create it.
+ *
+ * The name must be unique within the project, so a retry cannot mint a
+ * second credential. It cannot recover the first one either. A retry that
+ * returns `409` with code `access_token_name_exists` means the original
+ * create committed and its secret is unrecoverable: list the project's
+ * tokens, revoke the one holding that name, and create it again.
+ *
+ * Requires a platform token.
+ * @summary Create a project access token
+ */
+export const createProjectAccessToken = async (id: string,
+    createProjectAccessTokenRequest: CreateProjectAccessTokenRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createProjectAccessTokenResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createProjectAccessTokenResponse>(getCreateProjectAccessTokenUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createProjectAccessTokenRequest)
+  }
+);}
+
+
+
+export type listProjectAccessTokensUsageResponse200 = {
+  data: ProjectAccessTokenUsage[]
+  status: 200
+}
+
+export type listProjectAccessTokensUsageResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listProjectAccessTokensUsageResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type listProjectAccessTokensUsageResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type listProjectAccessTokensUsageResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type listProjectAccessTokensUsageResponseSuccess = (listProjectAccessTokensUsageResponse200) & {
+  headers: Headers;
+};
+export type listProjectAccessTokensUsageResponseError = (listProjectAccessTokensUsageResponse400 | listProjectAccessTokensUsageResponse401 | listProjectAccessTokensUsageResponse403 | listProjectAccessTokensUsageResponse404) & {
+  headers: Headers;
+};
+
+export type listProjectAccessTokensUsageResponse = (listProjectAccessTokensUsageResponseSuccess | listProjectAccessTokensUsageResponseError)
+
+export const getListProjectAccessTokensUsageUrl = (id: string,
+    params?: ListProjectAccessTokensUsageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens/usage?${stringifiedParams}` : `/projects/${id}/access-tokens/usage`
+}
+
+/**
+ * Returns a zero-filled daily series of request counts for each of the
+ * project's access tokens, oldest first. Every day in the window is
+ * present, so a gap reads as zero rather than missing.
+ *
+ * Revoked tokens are included, because the traffic they made before
+ * revocation is usually the reason you are looking.
+ *
+ * `days` defaults to 30 and is capped at 60, which is also how long per-day
+ * counts are retained — a longer window cannot be answered.
+ *
+ * A platform token sees every token in the project. A project access token
+ * sees only its own row, so it can watch its own traffic without being
+ * able to enumerate the project's other credentials by name.
+ * @summary Per-day request counts for every access token in a project
+ */
+export const listProjectAccessTokensUsage = async (id: string,
+    params?: ListProjectAccessTokensUsageParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listProjectAccessTokensUsageResponse> => {
+
+  return volcanoFetch<listProjectAccessTokensUsageResponse>(getListProjectAccessTokensUsageUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getProjectAccessTokenResponse200 = {
+  data: ProjectAccessToken
+  status: 200
+}
+
+export type getProjectAccessTokenResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getProjectAccessTokenResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getProjectAccessTokenResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getProjectAccessTokenResponseSuccess = (getProjectAccessTokenResponse200) & {
+  headers: Headers;
+};
+export type getProjectAccessTokenResponseError = (getProjectAccessTokenResponse401 | getProjectAccessTokenResponse403 | getProjectAccessTokenResponse404) & {
+  headers: Headers;
+};
+
+export type getProjectAccessTokenResponse = (getProjectAccessTokenResponseSuccess | getProjectAccessTokenResponseError)
+
+export const getGetProjectAccessTokenUrl = (id: string,
+    tokenId: string,) => {
+
+
+
+
+  return `/projects/${id}/access-tokens/${tokenId}`
+}
+
+/**
+ * Returns one token's metadata. Never its secret, which is not stored in a
+ * recoverable form.
+ *
+ * Requires a platform token.
+ * @summary Get a project access token
+ */
+export const getProjectAccessToken = async (id: string,
+    tokenId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getProjectAccessTokenResponse> => {
+
+  return volcanoFetch<getProjectAccessTokenResponse>(getGetProjectAccessTokenUrl(id,tokenId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type revokeProjectAccessTokenResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokeProjectAccessTokenResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type revokeProjectAccessTokenResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type revokeProjectAccessTokenResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type revokeProjectAccessTokenResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type revokeProjectAccessTokenResponseSuccess = (revokeProjectAccessTokenResponse204) & {
+  headers: Headers;
+};
+export type revokeProjectAccessTokenResponseError = (revokeProjectAccessTokenResponse401 | revokeProjectAccessTokenResponse403 | revokeProjectAccessTokenResponse404 | revokeProjectAccessTokenResponse409) & {
+  headers: Headers;
+};
+
+export type revokeProjectAccessTokenResponse = (revokeProjectAccessTokenResponseSuccess | revokeProjectAccessTokenResponseError)
+
+export const getRevokeProjectAccessTokenUrl = (id: string,
+    tokenId: string,) => {
+
+
+
+
+  return `/projects/${id}/access-tokens/${tokenId}`
+}
+
+/**
+ * Revokes the token. It stops authenticating immediately in the region
+ * handling this call and within seconds across Volcano's other regions.
+ *
+ * The record is kept rather than deleted, so the token's name, prefix, last
+ * use, and request history stay available — which is what you need if you
+ * are revoking because a secret leaked. Revoking an already-revoked token
+ * succeeds.
+ *
+ * Revoking does not undo anything the token already did. Treat whatever it
+ * could reach as exposed and rotate accordingly.
+ *
+ * Requires a platform token.
+ * @summary Revoke a project access token
+ */
+export const revokeProjectAccessToken = async (id: string,
+    tokenId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<revokeProjectAccessTokenResponse> => {
+
+  return volcanoFetch<revokeProjectAccessTokenResponse>(getRevokeProjectAccessTokenUrl(id,tokenId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getProjectAccessTokenUsageResponse200 = {
+  data: ProjectAccessTokenUsage
+  status: 200
+}
+
+export type getProjectAccessTokenUsageResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type getProjectAccessTokenUsageResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getProjectAccessTokenUsageResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getProjectAccessTokenUsageResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getProjectAccessTokenUsageResponseSuccess = (getProjectAccessTokenUsageResponse200) & {
+  headers: Headers;
+};
+export type getProjectAccessTokenUsageResponseError = (getProjectAccessTokenUsageResponse400 | getProjectAccessTokenUsageResponse401 | getProjectAccessTokenUsageResponse403 | getProjectAccessTokenUsageResponse404) & {
+  headers: Headers;
+};
+
+export type getProjectAccessTokenUsageResponse = (getProjectAccessTokenUsageResponseSuccess | getProjectAccessTokenUsageResponseError)
+
+export const getGetProjectAccessTokenUsageUrl = (id: string,
+    tokenId: string,
+    params?: GetProjectAccessTokenUsageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/access-tokens/${tokenId}/usage?${stringifiedParams}` : `/projects/${id}/access-tokens/${tokenId}/usage`
+}
+
+/**
+ * Returns a zero-filled daily series of request counts for a single token,
+ * oldest first, so the response always has exactly `days` entries.
+ *
+ * `days` defaults to 30 and is capped at 60, matching how long per-day
+ * counts are retained.
+ *
+ * A project access token may read only its own usage; asking for another
+ * token's returns `403`. A platform token may read any token in the
+ * project.
+ * @summary Per-day request counts for one access token
+ */
+export const getProjectAccessTokenUsage = async (id: string,
+    tokenId: string,
+    params?: GetProjectAccessTokenUsageParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<getProjectAccessTokenUsageResponse> => {
+
+  return volcanoFetch<getProjectAccessTokenUsageResponse>(getGetProjectAccessTokenUsageUrl(id,tokenId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listServiceKeysResponse200 = {
   data: PaginatedServiceKeys
   status: 200
@@ -13758,7 +14306,7 @@ export const getRegenerateServiceKeyUrl = (id: string,
 
 /**
  * Generate new JWT value for existing key.
- * The old key is immediately invalidated.
+ * The old key stops working within a few seconds.
  * Update your backend services with the new key before regenerating in production.
  * @summary Regenerate service key
  */
@@ -15337,5 +15885,296 @@ export const healthCheck = async ( options?: Parameters<typeof volcanoFetch>[1])
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type getOpenAPISpecJSONResponse200 = {
+  data: OpenAPISpecDocument
+  status: 200
+}
+
+export type getOpenAPISpecJSONResponse304 = {
+  data: OpenAPISpecNotModifiedResponse
+  status: 304
+}
+
+export type getOpenAPISpecJSONResponse429 = {
+  data: OpenAPISpecThrottledResponse
+  status: 429
+}
+
+export type getOpenAPISpecJSONResponseSuccess = (getOpenAPISpecJSONResponse200) & {
+  headers: Headers;
+};
+export type getOpenAPISpecJSONResponseError = (getOpenAPISpecJSONResponse304 | getOpenAPISpecJSONResponse429) & {
+  headers: Headers;
+};
+
+export type getOpenAPISpecJSONResponse = (getOpenAPISpecJSONResponseSuccess | getOpenAPISpecJSONResponseError)
+
+export const getGetOpenAPISpecJSONUrl = () => {
+
+
+
+
+  return `/openapi.json`
+}
+
+/**
+ * Returns this specification as a self-contained JSON document, with every
+ * reference resolved. It is generated from the same document the server
+ * validates requests against, so a client generated from it cannot
+ * describe a different API than the one that answers.
+ *
+ * No credential is required: a client generator fetches this by URL before
+ * its user has a token, and every path here is already published in the
+ * API reference.
+ *
+ * The response carries a strong `ETag`; send it back as `If-None-Match` to
+ * get `304 Not Modified` instead of the whole document.
+ * @summary Fetch the OpenAPI specification as JSON
+ */
+export const getOpenAPISpecJSON = async ( options?: Parameters<typeof volcanoFetch>[1]): Promise<getOpenAPISpecJSONResponse> => {
+
+  return volcanoFetch<getOpenAPISpecJSONResponse>(getGetOpenAPISpecJSONUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type headOpenAPISpecJSONResponse200 = {
+  data: OpenAPISpecHeadersResponse
+  status: 200
+}
+
+export type headOpenAPISpecJSONResponse304 = {
+  data: OpenAPISpecNotModifiedResponse
+  status: 304
+}
+
+export type headOpenAPISpecJSONResponse429 = {
+  data: OpenAPISpecThrottledResponse
+  status: 429
+}
+
+export type headOpenAPISpecJSONResponseSuccess = (headOpenAPISpecJSONResponse200) & {
+  headers: Headers;
+};
+export type headOpenAPISpecJSONResponseError = (headOpenAPISpecJSONResponse304 | headOpenAPISpecJSONResponse429) & {
+  headers: Headers;
+};
+
+export type headOpenAPISpecJSONResponse = (headOpenAPISpecJSONResponseSuccess | headOpenAPISpecJSONResponseError)
+
+export const getHeadOpenAPISpecJSONUrl = () => {
+
+
+
+
+  return `/openapi.json`
+}
+
+/**
+ * The headers `GET /openapi.json` would return, so a cache can pick up the
+ * current `ETag` without transferring the document.
+ * @summary Check the JSON OpenAPI specification
+ */
+export const headOpenAPISpecJSON = async ( options?: Parameters<typeof volcanoFetch>[1]): Promise<headOpenAPISpecJSONResponse> => {
+
+  return volcanoFetch<headOpenAPISpecJSONResponse>(getHeadOpenAPISpecJSONUrl(),
+  {
+    ...options,
+    method: 'HEAD'
+
+
+  }
+);}
+
+
+
+export type getOpenAPISpecYAMLResponse200 = {
+  data: OpenAPISpecDocument
+  status: 200
+}
+
+export type getOpenAPISpecYAMLResponse304 = {
+  data: OpenAPISpecNotModifiedResponse
+  status: 304
+}
+
+export type getOpenAPISpecYAMLResponse429 = {
+  data: OpenAPISpecThrottledResponse
+  status: 429
+}
+
+export type getOpenAPISpecYAMLResponseSuccess = (getOpenAPISpecYAMLResponse200) & {
+  headers: Headers;
+};
+export type getOpenAPISpecYAMLResponseError = (getOpenAPISpecYAMLResponse304 | getOpenAPISpecYAMLResponse429) & {
+  headers: Headers;
+};
+
+export type getOpenAPISpecYAMLResponse = (getOpenAPISpecYAMLResponseSuccess | getOpenAPISpecYAMLResponseError)
+
+export const getGetOpenAPISpecYAMLUrl = () => {
+
+
+
+
+  return `/openapi.yaml`
+}
+
+/**
+ * The same document as `/openapi.json`, serialized as YAML for tools that
+ * prefer it. See that operation for caching and authentication notes.
+ * @summary Fetch the OpenAPI specification as YAML
+ */
+export const getOpenAPISpecYAML = async ( options?: Parameters<typeof volcanoFetch>[1]): Promise<getOpenAPISpecYAMLResponse> => {
+
+  return volcanoFetch<getOpenAPISpecYAMLResponse>(getGetOpenAPISpecYAMLUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type headOpenAPISpecYAMLResponse200 = {
+  data: OpenAPISpecHeadersResponse
+  status: 200
+}
+
+export type headOpenAPISpecYAMLResponse304 = {
+  data: OpenAPISpecNotModifiedResponse
+  status: 304
+}
+
+export type headOpenAPISpecYAMLResponse429 = {
+  data: OpenAPISpecThrottledResponse
+  status: 429
+}
+
+export type headOpenAPISpecYAMLResponseSuccess = (headOpenAPISpecYAMLResponse200) & {
+  headers: Headers;
+};
+export type headOpenAPISpecYAMLResponseError = (headOpenAPISpecYAMLResponse304 | headOpenAPISpecYAMLResponse429) & {
+  headers: Headers;
+};
+
+export type headOpenAPISpecYAMLResponse = (headOpenAPISpecYAMLResponseSuccess | headOpenAPISpecYAMLResponseError)
+
+export const getHeadOpenAPISpecYAMLUrl = () => {
+
+
+
+
+  return `/openapi.yaml`
+}
+
+/**
+ * The headers `GET /openapi.yaml` would return, so a cache can pick up the
+ * current `ETag` without transferring the document.
+ * @summary Check the YAML OpenAPI specification
+ */
+export const headOpenAPISpecYAML = async ( options?: Parameters<typeof volcanoFetch>[1]): Promise<headOpenAPISpecYAMLResponse> => {
+
+  return volcanoFetch<headOpenAPISpecYAMLResponse>(getHeadOpenAPISpecYAMLUrl(),
+  {
+    ...options,
+    method: 'HEAD'
+
+
+  }
+);}
+
+
+
+export type callMCPResponse200 = {
+  data: CallMCP200
+  status: 200
+}
+
+export type callMCPResponse202 = {
+  data: void
+  status: 202
+}
+
+export type callMCPResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type callMCPResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type callMCPResponse413 = {
+  data: void
+  status: 413
+}
+
+export type callMCPResponseSuccess = (callMCPResponse200 | callMCPResponse202) & {
+  headers: Headers;
+};
+export type callMCPResponseError = (callMCPResponse401 | callMCPResponse403 | callMCPResponse413) & {
+  headers: Headers;
+};
+
+export type callMCPResponse = (callMCPResponseSuccess | callMCPResponseError)
+
+export const getCallMCPUrl = () => {
+
+
+
+
+  return `/mcp`
+}
+
+/**
+ * Streamable-HTTP MCP endpoint: one JSON-RPC 2.0 object per request, one
+ * response per request. There is no server-to-client stream, so a `GET`
+ * returns `405`, and a batched array is rejected.
+ *
+ * Authenticated with a **project access token**. The endpoint takes its
+ * project from the credential, so a platform token is refused with `403` —
+ * it names no project, and letting a tool argument choose one would hand an
+ * agent its own blast radius.
+ *
+ * Scope carries over from the REST API. A `read_only` token is not offered
+ * mutating tools or credential-returning reads, and is refused if it calls
+ * one anyway. Revoking the token ends MCP access on the same path it ends
+ * API access.
+ *
+ * Methods: `initialize`, `notifications/initialized`, `ping`,
+ * `tools/list`, `tools/call`. See the
+ * [MCP guide](https://docs.volcano.dev/platform/interfaces/mcp) for the
+ * tool surface and client configuration.
+ * @summary Model Context Protocol endpoint
+ */
+export const callMCP = async (callMCPBody: CallMCPBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<callMCPResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<callMCPResponse>(getCallMCPUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(callMCPBody)
   }
 );}

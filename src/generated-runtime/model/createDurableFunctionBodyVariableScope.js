@@ -8,6 +8,6 @@
  * OpenAPI spec version: 3.0.0
  */
 export const CreateDurableFunctionBodyVariableScope = {
-    all: 'all',
-    scoped: 'scoped',
+    CreateDurableFunctionMultipartBodyVariableScopeAll: 'all',
+    CreateDurableFunctionMultipartBodyVariableScopeScoped: 'scoped',
 };

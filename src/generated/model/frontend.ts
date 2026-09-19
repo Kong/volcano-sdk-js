@@ -10,8 +10,16 @@
 import type { FrontendCustomDomainStatus } from './frontendCustomDomainStatus';
 import type { FrontendFramework } from './frontendFramework';
 import type { FrontendStatus } from './frontendStatus';
+import type { FrontendVariableScope } from './frontendVariableScope';
 
 export interface Frontend {
+  /** All preserves access to all project variables. Shared includes the project frontend shared-variable list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection. */
+  variable_scope?: FrontendVariableScope;
+  /**
+     * Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it.
+     * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
+     */
+  declared_variables?: string[];
   id: string;
   project_id: string;
   /**

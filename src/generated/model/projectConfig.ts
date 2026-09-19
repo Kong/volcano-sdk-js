@@ -39,6 +39,12 @@ export interface ProjectConfig {
      * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
      */
   shared_variables?: string[];
+  /**
+     * Replace the complete shared frontend-variable list with existing names. Frontends with variable_scope shared receive this list. Omission keeps membership unchanged; an empty list clears it.
+     * @items.maxLength 256
+     * @items.pattern ^[a-zA-Z_][a-zA-Z0-9_]*$
+     */
+  frontend_shared_variables?: string[];
   /** Fully synced when declared - variables absent from this list are deleted. */
   variables?: ProjectConfigVariable[];
   buckets?: ProjectConfigBucket[];
