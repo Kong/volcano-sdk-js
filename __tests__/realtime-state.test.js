@@ -43,6 +43,108 @@ function createRealtime(config = {}) {
 }
 
 describe('realtime server state contract', () => {
+  test('scopes postgres channel identity, subscription data, and publications by database', async () => {
+    const { realtime, client } = createRealtime();
+    const dbA = realtime.channel('public:items', {
+      type: 'postgres',
+      databaseName: 'db-a',
+    });
+    const dbB = realtime.channel('public:items', {
+      type: 'postgres',
+      databaseName: 'db-b',
+    });
+    const onA = jest.fn();
+    const onB = jest.fn();
+
+    expect(dbA).not.toBe(dbB);
+    expect(dbA).toBe(realtime.channel('public:items', { type: 'postgres', databaseName: 'db-a' }));
+    expect(dbA.name).toBe('postgres:db-a:public:items');
+    expect(dbB.name).toBe('postgres:db-b:public:items');
+
+    dbA.onPostgresChanges('INSERT', 'public', 'items', onA);
+    dbB.onPostgresChanges('INSERT', 'public', 'items', onB);
+    await dbA.subscribe();
+    await dbB.subscribe();
+
+    expect(client.newSubscription.mock.calls[0]).toEqual([
+      'postgres:db-a:public:items',
+      expect.objectContaining({ data: { database_name: 'db-a' } }),
+    ]);
+    expect(client.newSubscription.mock.calls[1]).toEqual([
+      'postgres:db-b:public:items',
+      expect.objectContaining({ data: { database_name: 'db-b' } }),
+    ]);
+
+    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+    realtime._handleServerPublication({
+      channel: 'project:postgres:db-a:public:items:user-a',
+      data: change,
+    });
+    expect(onA).toHaveBeenCalledWith(change, expect.anything());
+    expect(onB).not.toHaveBeenCalled();
+
+    realtime._handleServerPublication({
+      channel: 'project:postgres:db-b:public:items:user-b',
+      data: change,
+    });
+    expect(onB).toHaveBeenCalledWith(change, expect.anything());
+    expect(onA).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses the global selector in scoped identity when the channel selector is absent', async () => {
+    const { realtime, client } = createRealtime({ databaseName: 'db-global' });
+
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    expect(channel.name).toBe('postgres:db-global:public:items');
+    await channel.subscribe();
+
+    expect(client.newSubscription).toHaveBeenCalledWith(
+      'postgres:db-global:public:items',
+      expect.objectContaining({ data: { database_name: 'db-global' } }),
+    );
+  });
+
+  test('keeps no-selector postgres channels on the legacy wire identity', async () => {
+    const { realtime, client } = createRealtime();
+
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    expect(channel.name).toBe('postgres:public:items');
+    await channel.subscribe();
+
+    expect(client.newSubscription).toHaveBeenCalledWith(
+      'postgres:public:items',
+      expect.not.objectContaining({ data: expect.anything() }),
+    );
+  });
+
+  test('removes and resubscribes only the requested scoped channel', async () => {
+    const { realtime, client, subscriptions } = createRealtime();
+    const dbA = realtime.channel('public:items', {
+      type: 'postgres',
+      databaseName: 'db-a',
+    });
+    const dbB = realtime.channel('public:items', {
+      type: 'postgres',
+      databaseName: 'db-b',
+    });
+
+    await dbA.subscribe();
+    await dbB.subscribe();
+    dbA.unsubscribe();
+    await dbA.subscribe();
+
+    expect(subscriptions[0].unsubscribe).toHaveBeenCalledTimes(1);
+    expect(client.newSubscription).toHaveBeenCalledTimes(2);
+    expect(subscriptions[0].setData).not.toHaveBeenCalled();
+
+    realtime.removeChannel('public:items', 'postgres', 'db-a');
+    expect(subscriptions[0].unsubscribe).toHaveBeenCalledTimes(2);
+    expect(realtime.channel('public:items', { type: 'postgres', databaseName: 'db-b' })).toBe(dbB);
+    expect(realtime.channel('public:items', { type: 'postgres', databaseName: 'db-a' })).not.toBe(
+      dbA,
+    );
+  });
+
   test('transmits the configured database selector when subscribing', async () => {
     const { realtime, client } = createRealtime({ databaseName: 'app' });
 

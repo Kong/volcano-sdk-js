@@ -129,12 +129,30 @@ channel.onPostgresChanges('*', 'public', 'posts', (change) => {
 await channel.subscribe();
 ```
 
-The configured database name is sent with the Postgres subscription as the
-`database_name` selector. A project with one active database can omit the
-selector; projects with multiple active databases must set `databaseName` on
-the channel or call `realtime.setDatabaseName()`. An unknown or inactive name
-causes subscription to fail with the server's `unknown database selector`
-error.
+The selected database is part of the Postgres channel identity. For example,
+`realtime.channel('public:posts', { type: 'postgres', databaseName: 'db-a' })`
+creates the `postgres:db-a:public:posts` wire channel and sends
+`{"database_name":"db-a"}` as the raw subscription data. Two channels for the
+same schema and table can therefore subscribe to different databases at once:
+
+```javascript
+const dbA = realtime.channel('public:posts', {
+  type: 'postgres',
+  databaseName: 'db-a',
+});
+const dbB = realtime.channel('public:posts', {
+  type: 'postgres',
+  databaseName: 'db-b',
+});
+```
+
+When `databaseName` is absent on a channel, the selector configured with
+`realtime.setDatabaseName()` (or the `VolcanoRealtime` `databaseName` option) is
+used when the channel is created. A project with one active database can omit
+the selector; this preserves the legacy `postgres:public:posts` wire channel
+and sends no subscription data. The server accepts that omission only for a
+project with exactly one active database. An unknown or inactive name causes
+subscription to fail with the server's `unknown database selector` error.
 
 Insert and update notifications can load the current row through the authenticated
 client. Automatic lookup requires a primary key named `id`; rapid updates may
@@ -176,7 +194,7 @@ Unsubscribe or remove channels during cleanup:
 
 ```javascript
 channel.unsubscribe();
-realtime.removeChannel('public:posts', 'postgres');
+realtime.removeChannel('public:posts', { type: 'postgres', databaseName: 'app' });
 realtime.removeChannel('public:comments', 'postgres');
 ```
 

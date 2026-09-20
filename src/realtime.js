@@ -402,13 +402,17 @@ class VolcanoRealtime {
    */
   channel(name, options = {}) {
     const type = options.type || 'broadcast';
-    const fullName = this._formatChannelName(name, type);
+    const databaseName = type === 'postgres' ? (options.databaseName ?? this._databaseName) : null;
+    const fullName = this._formatChannelName(name, type, databaseName);
 
     if (this._channels.has(fullName)) {
       return this._channels.get(fullName);
     }
 
-    const channel = new RealtimeChannel(this, fullName, type, options);
+    const channel = new RealtimeChannel(this, fullName, type, {
+      ...options,
+      ...(type === 'postgres' && databaseName ? { databaseName } : {}),
+    });
     this._channels.set(fullName, channel);
     return channel;
   }
@@ -420,7 +424,10 @@ class VolcanoRealtime {
    * The server automatically adds the project ID prefix based on
    * the authenticated connection. Clients never need to know about project IDs.
    */
-  _formatChannelName(name, type) {
+  _formatChannelName(name, type, databaseName = null) {
+    if (type === 'postgres' && databaseName) {
+      return `${type}:${databaseName}:${name}`;
+    }
     return `${type}:${name}`;
   }
 
@@ -444,14 +451,9 @@ class VolcanoRealtime {
     // Find the SDK channel and deliver the message
     let channel = this._channels.get(sdkChannel);
 
-    // Postgres changes are delivered on a per-user channel for RLS isolation:
-    // projectId:postgres:schema:table:userID. onPostgresChanges takes schema and
-    // table as separate single-identifier args, so a postgres channel is always
-    // exactly postgres:schema:table and the per-user form is exactly 5 segments.
-    // Match the base channel the client subscribed to by dropping the trailing
-    // userID; otherwise the publication is silently dropped and onPostgresChanges
-    // never fires. Requiring exactly 5 segments avoids over-matching anything
-    // that isn't this well-defined per-user format.
+    // Route per-user postgres publications to their exact subscribed channel.
+    // The helper accepts the legacy schema/table and database/schema/table
+    // forms, while rejecting unrelated channel shapes.
     if (!channel) {
       const postgresBaseChannel = postgresBaseChannelFromParts(parts);
       if (postgresBaseChannel !== null) {
@@ -571,10 +573,20 @@ class VolcanoRealtime {
   /**
    * Remove a specific channel
    * @param {string} name - Channel name
-   * @param {string} [type='broadcast'] - Channel type
+   * @param {string|Object} [typeOrOptions='broadcast'] - Channel type or channel options
+   * @param {string} [databaseName] - Database selector for postgres channels
    */
-  removeChannel(name, type = 'broadcast') {
-    const fullName = this._formatChannelName(name, type);
+  removeChannel(name, typeOrOptions = 'broadcast', databaseName) {
+    let type = typeOrOptions;
+    if (typeOrOptions && typeof typeOrOptions === 'object') {
+      type = typeOrOptions.type || 'broadcast';
+      databaseName = typeOrOptions.databaseName;
+    }
+    const fullName = this._formatChannelName(
+      name,
+      type,
+      type === 'postgres' ? (databaseName ?? this._databaseName) : null,
+    );
     const channel = this._channels.get(fullName);
     if (channel) {
       channel._dispose();

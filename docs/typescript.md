@@ -277,12 +277,16 @@ interface RealtimeConfig {
   accessToken?: string;
   getToken?: () => Promise<string>;
   volcanoClient?: VolcanoAuth;
+  /** Global database selector inherited by Postgres channels. */
+  databaseName?: string;
   fetchConfig?: FetchConfig;
   webSocket?: WebSocketConstructor;
 }
 
 interface ChannelOptions {
   type?: 'broadcast' | 'presence' | 'postgres';
+  /** Database selector used in the Postgres channel identity and subscription data. */
+  databaseName?: string;
   autoFetch?: boolean;
   fetchBatchWindowMs?: number;
   fetchMaxBatchSize?: number;

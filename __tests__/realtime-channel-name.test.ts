@@ -17,6 +17,9 @@ describe('server-side realtime channel names', () => {
     expect(
       postgresBaseChannelFromParts(['project', 'postgres', 'public', 'messages', 'user']),
     ).toBe('postgres:public:messages');
+    expect(
+      postgresBaseChannelFromParts(['project', 'postgres', 'db-a', 'public', 'messages', 'user']),
+    ).toBe('postgres:db-a:public:messages');
     expect(postgresBaseChannelFromParts(['project', 'postgres', 'public', 'messages'])).toBeNull();
     expect(
       postgresBaseChannelFromParts(['project', 'broadcast', 'public', 'messages', 'user']),
