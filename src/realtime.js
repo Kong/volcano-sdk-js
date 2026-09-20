@@ -52,7 +52,15 @@ let Centrifuge = null;
 const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
 function clonePresenceState(state) {
-  return JSON.parse(JSON.stringify(state));
+  if (Array.isArray(state)) {
+    return state.map((value) => clonePresenceState(value));
+  }
+  if (state && typeof state === 'object') {
+    return Object.fromEntries(
+      Object.entries(state).map(([key, value]) => [key, clonePresenceState(value)]),
+    );
+  }
+  return state;
 }
 
 /**
