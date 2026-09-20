@@ -359,8 +359,9 @@ channel.onPresenceSync((state: PresenceState) => {
 ```
 
 Each entry is a server connection record. One user can have multiple connections.
-`connInfo` and `chanInfo` contain server metadata when present. `track()` keeps
-local application state; it does not place custom fields on these records.
+`connInfo` and `chanInfo` contain server metadata when present. `track(state)`
+publishes custom JSON state as `info.data`; initial and live entries use the same
+record shape.
 
 ## Functions Types
 

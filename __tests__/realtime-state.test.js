@@ -1,18 +1,5 @@
 const { VolcanoRealtime } = require('../src/realtime.js');
 
-function containsValue(value, expected) {
-  if (value === expected) return true;
-  if (expected && typeof expected === 'object') {
-    try {
-      if (JSON.stringify(value) === JSON.stringify(expected)) return true;
-    } catch {
-      return false;
-    }
-  }
-  if (!value || typeof value !== 'object') return false;
-  return Object.values(value).some((child) => containsValue(child, expected));
-}
-
 function createSubscription() {
   const handlers = new Map();
   const subscription = {
@@ -30,6 +17,7 @@ function createSubscription() {
       subscription.state = 'subscribed';
     }),
     publish: jest.fn(async () => {}),
+    setData: jest.fn(),
   };
   return subscription;
 }
@@ -61,24 +49,28 @@ describe('realtime server state contract', () => {
     await realtime.channel('public:items', { type: 'postgres' }).subscribe();
 
     const subscriptionOptions = client.newSubscription.mock.calls[0][1];
-    expect(containsValue(subscriptionOptions, 'app')).toBe(true);
+    expect(subscriptionOptions).toEqual(
+      expect.objectContaining({ data: { database_name: 'app' } }),
+    );
   });
 
-  test.each(['database is required', 'database not found'])(
-    'surfaces the server %s error',
-    async (message) => {
-      const { realtime, client } = createRealtime({ databaseName: 'app' });
-      const channel = realtime.channel('public:items', { type: 'postgres' });
-      const serverError = new Error(message);
-      client.newSubscription.mockImplementationOnce(() => {
-        const subscription = createSubscription();
-        subscription.ready.mockRejectedValueOnce(serverError);
-        return subscription;
-      });
+  test.each([
+    { code: 400, message: 'database selector required' },
+    { code: 401, message: 'unknown database selector' },
+  ])('surfaces the server $message error', async (serverError) => {
+    const { realtime, client } = createRealtime({ databaseName: 'app' });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    let receivedOptions;
+    client.newSubscription.mockImplementationOnce((_name, options) => {
+      receivedOptions = options;
+      const subscription = createSubscription();
+      subscription.ready.mockRejectedValueOnce(serverError);
+      return subscription;
+    });
 
-      await expect(channel.subscribe()).rejects.toThrow(message);
-    },
-  );
+    await expect(channel.subscribe()).rejects.toMatchObject(serverError);
+    expect(receivedOptions).toEqual(expect.objectContaining({ data: { database_name: 'app' } }));
+  });
 
   test('publishes tracked state through the presence subscription', async () => {
     const { realtime, subscriptions } = createRealtime();
@@ -88,8 +80,21 @@ describe('realtime server state contract', () => {
     const state = { status: 'working', task: 'build' };
     await channel.track(state);
 
-    expect(subscriptions[0].publish).toHaveBeenCalledTimes(1);
-    expect(containsValue(subscriptions[0].publish.mock.calls[0][0], state)).toBe(true);
+    expect(subscriptions[0].setData).toHaveBeenCalledWith(state);
+    state.status = 'changed-after-track';
+    expect(subscriptions[0].setData.mock.calls[0][0]).toEqual({ status: 'working', task: 'build' });
+  });
+
+  test('includes tracked state in the initial presence subscription', async () => {
+    const { realtime, client } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.track({ status: 'working' });
+
+    await channel.subscribe();
+
+    expect(client.newSubscription.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ data: { status: 'working' } }),
+    );
   });
 
   test('keeps initial and live presence callback entries in one shape', async () => {
@@ -102,6 +107,7 @@ describe('realtime server state contract', () => {
     const info = {
       client: 'remote-client',
       user: 'user-id',
+      data: { status: 'working' },
       connInfo: { user_metadata: { display_name: 'Contract' } },
     };
     realtime._handleServerSubscribed({
@@ -126,7 +132,7 @@ describe('realtime server state contract', () => {
     channel.unsubscribe();
     await channel.subscribe();
 
-    expect(subscriptions[0].publish).toHaveBeenCalledTimes(2);
-    expect(containsValue(subscriptions[0].publish.mock.calls[1][0], state)).toBe(true);
+    expect(subscriptions[0].setData).toHaveBeenCalledTimes(1);
+    expect(subscriptions[0].setData.mock.calls[0][0]).toEqual(state);
   });
 });

@@ -129,6 +129,13 @@ channel.onPostgresChanges('*', 'public', 'posts', (change) => {
 await channel.subscribe();
 ```
 
+The configured database name is sent with the Postgres subscription as the
+`database_name` selector. A project with one active database can omit the
+selector; projects with multiple active databases must set `databaseName` on
+the channel or call `realtime.setDatabaseName()`. An unknown or inactive name
+causes subscription to fail with the server's `unknown database selector`
+error.
+
 Insert and update notifications can load the current row through the authenticated
 client. Automatic lookup requires a primary key named `id`; rapid updates may
 have changed the row by the time the lookup runs. A failed lookup leaves the
@@ -277,9 +284,11 @@ Initial snapshots and join updates retain the same full client record. The
 original handler continues to receive membership updates as other connections
 join and leave. Unsubscribing clears the local roster; resubscribing reloads it.
 
-`track(state)` stores application state locally. It does not publish that state
-or replace the server's authenticated identity and metadata. Use a broadcast
-channel to share application updates such as cursor positions.
+`track(state)` publishes the JSON object as this connection's custom presence
+state. Other clients receive the state in `info.data` for join events and in
+each entry of `onPresenceSync`; initial and live entries use the same full
+client record shape. The SDK retains a detached snapshot and sends it again
+when the channel reconnects.
 
 ```javascript
 await channel.track({ status: 'working' });

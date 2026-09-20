@@ -96,6 +96,8 @@ export interface RealtimeConfig {
 export interface ChannelOptions {
   /** Channel type: 'broadcast', 'presence', or 'postgres' */
   type?: 'broadcast' | 'presence' | 'postgres';
+  /** Database name sent with postgres subscription requests and used for auto-fetch */
+  databaseName?: string;
   /** Enable auto-fetch for lightweight notifications (default: true) */
   autoFetch?: boolean;
   /** Batch window in milliseconds for fetch requests (overrides global config) */
