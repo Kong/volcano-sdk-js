@@ -70,7 +70,7 @@
     "lint": "eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "eslint . --fix && pnpm format",
     "test": "pnpm build && jest",
-    "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.d.ts test/types/auth-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
+    "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.d.ts test/types/auth-contract.ts test/types/database-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
     "test:package": "publint --pack npm --strict",
     "test:watch": "pnpm build && jest --watch",
     "test:coverage": "pnpm build && jest --coverage",
@@ -80,7 +80,7 @@
     "test:quickstart": "node scripts/check-package-quickstart.mjs",
     "quality": "pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && pnpm test --ci && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:package && pnpm test:quickstart",
     "test:tooling": "node --test scripts/*.test.mjs",
-    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts"
+    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts"
   },
   "keywords": [
     "volcano",
