@@ -272,6 +272,8 @@ module.exports = [
     rules: {
       'no-unused-vars': 'off',
       complexity: ['error', 5],
+      'dot-notation': 'off',
+      '@typescript-eslint/dot-notation': 'error',
       'sonarjs/cognitive-complexity': ['error', 10],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
