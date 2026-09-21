@@ -1,0 +1,42 @@
+name: Verify immutable acceptance artifacts
+
+on:
+  workflow_call:
+    inputs:
+      package-artifact-id:
+        required: true
+        type: string
+      bundle-artifact-id:
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ inputs.package-artifact-id }}
+          merge-multiple: true
+          path: package
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: inputs.bundle-artifact-id != ''
+        with:
+          artifact-ids: ${{ inputs.bundle-artifact-id }}
+          merge-multiple: true
+          path: acceptance
+      # Fresh dependencies can modify these copies, never the uploaded artifacts.
+      - name: Verify the installed package and fresh consumer
+        env:
+          ACCEPTANCE_BUNDLE: ${{ inputs.bundle-artifact-id != '' && 'acceptance/sdk-acceptance.tar.gz' || 'package/sdk-acceptance.tar.gz' }}
+        run: bash scripts/test-acceptance.sh package/*.tgz "$ACCEPTANCE_BUNDLE"

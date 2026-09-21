@@ -41,6 +41,9 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   build:
+    outputs:
+      package-artifact-id: ${{ steps.upload-package.outputs.artifact-id }}
+      bundle-artifact-id: ${{ steps.upload-acceptance.outputs.artifact-id }}
     needs: [validate, check]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -59,25 +62,32 @@ jobs:
       - run: pnpm test:package
       - run: mkdir package && npm pack --ignore-scripts --pack-destination package
       - run: bash scripts/build-acceptance.sh package/*.tgz acceptance-output
-      - name: Run documented quickstart from the release artifact
-        run: node scripts/test-package-quickstart.mjs package/*.tgz
       - name: Check package version against the release
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: test "v$(node -p "require('./package.json').version")" = "$RELEASE_TAG"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: upload-package
         with:
           name: release-package
           path: package/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: upload-acceptance
         with:
           name: acceptance-tests
           path: acceptance-output/sdk-acceptance.tar.gz
           if-no-files-found: error
 
-  attest:
+  acceptance-check:
     needs: build
+    uses: ./.github/workflows/verify-acceptance.yml
+    with:
+      package-artifact-id: ${{ needs.build.outputs.package-artifact-id }}
+      bundle-artifact-id: ${{ needs.build.outputs.bundle-artifact-id }}
+
+  attest:
+    needs: [build, acceptance-check]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -87,11 +97,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-package
+          artifact-ids: ${{ needs.build.outputs.package-artifact-id }}
+          merge-multiple: true
           path: release
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: acceptance-tests
+          artifact-ids: ${{ needs.build.outputs.bundle-artifact-id }}
+          merge-multiple: true
           path: release
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
@@ -126,7 +138,8 @@ jobs:
       # Publishing receives only the checked build artifact, not source or build credentials.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-package
+          artifact-ids: ${{ needs.build.outputs.package-artifact-id }}
+          merge-multiple: true
           path: package
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -147,7 +160,7 @@ jobs:
           npm publish ./package/*.tgz --ignore-scripts --provenance --access public
 
   registry-smoke:
-    needs: publish
+    needs: [publish, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -155,7 +168,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: acceptance-tests
+          artifact-ids: ${{ needs.build.outputs.bundle-artifact-id }}
+          merge-multiple: true
           path: acceptance-output
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
