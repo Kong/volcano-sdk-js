@@ -1,3 +1,5 @@
+import typescript from '@rollup/plugin-typescript';
+
 // UMD (browser <script>) only. rollup's named UMD sets the global
 // `VolcanoAuth` to the export namespace ({ VolcanoAuth, QueryBuilder, ... });
 // restore the documented `new VolcanoAuth()` CDN ergonomic by making the
@@ -97,14 +99,17 @@ export default [
   // Next.js middleware helpers bundle
   {
     input: 'src/next/middleware.js',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     output: [
       {
-        file: 'dist/next/middleware.js',
+        dir: 'dist',
+        entryFileNames: 'next/middleware.js',
         format: 'cjs',
         exports: 'named',
       },
       {
-        file: 'dist/next/middleware.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'next/middleware.esm.mjs',
         format: 'es',
       },
     ],
