@@ -681,61 +681,6 @@ function apiRequestError(response, data, message = data?.error || 'Request faile
   return error;
 }
 
-const FULL_ACCESS_APP_NAME = 'volcano_full_access';
-const USER_ACCESS_APP_NAME = 'volcano_user_access';
-const CONNECTION_URI_PREFIX = /^postgres(?:ql)?:\/\//u;
-const INVALID_PERCENT_ENCODING = /%(?![\da-f]{2})/iu;
-
-/**
- * Build a Postgres connection string for querying a Volcano database from inside
- * a function, selecting the access mode via application_name.
- *
- * Pass the DATABASE_URL Volcano advertises as `baseConnectionString`. The target
- * database is identified by the (globally-unique) username already baked into
- * that URL, so this only sets application_name to choose the access mode — the
- * username, host, database and password are left untouched. With no `userId` the
- * result is a full-access (admin) connection that bypasses RLS the same way the
- * Postgres service_role does; with a `userId` (e.g. `event.__volcano_auth.user_id`)
- * it impersonates that user and RLS is enforced.
- *
- * @param {string} baseConnectionString - DATABASE_URL from the Volcano runtime
- * @param {{ userId?: string|null }|null} [options]
- * @returns {string} a connection string with the requested application_name
- */
-function databaseConnectionString(baseConnectionString, options = {}) {
-  options = options || {};
-  if (typeof baseConnectionString !== 'string' || baseConnectionString === '') {
-    throw new Error('databaseConnectionString: baseConnectionString (DATABASE_URL) is required');
-  }
-  const prefix = CONNECTION_URI_PREFIX.exec(baseConnectionString);
-  if (!prefix || INVALID_PERCENT_ENCODING.test(baseConnectionString)) {
-    throw new Error('databaseConnectionString: baseConnectionString is not a valid connection URL');
-  }
-  const userId = options.userId == null ? '' : String(options.userId);
-  const appName = userId === '' ? FULL_ACCESS_APP_NAME : `${USER_ACCESS_APP_NAME}:${userId}`;
-  const authorityEnd = baseConnectionString.indexOf('/', prefix[0].length);
-  const possibleUserInfoEnd = baseConnectionString.indexOf('@', prefix[0].length);
-  const userInfoEnd =
-    possibleUserInfoEnd !== -1 && (authorityEnd === -1 || possibleUserInfoEnd < authorityEnd)
-      ? possibleUserInfoEnd
-      : -1;
-  const queryMarker = baseConnectionString.indexOf(
-    '?',
-    Math.max(prefix[0].length, userInfoEnd + 1),
-  );
-  const target =
-    queryMarker === -1 ? baseConnectionString : baseConnectionString.slice(0, queryMarker);
-  const rawQuery = queryMarker === -1 ? '' : baseConnectionString.slice(queryMarker + 1);
-  const parameters = rawQuery
-    .split('&')
-    .filter((parameter) => decodeURIComponent(parameter.split('=', 1)[0]) !== 'application_name');
-  while (parameters.at(-1) === '') {
-    parameters.pop();
-  }
-  parameters.push(`application_name=${encodeURIComponent(appName)}`);
-  return `${target}?${parameters.join('&')}`;
-}
-
 class ProjectLocksApi {
   constructor(client) {
     this.client = client;
@@ -4044,7 +3989,6 @@ const VolcanoClient = VolcanoAuth;
 export {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
-  databaseConnectionString,
   isBrowser,
   loadRealtime,
   QueryBuilder,
@@ -4054,3 +3998,5 @@ export {
   VolcanoSystemError,
 };
 export default VolcanoAuth;
+
+export { databaseConnectionString } from './database-connection-string.ts';

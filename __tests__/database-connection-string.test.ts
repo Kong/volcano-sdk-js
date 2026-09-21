@@ -1,4 +1,5 @@
-const { databaseConnectionString } = require('../src/index.js');
+import { describe, expect, it } from '@jest/globals';
+import { databaseConnectionString } from '../src/database-connection-string.ts';
 
 // A Volcano-advertised DATABASE_URL. pgproxy routes by the globally-unique
 // username (volcano_client_{id}) that is baked into the userinfo; application_name
@@ -7,7 +8,7 @@ const DB_ID = '11111111-1111-1111-1111-111111111111';
 const USERNAME = `volcano_client_${DB_ID}`;
 const BASE_URL = `postgres://${USERNAME}:vpg_secret@databases.volcano.dev:5432/my_app?sslmode=require&application_name=volcano_full_access`;
 
-function appNameOf(connectionString) {
+function appNameOf(connectionString: string): string | null {
   return new URL(connectionString).searchParams.get('application_name');
 }
 
@@ -44,22 +45,18 @@ describe('databaseConnectionString', () => {
   });
 
   it('treats null/undefined/empty userId as full access', () => {
-    expect(appNameOf(databaseConnectionString(BASE_URL, null))).toBe('volcano_full_access');
+    expect(appNameOf(invokeUntyped(BASE_URL, null))).toBe('volcano_full_access');
     expect(appNameOf(databaseConnectionString(BASE_URL, { userId: null }))).toBe(
       'volcano_full_access',
     );
-    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: undefined }))).toBe(
-      'volcano_full_access',
-    );
+    expect(appNameOf(invokeUntyped(BASE_URL, { userId: undefined }))).toBe('volcano_full_access');
     expect(appNameOf(databaseConnectionString(BASE_URL, { userId: '' }))).toBe(
       'volcano_full_access',
     );
   });
 
   it('coerces a non-string userId to string', () => {
-    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: 12345 }))).toBe(
-      'volcano_user_access:12345',
-    );
+    expect(appNameOf(invokeUntyped(BASE_URL, { userId: 12345 }))).toBe('volcano_user_access:12345');
   });
 
   it('adds application_name when the base connection string has none', () => {
@@ -69,7 +66,7 @@ describe('databaseConnectionString', () => {
 
   it('throws when the base connection string is missing or invalid', () => {
     expect(() => databaseConnectionString('')).toThrow(/required/);
-    expect(() => databaseConnectionString(null)).toThrow(/required/);
+    expect(() => invokeUntyped(null)).toThrow(/required/);
     expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
     expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
   });
@@ -146,7 +143,7 @@ describe('databaseConnectionString', () => {
     const twice = databaseConnectionString(once, { userId: 'u1' });
     expect(twice).toBe(once);
     // And exactly one application_name is present.
-    const raw = new URL(twice).search.match(/application_name=/g) || [];
+    const raw = new URL(twice).search.match(/application_name=/g) ?? [];
     expect(raw).toHaveLength(1);
   });
 
@@ -161,3 +158,9 @@ describe('databaseConnectionString', () => {
     expect(b.pathname).toBe(a.pathname);
   });
 });
+
+function invokeUntyped(...args: unknown[]): string {
+  const result: unknown = Reflect.apply(databaseConnectionString, undefined, args);
+  expect(typeof result).toBe('string');
+  return String(result);
+}

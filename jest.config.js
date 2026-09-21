@@ -12,6 +12,12 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/database-connection-string.ts': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
+    },
     'src/lock-clock.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/auth-session.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/next/request.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
