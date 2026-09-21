@@ -12,6 +12,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/auth-session.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/next/request.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
   },
   coverageDirectory: 'coverage',

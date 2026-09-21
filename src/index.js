@@ -1,4 +1,4 @@
-import { AuthSessionOperations } from './auth-session.js';
+import { AuthSessionOperations } from './auth-session.ts';
 import {
   acquireProjectLock,
   authSignin,

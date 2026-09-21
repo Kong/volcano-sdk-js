@@ -26,10 +26,12 @@ export default [
   // Main SDK bundle
   {
     input: 'src/index.js',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [
       {
-        file: 'dist/index.js',
+        dir: 'dist',
+        entryFileNames: 'index.js',
         format: 'umd',
         name: 'VolcanoAuth',
         exports: 'named',
@@ -37,12 +39,14 @@ export default [
         footer: umdBrowserGlobalFooter,
       },
       {
-        file: 'dist/index.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'index.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
       },
       {
-        file: 'dist/index.cjs.js',
+        dir: 'dist',
+        entryFileNames: 'index.cjs.js',
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
