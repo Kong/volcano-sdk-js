@@ -46,10 +46,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.10.1](https://github.com/Kong/volcano-sdk-js/compare/v1.10.0...v1.10.1) (2026-09-21)
 
-
 ### Bug Fixes
 
-* **deps:** update realtime dependencies past known advisories ([#155](https://github.com/Kong/volcano-sdk-js/issues/155)) ([0c0b15a](https://github.com/Kong/volcano-sdk-js/commit/0c0b15af2b66109a46258415f334c6ce8a2f8561))
+- **deps:** update realtime dependencies past known advisories ([#155](https://github.com/Kong/volcano-sdk-js/issues/155)) ([0c0b15a](https://github.com/Kong/volcano-sdk-js/commit/0c0b15af2b66109a46258415f334c6ce8a2f8561))
 
 ## [1.10.0](https://github.com/Kong/volcano-sdk-js/compare/v1.9.7...v1.10.0) (2026-09-19)
 
