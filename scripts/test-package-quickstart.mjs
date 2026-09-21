@@ -109,6 +109,26 @@ try {
     ],
     { cwd: directory, env, timeout: 120_000 },
   );
+  await writeFile(
+    join(directory, 'realtime-imports.mjs'),
+    `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import RealtimeDefault, { VolcanoRealtime, RealtimeChannel } from '@volcano.dev/sdk/realtime';
+
+assert.equal(typeof VolcanoRealtime, 'function');
+assert.equal(typeof RealtimeChannel, 'function');
+assert.equal(RealtimeDefault, VolcanoRealtime);
+const commonjs = createRequire(import.meta.url)('@volcano.dev/sdk/realtime');
+assert.equal(typeof commonjs.VolcanoRealtime, 'function');
+assert.equal(typeof commonjs.RealtimeChannel, 'function');
+assert.equal(commonjs.default, commonjs.VolcanoRealtime);
+`,
+  );
+  await run(process.execPath, ['realtime-imports.mjs'], {
+    cwd: directory,
+    env,
+    timeout: 30_000,
+  });
   await writeFile(join(directory, 'quickstart.mjs'), quickstart);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');

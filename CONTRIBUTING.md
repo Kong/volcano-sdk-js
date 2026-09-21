@@ -9,21 +9,29 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 
 ## Common Workflows
 
-| Goal                   | Command                          |
-| ---------------------- | -------------------------------- |
-| Install dependencies   | `pnpm install --frozen-lockfile` |
-| Run linting            | `pnpm lint`                      |
-| Run unit tests         | `pnpm test`                      |
-| Regenerate API types   | `pnpm generate:openapi`          |
-| Check generated types  | `pnpm check:openapi`             |
-| Check public types     | `pnpm test:types`                |
-| Discover contract lane | `pnpm test:contract --listTests` |
-| Build the package      | `pnpm build`                     |
-| Check package metadata | `pnpm test:package`              |
+| Goal                            | Command                          |
+| ------------------------------- | -------------------------------- |
+| Install dependencies            | `pnpm install --frozen-lockfile` |
+| Run linting                     | `pnpm lint`                      |
+| Run unit tests                  | `pnpm test`                      |
+| Regenerate API types            | `pnpm generate:openapi`          |
+| Check generated types           | `pnpm check:openapi`             |
+| Check public types              | `pnpm test:types`                |
+| Discover contract lane          | `pnpm test:contract --listTests` |
+| Build the package               | `pnpm build`                     |
+| Check packed metadata and types | `pnpm test:package`              |
 
 The SDK repository keeps its local workflow focused on client behavior,
 packaging, and documentation. Server-backed end-to-end coverage lives with the
 platform implementation.
+
+`pnpm test:package` packs with pnpm, then runs Publint and
+[Are the Types Wrong](https://github.com/arethetypeswrong/arethetypeswrong.github.io/blob/main/packages/cli/README.md)
+against the same tarball. ATTW's native `node16` profile checks CommonJS, ESM,
+and bundler resolution through the package export map. Legacy Node 10 resolution
+is outside the SDK's Node 20+ support; no diagnostic rules or entrypoints are ignored.
+`pnpm test:quickstart` also installs that tarball in an isolated consumer and
+checks realtime imports and the documented quickstart.
 
 The `test:integration` script is intentionally retained as a stable entry point
 for platform CI jobs that check out this repository while running those
