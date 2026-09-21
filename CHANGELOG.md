@@ -44,6 +44,13 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.10.4](https://github.com/Kong/volcano-sdk-js/compare/v1.10.3...v1.10.4) (2026-09-21)
+
+
+### Bug Fixes
+
+* **durable:** type duration parsing and reject numeric overflow ([#175](https://github.com/Kong/volcano-sdk-js/issues/175)) ([22ce831](https://github.com/Kong/volcano-sdk-js/commit/22ce83195a11d9df8f16ec36615cb53a53af27d4))
+
 ## [1.10.3](https://github.com/Kong/volcano-sdk-js/compare/v1.10.2...v1.10.3) (2026-09-21)
 
 ### Bug Fixes
