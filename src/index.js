@@ -12,6 +12,11 @@ import {
   uploadStorageObject,
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.ts';
+import {
+  decodeBase64Url,
+  extractRequiredProjectIdFromToken,
+  extractSessionIdFromToken,
+} from './token-claims.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -399,27 +404,6 @@ class VolcanoSystemError extends Error {
 // keeps it out of JSON.stringify output.
 VolcanoSystemError.prototype.name = 'VolcanoSystemError';
 
-/**
- * Decode a base64url string to UTF-8 (JWT-safe, Node/browser compatible)
- * @param {string} value
- * @returns {string}
- */
-function decodeBase64Url(value) {
-  const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
-  const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
-  const base64 = normalized + padding;
-
-  if (typeof atob === 'function') {
-    return atob(base64);
-  }
-
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(base64, 'base64').toString('utf-8');
-  }
-
-  throw new Error('No base64 decoder available');
-}
-
 function getSharedRuntimeObject() {
   if (typeof globalThis !== 'undefined') {
     return globalThis;
@@ -477,45 +461,6 @@ function clearSharedFunctionResolveStateForTests() {
   state.inFlight.clear();
   state.maxEntries = DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES;
   state.lastPruneAtMs = 0;
-}
-
-function extractRequiredProjectIdFromToken(token, tokenName = 'accessToken') {
-  if (!token || typeof token !== 'string') {
-    throw new Error('No active session');
-  }
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    throw new Error(`${tokenName} must be a JWT with project_id claim`);
-  }
-  let payload;
-  try {
-    payload = JSON.parse(decodeBase64Url(parts[1]));
-  } catch {
-    throw new Error(`${tokenName} must be a valid JWT with project_id claim`);
-  }
-  if (!payload || typeof payload.project_id !== 'string' || payload.project_id.trim() === '') {
-    throw new Error(`${tokenName} missing project_id claim`);
-  }
-  return payload.project_id.trim();
-}
-
-function extractSessionIdFromToken(token) {
-  if (!token || typeof token !== 'string') {
-    return null;
-  }
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    return null;
-  }
-  try {
-    const sessionId = JSON.parse(decodeBase64Url(parts[1]))?.session_id;
-    return typeof sessionId === 'string' &&
-      /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(sessionId)
-      ? sessionId.toLowerCase()
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function validateRefreshSource(context) {

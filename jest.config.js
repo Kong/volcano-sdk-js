@@ -12,6 +12,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/token-claims.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/database-connection-string.ts': {
       branches: 100,
       functions: 100,
