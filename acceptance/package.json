@@ -2,7 +2,7 @@
   "name": "volcano-sdk-acceptance",
   "private": true,
   "scripts": {
-    "test:contract": "jest --config jest.contract.config.cjs --runInBand"
+    "test:contract": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.contract.config.cjs --runInBand"
   },
   "dependencies": {
     "@volcano.dev/sdk": "file:published-sdk.tgz"
@@ -12,6 +12,8 @@
     "jest-environment-node": "30.3.0",
     "jest-cucumber": "4.5.0",
     "jest-junit": "17.0.0",
-    "pg": "8.20.0"
+    "pg": "8.20.0",
+    "ws": "8.21.3",
+    "@jest/globals": "30.3.0"
   }
 }

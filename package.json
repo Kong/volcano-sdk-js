@@ -75,7 +75,7 @@
     "test:watch": "pnpm build && jest --watch",
     "test:coverage": "pnpm build && jest --coverage",
     "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.integration.config.cjs --testTimeout=120000",
-    "test:contract": "pnpm build && jest --config jest.contract.config.cjs --runInBand",
+    "test:contract": "pnpm build && node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.contract.config.cjs --runInBand",
     "prepublishOnly": "npm run build",
     "test:quickstart": "node scripts/check-package-quickstart.mjs",
     "audit": "node scripts/audit-dependencies.mjs",
