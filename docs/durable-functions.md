@@ -113,6 +113,10 @@ Durations are whole seconds. There is no millisecond unit, and a fraction is
 refused rather than rounded — the platform holds a wait between invocations, so
 sub-second precision is not something it can honor.
 
+Durations must be finite. The SDK rejects `NaN`, infinite numeric values, and
+strings that overflow JavaScript's numeric range before passing them to the
+durable runtime.
+
 ## `ctx.step(name?, fn, options?)`
 
 Runs one atomic operation and records its result.
