@@ -1,4 +1,5 @@
 import { AuthSessionOperations } from './auth-session.ts';
+import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
 import {
   acquireProjectLock,
   authSignin,
@@ -93,7 +94,6 @@ const OAUTH_RESPONSE_QUERY_KEYS = new Set([
   'iss',
   'vh_state',
 ]);
-const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 // Present only once the platform has dispatched to the function. Its absence on
 // a 404 is what says the id we cached no longer names anything, as opposed to
@@ -492,57 +492,6 @@ function sessionIdsEqual(left, right) {
     typeof right === 'string' &&
     left.toLowerCase() === right.toLowerCase()
   );
-}
-
-function sanitizeFunctionIdentifierForHost(identifier) {
-  if (!identifier || typeof identifier !== 'string') {
-    return null;
-  }
-
-  const trimmed = identifier.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  // DNS host labels are case-insensitive; preserve exact behavior by requiring lowercase.
-  if (trimmed !== trimmed.toLowerCase()) {
-    return null;
-  }
-
-  if (!FUNCTION_HOST_LABEL_REGEX.test(trimmed)) {
-    return null;
-  }
-
-  return trimmed;
-}
-
-// The URL carries the caller's bearer token. Plaintext is accepted only when
-// the API itself is plaintext, so a resolve response cannot downgrade a
-// credential that is otherwise protected in transit.
-function validInvokeUrl(value, apiUrl) {
-  if (!value || typeof value !== 'string') {
-    return null;
-  }
-  try {
-    const parsed = new URL(value);
-    if (!parsed.hostname) {
-      return null;
-    }
-    if (parsed.protocol === 'https:') {
-      return parsed.href;
-    }
-    return parsed.protocol === 'http:' && isPlaintextUrl(apiUrl) ? parsed.href : null;
-  } catch {
-    return null;
-  }
-}
-
-function isPlaintextUrl(value) {
-  try {
-    return new URL(value).protocol === 'http:';
-  } catch {
-    return false;
-  }
 }
 
 /**
