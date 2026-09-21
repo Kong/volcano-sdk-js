@@ -78,9 +78,9 @@
     "test:contract": "jest --config jest.contract.config.cjs --runInBand",
     "prepublishOnly": "npm run build",
     "test:quickstart": "node scripts/check-package-quickstart.mjs",
-    "quality": "pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && pnpm test --ci && pnpm test:middleware && pnpm test:contract --listTests && pnpm test:package && pnpm test:quickstart",
-    "test:middleware": "jest --coverage --collectCoverageFrom=src/next/request.ts --runTestsByPath __tests__/next-request.test.ts",
-    "test:tooling": "node --test scripts/*.test.mjs"
+    "quality": "pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && pnpm test --ci && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:package && pnpm test:quickstart",
+    "test:tooling": "node --test scripts/*.test.mjs",
+    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts"
   },
   "keywords": [
     "volcano",
