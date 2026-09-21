@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { gunzipSync } from 'node:zlib';
 
 const run = promisify(execFile);
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const auditScript = await readFile(new URL('audit-dependencies.mjs', import.meta.url), 'utf8');
 const cleanReport = {
   actions: [],
   advisories: {},
@@ -43,6 +44,8 @@ const vulnerableReport = {
 async function auditFixture(context, status, report) {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-audit-policy-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(join(directory, 'scripts'));
+  await writeFile(join(directory, 'scripts/audit-dependencies.mjs'), auditScript);
   await writeFile(
     join(directory, 'package.json'),
     JSON.stringify({
@@ -101,7 +104,7 @@ snapshots:
     return { code: 0, stdout: result.stdout, requests };
   } catch (error) {
     assert.equal(typeof error.code, 'number', String(error));
-    return { code: error.code, stdout: error.stdout, requests };
+    return { code: error.code, stdout: error.stdout + error.stderr, requests };
   }
 }
 
@@ -121,6 +124,27 @@ test('dependency audit rejects even low-severity development advisories', async 
   const result = await auditFixture(context, 200, vulnerableReport);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /Fixture vulnerability/);
+});
+
+test('dependency audit rejects informational development advisories', async (context) => {
+  const report = {
+    ...vulnerableReport,
+    advisories: { 1: { ...vulnerableReport.advisories[1], severity: 'info' } },
+    metadata: {
+      ...cleanReport.metadata,
+      vulnerabilities: { ...cleanReport.metadata.vulnerabilities, info: 1 },
+    },
+  };
+  const result = await auditFixture(context, 200, report);
+  assert.equal(result.code, 1, result.stdout);
+  assert.match(result.stdout, /zero advisories at every severity/);
+});
+
+test('dependency audit rejects an incomplete registry report', async (context) => {
+  const report = { ...cleanReport, metadata: { vulnerabilities: { low: 0 } } };
+  const result = await auditFixture(context, 200, report);
+  assert.equal(result.code, 1, result.stdout);
+  assert.match(result.stdout, /zero advisories at every severity/);
 });
 
 test('dependency audit fails when the registry is unavailable', async (context) => {
