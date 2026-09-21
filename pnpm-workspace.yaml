@@ -7,6 +7,10 @@ packages:
 # which pulled a package requiring Node >=22 into a workspace tested on Node 20.
 autoInstallPeers: false
 
+# Next 15 pins PostCSS 8.4.31, which predates its file-disclosure and XSS fixes.
+overrides:
+  'next>postcss': ^8.5.28
+
 allowBuilds:
   protobufjs: true
   sharp: true
