@@ -18,6 +18,7 @@ module.exports = {
       lines: 100,
       statements: 100,
     },
+    'src/lock-session.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/lock-clock.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/auth-session.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/next/request.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },

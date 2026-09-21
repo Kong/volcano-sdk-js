@@ -11,7 +11,7 @@ import {
   stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
-import { lockRequestStart, LockSession } from './lock-session.js';
+import { lockRequestStart, LockSession } from './lock-session.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano

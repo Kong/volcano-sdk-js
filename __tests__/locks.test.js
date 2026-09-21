@@ -1,5 +1,5 @@
 const { VolcanoAuth } = require('../src/index.js');
-const { LeaseClock } = require('../src/lock-session.js');
+const { LeaseClock } = require('../src/lock-session.ts');
 
 function response(status, body, headers = {}) {
   return {
