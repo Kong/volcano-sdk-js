@@ -1160,3 +1160,4 @@ class RealtimeChannel {
 }
 
 export { RealtimeChannel, VolcanoRealtime };
+export default VolcanoRealtime;

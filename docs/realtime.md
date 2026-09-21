@@ -26,6 +26,9 @@ you provide a custom implementation.
 
 ### Import and Initialize
 
+Both the named import below and `import VolcanoRealtime from '@volcano.dev/sdk/realtime'`
+provide the same constructor.
+
 ```javascript
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
 
