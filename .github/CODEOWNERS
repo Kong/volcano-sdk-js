@@ -40,6 +40,7 @@ babel.config.* @Kong/team-volcano
 prettier.config.* @Kong/team-volcano
 .prettierrc* @Kong/team-volcano
 .prettierignore @Kong/team-volcano
+.editorconfig @Kong/team-volcano
 rollup.config.* @Kong/team-volcano
 orval.config.* @Kong/team-volcano
 knip.* @Kong/team-volcano
