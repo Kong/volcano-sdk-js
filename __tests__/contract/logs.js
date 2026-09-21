@@ -1,5 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const { VolcanoClient } = require('../../src/index.js');
+const { VolcanoClient } = require('@volcano.dev/sdk');
 
 async function poll(operation, ready, seconds) {
   const deadline = performance.now() + seconds * 1000;

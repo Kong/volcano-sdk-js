@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const { autoBindSteps, loadFeatures } = require('jest-cucumber');
 
-const { VolcanoClient } = require('../../src/index.js');
+const { VolcanoClient } = require('@volcano.dev/sdk');
 const {
   ContractWorld,
   recordOutcome,

@@ -1,0 +1,17 @@
+{
+  "name": "volcano-sdk-acceptance",
+  "private": true,
+  "scripts": {
+    "test:contract": "jest --config jest.contract.config.cjs --runInBand"
+  },
+  "dependencies": {
+    "@volcano.dev/sdk": "file:published-sdk.tgz"
+  },
+  "devDependencies": {
+    "jest": "30.3.0",
+    "jest-environment-node": "30.3.0",
+    "jest-cucumber": "4.5.0",
+    "jest-junit": "17.0.0",
+    "pg": "8.20.0"
+  }
+}
