@@ -102,8 +102,8 @@
     "presence"
   ],
   "dependencies": {
-    "centrifuge": "^5.0.0",
-    "ws": "^8.0.0"
+    "centrifuge": "^5.7.4",
+    "ws": "^8.21.3"
   },
   "peerDependencies": {
     "@aws/durable-execution-sdk-js": ">=2 <3"
