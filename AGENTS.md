@@ -1,4 +1,7 @@
 - Before pushing changes, run `pnpm quality`. CI runs the same command on Node 20 and 22.
+- Research upstream tools before adding enforcement. Keep rules in native tool
+  configuration and orchestration in standard tasks. Add custom checks only
+  for requirements established tools cannot express; document that gap.
 - Fix failing checks rather than weakening rules, excluding code, or suppressing findings.
 - Never approve quality-policy changes on a human reviewer's behalf.
 - Use Conventional Commits with a scope, like `fix(component): describe the change`.
