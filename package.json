@@ -79,7 +79,7 @@
     "prepublishOnly": "npm run build",
     "test:quickstart": "node scripts/check-package-quickstart.mjs",
     "audit": "node scripts/audit-dependencies.mjs",
-    "quality": "pnpm run audit && pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && pnpm test --ci && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:package && pnpm test:quickstart",
+    "quality": "pnpm run audit && pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:package && pnpm test:quickstart",
     "test:tooling": "node --test scripts/*.test.mjs",
     "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts"
   },
@@ -150,6 +150,7 @@
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "eslint-plugin-sonarjs": "^4.0.3",
     "eslint-plugin-unicorn": "^64.0.0",
+    "fast-check": "4.10.2",
     "globals": "^17.6.0",
     "jest": "^30.3.0",
     "jest-cucumber": "4.5.0",
