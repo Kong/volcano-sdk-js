@@ -1,5 +1,6 @@
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
+import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
 import {
   acquireProjectLock,
@@ -143,50 +144,6 @@ function cloneJsonValue(value) {
 
   const serializedValue = JSON.stringify(value);
   return JSON.parse(serializedValue);
-}
-
-/**
- * Fetch with timeout using AbortController
- * @param {string} url - The URL to fetch
- * @param {RequestInit} options - Fetch options
- * @param {number} [timeoutMs] - Timeout in milliseconds (default: 60000)
- * @param {(response: Response, signal: AbortSignal) => Promise<unknown>|unknown} [consume] - Optional response consumer
- * @returns {Promise<unknown>}
- */
-async function fetchWithTimeout(
-  url,
-  options = {},
-  timeoutMs = DEFAULT_TIMEOUT_MS,
-  consume = (response) => response,
-) {
-  const controller = new AbortController();
-  let timedOut = false;
-  const abortFromCaller = () => controller.abort(options.signal.reason);
-  if (options.signal?.aborted) {
-    abortFromCaller();
-  } else {
-    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
-  }
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return await consume(response, controller.signal);
-  } catch (error) {
-    if (error.name === 'AbortError' && timedOut && !options.signal?.aborted) {
-      throw new Error(`Request timeout after ${timeoutMs}ms`, { cause: error });
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-    options.signal?.removeEventListener('abort', abortFromCaller);
-  }
 }
 
 /**
