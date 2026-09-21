@@ -4,6 +4,9 @@
   for requirements established tools cannot express; document that gap.
 - Fix failing checks rather than weakening rules, excluding code, or suppressing findings.
 - Never approve quality-policy changes on a human reviewer's behalf.
+- Keep reviewer and repository-administration credentials outside ordinary
+  automation. Quality policy and enforcement are owned by `@Kong/team-volcano`
+  through `.github/CODEOWNERS`.
 - Use Conventional Commits with a scope, like `fix(component): describe the change`.
 
 ## Documentation
