@@ -13,10 +13,14 @@ async function lintFixture(source, parent) {
   try {
     const path = join(directory, parent === 'src' ? 'fixture.ts' : 'fixture.test.ts');
     await writeFile(path, source);
-    const result = spawnSync(process.execPath, [eslint, '--format=json', path], {
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [eslint, '--format=json', '--max-warnings=0', path],
+      {
+        encoding: 'utf8',
+        timeout: 30_000,
+      },
+    );
     assert.equal(result.error, undefined);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
     return JSON.parse(result.stdout);
@@ -25,6 +29,16 @@ async function lintFixture(source, parent) {
   }
 }
 const violations = [
+  [
+    'disabled rule comment',
+    '/* eslint-disable @typescript-eslint/no-explicit-any */\nexport function value(input: any): unknown { return input; }',
+    '@typescript-eslint/no-explicit-any',
+  ],
+  [
+    'inline rule override',
+    '/* eslint @typescript-eslint/no-explicit-any: "off" */\nexport function value(input: any): unknown { return input; }',
+    '@typescript-eslint/no-explicit-any',
+  ],
   [
     'explicit any',
     'export function value(input: any): unknown { return input; }',

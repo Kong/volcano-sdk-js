@@ -74,6 +74,7 @@ module.exports = [
   },
   {
     linterOptions: {
+      noInlineConfig: true,
       reportUnusedDisableDirectives: 'error',
       reportUnusedInlineConfigs: 'error',
     },
