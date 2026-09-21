@@ -44,6 +44,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.10.3](https://github.com/Kong/volcano-sdk-js/compare/v1.10.2...v1.10.3) (2026-09-21)
+
+### Bug Fixes
+
+- **packaging:** align realtime exports and validate packed types ([#172](https://github.com/Kong/volcano-sdk-js/issues/172)) ([bdaaa78](https://github.com/Kong/volcano-sdk-js/commit/bdaaa78a2f7c58bc84b8833341e155ab5e1b61fc))
+
 ## [1.10.2](https://github.com/Kong/volcano-sdk-js/compare/v1.10.1...v1.10.2) (2026-09-21)
 
 ### Bug Fixes
