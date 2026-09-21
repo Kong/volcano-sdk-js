@@ -74,11 +74,12 @@
     "test:package": "publint --pack npm --strict",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPatterns=integration --passWithNoTests --testTimeout=120000 --forceExit",
+    "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.integration.config.cjs --testTimeout=120000",
     "test:contract": "jest --config jest.contract.config.cjs --runInBand",
     "prepublishOnly": "npm run build",
     "test:quickstart": "node scripts/check-package-quickstart.mjs",
-    "quality": "pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test --ci && pnpm test:contract --listTests && pnpm build && pnpm test:package && pnpm test:quickstart"
+    "quality": "pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && pnpm test --ci && pnpm test:contract --listTests && pnpm build && pnpm test:package && pnpm test:quickstart",
+    "test:tooling": "node --test scripts/*.test.mjs"
   },
   "keywords": [
     "volcano",
