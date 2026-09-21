@@ -1,6 +1,18 @@
 const { createHash } = require('node:crypto');
-const { readFileSync } = require('node:fs');
+const { readFileSync, readdirSync } = require('node:fs');
 const path = require('node:path');
+const { loadFeatures } = require('jest-cucumber');
+
+test('parses every canonical feature through the installed Cucumber dependencies', () => {
+  const directory = path.join(__dirname, '../features/contract');
+  const files = readdirSync(directory).filter((name) => name.endsWith('.feature'));
+  const features = loadFeatures(path.join(directory, '*.feature'));
+  expect(files.length).toBeGreaterThan(0);
+  expect(features).toHaveLength(files.length);
+  for (const feature of features) {
+    expect(feature.scenarios.length + feature.scenarioOutlines.length).toBeGreaterThan(0);
+  }
+});
 
 test('vendors the canonical database query feature', () => {
   const feature = readFileSync(
