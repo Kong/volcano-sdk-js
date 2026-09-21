@@ -56,10 +56,12 @@ export default [
   // Realtime module bundle
   {
     input: 'src/realtime.js',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [
       {
-        file: 'dist/realtime.js',
+        dir: 'dist',
+        entryFileNames: 'realtime.js',
         format: 'umd',
         name: 'VolcanoRealtime',
         exports: 'named',
@@ -70,12 +72,14 @@ export default [
         },
       },
       {
-        file: 'dist/realtime.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'realtime.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
       },
       {
-        file: 'dist/realtime.cjs.js',
+        dir: 'dist',
+        entryFileNames: 'realtime.cjs.js',
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
