@@ -1,4 +1,5 @@
 import { AuthSessionOperations } from './auth-session.ts';
+import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
 import {
   acquireProjectLock,
@@ -142,39 +143,6 @@ function cloneJsonValue(value) {
 
   const serializedValue = JSON.stringify(value);
   return JSON.parse(serializedValue);
-}
-
-function validateCompleteSession(session) {
-  if (!session || typeof session !== 'object' || Array.isArray(session)) {
-    return new TypeError('Session must be an object');
-  }
-  if (typeof session.access_token !== 'string' || session.access_token.trim() === '') {
-    return new TypeError('Session access_token must be a non-empty string');
-  }
-  if (typeof session.refresh_token !== 'string' || session.refresh_token.trim() === '') {
-    return new TypeError('Session refresh_token must be a non-empty string');
-  }
-  if (!session.user || typeof session.user !== 'object' || Array.isArray(session.user)) {
-    return new TypeError('Session user must be an object');
-  }
-  if (typeof session.user.id !== 'string' || session.user.id.trim() === '') {
-    return new TypeError('Session user ID must be a non-empty string');
-  }
-  return null;
-}
-
-/**
- * Basic provider name sanitization - only alphanumeric and hyphens allowed
- * This is NOT validation (backend validates), just prevents URL injection
- * @param {string} provider - The provider name
- * @throws {Error} If provider contains invalid characters
- */
-function sanitizeProvider(provider) {
-  if (!provider || typeof provider !== 'string' || !/^[a-z0-9-]+$/.test(provider)) {
-    throw new Error(
-      'Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens',
-    );
-  }
 }
 
 /**
