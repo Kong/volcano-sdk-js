@@ -313,11 +313,14 @@ describe('ctx.wait', () => {
   // could only be rounded. It was: 'ms' parsed, and '400ms' became a wait of
   // nothing while '500ms' became a second. A wait that does not happen is worse
   // than one that is refused, since the code reads as if it paused.
-  it.each(['400ms', '500ms', '2000ms'])('refuses %p rather than rounding it', async (given) => {
-    await expect(run((_input, ctx) => ctx.wait('pause', given))).rejects.toThrow(
-      /must be a duration in whole seconds/,
-    );
-  });
+  it.each(['400ms', '500ms', '2000ms', `${'9'.repeat(400)}s`])(
+    'rejects an unrepresentable duration: %p',
+    async (given) => {
+      await expect(run((_input, ctx) => ctx.wait('pause', given))).rejects.toThrow(
+        /must be a duration in whole seconds/,
+      );
+    },
+  );
 
   it('refuses a fraction of a second', async () => {
     await expect(run((_input, ctx) => ctx.wait('pause', 0.4))).rejects.toThrow(

@@ -91,15 +91,18 @@ export default [
   // durable function installs.
   {
     input: 'src/durable.js',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['@aws/durable-execution-sdk-js'],
     output: [
       {
-        file: 'dist/durable.js',
+        dir: 'dist',
+        entryFileNames: 'durable.js',
         format: 'cjs',
         exports: 'named',
       },
       {
-        file: 'dist/durable.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'durable.esm.mjs',
         format: 'es',
       },
     ],
