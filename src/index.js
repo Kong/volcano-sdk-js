@@ -13,6 +13,7 @@ import {
   uploadStorageObject,
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.ts';
+import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
 import {
   decodeBase64Url,
   extractRequiredProjectIdFromToken,
@@ -102,7 +103,6 @@ const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
 const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
 const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
-const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
 // The idempotency header's documented limit. Checked here so a name that is too
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
@@ -712,31 +712,10 @@ class ProjectLocksApi {
   }
 }
 
-function validateLockOptions(key, options) {
-  validateLockKey(key);
-  const ttl = options?.ttl;
-  if (!Number.isInteger(ttl) || ttl < 5 || ttl > MAX_LOCK_TTL_SECONDS) {
-    throw new RangeError('ttl must be an integer between 5 seconds and 90 days');
-  }
-  return ttl;
-}
-
-function validateLockKey(key) {
-  if (typeof key !== 'string' || !/^[a-z0-9][\w.:-]{0,127}$/i.test(key)) {
-    throw new TypeError('lock key must match ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
-  }
-}
-
 function secureRandomUnit() {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] / 0x1_0000_0000;
-}
-
-function validateLease(key, lease) {
-  if (!lease || lease.key !== key || typeof lease.token !== 'string' || lease.token === '') {
-    throw new TypeError('lease must belong to the requested lock and include its token');
-  }
 }
 
 // ============================================================================
