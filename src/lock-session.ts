@@ -1,4 +1,5 @@
-import { LeaseClock, lockRequestStart } from './lock-clock.ts';
+import type { ProjectLockLease, ProjectLocks } from './index.js';
+import { LeaseClock, type LockRequestStart, lockRequestStart } from './lock-clock.ts';
 
 export { LeaseClock, lockRequestStart } from './lock-clock.ts';
 
@@ -8,30 +9,48 @@ const RENEWAL_SAFETY_MARGIN_MS = 1000;
 const EXPIRY_MESSAGE = 'lock lease expired before renewal completed';
 const UNSAFE_RENEWAL_MESSAGE = 'lock renewal returned no safe lease window';
 
+interface LockSessionOptions {
+  locks: Pick<ProjectLocks, 'renew' | 'release'>;
+  key: string;
+  ttl: number;
+  lease: ProjectLockLease;
+  startedAt: LockRequestStart;
+  random: () => number;
+}
+
 export class LockSession {
-  constructor({ locks, key, ttl, lease, startedAt, random }) {
+  readonly locks: Pick<ProjectLocks, 'renew' | 'release'>;
+  readonly key: string;
+  readonly ttl: number;
+  readonly lease: ProjectLockLease;
+  readonly random: () => number;
+  readonly clock: LeaseClock;
+  readonly controller = new AbortController();
+  renewalController: AbortController | null = null;
+  failure: Error | null = null;
+  stopped = false;
+  expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  renewalTimer: ReturnType<typeof setTimeout> | undefined;
+  wakeRenewal: (() => void) | null = null;
+
+  constructor({ locks, key, ttl, lease, startedAt, random }: LockSessionOptions) {
     this.locks = locks;
     this.key = key;
     this.ttl = ttl;
     this.lease = lease;
     this.random = random;
     this.clock = new LeaseClock(ttl, startedAt);
-    this.controller = new AbortController();
-    this.renewalController = null;
-    this.failure = null;
-    this.stopped = false;
-    this.expiryTimer = null;
-    this.renewalTimer = null;
-    this.wakeRenewal = null;
   }
 
-  async run(callback) {
-    let data = null;
-    let callbackError = null;
-    let releaseError;
+  async run<T>(
+    callback: (context: { signal: AbortSignal; lease: ProjectLockLease }) => T | Promise<T>,
+  ): Promise<{ data: T | null; error: Error | null }> {
+    let data: T | null = null;
+    let callbackError: Error | null = null;
+    let releaseError: Error | null;
     try {
       await this.prepare();
-      if (!this.failure) {
+      if (this.failure === null) {
         this.start();
         data = await callback({ signal: this.controller.signal, lease: this.lease });
       }
@@ -40,51 +59,43 @@ export class LockSession {
     } finally {
       releaseError = await this.cleanup();
     }
-    return { data, error: this.failure || callbackError || releaseError };
+    return { data, error: this.failure ?? callbackError ?? releaseError };
   }
 
-  async prepare() {
+  async prepare(): Promise<void> {
     if (this.renewalDelay() > 0) {
       return;
     }
     this.scheduleExpiry();
-    const startedAt = lockRequestStart();
-    const controller = new AbortController();
-    this.renewalController = controller;
-    const renewed = await this.locks.renew(this.key, this.lease, {
-      ttl: this.ttl,
-      signal: controller.signal,
-    });
-    this.renewalController = null;
-    if (this.failure || this.stopped) {
-      return;
-    }
-    if (renewed.error) {
-      this.markLost(renewed.error);
-      return;
-    }
-    this.clock.reset(startedAt);
-    if (this.renewalDelay() === 0) {
-      this.markLost(new Error(UNSAFE_RENEWAL_MESSAGE));
-    }
+    await this.renewLease(false);
   }
 
-  start() {
+  start(): void {
     this.scheduleExpiry();
-    this.runRenewals().catch((error) => this.markLost(toError(error)));
+    this.runRenewals().catch((error: unknown) => {
+      this.markLost(toError(error));
+    });
   }
 
-  async runRenewals() {
-    while (!this.stopped && !this.failure) {
+  async runRenewals(): Promise<void> {
+    while (this.isActive()) {
       await this.waitToRenew();
-      if (this.stopped || this.failure) {
+      if (!this.isActive()) {
         return;
       }
       await this.renew();
     }
   }
 
-  async renew() {
+  private isActive(): boolean {
+    return !this.stopped && this.failure === null;
+  }
+
+  renew(): Promise<void> {
+    return this.renewLease(true);
+  }
+
+  private async renewLease(scheduleNext: boolean): Promise<void> {
     const startedAt = lockRequestStart();
     const controller = new AbortController();
     this.renewalController = controller;
@@ -93,32 +104,38 @@ export class LockSession {
       signal: controller.signal,
     });
     this.renewalController = null;
-    if (this.stopped || this.failure) {
-      return;
+    if (this.acceptRenewal(renewed.error, startedAt) && scheduleNext) {
+      this.scheduleExpiry();
     }
-    if (renewed.error) {
-      this.markLost(renewed.error);
-      return;
+  }
+
+  private acceptRenewal(error: Error | null, startedAt: LockRequestStart): boolean {
+    if (this.stopped || this.failure !== null) {
+      return false;
+    }
+    if (error !== null) {
+      this.markLost(error);
+      return false;
     }
     this.clock.reset(startedAt);
     if (this.renewalDelay() === 0) {
       this.markLost(new Error(UNSAFE_RENEWAL_MESSAGE));
-      return;
+      return false;
     }
-    this.scheduleExpiry();
+    return true;
   }
 
-  waitToRenew() {
-    return new Promise((resolve) => {
+  waitToRenew(): Promise<void> {
+    return new Promise<void>((resolve) => {
       this.wakeRenewal = resolve;
       this.renewalTimer = setTimeout(resolve, Math.max(1, this.renewalDelay()));
     }).finally(() => {
       this.wakeRenewal = null;
-      this.renewalTimer = null;
+      this.renewalTimer = undefined;
     });
   }
 
-  renewalDelay() {
+  renewalDelay(): number {
     const baseDelay = Math.min(this.clock.ttlMs / 3, MAX_TIMER_DELAY_MS);
     const latestDelay = Math.max(
       0,
@@ -128,14 +145,19 @@ export class LockSession {
     return Math.min(Math.max(0, baseDelay + jitter), latestDelay);
   }
 
-  scheduleExpiry() {
+  scheduleExpiry(): void {
     clearTimeout(this.expiryTimer);
     const delay = Math.min(MAX_TIMER_DELAY_MS, this.clock.remaining());
-    this.expiryTimer = setTimeout(() => this.checkExpiry(), Math.max(1, delay));
+    this.expiryTimer = setTimeout(
+      () => {
+        this.checkExpiry();
+      },
+      Math.max(1, delay),
+    );
   }
 
-  checkExpiry() {
-    if (this.stopped || this.failure) {
+  checkExpiry(): void {
+    if (this.stopped || this.failure !== null) {
       return;
     }
     if (this.clock.remaining() === 0) {
@@ -145,8 +167,8 @@ export class LockSession {
     this.scheduleExpiry();
   }
 
-  markLost(error) {
-    if (this.failure || this.stopped) {
+  markLost(error: Error): void {
+    if (this.failure !== null || this.stopped) {
       return;
     }
     this.failure = error;
@@ -155,8 +177,8 @@ export class LockSession {
     this.stopTimers();
   }
 
-  async cleanup() {
-    if (!this.failure && this.clock.remaining() === 0) {
+  async cleanup(): Promise<Error | null> {
+    if (this.failure === null && this.clock.remaining() === 0) {
       this.markLost(new Error(EXPIRY_MESSAGE));
     }
     this.stopped = true;
@@ -170,13 +192,13 @@ export class LockSession {
     }
   }
 
-  stopTimers() {
+  stopTimers(): void {
     clearTimeout(this.expiryTimer);
     clearTimeout(this.renewalTimer);
     this.wakeRenewal?.();
   }
 }
 
-function toError(error) {
+function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
