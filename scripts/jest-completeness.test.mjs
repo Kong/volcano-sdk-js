@@ -79,6 +79,30 @@ test('preserves a real assertion failure', async () => {
   assert.doesNotMatch(result.stderr, /Incomplete test run:/);
 });
 
+test('allows test-name selection without counting filtered tests as skips', async () => {
+  const result = await runFixture(`${passing} test('filtered', () => expect(1).toBe(2));`, [
+    '--testNamePattern=PASSES',
+  ]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('rejects an explicitly skipped test that matches the name selection', async () => {
+  const result = await runFixture(`${passing} test.skip('selected', () => {});`, [
+    '--testNamePattern=selected',
+  ]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Incomplete test run:/);
+});
+
+test('rejects a name selection that runs no tests', async () => {
+  const result = await runFixture(passing, ['--testNamePattern=missing']);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Incomplete test run:/);
+});
+
 const forbiddenSources = [
   ["test.only('focused', () => expect(1).toBe(1));", 'jest/no-focused-tests'],
   [
