@@ -2,6 +2,8 @@
 /.github/ @Kong/team-volcano
 CODEOWNERS @Kong/team-volcano
 AGENTS.md @Kong/team-volcano
+CONTRIBUTING.md @Kong/team-volcano
+SECURITY.md @Kong/team-volcano
 CLAUDE.md @Kong/team-volcano
 GEMINI.md @Kong/team-volcano
 .agents/ @Kong/team-volcano
@@ -55,5 +57,6 @@ release-please-config.json @Kong/team-volcano
 
 # Shared test setup can change discovery and test integrity.
 /__tests__/setup.* @Kong/team-volcano
+/__tests__/node-environment.cjs @Kong/team-volcano
 /__tests__/integration/setup.* @Kong/team-volcano
 /__tests__/support/property-options.* @Kong/team-volcano
