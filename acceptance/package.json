@@ -13,7 +13,7 @@
     "jest-cucumber": "4.5.0",
     "jest-junit": "17.0.0",
     "pg": "8.20.0",
-    "ws": "8.21.3",
+    "acceptance-ws-server": "npm:ws@8.21.3",
     "@jest/globals": "30.3.0"
   }
 }

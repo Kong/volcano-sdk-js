@@ -1,6 +1,6 @@
 const { test, expect } = require('@jest/globals');
 const { once } = require('node:events');
-const { WebSocketServer } = require('ws');
+const { WebSocketServer } = require('acceptance-ws-server');
 const { VolcanoRealtime } = require('@volcano.dev/sdk/realtime');
 
 test('the installed package loads its realtime dependencies and connects', async () => {
