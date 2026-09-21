@@ -1,8 +1,29 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import test from 'node:test';
-import { ESLint } from 'eslint';
+import { fileURLToPath } from 'node:url';
 
-const eslint = new ESLint();
+const root = fileURLToPath(new URL('..', import.meta.url));
+const eslint = join(root, 'node_modules/eslint/bin/eslint.js');
+
+async function lintFixture(source, parent) {
+  const directory = await mkdtemp(join(root, parent, 'quality-fixture-'));
+  try {
+    const path = join(directory, parent === 'src' ? 'fixture.ts' : 'fixture.test.ts');
+    await writeFile(path, source);
+    const result = spawnSync(process.execPath, [eslint, '--format=json', path], {
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    assert.equal(result.error, undefined);
+    assert.ok(result.status === 0 || result.status === 1, result.stderr);
+    return JSON.parse(result.stdout);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 const violations = [
   [
     'explicit any',
@@ -37,16 +58,16 @@ const violations = [
 ];
 
 const contexts = [
-  ['src/next/request.ts', ''],
+  ['src', ''],
   [
-    '__tests__/next-request.test.ts',
+    '__tests__',
     "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(true).toBe(true); });\n",
   ],
 ];
 
-for (const [filePath, setup] of contexts) {
-  test(`typed lint accepts safe code in ${filePath}`, async () => {
-    const results = await eslint.lintText(`${setup}export const enabled = true;`, { filePath });
+for (const [parent, setup] of contexts) {
+  test(`typed lint accepts safe code in ${parent}`, async () => {
+    const results = await lintFixture(`${setup}export const enabled = true;`, parent);
     assert.deepEqual(
       results.flatMap((result) => result.messages),
       [],
@@ -54,8 +75,8 @@ for (const [filePath, setup] of contexts) {
   });
 
   for (const [name, source, rule] of violations) {
-    test(`typed lint rejects ${name} in ${filePath}`, async () => {
-      const results = await eslint.lintText(`${setup}${source}`, { filePath });
+    test(`typed lint rejects ${name} in ${parent}`, async () => {
+      const results = await lintFixture(`${setup}${source}`, parent);
       const rules = results.flatMap((result) => result.messages.map((message) => message.ruleId));
       assert.ok(rules.includes(rule), `Missing ${rule}: ${JSON.stringify(results)}`);
     });
