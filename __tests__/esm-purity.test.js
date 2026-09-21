@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 // Regression guard for VOL-505.
 //
@@ -58,12 +57,6 @@ describe('VOL-505: SDK ES output carries no CJS/UMD/global export statements', (
   });
 
   describe('built ES artifacts are format-pure', () => {
-    beforeAll(() => {
-      if (!ESM_BUILDS.every((f) => fs.existsSync(path.join(ROOT, f)))) {
-        execSync('npm run build', { cwd: ROOT, stdio: 'ignore' });
-      }
-    });
-
     for (const rel of ESM_BUILDS) {
       test(`${rel} contains no module.exports / window.* = / define([`, () => {
         expectPure(fs.readFileSync(path.join(ROOT, rel), 'utf8'));

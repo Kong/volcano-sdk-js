@@ -1,4 +1,3 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -38,12 +37,6 @@ describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
 
   describe('the durable build imports it rather than inlining it', () => {
     const durableBuilds = ['dist/durable.js', 'dist/durable.esm.mjs'];
-
-    beforeAll(() => {
-      if (!durableBuilds.every((file) => fs.existsSync(path.join(ROOT, file)))) {
-        execSync('npm run build', { cwd: ROOT, stdio: 'ignore' });
-      }
-    });
 
     for (const file of durableBuilds) {
       test(`${file} loads it at runtime`, () => {
