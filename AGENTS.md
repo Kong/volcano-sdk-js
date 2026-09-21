@@ -1,4 +1,6 @@
-- Before pushing changes, run `pnpm lint`.
+- Before pushing changes, run `pnpm quality`. CI runs the same command on Node 20 and 22.
+- Fix failing checks rather than weakening rules, excluding code, or suppressing findings.
+- Never approve quality-policy changes on a human reviewer's behalf.
 - Use Conventional Commits with a scope, like `fix(component): describe the change`.
 
 ## Documentation
