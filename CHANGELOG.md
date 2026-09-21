@@ -44,6 +44,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.10.2](https://github.com/Kong/volcano-sdk-js/compare/v1.10.1...v1.10.2) (2026-09-21)
+
+### Bug Fixes
+
+- **example:** update Next.js past known advisories ([#158](https://github.com/Kong/volcano-sdk-js/issues/158)) ([85c9b5d](https://github.com/Kong/volcano-sdk-js/commit/85c9b5dac2922df7795ffc53487bae325d4c609a))
+
 ## [1.10.1](https://github.com/Kong/volcano-sdk-js/compare/v1.10.0...v1.10.1) (2026-09-21)
 
 ### Bug Fixes
