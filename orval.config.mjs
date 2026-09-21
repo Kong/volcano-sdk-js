@@ -17,6 +17,7 @@ export default defineConfig({
     output: {
       client: 'fetch',
       mode: 'single',
+      tsconfig: './tsconfig.generated.json',
       override: {
         fetch: {
           includeHttpResponseReturnType: true,

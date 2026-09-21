@@ -26,29 +26,9 @@
  * ```
  */
 
-/**
- * Extract auth token from request headers or cookies
- * @param {Request} request - Next.js request object
- * @returns {string|null} The access token or null
- */
-export function getTokenFromRequest(request) {
-  // Check Authorization header first
-  const authHeader = request.headers.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.slice(7);
-  }
+import { getTokenFromRequest } from './request.ts';
 
-  // Check cookies (for SSR/middleware)
-  const cookies = request.cookies;
-  if (cookies) {
-    const tokenCookie = cookies.get('volcano_access_token');
-    if (tokenCookie?.value) {
-      return tokenCookie.value;
-    }
-  }
-
-  return null;
-}
+export { getTokenFromRequest, isBrowser, isServer } from './request.ts';
 
 /**
  * Create a server-side Volcano client for middleware/API routes
@@ -163,20 +143,4 @@ export async function withAuth(request, client) {
   }
 
   return user;
-}
-
-/**
- * Check if running in browser environment
- * @returns {boolean}
- */
-export function isBrowser() {
-  return typeof window !== 'undefined' && window.document !== undefined;
-}
-
-/**
- * Check if running in server environment (Node.js, Edge Runtime, etc.)
- * @returns {boolean}
- */
-export function isServer() {
-  return !isBrowser();
 }

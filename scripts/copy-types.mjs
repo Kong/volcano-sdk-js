@@ -1,7 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 
 const declarationFiles = [
+  ['dist/typescript/next/request.d.ts', 'dist/next/request.d.ts'],
+  ['dist/typescript/next/request.d.ts', 'dist/next/request.esm.d.mts', toEsmDeclaration],
   ['src/index.d.ts', 'dist/index.d.ts'],
   ['src/index.d.ts', 'dist/index.esm.d.mts', toEsmDeclaration],
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.d.ts'],
@@ -19,6 +21,8 @@ for (const [source, target, transform] of declarationFiles) {
   const declaration = await readFile(source, 'utf8');
   await writeFile(target, transform ? transform(declaration) : declaration);
 }
+
+await rm('dist/typescript', { recursive: true, force: true });
 
 function toEsmDeclaration(declaration) {
   return declaration

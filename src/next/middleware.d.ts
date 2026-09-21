@@ -44,12 +44,8 @@ export interface ServerClient {
   refreshToken(refreshToken: string): Promise<RefreshTokenResult>;
 }
 
-/**
- * Extract auth token from request headers or cookies
- * @param request - Next.js request object
- * @returns The access token or null
- */
-export function getTokenFromRequest(request: Request): string | null;
+export type { MiddlewareRequest } from './request';
+export { getTokenFromRequest, isBrowser, isServer } from './request';
 
 /**
  * Create a server-side Volcano client for middleware/API routes
@@ -65,13 +61,3 @@ export function createServerClient(config: ServerClientConfig): ServerClient;
  * @returns The user object or null if not authenticated
  */
 export function withAuth(request: Request, client: ServerClient): Promise<User | null>;
-
-/**
- * Check if running in browser environment
- */
-export function isBrowser(): boolean;
-
-/**
- * Check if running in server environment (Node.js, Edge Runtime, etc.)
- */
-export function isServer(): boolean;

@@ -22,7 +22,8 @@ const unicorn = unicornModule.default || unicornModule;
 
 const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
-const testFiles = ['__tests__/**/*.js'];
+const testFiles = ['__tests__/**/*.{js,ts}'];
+const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts'];
 const integrationTestFiles = ['__tests__/integration/**/*.js'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
@@ -37,6 +38,7 @@ const commonjsFiles = [
   ...commonjsScriptFiles,
 ];
 const strictFiles = [
+  ...typescriptFiles,
   ...sdkFiles,
   ...moduleScriptFiles,
   ...commonjsScriptFiles,
@@ -137,6 +139,8 @@ module.exports = [
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
   ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/stylistic'], declarationFiles),
+  ...scopeConfig(tsPlugin.configs['flat/strict-type-checked'], typescriptFiles),
+  ...scopeConfig(tsPlugin.configs['flat/stylistic-type-checked'], typescriptFiles),
   prettierConfig,
 
   {
@@ -257,6 +261,34 @@ module.exports = [
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: typescriptFiles,
+    languageOptions: {
+      sourceType: 'module',
+      parserOptions: { project: './tsconfig.json', tsconfigRootDir: __dirname },
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      complexity: ['error', 5],
+      'sonarjs/cognitive-complexity': ['error', 10],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/no-unsafe-type-assertion': 'error',
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        {
+          allowString: false,
+          allowNumber: false,
+          allowNullableObject: false,
+        },
+      ],
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
     },
   },
 ];
