@@ -8,6 +8,7 @@ module.exports = {
   testTimeout: 600000,
   reporters: [
     'default',
+    '<rootDir>/scripts/jest-completeness.cjs',
     [
       'jest-junit',
       {

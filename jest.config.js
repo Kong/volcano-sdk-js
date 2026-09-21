@@ -1,5 +1,6 @@
 module.exports = {
   testEnvironment: 'jsdom',
+  reporters: ['default', '<rootDir>/scripts/jest-completeness.cjs'],
   testMatch: ['**/__tests__/**/*.test.js'],
   // The integration suite under __tests__/integration requires a live Volcano
   // server and is run by the volcano-hosting harness (scripts/ci/run-sdk-integration-tests.sh

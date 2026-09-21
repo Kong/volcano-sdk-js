@@ -25,14 +25,21 @@ const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.js'];
 const integrationTestFiles = ['__tests__/integration/**/*.js'];
 const sdkFiles = ['src/**/*.js'];
+const commonjsScriptFiles = ['scripts/**/*.cjs'];
 const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
 const rootConfigFiles = ['*.config.js', '*.config.cjs', 'eslint.config.cjs'];
 const exampleFiles = ['examples/nextjs-notes-app/src/**/*.js'];
 const exampleConfigFiles = ['examples/nextjs-notes-app/*.config.js'];
-const commonjsFiles = [...rootConfigFiles, ...exampleConfigFiles, ...testFiles];
+const commonjsFiles = [
+  ...rootConfigFiles,
+  ...exampleConfigFiles,
+  ...testFiles,
+  ...commonjsScriptFiles,
+];
 const strictFiles = [
   ...sdkFiles,
   ...moduleScriptFiles,
+  ...commonjsScriptFiles,
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...exampleFiles,
@@ -114,6 +121,18 @@ module.exports = [
   ...scopeConfig(unicorn.configs['flat/recommended'], strictFiles),
   scopedRules(jest.configs['flat/recommended'], testFiles, {
     'jest/expect-expect': 'off',
+    'jest/no-disabled-tests': 'error',
+    'jest/no-focused-tests': 'error',
+    'no-restricted-properties': [
+      'error',
+      {
+        object: 'jest',
+        property: 'retryTimes',
+        message: 'Fix flaky tests instead of retrying them.',
+      },
+      { object: 'test', property: 'todo', message: 'Implement the test before merging.' },
+      { object: 'it', property: 'todo', message: 'Implement the test before merging.' },
+    ],
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
   ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
