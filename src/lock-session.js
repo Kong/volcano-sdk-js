@@ -1,40 +1,12 @@
+import { LeaseClock, lockRequestStart } from './lock-clock.ts';
+
+export { LeaseClock, lockRequestStart } from './lock-clock.ts';
+
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
-const MAX_LEASE_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 const RENEWAL_REQUEST_BUDGET_MS = 1000;
 const RENEWAL_SAFETY_MARGIN_MS = 1000;
 const EXPIRY_MESSAGE = 'lock lease expired before renewal completed';
 const UNSAFE_RENEWAL_MESSAGE = 'lock renewal returned no safe lease window';
-
-export function lockRequestStart() {
-  return { monotonic: performance.now(), wall: Date.now() };
-}
-
-export class LeaseClock {
-  constructor(ttl, startedAt) {
-    this.ttlMs = ttl * 1000;
-    this.absoluteMonotonicDeadline = startedAt.monotonic + MAX_LEASE_LIFETIME_MS;
-    this.absoluteWallDeadline = startedAt.wall + MAX_LEASE_LIFETIME_MS;
-    this.reset(startedAt);
-  }
-
-  reset(startedAt) {
-    this.monotonicDeadline = Math.min(
-      startedAt.monotonic + this.ttlMs,
-      this.absoluteMonotonicDeadline,
-    );
-    this.wallDeadline = Math.min(startedAt.wall + this.ttlMs, this.absoluteWallDeadline);
-  }
-
-  remaining() {
-    // Date.now catches suspension on platforms where performance.now pauses.
-    // A forward clock correction may shorten a lease; failing closed is safer
-    // than allowing guarded work to outlive its server-side ownership.
-    return Math.max(
-      0,
-      Math.min(this.monotonicDeadline - performance.now(), this.wallDeadline - Date.now()),
-    );
-  }
-}
 
 export class LockSession {
   constructor({ locks, key, ttl, lease, startedAt, random }) {
