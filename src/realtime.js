@@ -44,57 +44,11 @@
  * ```
  */
 
+import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
+
 // Centrifuge client - dynamically imported
 let Centrifuge = null;
 const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
-
-function decodeTokenPayload(token) {
-  const parts = typeof token === 'string' ? token.split('.') : [];
-  if (parts.length !== 3) {
-    return null;
-  }
-  try {
-    const normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
-    const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
-    const encoded = normalized + padding;
-    let decoded;
-    if (typeof atob === 'function') {
-      decoded = atob(encoded);
-    } else if (typeof Buffer !== 'undefined') {
-      decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    } else {
-      return null;
-    }
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
-}
-
-// These claims scope local state; the server authenticates credentials.
-function recoveryIdentity(token) {
-  const payload = decodeTokenPayload(token);
-  if (
-    payload &&
-    typeof payload.project_id === 'string' &&
-    payload.project_id !== '' &&
-    typeof payload.sub === 'string' &&
-    payload.sub !== ''
-  ) {
-    return { kind: 'user', projectId: payload.project_id, subject: payload.sub };
-  }
-  return { kind: 'credential', token };
-}
-
-function sameRecoveryIdentity(left, right) {
-  if (left.kind !== right.kind) {
-    return false;
-  }
-  if (left.kind === 'user') {
-    return left.projectId === right.projectId && left.subject === right.subject;
-  }
-  return left.token === right.token;
-}
 
 /**
  * Dynamically imports the Centrifuge client

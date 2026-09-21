@@ -12,6 +12,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/realtime-identity.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/auth-validation.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/lock-validation.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/function-url.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
