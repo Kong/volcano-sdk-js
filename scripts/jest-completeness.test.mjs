@@ -99,3 +99,20 @@ for (const [source, rule] of forbiddenSources) {
     assert.ok(results.some((result) => result.messages.some((message) => message.ruleId === rule)));
   });
 }
+
+test('the integration entrypoint discovers server-backed suites', () => {
+  const packageManager = process.env.npm_execpath;
+  assert.ok(packageManager, 'Run tooling tests through pnpm test:tooling.');
+  const result = spawnSync(
+    process.execPath,
+    [packageManager, 'test:integration', '--listTests', '--json', '--runInBand'],
+    { encoding: 'utf8', timeout: 15_000 },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  const discovery = result.stdout.trim().split('\n').at(-1);
+  assert.ok(discovery);
+  const paths = JSON.parse(discovery);
+  assert.equal(paths.length, 6);
+  assert.ok(paths.every((path) => path.includes('/__tests__/integration/')));
+});
