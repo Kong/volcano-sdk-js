@@ -1,39 +1,17 @@
-- Before pushing changes, run `pnpm quality`. CI runs the same command on Node 20 and 22.
+# SDK quality
+
 - Research upstream tools before adding enforcement. Keep rules in native tool
   configuration and orchestration in standard tasks. Add custom checks only
   for requirements established tools cannot express; document that gap.
-- Fix failing checks rather than weakening rules, excluding code, or suppressing findings.
-- Never approve quality-policy changes on a human reviewer's behalf.
+- Fix failures rather than weakening rules, excluding code, or suppressing
+  findings. Never approve quality-policy changes on a human reviewer's behalf.
 - Keep reviewer and repository-administration credentials outside ordinary
-  automation. Quality policy and enforcement are owned by `@Kong/team-volcano`
-  through `.github/CODEOWNERS`.
-- Use Conventional Commits with a scope, like `fix(component): describe the change`.
+  automation.
+- Preserve shared behavioral scenarios and coordinate contract changes with
+  `Kong/volcano-hosting` and the other SDKs.
+- Keep maintainer guidance under `maintainers/`; `docs/` is published.
 
 ## Documentation
 
-Everything under `docs/` is **published** — CI syncs it to the public developer
-docs site (`Kong/volcano-docs`). So `docs/` is for **end-user-facing docs only**:
-the SDK API, options, and behavior a Volcano user relies on.
-
-**When you add or change user-facing behavior, update the matching doc under
-`docs/` in the same PR.** Do **not** put internal or maintainer material in
-`docs/` — internal-only env vars and test/build knobs, design notes, or
-implementation detail. That lives **next to the code it describes**: a code
-comment, or a notes/README file in the relevant package — never under `docs/`,
-which is the sync target. When unsure whether something is meant for users, keep
-it out of `docs/`.
-
-Every doc must follow the Volcano docs format
-(https://github.com/Kong/volcano-docs/blob/main/spec/markdown-format.md):
-
-- YAML frontmatter with **`title`** and **`description`** (both required).
-- **No H1 in the body** — the title comes from frontmatter; start at `##`.
-- `kebab-case.md` filenames; `_index.md` (or `README.md`) for a section landing.
-- Every fenced code block declares a language.
-- For links within `docs/`, use a relative path with the `.md` extension. For
-  links to another docs section, use a site-absolute path without an extension,
-  such as `/platform/functions/overview` or `/cli`. Do not use source-root paths
-  such as `/authentication`; this repository is synced under `/sdk/js`.
-
-The shared lint (`.github/workflows/lint-docs.yml`) validates this on PRs that
-touch `docs/`, so malformed docs fail CI.
+- Update the matching public documentation in the same PR when user-facing
+  behavior changes.
