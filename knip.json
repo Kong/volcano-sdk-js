@@ -1,0 +1,32 @@
+{
+  "$schema": "https://unpkg.com/knip@6.37.0/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "__tests__/**/*.test.{js,ts}",
+        "__tests__/integration/**/*.test.js",
+        "__tests__/integration/setup.js",
+        "__tests__/node-environment.cjs",
+        "scripts/*.test.mjs",
+        "test/types/**/*.ts",
+        "examples/durable-order-pipeline/volcano/functions/*/index.js"
+      ],
+      "project": [
+        "src/**/*.{js,ts}",
+        "!src/generated/**",
+        "!src/generated-runtime/**",
+        "__tests__/**/*.{js,ts,cjs}",
+        "scripts/*.mjs",
+        "test/types/**/*.ts",
+        "examples/durable-order-pipeline/volcano/functions/**/*.js"
+      ]
+    },
+    "examples/nextjs-notes-app": {
+      "entry": ["src/app/**/*.js"],
+      "project": ["src/**/*.{js,css}", "*.config.js"],
+      "paths": {
+        "@/*": ["./src/*"]
+      }
+    }
+  }
+}
