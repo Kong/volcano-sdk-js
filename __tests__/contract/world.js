@@ -268,7 +268,6 @@ class ContractWorld {
 }
 
 module.exports = {
-  classifyError,
   ContractWorld,
   recordOutcome,
   requireSuccessfulOutcome,

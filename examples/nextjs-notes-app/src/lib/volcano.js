@@ -98,4 +98,3 @@ if (config.databaseName) {
 // ---------------------------------------------------------------------------
 
 // Default export for convenience
-export default volcano;
