@@ -853,6 +853,11 @@ class RealtimeChannel {
    * Pause delivery while retaining event handlers
    */
   unsubscribe() {
+    this._presenceResubscribePromise = null;
+    this._pauseSubscription();
+  }
+
+  _pauseSubscription() {
     this._paused = true;
     this._lifecycleVersion += 1;
     this._activationPromise = null;
@@ -1268,8 +1273,12 @@ class RealtimeChannel {
   async _resubscribeTrackedPresence() {
     while (true) {
       const stateVersion = this._presenceStateVersion;
-      this.unsubscribe();
+      this._pauseSubscription();
+      const lifecycleVersion = this._lifecycleVersion;
       await this._activateSubscription();
+      if (this._lifecycleVersion !== lifecycleVersion) {
+        return;
+      }
       if (stateVersion === this._presenceStateVersion) {
         return;
       }

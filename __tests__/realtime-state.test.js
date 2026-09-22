@@ -517,4 +517,90 @@ describe('realtime server state contract', () => {
     await Promise.all([tracked, subscribed]);
     expect(subscription.subscribe).toHaveBeenCalledTimes(2);
   });
+
+  test('explicit pause cancels an in-flight tracked-state attempt without poisoning immediate resume', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    const cancelledReady = deferred();
+    const resumedReady = deferred();
+    const latestReady = deferred();
+    subscription.ready
+      .mockReturnValueOnce(cancelledReady.promise)
+      .mockReturnValueOnce(resumedReady.promise)
+      .mockReturnValueOnce(latestReady.promise);
+
+    const tracked = channel.track({ status: 'working' }).catch((error) => error);
+    channel.unsubscribe();
+    let resumedCompleted = false;
+    const resumed = channel.subscribe().then(() => {
+      resumedCompleted = true;
+    });
+    expect(subscription.subscribe).toHaveBeenCalledTimes(3);
+    await Promise.resolve();
+    expect(resumedCompleted).toBe(false);
+
+    resumedReady.resolve();
+    await expect(resumed).resolves.toBeUndefined();
+    expect(resumedCompleted).toBe(true);
+    expect(channel._paused).toBe(false);
+
+    const latest = channel.track({ status: 'online' });
+    const latestAttempt = channel._presenceResubscribePromise;
+    expect(subscription.subscribe).toHaveBeenCalledTimes(4);
+    const cancellation = new Error('subscription unsubscribed');
+    cancelledReady.reject(cancellation);
+    await expect(tracked).resolves.toBe(cancellation);
+    expect(channel._presenceResubscribePromise).toBe(latestAttempt);
+
+    latestReady.resolve();
+    await expect(latest).resolves.toBeUndefined();
+    expect(channel._paused).toBe(false);
+    expect(channel._presenceResubscribePromise).toBeNull();
+  });
+
+  test('track while explicitly paused saves state as the cancelled attempt settles', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    const cancelledReady = deferred();
+    subscription.ready.mockReturnValueOnce(cancelledReady.promise);
+
+    const tracked = channel.track({ status: 'working' }).catch((error) => error);
+    channel.unsubscribe();
+    await expect(channel.track({ status: 'offline' })).resolves.toBeUndefined();
+    expect(subscription.setData).toHaveBeenLastCalledWith({ status: 'offline' });
+    expect(subscription.subscribe).toHaveBeenCalledTimes(2);
+
+    const cancellation = new Error('subscription unsubscribed');
+    cancelledReady.reject(cancellation);
+    await expect(tracked).resolves.toBe(cancellation);
+    await channel.subscribe();
+    expect(subscription.subscribe).toHaveBeenCalledTimes(3);
+    expect(subscription.setData).toHaveBeenLastCalledWith({ status: 'offline' });
+  });
+
+  test('explicit pause after readiness prevents a stale tracked-state retry', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    const ready = deferred();
+    subscription.ready.mockReturnValueOnce(ready.promise);
+
+    const tracked = channel.track({ status: 'working' });
+    ready.resolve();
+    await Promise.resolve();
+    channel.unsubscribe();
+    await channel.track({ status: 'offline' });
+    await tracked;
+
+    expect(channel._paused).toBe(true);
+    expect(subscription.subscribe).toHaveBeenCalledTimes(2);
+    expect(subscription.setData).toHaveBeenLastCalledWith({ status: 'offline' });
+    await channel.subscribe();
+    expect(subscription.subscribe).toHaveBeenCalledTimes(3);
+  });
 });

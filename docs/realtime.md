@@ -362,6 +362,10 @@ from a fresh snapshot.
 
 Row fetches and presence snapshots started before unsubscribe are discarded when
 they finish, even if you have since subscribed again.
+If a presence state update is still pending, `unsubscribe()` cancels that attempt;
+its `track()` promise may reject. A new `subscribe()` starts a fresh attempt and
+waits for it. Calling `track()` while paused saves the latest state for the
+next subscribe attempt without resuming the channel.
 
 `removeChannel()`, `removeAllChannels()`, and `disconnect()` discard subscriptions
 and listeners. Auth identity changes discard subscriptions while preserving
