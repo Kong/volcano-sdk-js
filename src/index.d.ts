@@ -1,3 +1,6 @@
+import type { FilterValue } from './database-filters';
+export type { FilterValue } from './database-filters';
+
 /**
  * Volcano Auth SDK Type Definitions
  */
@@ -896,9 +899,6 @@ export interface Storage {
   /** Select a storage bucket to perform operations on */
   from(bucketName: string): StorageFileApi;
 }
-
-/** Filter value types for database queries */
-export type FilterValue = string | number | boolean | null | Date;
 
 export interface QueryResult<T = Record<string, JsonValue>> {
   data: T[] | null;

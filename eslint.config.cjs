@@ -23,7 +23,7 @@ const unicorn = unicornModule.default || unicornModule;
 const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
-const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts'];
+const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/package-*.ts'];
 const integrationTestFiles = ['__tests__/integration/**/*.js'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
@@ -268,7 +268,10 @@ module.exports = [
     files: typescriptFiles,
     languageOptions: {
       sourceType: 'module',
-      parserOptions: { project: './tsconfig.json', tsconfigRootDir: __dirname },
+      parserOptions: {
+        project: ['./tsconfig.json', './tsconfig.consumer.json'],
+        tsconfigRootDir: __dirname,
+      },
     },
     rules: {
       'no-unused-vars': 'off',

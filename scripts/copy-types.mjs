@@ -2,6 +2,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 
 const declarationFiles = [
+  ['dist/typescript/database-filters.d.ts', 'dist/database-filters.d.ts'],
+  ['dist/typescript/database-filters.d.ts', 'dist/database-filters.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/errors.d.ts', 'dist/errors.d.ts'],
   ['dist/typescript/errors.d.ts', 'dist/errors.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/database-connection-string.d.ts', 'dist/database-connection-string.d.ts'],
