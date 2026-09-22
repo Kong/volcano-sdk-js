@@ -1,3 +1,6 @@
+import { describe, expect, jest, test } from '@jest/globals';
+import { durable, DurableRuntimeMissingError } from '../src/durable.js';
+
 // A durable handler running where durable execution does not exist — a function
 // that was not deployed as durable, a browser, a local script — cannot load the
 // runtime. The failure has to name what to do about it rather than surface a
@@ -18,17 +21,27 @@ jest.mock(
   { virtual: true },
 );
 
-const { durable, DurableRuntimeMissingError } = require('../src/durable.js');
+async function missingRuntimeError(): Promise<DurableRuntimeMissingError> {
+  try {
+    await durable(() => Promise.resolve(null))({}, {});
+  } catch (error: unknown) {
+    if (error instanceof DurableRuntimeMissingError) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error('Expected the missing durable runtime to fail');
+}
 
 describe('durable() where the durable runtime is not available', () => {
-  it('fails on invocation, not on import', async () => {
-    const handler = durable(async () => 'never runs');
+  test('fails on invocation, not on import', async () => {
+    const handler = durable(() => Promise.resolve('never runs'));
 
     await expect(handler({}, {})).rejects.toThrow(DurableRuntimeMissingError);
   });
 
-  it('says to deploy as durable, and that durable execution is cloud-only', async () => {
-    const error = await durable(async () => null)({}, {}).catch((err) => err);
+  test('says to deploy as durable, and that durable execution is cloud-only', async () => {
+    const error = await missingRuntimeError();
 
     expect(error.message).toMatch(/deploy this one that way/);
     expect(error.message).toMatch(/kind: durable/);
@@ -36,8 +49,8 @@ describe('durable() where the durable runtime is not available', () => {
     expect(error.cause).toBeDefined();
   });
 
-  it('does not tell the reader to install anything', async () => {
-    const error = await durable(async () => null)({}, {}).catch((err) => err);
+  test('does not tell the reader to install anything', async () => {
+    const error = await missingRuntimeError();
 
     // The platform installs it. A message naming a package would send the
     // reader to add a dependency that their function does not need and that
