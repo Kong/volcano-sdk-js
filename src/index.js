@@ -16,6 +16,7 @@ import {
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
+import { safeJsonParse } from './response-json.ts';
 import {
   decodeBase64Url,
   extractRequiredProjectIdFromToken,
@@ -144,26 +145,6 @@ function cloneJsonValue(value) {
 
   const serializedValue = JSON.stringify(value);
   return JSON.parse(serializedValue);
-}
-
-/**
- * Safely parse JSON from response, returns empty object on failure
- * @param {Response} response
- * @param {AbortSignal} [signal]
- * @returns {Promise<Object>}
- */
-async function safeJsonParse(response, signal) {
-  try {
-    return await response.json();
-  } catch (error) {
-    if (signal?.aborted) {
-      throw signal.reason || error;
-    }
-    if (error?.name === 'AbortError') {
-      throw error;
-    }
-    return {};
-  }
 }
 
 async function parseResponseBody(response) {
