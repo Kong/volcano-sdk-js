@@ -16,6 +16,7 @@ import {
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
+import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
 import {
@@ -146,43 +147,6 @@ function cloneJsonValue(value) {
 
   const serializedValue = JSON.stringify(value);
   return JSON.parse(serializedValue);
-}
-
-async function parseResponseBody(response) {
-  if (!response) {
-    return null;
-  }
-
-  if (typeof response.text !== 'function') {
-    if (typeof response.json === 'function') {
-      try {
-        return await response.json();
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  const bodyText = await response.text();
-  if (!bodyText) {
-    return null;
-  }
-
-  const contentType = (getHeaderValue(response, 'content-type') || '').toLowerCase();
-  const shouldParseJson =
-    contentType.includes('application/json') ||
-    bodyText.startsWith('{') ||
-    bodyText.startsWith('[');
-  if (!shouldParseJson) {
-    return bodyText;
-  }
-
-  try {
-    return JSON.parse(bodyText);
-  } catch {
-    return bodyText;
-  }
 }
 
 class AuthRefreshDiscardedError extends Error {
