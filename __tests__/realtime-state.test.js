@@ -1,4 +1,7 @@
 const { VolcanoRealtime } = require('../src/realtime.js');
+const userToken = `header.${Buffer.from(
+  JSON.stringify({ project_id: 'project', sub: 'user' }),
+).toString('base64url')}.signature`;
 
 function deferred() {
   let resolve;
@@ -113,7 +116,7 @@ describe('realtime server state contract', () => {
       serverChannel: 'project:postgres:app:public:items:service:key-id',
     },
   ])('routes $name service-key postgres publications', ({ options, serverChannel }) => {
-    const { realtime } = createRealtime();
+    const { realtime } = createRealtime({ accessToken: 'sk-project-key' });
     const channel = realtime.channel('public:items', options);
     const onDelete = jest.fn();
     channel.onPostgresChanges('DELETE', 'public', 'items', onDelete);
@@ -137,6 +140,98 @@ describe('realtime server state contract', () => {
     });
 
     expect(onInsert).toHaveBeenCalledWith(change, expect.anything());
+  });
+
+  test.each([
+    ['service key', 'sk-project-key', 'service:key-id'],
+    ['user token', userToken, 'user-uuid'],
+  ])(
+    'routes colliding legacy and scoped postgres channels for a %s',
+    async (_name, accessToken, suffix) => {
+      const { realtime } = createRealtime({ accessToken });
+      const legacy = realtime.channel('public:items', { type: 'postgres' });
+      const scoped = realtime.channel('items:service', {
+        type: 'postgres',
+        databaseName: 'public',
+      });
+      const onLegacy = jest.fn();
+      const onScoped = jest.fn();
+      legacy.onPostgresChanges('DELETE', 'public', 'items', onLegacy);
+      scoped.onPostgresChanges('DELETE', 'items', 'service', onScoped);
+      await legacy.subscribe();
+      await scoped.subscribe();
+      const legacyChange = { type: 'DELETE', schema: 'public', table: 'items' };
+      const scopedChange = { type: 'DELETE', schema: 'items', table: 'service' };
+
+      const legacyPublication = {
+        channel: `project:postgres:public:items:${suffix}`,
+        data: legacyChange,
+      };
+      const scopedPublication = {
+        channel: `project:postgres:public:items:service:${suffix}`,
+        data: scopedChange,
+      };
+      realtime._handleServerPublication(legacyPublication);
+      realtime._handleServerPublication(scopedPublication);
+
+      expect(onLegacy).toHaveBeenCalledWith(legacyChange, expect.anything());
+      expect(onScoped).toHaveBeenCalledWith(scopedChange, expect.anything());
+      expect(onLegacy).toHaveBeenCalledTimes(1);
+      expect(onScoped).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test('uses an adopted access token when routing colliding postgres channels', async () => {
+    const { realtime } = createRealtime({ accessToken: userToken });
+    const legacy = realtime.channel('public:items', { type: 'postgres' });
+    const scoped = realtime.channel('items:service', {
+      type: 'postgres',
+      databaseName: 'public',
+    });
+    const onLegacy = jest.fn();
+    const onScoped = jest.fn();
+    legacy.onPostgresChanges('DELETE', 'public', 'items', onLegacy);
+    scoped.onPostgresChanges('DELETE', 'items', 'service', onScoped);
+
+    realtime._adoptAccessToken('sk-project-key');
+    await legacy.subscribe();
+    await scoped.subscribe();
+    const legacyChange = { type: 'DELETE', schema: 'public', table: 'items' };
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:service:key-id',
+      data: legacyChange,
+    });
+    expect(onLegacy).toHaveBeenCalledWith(legacyChange, expect.anything());
+    expect(onScoped).not.toHaveBeenCalled();
+
+    realtime._adoptAccessToken(userToken);
+    await legacy.subscribe();
+    await scoped.subscribe();
+    const scopedChange = { type: 'DELETE', schema: 'items', table: 'service' };
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:service:user-uuid',
+      data: scopedChange,
+    });
+    expect(onScoped).toHaveBeenCalledWith(scopedChange, expect.anything());
+  });
+
+  test('rejects malformed service-key postgres publication shapes', () => {
+    const { realtime } = createRealtime({ accessToken: 'sk-project-key' });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    const onDelete = jest.fn();
+    channel.onPostgresChanges('DELETE', 'public', 'items', onDelete);
+    const change = { type: 'DELETE', schema: 'public', table: 'items' };
+
+    realtime._handleServerPublication({
+      channel: 'project:postgres:extra:public:items:service:key-id',
+      data: change,
+    });
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:service:',
+      data: change,
+    });
+
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   test('uses the global selector in scoped identity when the channel selector is absent', async () => {

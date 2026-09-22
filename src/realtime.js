@@ -469,22 +469,25 @@ class VolcanoRealtime {
     // Find the SDK channel and deliver the message
     let channel = this._channels.get(sdkChannel);
 
-    // Route per-user postgres publications to their exact subscribed channel.
-    // The helper accepts the legacy schema/table and database/schema/table
-    // forms, while rejecting unrelated channel shapes.
+    // Service keys have a two-part `service:<key-id>` identity; user tokens
+    // have a one-part identity. Resolve the suffix from the current credential
+    // before looking up a channel, since a table may be named `service`.
     if (!channel) {
-      const postgresBaseChannel = postgresBaseChannelFromParts(parts);
-      if (postgresBaseChannel !== null) {
-        channel = this._channels.get(postgresBaseChannel);
+      const serviceKey = typeof this.accessToken === 'string' && this.accessToken.startsWith('sk-');
+      if (
+        serviceKey &&
+        (parts.length === 6 || parts.length === 7) &&
+        parts[1] === 'postgres' &&
+        parts.at(-2) === 'service' &&
+        parts.at(-1) !== ''
+      ) {
+        channel = this._channels.get(parts.slice(1, -2).join(':'));
+      } else {
+        const postgresBaseChannel = postgresBaseChannelFromParts(parts);
+        if (postgresBaseChannel !== null) {
+          channel = this._channels.get(postgresBaseChannel);
+        }
       }
-    }
-
-    // Service identities use the server-defined `service:<key-id>` form, so
-    // their user-specific channel suffix occupies two colon-delimited parts.
-    // Try this only after the ordinary one-part user suffix to preserve tables
-    // whose name is literally "service".
-    if (!channel && parts[1] === 'postgres' && parts.at(-2) === 'service') {
-      channel = this._channels.get(parts.slice(1, -2).join(':'));
     }
 
     if (channel) {

@@ -158,6 +158,10 @@ and sends no subscription data. The server accepts that omission only for a
 project with exactly one active database. An unknown or inactive name causes
 subscription to fail with the server's `unknown database selector` error.
 
+Legacy and database-scoped Postgres channels can coexist in one realtime client
+for signed-in users and server-side service keys, including when a table is named
+`service`.
+
 Insert and update notifications can load the current row through the authenticated
 client. Automatic lookup requires a primary key named `id`; rapid updates may
 have changed the row by the time the lookup runs. A failed lookup leaves the
