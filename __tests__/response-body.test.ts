@@ -85,14 +85,16 @@ test.each([new Error('read failed'), new DOMException('cancelled', 'AbortError')
 test.each([undefined, null, false, 0, '', Number.NaN])(
   'treats a falsy content type as absent: %p',
   async (value) => {
-    const response = { text: () => Promise.resolve('payload'), headers: { get: () => value } };
-    await expect(parseResponseBody(response)).resolves.toBe('payload');
+    const response = { text: () => Promise.resolve('false'), headers: { get: () => value } };
+    await expect(parseResponseBody(response)).resolves.toBe('false');
   },
 );
 
 test.each([true, 1, {}, []])('rejects a truthy non-string content type: %p', async (value) => {
   const response = { text: () => Promise.resolve('payload'), headers: { get: () => value } };
-  await expect(parseResponseBody(response)).rejects.toBeInstanceOf(TypeError);
+  const result = parseResponseBody(response);
+  await expect(result).rejects.toBeInstanceOf(TypeError);
+  await expect(result).rejects.toThrow('Content-Type header must be a string');
 });
 
 test('accepts a text-only adapter without headers', async () => {
