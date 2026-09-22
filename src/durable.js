@@ -1,6 +1,7 @@
 import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { optionalDuration, waitDuration } from './durable-duration.ts';
 import { failureDetail } from './durable-failure-detail.ts';
+import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
 /**
  * Volcano SDK - Durable function authoring API
@@ -55,24 +56,6 @@ async function resolveEngine() {
     return loaded.withDurableExecution ? loaded : loaded.default;
   } catch (cause) {
     throw new DurableRuntimeMissingError(cause);
-  }
-}
-
-/**
- * Thrown when the durable runtime is not there, which means this handler is
- * running somewhere durable execution does not exist: a function that was not
- * deployed as durable, a browser, or a local script.
- */
-class DurableRuntimeMissingError extends Error {
-  constructor(cause) {
-    super(
-      'Durable execution is not available here. Volcano provides the durable runtime when it ' +
-        'builds a function deployed as durable, so deploy this one that way ' +
-        '(`volcano cloud durable deploy`, or `kind: durable` in volcano-config.yaml). ' +
-        'Durable execution is a cloud capability and does not run locally.',
-    );
-    this.name = 'DurableRuntimeMissingError';
-    this.cause = cause;
   }
 }
 
@@ -360,4 +343,5 @@ function toRetryStrategy(retry, engine) {
   );
 }
 
-export { durable, DurableRuntimeMissingError };
+export { durable };
+export { DurableRuntimeMissingError } from './durable-runtime-error.ts';
