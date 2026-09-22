@@ -3,6 +3,14 @@
   "workspaces": {
     ".": {
       "entry": [
+        "src/index.js!",
+        "src/realtime.js!",
+        "src/durable.js!",
+        "src/next/middleware.js!",
+        "src/index.d.ts!",
+        "src/realtime.d.ts!",
+        "src/durable.d.ts!",
+        "src/next/middleware.d.ts!",
         "__tests__/**/*.test.{js,ts}",
         "__tests__/integration/**/*.test.js",
         "__tests__/integration/setup.js",
@@ -12,9 +20,11 @@
         "examples/durable-order-pipeline/volcano/functions/*/index.js"
       ],
       "project": [
-        "src/**/*.{js,ts}",
-        "!src/generated/**",
-        "!src/generated-runtime/**",
+        "src/**/*.{js,ts}!",
+        "!src/generated/model/**",
+        "!src/generated/client.ts",
+        "!src/generated/volcano-fetch.ts",
+        "!src/generated-runtime/model/**",
         "__tests__/**/*.{js,ts,cjs}",
         "scripts/*.mjs",
         "test/types/**/*.ts",
@@ -22,8 +32,7 @@
       ]
     },
     "examples/nextjs-notes-app": {
-      "entry": ["src/app/**/*.js"],
-      "project": ["src/**/*.{js,css}", "*.config.js"],
+      "project": ["src/**/*.{js,css}!", "*.config.js"],
       "paths": {
         "@/*": ["./src/*"]
       }
