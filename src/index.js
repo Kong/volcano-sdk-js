@@ -25,6 +25,7 @@ import {
   stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
 import { parseResponseBody } from './response-body.ts';
@@ -423,12 +424,6 @@ class ProjectLocksApi {
     });
     return { acquired: true, ...(await session.run(callback)) };
   }
-}
-
-function secureRandomUnit() {
-  const value = new Uint32Array(1);
-  crypto.getRandomValues(value);
-  return value[0] / 0x1_0000_0000;
 }
 
 // ============================================================================

@@ -384,7 +384,7 @@ describe('project locks', () => {
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000007');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
-      values[0] = 0x8000_0000;
+      new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
     fetch
@@ -416,7 +416,7 @@ describe('project locks', () => {
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000b');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
-      values[0] = 0x8000_0000;
+      new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
     let finishRenewal;
@@ -460,7 +460,7 @@ describe('project locks', () => {
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000008');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
-      values[0] = 0x8000_0000;
+      new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
     fetch
