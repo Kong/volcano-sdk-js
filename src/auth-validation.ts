@@ -2,6 +2,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+interface CompleteSessionFields {
+  access_token: string;
+  refresh_token: string;
+  user: { id: string };
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
 }
@@ -31,6 +37,13 @@ export function validateCompleteSession(session: unknown): TypeError | null {
     return new TypeError('Session must be an object');
   }
   return validateCredentials(session) ?? validateUser(session['user']);
+}
+
+export function assertCompleteSession(session: unknown): asserts session is CompleteSessionFields {
+  const error = validateCompleteSession(session);
+  if (error !== null) {
+    throw error;
+  }
 }
 
 export function sanitizeProvider(provider: unknown): void {

@@ -1,3 +1,8 @@
+import {
+  sessionIdsEqual,
+  validateRefreshSource,
+  validateSessionContinuation,
+} from './auth-continuity.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import {
@@ -216,37 +221,6 @@ function clearSharedFunctionResolveStateForTests() {
   state.inFlight.clear();
   state.maxEntries = DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES;
   state.lastPruneAtMs = 0;
-}
-
-function validateRefreshSource(context) {
-  if (
-    !context.operations.hasVerifiedPair(context.accessToken, context.refreshToken) &&
-    !extractSessionIdFromToken(context.accessToken)
-  ) {
-    throw new Error('Cannot refresh supplied credentials without a session identifier');
-  }
-}
-
-function validateSessionContinuation(data, context, userId) {
-  const invalid = validateCompleteSession(data);
-  if (invalid) {
-    throw invalid;
-  }
-  const expected = extractSessionIdFromToken(context.accessToken);
-  if (expected && !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))) {
-    throw new Error('Refreshed credentials belong to a different server session');
-  }
-  if (userId && data.user.id !== userId) {
-    throw new Error('Refreshed session belongs to a different user');
-  }
-}
-
-function sessionIdsEqual(left, right) {
-  return (
-    typeof left === 'string' &&
-    typeof right === 'string' &&
-    left.toLowerCase() === right.toLowerCase()
-  );
 }
 
 /**
