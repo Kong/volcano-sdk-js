@@ -244,22 +244,28 @@ describe('realtime server state contract', () => {
     channel.onPresenceSync(onSync);
     await channel.subscribe();
 
-    const info = {
+    const transportInfo = {
       client: 'remote-client',
       user: 'user-id',
-      data: { status: 'working' },
+      chanInfo: { status: 'working' },
       connInfo: { user_metadata: { display_name: 'Contract' } },
     };
     realtime._handleServerSubscribed({
       channel: 'project:presence:lobby',
-      data: { presence: { 'remote-client': info } },
+      data: { presence: { 'remote-client': transportInfo } },
     });
     const initial = onSync.mock.lastCall[0];
-    realtime._handleServerJoin({ channel: 'project:presence:lobby', info });
+    realtime._handleServerJoin({ channel: 'project:presence:lobby', info: transportInfo });
     const live = onSync.mock.lastCall[0];
 
-    expect(initial).toEqual({ 'remote-client': info });
+    expect(initial).toEqual({
+      'remote-client': {
+        ...transportInfo,
+        data: { status: 'working' },
+      },
+    });
     expect(live).toEqual(initial);
+    expect(transportInfo).not.toHaveProperty('data');
   });
 
   test('resends the current tracked state after resubscribe', async () => {

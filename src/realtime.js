@@ -63,6 +63,18 @@ function clonePresenceState(state) {
   return state;
 }
 
+function normalizePresenceInfo(info) {
+  if (!info || typeof info !== 'object' || Array.isArray(info)) {
+    return info;
+  }
+
+  const normalized = clonePresenceState(info);
+  if (normalized.data === undefined && normalized.chanInfo !== undefined) {
+    normalized.data = clonePresenceState(normalized.chanInfo);
+  }
+  return normalized;
+}
+
 /**
  * Dynamically imports the Centrifuge client
  */
@@ -488,7 +500,11 @@ class VolcanoRealtime {
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
-        channel._presenceState[ctx.info.client] = ctx.info;
+        const info = normalizePresenceInfo(ctx.info);
+        channel._presenceState[info.client] = info;
+        channel._triggerPresenceSync();
+        channel._triggerEvent('join', info);
+        return;
       }
       channel._triggerPresenceSync();
       channel._triggerEvent('join', ctx.info);
@@ -509,7 +525,11 @@ class VolcanoRealtime {
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
-        delete channel._presenceState[ctx.info.client];
+        const info = normalizePresenceInfo(ctx.info);
+        delete channel._presenceState[info.client];
+        channel._triggerPresenceSync();
+        channel._triggerEvent('leave', info);
+        return;
       }
       channel._triggerPresenceSync();
       channel._triggerEvent('leave', ctx.info);
@@ -534,7 +554,7 @@ class VolcanoRealtime {
       if (ctx.data.presence) {
         channel._presenceState = {};
         for (const [clientId, info] of Object.entries(ctx.data.presence)) {
-          channel._presenceState[clientId] = info;
+          channel._presenceState[clientId] = normalizePresenceInfo(info);
         }
         channel._triggerPresenceSync();
       }
@@ -720,9 +740,10 @@ class RealtimeChannel {
         if (this._paused) {
           return;
         }
-        this._presenceState[ctx.info.client] = ctx.info;
+        const info = normalizePresenceInfo(ctx.info);
+        this._presenceState[info.client] = info;
         this._triggerPresenceSync();
-        this._triggerEvent('join', ctx.info);
+        this._triggerEvent('join', info);
       };
       this._subscription.on('join', this._eventHandlers.join);
 
@@ -730,9 +751,10 @@ class RealtimeChannel {
         if (this._paused) {
           return;
         }
-        delete this._presenceState[ctx.info.client];
+        const info = normalizePresenceInfo(ctx.info);
+        delete this._presenceState[info.client];
         this._triggerPresenceSync();
-        this._triggerEvent('leave', ctx.info);
+        this._triggerEvent('leave', info);
       };
       this._subscription.on('leave', this._eventHandlers.leave);
 
@@ -756,7 +778,7 @@ class RealtimeChannel {
               if (presence?.clients && lifecycleVersion === this._lifecycleVersion) {
                 this._presenceState = {};
                 for (const [clientId, info] of Object.entries(presence.clients)) {
-                  this._presenceState[clientId] = info;
+                  this._presenceState[clientId] = normalizePresenceInfo(info);
                 }
                 this._triggerPresenceSync();
               }
@@ -1198,7 +1220,7 @@ class RealtimeChannel {
     this._presenceState = {};
     if (ctx.clients) {
       for (const [clientId, info] of Object.entries(ctx.clients)) {
-        this._presenceState[clientId] = info;
+        this._presenceState[clientId] = normalizePresenceInfo(info);
       }
     }
   }

@@ -305,8 +305,9 @@ join and leave. Unsubscribing clears the local roster; resubscribing reloads it.
 `track(state)` publishes the JSON object as this connection's custom presence
 state. Other clients receive the state in `info.data` for join events and in
 each entry of `onPresenceSync`; initial and live entries use the same full
-client record shape. The SDK retains a detached snapshot and sends it again
-when the channel reconnects.
+client record shape. The original server metadata remains available in
+`info.chanInfo` for compatibility. The SDK retains a detached snapshot and
+sends it again when the channel reconnects.
 
 ```javascript
 await channel.track({ status: 'working' });

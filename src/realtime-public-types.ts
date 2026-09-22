@@ -175,7 +175,7 @@ export interface PresenceInfo {
   connInfo?: Record<string, unknown>;
   /** Server subscription metadata */
   chanInfo?: Record<string, unknown>;
-  /** Legacy transport data, when supplied */
+  /** Custom presence state normalized from server subscription metadata */
   data?: Record<string, unknown>;
 }
 
