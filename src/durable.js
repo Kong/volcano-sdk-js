@@ -1,5 +1,6 @@
 import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { optionalDuration, waitDuration } from './durable-duration.ts';
+import { failureDetail } from './durable-failure-detail.ts';
 
 /**
  * Volcano SDK - Durable function authoring API
@@ -260,29 +261,6 @@ function completionReason(batch) {
   return typeof batch.completionReason === 'string'
     ? batch.completionReason.toLowerCase()
     : undefined;
-}
-
-/**
- * A failure as data, because the result is documented as surviving
- * `JSON.stringify` and an Error does not: `message` and `name` live on the
- * prototype and are non-enumerable, so serializing the engine's error kept its
- * `errorType` and dropped the one field anybody reads.
- *
- * `throwIfFailed` still throws the engine's own error, so nothing is lost for a
- * handler that wants to propagate the failure rather than report it.
- */
-function failureDetail(error) {
-  if (!(error instanceof Error)) {
-    return { name: 'Error', message: String(error) };
-  }
-  const detail = { name: error.name, message: error.message };
-  if (error.errorType !== undefined) {
-    detail.type = error.errorType;
-  }
-  if (error.errorData !== undefined) {
-    detail.data = error.errorData;
-  }
-  return detail;
 }
 
 function stepConfig(options, engine) {

@@ -13,6 +13,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/durable-failure-detail.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-arguments.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/database-filters.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/lock-random.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
