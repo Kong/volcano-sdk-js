@@ -68,7 +68,7 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
-    "lint:fix": "eslint . --fix && pnpm format",
+    "lint:fix": "pnpm build && eslint . --fix && pnpm format",
     "test": "pnpm build && jest",
     "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.d.ts test/types/auth-contract.ts test/types/database-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
     "test:package": "pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz",
