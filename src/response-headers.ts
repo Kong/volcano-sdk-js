@@ -1,10 +1,10 @@
 interface HeaderMethods {
-  get?: (name: string) => string | null;
+  get?: (name: string) => unknown;
   forEach?: (callback: (value: string, key: string) => void) => void;
   entries?: () => Iterable<readonly [string, string]>;
 }
 
-interface HeaderResponse {
+export interface HeaderResponse {
   headers?: HeaderMethods | Readonly<Record<string, string>> | null;
 }
 
