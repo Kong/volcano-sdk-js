@@ -91,6 +91,44 @@ describe('realtime server state contract', () => {
     expect(onA).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    {
+      name: 'legacy',
+      options: { type: 'postgres' },
+      serverChannel: 'project:postgres:public:items:service:key-id',
+    },
+    {
+      name: 'database-scoped',
+      options: { type: 'postgres', databaseName: 'app' },
+      serverChannel: 'project:postgres:app:public:items:service:key-id',
+    },
+  ])('routes $name service-key postgres publications', ({ options, serverChannel }) => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('public:items', options);
+    const onDelete = jest.fn();
+    channel.onPostgresChanges('DELETE', 'public', 'items', onDelete);
+    const change = { type: 'DELETE', schema: 'public', table: 'items', id: 'row-1' };
+
+    realtime._handleServerPublication({ channel: serverChannel, data: change });
+
+    expect(onDelete).toHaveBeenCalledWith(change, expect.anything());
+  });
+
+  test('keeps one-part user suffix routing for a table named service', () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('public:service', { type: 'postgres' });
+    const onInsert = jest.fn();
+    channel.onPostgresChanges('INSERT', 'public', 'service', onInsert);
+    const change = { type: 'INSERT', schema: 'public', table: 'service' };
+
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:service:user-uuid',
+      data: change,
+    });
+
+    expect(onInsert).toHaveBeenCalledWith(change, expect.anything());
+  });
+
   test('uses the global selector in scoped identity when the channel selector is absent', async () => {
     const { realtime, client } = createRealtime({ databaseName: 'db-global' });
 

@@ -461,6 +461,14 @@ class VolcanoRealtime {
       }
     }
 
+    // Service identities use the server-defined `service:<key-id>` form, so
+    // their user-specific channel suffix occupies two colon-delimited parts.
+    // Try this only after the ordinary one-part user suffix to preserve tables
+    // whose name is literally "service".
+    if (!channel && parts[1] === 'postgres' && parts.at(-2) === 'service') {
+      channel = this._channels.get(parts.slice(1, -2).join(':'));
+    }
+
     if (channel) {
       channel._handlePublication(ctx);
     }
