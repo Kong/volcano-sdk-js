@@ -661,6 +661,8 @@ class RealtimeChannel {
     // Event handler references for cleanup
     this._eventHandlers = {};
     this._presenceTimeoutId = null;
+    this._presenceStateVersion = 0;
+    this._presenceResubscribePromise = null;
   }
 
   /**
@@ -1194,19 +1196,45 @@ class RealtimeChannel {
     // attempt. Keep a detached snapshot so reconnects cannot observe caller
     // mutations after a successful track call.
     this._myPresenceState = clonePresenceState(state);
+    this._presenceStateVersion += 1;
     if (!this._subscription) {
       return;
     }
 
     this._subscription.setData(this._myPresenceState);
+    if (this._presenceResubscribePromise) {
+      await this._presenceResubscribePromise;
+      return;
+    }
     if (this._paused) {
       return;
     }
 
     // setData applies to the next subscription attempt, so resubscribe the
-    // active channel and wait for the server acknowledgement.
-    this.unsubscribe();
-    await this._activateSubscription();
+    // active channel and wait for the server acknowledgement. Coalesce state
+    // changes made while an attempt is in flight, but do not resolve any of
+    // their callers until the latest snapshot has been acknowledged.
+    const resubscribe = this._resubscribeTrackedPresence();
+    this._presenceResubscribePromise = resubscribe;
+    try {
+      await resubscribe;
+    } finally {
+      if (this._presenceResubscribePromise === resubscribe) {
+        this._presenceResubscribePromise = null;
+      }
+    }
+  }
+
+  async _resubscribeTrackedPresence() {
+    while (true) {
+      const stateVersion = this._presenceStateVersion;
+      this.unsubscribe();
+      await this._activateSubscription();
+      if (stateVersion === this._presenceStateVersion) {
+        return;
+      }
+      this._subscription.setData(this._myPresenceState);
+    }
   }
 
   /**

@@ -1,5 +1,15 @@
 const { VolcanoRealtime } = require('../src/realtime.js');
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createSubscription() {
   const handlers = new Map();
   const subscription = {
@@ -280,5 +290,63 @@ describe('realtime server state contract', () => {
 
     expect(subscriptions[0].setData).toHaveBeenCalledTimes(1);
     expect(subscriptions[0].setData.mock.calls[0][0]).toEqual(state);
+  });
+
+  test('waits until the latest concurrent tracked state is acknowledged', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    const firstReady = deferred();
+    const secondReady = deferred();
+    const sent = [];
+    let currentData;
+    subscription.setData.mockImplementation((state) => {
+      currentData = state;
+    });
+    subscription.subscribe.mockImplementation(() => {
+      sent.push(JSON.parse(JSON.stringify(currentData)));
+    });
+    subscription.ready
+      .mockReset()
+      .mockReturnValueOnce(firstReady.promise)
+      .mockReturnValueOnce(secondReady.promise);
+
+    const first = channel.track({ status: 'away' });
+    let secondResolved = false;
+    const second = channel.track({ status: 'busy' }).then(() => {
+      secondResolved = true;
+    });
+    await Promise.resolve();
+
+    expect(sent).toEqual([{ status: 'away' }]);
+    expect(secondResolved).toBe(false);
+
+    firstReady.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sent).toEqual([{ status: 'away' }, { status: 'busy' }]);
+    expect(secondResolved).toBe(false);
+
+    secondReady.resolve();
+    await Promise.all([first, second]);
+    expect(secondResolved).toBe(true);
+  });
+
+  test('stores tracked state without resubscribing an explicitly paused channel', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    subscription.subscribe.mockClear();
+    channel.unsubscribe();
+
+    await channel.track({ status: 'offline' });
+
+    expect(subscription.setData).toHaveBeenLastCalledWith({ status: 'offline' });
+    expect(subscription.subscribe).not.toHaveBeenCalled();
+
+    await channel.subscribe();
+    expect(subscription.subscribe).toHaveBeenCalledTimes(1);
   });
 });
