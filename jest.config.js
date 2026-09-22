@@ -1,4 +1,5 @@
 module.exports = {
+  waitForUnhandledRejections: true,
   testEnvironment: 'jsdom',
   reporters: ['default', '<rootDir>/scripts/jest-completeness.cjs'],
   testMatch: ['**/__tests__/**/*.test.{js,ts}'],
