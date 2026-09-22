@@ -73,7 +73,6 @@ try {
 
 Abort `renewal` to cancel the in-flight renewal request. Cancellation is
 reported through `renewed.error`; the existing lease remains unchanged.
-The SDK releases request timers and cancellation listeners when the request settles.
 
 ## Recover an uncertain acquisition
 
