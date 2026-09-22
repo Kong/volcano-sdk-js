@@ -5,6 +5,7 @@ import {
 } from './auth-continuity.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
+import { durablePathSegments } from './durable-paths.ts';
 import {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
@@ -272,23 +273,6 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
 function errorResult(message, extra = {}) {
   const error = message instanceof Error ? message : new Error(message);
   return { data: null, error, ...extra };
-}
-
-/**
- * Checks and escapes the path segments an owner-scoped durable route is
- * addressed by. An empty one would silently address the collection instead of
- * the execution, which is a different request rather than a failed one.
- */
-function durablePathSegments(fields) {
-  const segments = {};
-  for (const [field, value] of Object.entries(fields)) {
-    const identifier = typeof value === 'string' ? value.trim() : '';
-    if (!identifier) {
-      return { error: new Error(`${field} must be a non-empty string`) };
-    }
-    segments[field] = encodeURIComponent(identifier);
-  }
-  return { segments };
 }
 
 function apiRequestError(response, data, message = data?.error || 'Request failed') {
