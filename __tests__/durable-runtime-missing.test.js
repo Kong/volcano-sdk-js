@@ -7,7 +7,7 @@
 // longer something the reader can fix by installing a package, and the message
 // must not send them after one. The runtime is never installed in this repo --
 // `pnpm-workspace.yaml` sets `autoInstallPeers: false` and
-// durable-runtime-packaging.test.js asserts the lockfile does not resolve it --
+// the packaging test asserts the lockfile does not resolve it --
 // so the virtual mock below is what makes the missing-module path testable at
 // all, rather than a way of hiding a module that is really there.
 jest.mock(

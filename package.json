@@ -82,7 +82,7 @@
     "audit": "node scripts/audit-dependencies.mjs",
     "quality": "pnpm run audit && pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart",
     "test:tooling": "node --test scripts/*.test.mjs",
-    "test:typed-runtime": "jest --config jest.typed.config.cjs"
+    "test:typed-runtime": "pnpm build && jest --config jest.typed.config.cjs"
   },
   "keywords": [
     "volcano",
