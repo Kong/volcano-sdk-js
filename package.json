@@ -77,11 +77,12 @@
     "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --config jest.integration.config.cjs --testTimeout=120000",
     "test:contract": "jest --config jest.contract.config.cjs --runInBand",
     "prepublishOnly": "npm run build",
-    "test:quickstart": "pnpm test:package && node scripts/test-package-quickstart.mjs reports/volcano-sdk.tgz",
+    "test:quickstart": "pnpm test:package && pnpm test:types:package && node scripts/test-package-quickstart.mjs reports/volcano-sdk.tgz",
+    "test:types:package": "tsc --noEmit -p tsconfig.consumer.json",
     "audit": "node scripts/audit-dependencies.mjs",
     "quality": "pnpm run audit && pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart",
     "test:tooling": "node --test scripts/*.test.mjs",
-    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts __tests__/lock-session.test.ts __tests__/token-claims.test.ts __tests__/function-url.test.ts __tests__/lock-validation.test.ts __tests__/realtime-identity.test.ts __tests__/auth-validation.test.ts __tests__/durable-duration.test.ts __tests__/fetch-lifecycle.test.ts __tests__/response-json.test.ts __tests__/response-headers.test.ts __tests__/response-body.test.ts"
+    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts __tests__/lock-session.test.ts __tests__/token-claims.test.ts __tests__/function-url.test.ts __tests__/lock-validation.test.ts __tests__/realtime-identity.test.ts __tests__/auth-validation.test.ts __tests__/durable-duration.test.ts __tests__/fetch-lifecycle.test.ts __tests__/response-json.test.ts __tests__/response-headers.test.ts __tests__/response-body.test.ts __tests__/errors.test.ts"
   },
   "keywords": [
     "volcano",

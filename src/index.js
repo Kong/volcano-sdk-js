@@ -1,5 +1,10 @@
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
+import {
+  AuthRefreshDiscardedError,
+  AuthSessionChangedError,
+  VolcanoSystemError,
+} from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
 import {
@@ -149,96 +154,10 @@ function cloneJsonValue(value) {
   return JSON.parse(serializedValue);
 }
 
-class AuthRefreshDiscardedError extends Error {
-  constructor() {
-    super('Refresh result discarded because the auth session changed');
-    Object.defineProperty(this, 'code', { value: 'auth_refresh_discarded' });
-    Object.defineProperty(this, 'status', { value: 409 });
-  }
-
-  static is(error) {
-    return (
-      Boolean(error) &&
-      error.name === 'AuthRefreshDiscardedError' &&
-      error.code === 'auth_refresh_discarded' &&
-      error.status === 409
-    );
-  }
-}
-AuthRefreshDiscardedError.prototype.name = 'AuthRefreshDiscardedError';
-
-class AuthSessionChangedError extends Error {
-  constructor() {
-    super('Auth operation discarded because the session changed');
-    Object.defineProperty(this, 'code', { value: 'auth_session_changed' });
-    Object.defineProperty(this, 'status', { value: 409 });
-  }
-
-  static is(error) {
-    return (
-      Boolean(error) &&
-      error.name === 'AuthSessionChangedError' &&
-      error.code === 'auth_session_changed' &&
-      error.status === 409
-    );
-  }
-}
-AuthSessionChangedError.prototype.name = 'AuthSessionChangedError';
-
 function authSessionChangedResult() {
   const error = new AuthSessionChangedError();
   return { data: null, status: error.status, headers: {}, version: null, error };
 }
-
-/**
- * Error raised when a function *invocation* fails at the platform layer rather
- * than inside the function's own code — the call reached (or tried to reach)
- * the invocation gateway but was never served: the deploy is failed/provisioning,
- * the gateway is unavailable (a non-2xx response with no `x-volcano-version`
- * header), or the network call itself failed (timeout/DNS/offline).
- *
- * Detect it with `VolcanoSystemError.is(error)` (or `error?.isSystemError ===
- * true`). Prefer either over `error instanceof VolcanoSystemError`, which can be
- * `false` when an app bundles more than one copy of the SDK (class identities
- * differ). `.status` is the blocked HTTP status, or `null` for transport
- * failures.
- *
- * NOT a system error, and therefore a plain `Error` (or not an error at all):
- * a running function's own non-2xx response (surfaced as `data` with `error`
- * null), and pre-flight / name-resolution failures — invalid function name,
- * misconfigured `apiUrl`, function-not-found — which stay plain `Error`s since
- * they are caller/config issues, not platform outages.
- */
-class VolcanoSystemError extends Error {
-  constructor(message, options = {}) {
-    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
-    // Non-enumerable (like native Error's own props) so `JSON.stringify(err)`
-    // stays `{}` and consumer log/redaction/snapshot pipelines don't suddenly
-    // see new keys. Still read normally: `err.isSystemError`, `err.status`.
-    Object.defineProperty(this, 'isSystemError', { value: true });
-    Object.defineProperty(this, 'status', { value: options.status ?? null });
-    if (options.code !== undefined) {
-      Object.defineProperty(this, 'code', { value: options.code });
-    }
-    if (options.retryAfter !== undefined) {
-      Object.defineProperty(this, 'retryAfter', { value: options.retryAfter });
-    }
-  }
-
-  /**
-   * Type guard: true when `err` is a platform-layer invocation failure. Prefer
-   * this over `instanceof` — it duck-types on the `isSystemError` brand, so it
-   * holds across duplicate SDK copies in a bundle.
-   * @param {unknown} err
-   * @returns {boolean}
-   */
-  static is(err) {
-    return Boolean(err) && err.isSystemError === true;
-  }
-}
-// `name` on the prototype (non-enumerable, inherited) matches native Error and
-// keeps it out of JSON.stringify output.
-VolcanoSystemError.prototype.name = 'VolcanoSystemError';
 
 function getSharedRuntimeObject() {
   if (typeof globalThis !== 'undefined') {
@@ -3695,17 +3614,12 @@ async function loadRealtime() {
 // at runtime. See VOL-505.
 const VolcanoClient = VolcanoAuth;
 
-export {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  isBrowser,
-  loadRealtime,
-  QueryBuilder,
-  StorageFileApi,
-  VolcanoAuth,
-  VolcanoClient,
-  VolcanoSystemError,
-};
+export { isBrowser, loadRealtime, QueryBuilder, StorageFileApi, VolcanoAuth, VolcanoClient };
 export default VolcanoAuth;
 
 export { databaseConnectionString } from './database-connection-string.ts';
+export {
+  AuthRefreshDiscardedError,
+  AuthSessionChangedError,
+  VolcanoSystemError,
+} from './errors.ts';
