@@ -5,12 +5,16 @@ interface SystemErrorOptions {
   cause?: unknown;
 }
 
+interface AuthErrorOptions {
+  cause?: unknown;
+}
+
 /** A refresh completed after another auth operation replaced or cleared the session. */
 export class AuthRefreshDiscardedError extends Error {
   declare readonly name: 'AuthRefreshDiscardedError';
   declare readonly code: 'auth_refresh_discarded';
   declare readonly status: 409;
-  constructor(message?: string, options?: ErrorOptions);
+  constructor(message?: string, options?: AuthErrorOptions);
   constructor() {
     super('Refresh result discarded because the auth session changed');
     Object.defineProperty(this, 'code', { value: 'auth_refresh_discarded' });
@@ -32,7 +36,7 @@ export class AuthSessionChangedError extends Error {
   declare readonly name: 'AuthSessionChangedError';
   declare readonly code: 'auth_session_changed';
   declare readonly status: 409;
-  constructor(message?: string, options?: ErrorOptions);
+  constructor(message?: string, options?: AuthErrorOptions);
   constructor() {
     super('Auth operation discarded because the session changed');
     Object.defineProperty(this, 'code', { value: 'auth_session_changed' });
