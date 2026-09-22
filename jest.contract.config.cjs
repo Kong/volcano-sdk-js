@@ -1,4 +1,5 @@
 module.exports = {
+  waitForUnhandledRejections: true,
   testEnvironment: '<rootDir>/__tests__/node-environment.cjs',
   testMatch: ['**/__tests__/contract/**/*.test.js'],
   // The larger of the two budgets, since one file runs both sets: three 60s

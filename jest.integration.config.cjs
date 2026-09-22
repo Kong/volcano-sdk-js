@@ -1,4 +1,5 @@
 module.exports = {
+  waitForUnhandledRejections: true,
   testEnvironment: '<rootDir>/__tests__/node-environment.cjs',
   testMatch: ['<rootDir>/__tests__/integration/**/*.test.js'],
   setupFilesAfterEnv: ['<rootDir>/__tests__/integration/setup.js'],
