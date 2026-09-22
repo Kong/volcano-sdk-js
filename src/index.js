@@ -16,6 +16,7 @@ import {
 } from './generated-runtime/client.js';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
+import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
 import {
   decodeBase64Url,
@@ -182,41 +183,6 @@ async function parseResponseBody(response) {
   } catch {
     return bodyText;
   }
-}
-
-function responseHeadersToObject(response) {
-  const headers = {};
-  if (!response || !response.headers) {
-    return headers;
-  }
-  if (typeof response.headers.forEach === 'function') {
-    response.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-    return headers;
-  }
-  if (typeof response.headers.entries === 'function') {
-    for (const [key, value] of response.headers.entries()) {
-      headers[key] = value;
-    }
-  }
-  return headers;
-}
-
-function getHeaderValue(response, headerName) {
-  if (!response || !response.headers) {
-    return null;
-  }
-  if (typeof response.headers.get === 'function') {
-    return response.headers.get(headerName);
-  }
-  const lowerName = String(headerName).toLowerCase();
-  for (const key of Object.keys(response.headers)) {
-    if (String(key).toLowerCase() === lowerName) {
-      return response.headers[key];
-    }
-  }
-  return null;
 }
 
 class AuthRefreshDiscardedError extends Error {
