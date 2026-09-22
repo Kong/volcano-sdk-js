@@ -1,0 +1,41 @@
+{
+  "$schema": "https://unpkg.com/knip@5.80.0/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/index.js!",
+        "src/realtime.js!",
+        "src/durable.js!",
+        "src/next/middleware.js!",
+        "src/index.d.ts!",
+        "src/realtime.d.ts!",
+        "src/durable.d.ts!",
+        "src/next/middleware.d.ts!",
+        "__tests__/**/*.test.{js,ts}",
+        "__tests__/integration/**/*.test.js",
+        "__tests__/integration/setup.js",
+        "__tests__/node-environment.cjs",
+        "scripts/*.test.mjs",
+        "test/types/**/*.ts",
+        "examples/durable-order-pipeline/volcano/functions/*/index.js"
+      ],
+      "project": [
+        "src/**/*.{js,ts}!",
+        "!src/generated/model/**",
+        "!src/generated/client.ts",
+        "!src/generated/volcano-fetch.ts",
+        "!src/generated-runtime/model/**",
+        "__tests__/**/*.{js,ts,cjs}",
+        "scripts/**/*.{mjs,cjs}",
+        "test/types/**/*.ts",
+        "examples/durable-order-pipeline/volcano/functions/**/*.js"
+      ]
+    },
+    "examples/nextjs-notes-app": {
+      "project": ["src/**/*.{js,css}!", "*.config.js"],
+      "paths": {
+        "@/*": ["./src/*"]
+      }
+    }
+  }
+}
