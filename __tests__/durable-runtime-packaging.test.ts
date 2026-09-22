@@ -1,5 +1,6 @@
-const fs = require('fs');
-const path = require('path');
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 // Installing this SDK must never install the durable runtime. Volcano puts it in
 // a durable function's own dependencies when it builds one, on a Node runtime
@@ -12,24 +13,42 @@ const path = require('path');
 // optional peer, this repo's install does not resolve it anyway, and the build
 // keeps it external so the dynamic import survives into the artifacts rather
 // than being inlined.
-const ROOT = path.join(__dirname, '..');
+const ROOT = join(__dirname, '..');
 const RUNTIME = '@aws/durable-execution-sdk-js';
 
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requiredRecord(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error('Expected a JSON object');
+  }
+  return value;
+}
+
+const manifest = requiredRecord(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')));
+
+function dependency(group: string): unknown {
+  const entries = manifest[group];
+  return isRecord(entries) ? entries[RUNTIME] : undefined;
+}
 
 describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
   test('it is declared only as an optional peer', () => {
-    expect(manifest.peerDependencies?.[RUNTIME]).toBeTruthy();
-    expect(manifest.peerDependenciesMeta?.[RUNTIME]?.optional).toBe(true);
-    expect(manifest.dependencies?.[RUNTIME]).toBeUndefined();
-    expect(manifest.devDependencies?.[RUNTIME]).toBeUndefined();
+    expect(dependency('peerDependencies')).toBeTruthy();
+    const peerMetadata = requiredRecord(manifest['peerDependenciesMeta']);
+    const durableMetadata = requiredRecord(peerMetadata[RUNTIME]);
+    expect(durableMetadata['optional']).toBe(true);
+    expect(dependency('dependencies')).toBeUndefined();
+    expect(dependency('devDependencies')).toBeUndefined();
   });
 
   // pnpm resolves optional peers into the importer even though the setting is
   // documented as non-optional only (pnpm/pnpm#11155), which is what
   // autoInstallPeers in pnpm-workspace.yaml is there to stop.
   test('this repo does not resolve it into its own lockfile', () => {
-    const lock = fs.readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8');
+    const lock = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8');
     const importer = lock.slice(lock.indexOf('importers:'), lock.indexOf('\npackages:'));
 
     expect(importer).not.toContain(RUNTIME);
@@ -40,7 +59,7 @@ describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
 
     for (const file of durableBuilds) {
       test(`${file} loads it at runtime`, () => {
-        expect(fs.readFileSync(path.join(ROOT, file), 'utf8')).toContain(RUNTIME);
+        expect(readFileSync(join(ROOT, file), 'utf8')).toContain(RUNTIME);
       });
     }
   });
