@@ -524,54 +524,7 @@ export interface Durable {
   }>;
 }
 
-/**
- * Error raised when a function invocation fails at the platform layer rather
- * than inside the invoked function's own code. Detect with
- * `VolcanoSystemError.is(error)` (or `error?.isSystemError === true`) — prefer
- * either over `instanceof`, which can be `false` across duplicate SDK copies in
- * a bundle. Not raised for pre-flight / name-resolution failures (bad name,
- * misconfigured apiUrl, function-not-found), which stay plain `Error`s.
- */
-export class VolcanoSystemError extends Error {
-  readonly name: 'VolcanoSystemError';
-  readonly isSystemError: true;
-  /** HTTP status of the blocked invocation, or null for transport failures. */
-  readonly status: number | null;
-  /** Platform error code, when supplied by the server. */
-  readonly code?: string;
-  /** Retry-After delay in seconds, when supplied by the server. */
-  readonly retryAfter?: number;
-  /** Underlying error for transport failures (network/timeout); undefined otherwise. */
-  readonly cause?: unknown;
-  constructor(
-    message: string,
-    options?: { status?: number | null; code?: string; retryAfter?: number; cause?: unknown },
-  );
-  /**
-   * Type guard for platform-layer invocation failures. Prefer over `instanceof`
-   * (holds across duplicate SDK copies in a bundle).
-   */
-  static is(err: unknown): err is VolcanoSystemError;
-}
-
-/**
- * A refresh completed after another auth operation replaced or cleared the
- * session. The SDK discards the stale result and does not replay the request.
- */
-export class AuthRefreshDiscardedError extends Error {
-  readonly name: 'AuthRefreshDiscardedError';
-  readonly code: 'auth_refresh_discarded';
-  readonly status: 409;
-  static is(error: unknown): error is AuthRefreshDiscardedError;
-}
-
-/** A stale auth operation completed after another logical session won. */
-export class AuthSessionChangedError extends Error {
-  readonly name: 'AuthSessionChangedError';
-  readonly code: 'auth_session_changed';
-  readonly status: 409;
-  static is(error: unknown): error is AuthSessionChangedError;
-}
+export { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from './errors';
 
 // ============================================================================
 // Logs Types
