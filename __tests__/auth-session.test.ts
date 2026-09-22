@@ -35,6 +35,17 @@ test.each([
   expect(operations.hasVerifiedPair(access, refresh)).toBe(matches);
 });
 
+test.each([null, ''])(
+  'does not verify absent refresh credentials even when the stored pair matches: %p',
+  (refreshToken) => {
+    const operations = new AuthSessionOperations({
+      access_token: 'access',
+      refresh_token: refreshToken,
+    });
+    expect(operations.hasVerifiedPair('access', refreshToken)).toBe(false);
+  },
+);
+
 test('replaces and clears a verified pair', () => {
   const operations = new AuthSessionOperations(pair);
   operations.verifyPair({ access_token: 'new-access', refresh_token: 'new-refresh' });
@@ -115,5 +126,8 @@ test('a rejected sign-out still settles and remains idempotent', async () => {
   expect(signOut).toHaveBeenCalledWith(null);
   expect(operations.pendingSignOut()).toBeNull();
   expect(operations.hasVerifiedPair('access', 'refresh')).toBe(false);
-  expect(operations.signOut(signOut)).toBe(first);
+  const repeated = operations.signOut(signOut);
+  await expect(repeated).rejects.toBe(failure);
+  expect(repeated).toBe(first);
+  expect(signOut).toHaveBeenCalledTimes(1);
 });
