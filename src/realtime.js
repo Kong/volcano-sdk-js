@@ -414,7 +414,13 @@ class VolcanoRealtime {
    */
   channel(name, options = {}) {
     const type = options.type || 'broadcast';
-    const databaseName = type === 'postgres' ? (options.databaseName ?? this._databaseName) : null;
+    const databaseName =
+      type === 'postgres'
+        ? (options.databaseName ??
+          this._databaseName ??
+          this._volcanoClient?._currentDatabaseName ??
+          null)
+        : null;
     const fullName = this._formatChannelName(name, type, databaseName);
 
     if (this._channels.has(fullName)) {
@@ -423,7 +429,7 @@ class VolcanoRealtime {
 
     const channel = new RealtimeChannel(this, fullName, type, {
       ...options,
-      ...(type === 'postgres' && databaseName ? { databaseName } : {}),
+      ...(type === 'postgres' ? { databaseName } : {}),
     });
     this._channels.set(fullName, channel);
     return channel;
@@ -613,7 +619,11 @@ class VolcanoRealtime {
     const fullName = this._formatChannelName(
       name,
       type,
-      type === 'postgres' ? (databaseName ?? this._databaseName) : null,
+      type === 'postgres'
+        ? databaseName === undefined
+          ? (this._databaseName ?? this._volcanoClient?._currentDatabaseName)
+          : databaseName
+        : null,
     );
     const channel = this._channels.get(fullName);
     if (channel) {
@@ -662,7 +672,9 @@ class RealtimeChannel {
     this._eventHandlers = {};
     this._presenceTimeoutId = null;
     this._presenceStateVersion = 0;
+    this._presenceAcknowledgedVersion = 0;
     this._presenceResubscribePromise = null;
+    this._activationPromise = null;
   }
 
   /**
@@ -677,7 +689,7 @@ class RealtimeChannel {
    */
   async subscribe() {
     if (this._subscription) {
-      await this._activateSubscription();
+      await this._awaitActivation();
       return;
     }
 
@@ -692,9 +704,8 @@ class RealtimeChannel {
     if (this._type === 'presence' && this._myPresenceState !== undefined) {
       subscriptionOptions.data = this._myPresenceState;
     } else if (this._type === 'postgres') {
-      const databaseName = this._databaseName ?? this._realtime.getDatabaseName();
-      if (databaseName) {
-        subscriptionOptions.data = { database_name: databaseName };
+      if (this._databaseName) {
+        subscriptionOptions.data = { database_name: this._databaseName };
       }
     }
     this._subscription = client.newSubscription(this._name, subscriptionOptions);
@@ -793,12 +804,33 @@ class RealtimeChannel {
       this._subscription.on('subscribed', this._eventHandlers.subscribed);
     }
 
-    await this._activateSubscription();
+    await this._awaitActivation();
+  }
+
+  async _awaitActivation() {
+    if (this._presenceResubscribePromise) {
+      await this._presenceResubscribePromise;
+      await this._ensureTrackedPresenceAcknowledged();
+      return;
+    }
+    const activation = this._activationPromise ?? this._activateSubscription();
+    this._activationPromise = activation;
+    try {
+      await activation;
+    } finally {
+      if (this._activationPromise === activation) {
+        this._activationPromise = null;
+      }
+    }
+    if (this._type === 'presence') {
+      await this._ensureTrackedPresenceAcknowledged();
+    }
   }
 
   async _activateSubscription() {
     const subscription = this._subscription;
     const lifecycleVersion = this._lifecycleVersion;
+    const presenceStateVersion = this._presenceStateVersion;
     try {
       subscription.subscribe();
       await subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
@@ -806,6 +838,9 @@ class RealtimeChannel {
         throw new Error('Subscription changed before becoming ready');
       }
       this._paused = false;
+      if (this._type === 'presence') {
+        this._presenceAcknowledgedVersion = presenceStateVersion;
+      }
     } catch (error) {
       if (this._subscription === subscription && this._lifecycleVersion === lifecycleVersion) {
         this.unsubscribe();
@@ -820,6 +855,7 @@ class RealtimeChannel {
   unsubscribe() {
     this._paused = true;
     this._lifecycleVersion += 1;
+    this._activationPromise = null;
     // Cancel pending presence fetch timeout
     if (this._presenceTimeoutId) {
       clearTimeout(this._presenceTimeoutId);
@@ -1032,11 +1068,7 @@ class RealtimeChannel {
         throw new Error('volcanoClient.from not available');
       }
 
-      const databaseName =
-        this._databaseName ||
-        this._realtime.getDatabaseName?.() ||
-        volcanoClient._currentDatabaseName ||
-        null;
+      const databaseName = this._databaseName;
       let dbClient = volcanoClient;
       if (databaseName) {
         if (typeof volcanoClient.database !== 'function') {
@@ -1202,25 +1234,33 @@ class RealtimeChannel {
     }
 
     this._subscription.setData(this._myPresenceState);
-    if (this._presenceResubscribePromise) {
-      await this._presenceResubscribePromise;
-      return;
+    if (this._activationPromise) {
+      await this._activationPromise;
     }
-    if (this._paused) {
+    if (this._paused && !this._presenceResubscribePromise) {
       return;
     }
 
+    await this._ensureTrackedPresenceAcknowledged();
+  }
+
+  async _ensureTrackedPresenceAcknowledged() {
     // setData applies to the next subscription attempt, so resubscribe the
     // active channel and wait for the server acknowledgement. Coalesce state
     // changes made while an attempt is in flight, but do not resolve any of
     // their callers until the latest snapshot has been acknowledged.
-    const resubscribe = this._resubscribeTrackedPresence();
-    this._presenceResubscribePromise = resubscribe;
-    try {
-      await resubscribe;
-    } finally {
-      if (this._presenceResubscribePromise === resubscribe) {
-        this._presenceResubscribePromise = null;
+    while (this._presenceAcknowledgedVersion < this._presenceStateVersion) {
+      if (this._paused && !this._presenceResubscribePromise) {
+        return;
+      }
+      const resubscribe = this._presenceResubscribePromise ?? this._resubscribeTrackedPresence();
+      this._presenceResubscribePromise = resubscribe;
+      try {
+        await resubscribe;
+      } finally {
+        if (this._presenceResubscribePromise === resubscribe) {
+          this._presenceResubscribePromise = null;
+        }
       }
     }
   }

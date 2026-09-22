@@ -148,7 +148,11 @@ const dbB = realtime.channel('public:posts', {
 
 When `databaseName` is absent on a channel, the selector configured with
 `realtime.setDatabaseName()` (or the `VolcanoRealtime` `databaseName` option) is
-used when the channel is created. A project with one active database can omit
+captured when the channel is created. The selected database on a bound `volcano`
+client is used if neither selector is set. Later calls to `setDatabaseName()`
+affect new channels only; create a new channel to use a different database. A
+channel created without a selector keeps the legacy wire identity and never
+acquires a selector later. A project with one active database can omit
 the selector; this preserves the legacy `postgres:public:posts` wire channel
 and sends no subscription data. The server accepts that omission only for a
 project with exactly one active database. An unknown or inactive name causes
@@ -196,6 +200,8 @@ Unsubscribe or remove channels during cleanup:
 channel.unsubscribe();
 realtime.removeChannel('public:posts', { type: 'postgres', databaseName: 'app' });
 realtime.removeChannel('public:comments', 'postgres');
+// After changing the global selector, remove a previously created legacy channel:
+realtime.removeChannel('public:legacy', { type: 'postgres', databaseName: null });
 ```
 
 ## Broadcast
@@ -307,7 +313,8 @@ state. Other clients receive the state in `info.data` for join events and in
 each entry of `onPresenceSync`; initial and live entries use the same full
 client record shape. The original server metadata remains available in
 `info.chanInfo` for compatibility. The SDK retains a detached snapshot and
-sends it again when the channel reconnects.
+sends it again when the channel reconnects. If `track()` runs while the first
+`subscribe()` is pending, both promises wait until the latest state is accepted.
 
 ```javascript
 await channel.track({ status: 'working' });

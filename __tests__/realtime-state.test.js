@@ -165,6 +165,89 @@ describe('realtime server state contract', () => {
     );
   });
 
+  test('keeps a channel selector fixed after the global selector changes', async () => {
+    const { realtime, client } = createRealtime();
+    const legacy = realtime.channel('public:items', { type: 'postgres' });
+    const onLegacy = jest.fn();
+    legacy.onPostgresChanges('INSERT', 'public', 'items', onLegacy);
+
+    realtime.setDatabaseName('db-a');
+    await legacy.subscribe();
+
+    expect(client.newSubscription).toHaveBeenCalledWith(
+      'postgres:public:items',
+      expect.not.objectContaining({ data: expect.anything() }),
+    );
+    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:user-a',
+      data: change,
+    });
+    expect(onLegacy).toHaveBeenCalledWith(change, expect.anything());
+
+    legacy._resetForIdentityChange();
+    await legacy.subscribe();
+    expect(client.newSubscription).toHaveBeenLastCalledWith(
+      'postgres:public:items',
+      expect.not.objectContaining({ data: expect.anything() }),
+    );
+
+    const scoped = realtime.channel('public:items', { type: 'postgres' });
+    expect(scoped).not.toBe(legacy);
+    expect(scoped.name).toBe('postgres:db-a:public:items');
+    await scoped.subscribe();
+    expect(client.newSubscription).toHaveBeenLastCalledWith(
+      'postgres:db-a:public:items',
+      expect.objectContaining({ data: { database_name: 'db-a' } }),
+    );
+    realtime.removeChannel('public:items', { type: 'postgres', databaseName: null });
+    expect(realtime._channels.has(legacy.name)).toBe(false);
+    expect(realtime._channels.has(scoped.name)).toBe(true);
+  });
+
+  test('keeps auto-fetch bound to the selector captured when the channel was created', async () => {
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      in: jest.fn().mockResolvedValue({ data: [{ id: 'row-1' }], error: null }),
+    };
+    const database = jest.fn(() => ({ from: jest.fn(() => query) }));
+    const { realtime } = createRealtime({
+      databaseName: 'db-a',
+      volcanoClient: { from: jest.fn(), database },
+    });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    realtime.setDatabaseName('db-b');
+
+    await expect(channel._fetchRow('public', 'items', 'row-1')).resolves.toEqual({ id: 'row-1' });
+    expect(database).toHaveBeenCalledWith('db-a');
+  });
+
+  test('does not acquire an auto-fetch selector after creating a legacy channel', async () => {
+    const database = jest.fn();
+    const { realtime } = createRealtime({ volcanoClient: { from: jest.fn(), database } });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    realtime.setDatabaseName('db-a');
+
+    await expect(channel._fetchRow('public', 'items', 'row-1')).rejects.toThrow(
+      'Database name not set',
+    );
+    expect(database).not.toHaveBeenCalled();
+  });
+
+  test('captures the selected volcano client database when creating a channel', async () => {
+    const { realtime, client } = createRealtime({
+      volcanoClient: { _currentDatabaseName: 'db-a' },
+    });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+
+    expect(channel.name).toBe('postgres:db-a:public:items');
+    await channel.subscribe();
+    expect(client.newSubscription).toHaveBeenCalledWith(
+      'postgres:db-a:public:items',
+      expect.objectContaining({ data: { database_name: 'db-a' } }),
+    );
+  });
+
   test('removes and resubscribes only the requested scoped channel', async () => {
     const { realtime, client, subscriptions } = createRealtime();
     const dbA = realtime.channel('public:items', {
@@ -333,6 +416,74 @@ describe('realtime server state contract', () => {
     expect(secondResolved).toBe(true);
   });
 
+  test('track during first subscribe preserves both acknowledgements', async () => {
+    const { realtime, client, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    const firstReady = deferred();
+    const secondReady = deferred();
+    let initialData;
+    client.newSubscription.mockImplementationOnce((_name, options) => {
+      initialData = options.data;
+      const subscription = createSubscription();
+      subscription.ready
+        .mockReset()
+        .mockReturnValueOnce(firstReady.promise)
+        .mockReturnValueOnce(secondReady.promise);
+      subscriptions.push(subscription);
+      return subscription;
+    });
+    let subscribed = false;
+    let tracked = false;
+    const subscribe = channel.subscribe().then(() => {
+      subscribed = true;
+    });
+    const track = channel.track({ status: 'working' }).then(() => {
+      tracked = true;
+    });
+    const subscription = subscriptions[0];
+
+    expect(initialData).toBeUndefined();
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+    expect(subscribed).toBe(false);
+    expect(tracked).toBe(false);
+
+    firstReady.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(subscribed).toBe(false);
+    expect(tracked).toBe(false);
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(subscription.subscribe).toHaveBeenCalledTimes(2);
+    expect(subscription.setData).toHaveBeenLastCalledWith({ status: 'working' });
+
+    secondReady.resolve();
+    await Promise.all([subscribe, track]);
+    expect(subscribed).toBe(true);
+    expect(tracked).toBe(true);
+  });
+
+  test('cleans up when initial subscribe fails while track waits for it', async () => {
+    const { realtime, client, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    const ready = deferred();
+    client.newSubscription.mockImplementationOnce(() => {
+      const subscription = createSubscription();
+      subscription.ready.mockReset().mockReturnValue(ready.promise);
+      subscriptions.push(subscription);
+      return subscription;
+    });
+    const subscribe = channel.subscribe();
+    const track = channel.track({ status: 'working' });
+    const failure = new Error('denied');
+    ready.reject(failure);
+
+    await expect(subscribe).rejects.toBe(failure);
+    await expect(track).rejects.toBe(failure);
+    expect(subscriptions[0].unsubscribe).toHaveBeenCalledTimes(1);
+    expect(channel._paused).toBe(true);
+    expect(channel._presenceResubscribePromise).toBeNull();
+  });
+
   test('stores tracked state without resubscribing an explicitly paused channel', async () => {
     const { realtime, subscriptions } = createRealtime();
     const channel = realtime.channel('lobby', { type: 'presence' });
@@ -348,5 +499,22 @@ describe('realtime server state contract', () => {
 
     await channel.subscribe();
     expect(subscription.subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('subscribe waits for a tracked state update already in flight', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    const ready = deferred();
+    subscription.ready.mockReturnValueOnce(ready.promise);
+
+    const tracked = channel.track({ status: 'working' });
+    const subscribed = channel.subscribe();
+    expect(subscription.subscribe).toHaveBeenCalledTimes(2);
+
+    ready.resolve();
+    await Promise.all([tracked, subscribed]);
+    expect(subscription.subscribe).toHaveBeenCalledTimes(2);
   });
 });
