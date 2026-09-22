@@ -1,3 +1,4 @@
+import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { optionalDuration, waitDuration } from './durable-duration.ts';
 
 /**
@@ -284,31 +285,6 @@ function failureDetail(error) {
   return detail;
 }
 
-/**
- * Every operation takes both forms, named and unnamed. The name is what the
- * operation is recorded under, so it is worth encouraging, but a single obvious
- * operation reads better without one.
- */
-function namedArgs(name, operand, options) {
-  if (typeof name === 'string' || name === undefined) {
-    return [name, operand, options ?? {}];
-  }
-  return [undefined, name, operand ?? {}];
-}
-
-function mapArgs(name, items, fn, options) {
-  if (Array.isArray(name)) {
-    return [undefined, name, items, fn ?? {}];
-  }
-  return [name, items, fn, options ?? {}];
-}
-
-function requireFunction(fn, operation) {
-  if (typeof fn !== 'function') {
-    throw new TypeError(`ctx.${operation}() requires a function to run`);
-  }
-}
-
 function stepConfig(options, engine) {
   const config = {};
   if (options.atMostOnce) {
@@ -404,16 +380,6 @@ function toRetryStrategy(retry, engine) {
       retryableErrorTypes: retry.retryOnTypes,
     }),
   );
-}
-
-/**
- * The engine merges a config over its defaults with a spread, so a key that is
- * present with an undefined value wins over the default instead of falling back
- * to it — and an absent delay is then read for a unit it does not have, which
- * throws. What the caller left out has to be left out here too.
- */
-function engineConfig(entries) {
-  return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined));
 }
 
 export { durable, DurableRuntimeMissingError };
