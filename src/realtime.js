@@ -44,6 +44,7 @@
  * ```
  */
 
+import { postgresBaseChannelFromParts, sdkChannelFromParts } from './realtime-channel-name.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 
 // Centrifuge client - dynamically imported
@@ -421,13 +422,11 @@ class VolcanoRealtime {
     // Server channel format: projectId:type:name
     // We need to extract type:name to match our SDK channel
     const parts = serverChannel.split(':');
-    if (parts.length < 3) {
+    const sdkChannel = sdkChannelFromParts(parts);
+    if (sdkChannel === null) {
       // Not a valid server channel format, ignore
       return;
     }
-
-    // Skip projectId, reconstruct type:name
-    const sdkChannel = parts.slice(1).join(':');
 
     // Find the SDK channel and deliver the message
     let channel = this._channels.get(sdkChannel);
@@ -440,8 +439,11 @@ class VolcanoRealtime {
     // userID; otherwise the publication is silently dropped and onPostgresChanges
     // never fires. Requiring exactly 5 segments avoids over-matching anything
     // that isn't this well-defined per-user format.
-    if (!channel && parts[1] === 'postgres' && parts.length === 5) {
-      channel = this._channels.get(parts.slice(1, -1).join(':'));
+    if (!channel) {
+      const postgresBaseChannel = postgresBaseChannelFromParts(parts);
+      if (postgresBaseChannel !== null) {
+        channel = this._channels.get(postgresBaseChannel);
+      }
     }
 
     if (channel) {
@@ -455,11 +457,10 @@ class VolcanoRealtime {
   _handleServerJoin(ctx) {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
-    if (parts.length < 3) {
+    const sdkChannel = sdkChannelFromParts(parts);
+    if (sdkChannel === null) {
       return;
     }
-
-    const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
@@ -477,11 +478,10 @@ class VolcanoRealtime {
   _handleServerLeave(ctx) {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
-    if (parts.length < 3) {
+    const sdkChannel = sdkChannelFromParts(parts);
+    if (sdkChannel === null) {
       return;
     }
-
-    const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
@@ -499,11 +499,10 @@ class VolcanoRealtime {
   _handleServerSubscribed(ctx) {
     const serverChannel = ctx.channel;
     const parts = serverChannel.split(':');
-    if (parts.length < 3) {
+    const sdkChannel = sdkChannelFromParts(parts);
+    if (sdkChannel === null) {
       return;
     }
-
-    const sdkChannel = parts.slice(1).join(':');
     const channel = this._channels.get(sdkChannel);
 
     // For presence channels, populate initial state from subscribe response

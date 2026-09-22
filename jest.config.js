@@ -13,6 +13,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/realtime-channel-name.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-retry.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-runtime-error.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-failure-detail.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
