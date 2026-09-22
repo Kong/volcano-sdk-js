@@ -9,12 +9,16 @@ import {
 
 function request(authorization?: string, cookie?: string): MiddlewareRequest {
   const headers = new Headers();
+  const cookies = new Map<string, { value: string }>();
+  if (cookie !== undefined) {
+    cookies.set('volcano_access_token', { value: cookie });
+  }
   if (authorization !== undefined) {
     headers.set('authorization', authorization);
   }
   return {
     headers,
-    cookies: { get: () => (cookie === undefined ? undefined : { value: cookie }) },
+    cookies,
   };
 }
 

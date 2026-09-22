@@ -4,6 +4,10 @@ import { assert, asyncProperty, jsonValue } from 'fast-check';
 import { safeJsonParse } from '../src/response-json.ts';
 import { propertyOptions } from './support/property-options.ts';
 
+function AbortError(): never {
+  throw new Error('the failure must not be invoked');
+}
+
 afterEach(() => {
   jest.restoreAllMocks();
 });
@@ -65,6 +69,12 @@ test('propagates cancellation instead of treating its failed body as malformed J
   caller.abort(reason);
 
   await expect(safeJsonParse(new Response('invalid'), caller.signal)).rejects.toBe(reason);
+});
+
+test('propagates an abort-shaped callable failure without invoking it', async () => {
+  const response = new Response('unused');
+  jest.spyOn(response, 'json').mockRejectedValue(AbortError);
+  await expect(safeJsonParse(response)).rejects.toBe(AbortError);
 });
 
 test.each([null, false, 0, '', Number.NaN])(

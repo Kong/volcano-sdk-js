@@ -19,7 +19,7 @@ export async function parseResponseBody(
   if (bodyText === '') {
     return null;
   }
-  return parseBodyText(bodyText, responseContentType(response));
+  return parseBodyText(bodyText, hasJsonContentType(response));
 }
 
 async function parseJsonResponse(response: BodyResponse): Promise<unknown> {
@@ -33,20 +33,19 @@ async function parseJsonResponse(response: BodyResponse): Promise<unknown> {
   }
 }
 
-function responseContentType(response: HeaderResponse): string {
+function hasJsonContentType(response: HeaderResponse): boolean {
   const value = getHeaderValue(response, 'content-type');
   if (!Boolean(value)) {
-    return '';
+    return false;
   }
   if (typeof value !== 'string') {
     throw new TypeError('Content-Type header must be a string');
   }
-  return value.toLowerCase();
+  return value.toLowerCase().includes('application/json');
 }
 
-function parseBodyText(body: string, contentType: string): unknown {
-  const shouldParseJson =
-    contentType.includes('application/json') || body.startsWith('{') || body.startsWith('[');
+function parseBodyText(body: string, jsonContentType: boolean): unknown {
+  const shouldParseJson = jsonContentType || body.startsWith('{') || body.startsWith('[');
   if (!shouldParseJson) {
     return body;
   }

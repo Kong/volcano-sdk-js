@@ -6,6 +6,17 @@ function token(payload: unknown): string {
   return `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.signature`;
 }
 
+test.each(['', '.signature.extra'])(
+  'retains credentials with valid claims but an invalid segment count: %p',
+  (suffix) => {
+    const payload = Buffer.from(JSON.stringify({ project_id: 'project', sub: 'user' })).toString(
+      'base64url',
+    );
+    const value = `header.${payload}${suffix}`;
+    expect(recoveryIdentity(value)).toEqual({ kind: 'credential', token: value });
+  },
+);
+
 test.each([undefined, null, false, 12, {}, '', 'one', 'one.two', 'one.two.three.four'])(
   'retains an unstructured credential without coercion: %p',
   (value) => {
