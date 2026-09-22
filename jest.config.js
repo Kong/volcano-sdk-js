@@ -12,6 +12,7 @@ module.exports = {
   ],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
+    'src/response-headers.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/response-json.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/fetch-lifecycle.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-duration.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
