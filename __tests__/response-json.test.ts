@@ -8,13 +8,19 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test('preserves arbitrary JSON response values', async () => {
+test('preserves arbitrary JSON on the wire', async () => {
   await assert(
     asyncProperty(jsonValue(), async (value) => {
-      await expect(safeJsonParse(Response.json(value))).resolves.toEqual(value);
+      const result = await safeJsonParse(Response.json(value));
+      expect(JSON.stringify(result)).toBe(JSON.stringify(value));
     }),
-    propertyOptions(),
+    // Seed -744480547 produced -0, which JSON serialization sends as 0.
+    { ...propertyOptions(), examples: [[-0]] },
   );
+});
+
+test('preserves a negative zero explicitly supplied in the response body', async () => {
+  await expect(safeJsonParse(new Response('-0'))).resolves.toBe(-0);
 });
 
 test.each([null, true, false, 0, '', 'text', [], { nested: [1, null, false] }])(
