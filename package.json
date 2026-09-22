@@ -67,8 +67,8 @@
     "dev": "rollup -c -w",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "lint": "eslint . --max-warnings=0 && pnpm format:check",
-    "lint:fix": "eslint . --fix && pnpm format",
+    "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
+    "lint:fix": "pnpm build && eslint . --fix && pnpm format",
     "test": "pnpm build && jest",
     "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.d.ts test/types/auth-contract.ts test/types/database-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
     "test:package": "pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz",
@@ -82,7 +82,7 @@
     "audit": "node scripts/audit-dependencies.mjs",
     "quality": "pnpm run audit && pnpm lint && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart",
     "test:tooling": "node --test scripts/*.test.mjs",
-    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts __tests__/lock-session.test.ts __tests__/token-claims.test.ts __tests__/function-url.test.ts __tests__/lock-validation.test.ts __tests__/realtime-identity.test.ts __tests__/auth-validation.test.ts __tests__/durable-duration.test.ts __tests__/fetch-lifecycle.test.ts __tests__/response-json.test.ts __tests__/response-headers.test.ts __tests__/response-body.test.ts __tests__/errors.test.ts __tests__/auth-continuity.test.ts __tests__/durable-paths.test.ts __tests__/lock-random.test.ts"
+    "test:typed-runtime": "jest --coverage --collectCoverageFrom=src/**/*.ts --collectCoverageFrom=!src/**/*.d.ts --runTestsByPath __tests__/next-request.test.ts __tests__/auth-session.test.ts __tests__/lock-clock.test.ts __tests__/database-connection-string.test.ts __tests__/lock-session.test.ts __tests__/token-claims.test.ts __tests__/function-url.test.ts __tests__/lock-validation.test.ts __tests__/realtime-identity.test.ts __tests__/auth-validation.test.ts __tests__/durable-duration.test.ts __tests__/fetch-lifecycle.test.ts __tests__/response-json.test.ts __tests__/response-headers.test.ts __tests__/response-body.test.ts __tests__/errors.test.ts __tests__/auth-continuity.test.ts __tests__/durable-paths.test.ts __tests__/lock-random.test.ts __tests__/database-filters.test.ts"
   },
   "keywords": [
     "volcano",

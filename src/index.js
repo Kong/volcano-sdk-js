@@ -5,6 +5,7 @@ import {
 } from './auth-continuity.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
+import { FilterMixin } from './database-filters.ts';
 import { durablePathSegments } from './durable-paths.ts';
 import {
   AuthRefreshDiscardedError,
@@ -2850,53 +2851,6 @@ class VolcanoAuth {
     pruneFunctionResolveCache(state, Date.now(), true);
   }
 }
-
-// ============================================================================
-// Shared Filter Mixin - Used by QueryBuilder and MutationBuilder
-// ============================================================================
-
-const FilterMixin = {
-  eq(column, value) {
-    this.filters.push({ column, operator: 'eq', value });
-    return this;
-  },
-  neq(column, value) {
-    this.filters.push({ column, operator: 'neq', value });
-    return this;
-  },
-  gt(column, value) {
-    this.filters.push({ column, operator: 'gt', value });
-    return this;
-  },
-  gte(column, value) {
-    this.filters.push({ column, operator: 'gte', value });
-    return this;
-  },
-  lt(column, value) {
-    this.filters.push({ column, operator: 'lt', value });
-    return this;
-  },
-  lte(column, value) {
-    this.filters.push({ column, operator: 'lte', value });
-    return this;
-  },
-  like(column, pattern) {
-    this.filters.push({ column, operator: 'like', value: pattern });
-    return this;
-  },
-  ilike(column, pattern) {
-    this.filters.push({ column, operator: 'ilike', value: pattern });
-    return this;
-  },
-  is(column, value) {
-    this.filters.push({ column, operator: 'is', value });
-    return this;
-  },
-  in(column, values) {
-    this.filters.push({ column, operator: 'in', value: values });
-    return this;
-  },
-};
 
 // ============================================================================
 // QueryBuilder - For SELECT operations
