@@ -184,7 +184,7 @@ await comments.subscribe();
 ### Row-Level Security and deletion
 
 Volcano checks the current row against the subscriber's Row-Level Security policies.
-Authenticated user subscriptions currently do not receive delete notifications after
+Anonymous and authenticated subscriptions do not receive delete notifications after
 the row is gone. Service-key subscriptions can receive deletion events with the
 primary key in `old_record`; other deleted columns are not retained. See
 [Postgres Changes](/platform/realtime/postgres-changes) for platform behavior.
@@ -523,11 +523,9 @@ channel.onPostgresChanges('INSERT', 'public', 'posts', (change) => {
 channel.onPostgresChanges('UPDATE', 'public', 'posts', (change) => {
   setPosts((current) => current.map((p) => (p.id === change.record.id ? change.record : p)));
 });
-
-channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
-  setPosts((current) => current.filter((p) => p.id !== change.old_record.id));
-});
 ```
+
+End-user subscriptions do not receive `DELETE` events. Re-fetch after application actions that can delete rows. A server-side service-key subscription can handle `DELETE` events when needed.
 
 ## Next Steps
 
