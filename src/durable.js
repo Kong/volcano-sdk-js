@@ -1,6 +1,7 @@
 import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { optionalDuration, waitDuration } from './durable-duration.ts';
 import { failureDetail } from './durable-failure-detail.ts';
+import { toRetryStrategy } from './durable-retry.ts';
 import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
 /**
@@ -310,37 +311,6 @@ function batchConfig(options = {}) {
     config.completionConfig = { minSuccessful: options.minSucceeded };
   }
   return config;
-}
-
-/**
- * `retry: false` means "fail on the first error", which is not the same as
- * leaving retry unset: the engine retries by default, and a step that is not
- * safe to repeat wants the opposite.
- */
-function toRetryStrategy(retry, engine) {
-  if (retry === undefined || retry === null) {
-    return null;
-  }
-  if (retry === false) {
-    return () => ({ shouldRetry: false });
-  }
-  if (typeof retry === 'function') {
-    return retry;
-  }
-  if (typeof retry !== 'object') {
-    throw new TypeError('retry must be false, a function, or an options object');
-  }
-
-  return engine.createRetryStrategy(
-    engineConfig({
-      maxAttempts: retry.attempts,
-      initialDelay: optionalDuration(retry.initialDelay, 'initialDelay'),
-      maxDelay: optionalDuration(retry.maxDelay, 'maxDelay'),
-      backoffRate: retry.backoffRate,
-      retryableErrors: retry.retryOn,
-      retryableErrorTypes: retry.retryOnTypes,
-    }),
-  );
 }
 
 export { durable };
