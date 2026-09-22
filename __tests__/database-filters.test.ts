@@ -29,9 +29,13 @@ test.each(['eq', 'neq', 'gt', 'gte', 'lt', 'lte'] as const)(
     fc.assert(
       fc.property(fc.string(), filterValue, (column, value) => {
         const query = builder();
+        query.is('existing', null);
         const result: Builder = query[operator](column, value);
         expect(result).toBe(query);
-        expect(query.filters).toEqual([{ column, operator, value }]);
+        expect(query.filters).toEqual([
+          { column: 'existing', operator: 'is', value: null },
+          { column, operator, value },
+        ]);
       }),
     );
   },
