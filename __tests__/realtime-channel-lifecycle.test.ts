@@ -215,6 +215,29 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
   expect(state._paused).toBe(true);
 });
 
+test('listeners registered during delivery receive only subsequent publications', async () => {
+  const state = new State();
+  const received: string[] = [];
+  const callbacks = [
+    () => {
+      received.push('first');
+      callbacks.push(() => {
+        received.push('later');
+      });
+    },
+  ];
+  state._callbacks.set('message', callbacks);
+  await subscribeChannel(state);
+  const client = state.client;
+  if (client === null) {
+    throw new Error('client missing');
+  }
+  await client.subscription.emit('publication', { data: { text: 'first' } });
+  expect(received).toEqual(['first']);
+  await client.subscription.emit('publication', { data: { text: 'second' } });
+  expect(received).toEqual(['first', 'first', 'later']);
+});
+
 test('pauses a failed subscription but preserves the rejection and retained transport', async () => {
   const state = new State();
   const client = state.client;

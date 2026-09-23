@@ -66,9 +66,9 @@ function notifyCallbacks(
   data: unknown,
   context: unknown,
 ): void {
-  for (const callback of state._callbacks.get(event) ?? []) {
+  state._callbacks.get(event)?.forEach((callback) => {
     callback(data, context);
-  }
+  });
 }
 
 function deliverPublication(state: ChannelLifecycleState, context: unknown): void {
