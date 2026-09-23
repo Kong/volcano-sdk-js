@@ -16,6 +16,7 @@ function user(id: string): User {
   return {
     id,
     email: 'test@example.com',
+    status: 'active',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
   };
@@ -73,12 +74,35 @@ describe('Next.js middleware helpers', () => {
 
   test.each([
     ['non-object body', null],
+    ['missing required status', { user: { id: 'user-123', email: 'test@example.com' } }],
     ['invalid metadata', { user: { ...user('user-123'), user_metadata: 'invalid' } }],
+    ['invalid created timestamp', { user: { ...user('user-123'), created_at: 123 } }],
+    ['invalid updated timestamp', { user: { ...user('user-123'), updated_at: 123 } }],
   ])('getUser rejects %s in a successful response', async (_case, payload) => {
     jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json(payload));
 
     await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
       user: null,
+      error: null,
+    });
+  });
+
+  test('withAuth accepts a user without optional timestamps', async () => {
+    const expectedUser = { id: 'user-123', email: 'test@example.com', status: 'active' };
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ user: expectedUser }));
+    const request = new Request('https://app.test.com/dashboard', {
+      headers: { authorization: 'Bearer access-token' },
+    });
+
+    await expect(withAuth(request, createServerClient(config))).resolves.toEqual(expectedUser);
+  });
+
+  test.each(['banned', 'deleted'])('getUser accepts the %s status', async (status) => {
+    const expectedUser = { ...user('user-123'), status };
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ user: expectedUser }));
+
+    await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
+      user: expectedUser,
       error: null,
     });
   });

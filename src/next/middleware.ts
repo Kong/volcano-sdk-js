@@ -33,10 +33,11 @@ export interface ServerClientConfig {
 
 export interface User {
   id: string;
-  email?: string;
+  email: string;
+  status: 'active' | 'banned' | 'deleted';
   user_metadata?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface GetUserResult {
@@ -69,15 +70,24 @@ function optionalRecord(value: Record<string, unknown>, field: string): boolean 
   return fieldValue === undefined || isRecord(fieldValue);
 }
 
+function isUserStatus(value: unknown): value is User['status'] {
+  return value === 'active' || value === 'banned' || value === 'deleted';
+}
+
+function hasOptionalTimestamps(value: Record<string, unknown>): boolean {
+  return optionalString(value, 'created_at') && optionalString(value, 'updated_at');
+}
+
 function isUser(value: unknown): value is User {
   if (!isRecord(value)) {
     return false;
   }
-  const required = ['id', 'created_at', 'updated_at'];
+  const required = ['id', 'email'];
   return (
     required.every((field) => typeof value[field] === 'string') &&
-    optionalString(value, 'email') &&
-    optionalRecord(value, 'user_metadata')
+    isUserStatus(value['status']) &&
+    optionalRecord(value, 'user_metadata') &&
+    hasOptionalTimestamps(value)
   );
 }
 

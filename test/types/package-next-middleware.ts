@@ -14,6 +14,12 @@ const config: ServerClientConfig = { anonKey: 'anon' };
 const cjsClient: ServerClient = createCjsClient(config);
 const esmClient: ServerClient = createEsmClient(config);
 
+export const minimalMiddlewareUser: User = {
+  id: 'user',
+  email: 'user@example.com',
+  status: 'active',
+};
+
 export async function loadMiddlewareUser(request: Request): Promise<User | null> {
   const cjsUser = await withCjsAuth(request, cjsClient);
   return cjsUser ?? withEsmAuth(request, esmClient);
