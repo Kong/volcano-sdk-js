@@ -28,11 +28,13 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 | [Storage](./storage.md)                     | Upload, download, and manage files                            |
 | [Realtime](./realtime.md)                   | WebSocket subscriptions, presence, and broadcast              |
 | [Functions](./functions.md)                 | Invoke serverless functions                                   |
-| [Durable functions](./durable-functions.md) | Write functions that checkpoint and resume across hours       |
+| [Durable functions](./durable-functions.md) | Write functions that checkpoint and resume for up to 366 days |
 | [Project locks](./locks.md)                 | Leases that keep one holder at a time on backend work         |
+| [Logs](./logs.md)                           | Search project logs and read activity buckets                 |
 | [Next.js Integration](./nextjs.md)          | Server components, middleware, and SSR considerations         |
 | [TypeScript](./typescript.md)               | Type definitions and best practices                           |
 | [Error Handling](./error-handling.md)       | Error patterns and troubleshooting                            |
+| [Versions](./versions.md)                   | Runtime support, upgrades, and tested dependency sets         |
 
 ## Quick Example
 
@@ -90,7 +92,3 @@ Realtime support is included with the SDK and is available from
 ## License
 
 Apache License 2.0 - see [LICENSE](https://github.com/Kong/volcano-sdk-js/blob/main/LICENSE) for details.
-
-See [Logs](./logs.md) for project-token authentication, search, pagination, and activity.
-
-See [Versions and compatibility](./versions.md) for runtime support, upgrades, and restoring a tested dependency set.

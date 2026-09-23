@@ -573,16 +573,31 @@ The step timeout bounds one attempt between checkpoints, not the execution. A
 step that needs longer than that has to be split, or moved behind
 `ctx.waitUntil` so the waiting happens between operations instead of inside one.
 
+## Local development
+
+Use the same handler and manifest with the local CLI:
+
+```bash
+volcano start
+volcano durable deploy --all
+volcano durable start order-pipeline --input '{"order_id":4417}' --name order-4417
+volcano durable executions get order-pipeline <execution-id>
+```
+
+Local waits resolve immediately by default while preserving checkpoint and replay
+behavior. Set `LOCAL_DURABLE_REAL_TIME=true` before `volcano start` when wait
+timing must match the deployed function. Local executions persist across
+`volcano stop` and `volcano start`.
+
 ## Not available yet
 
 - **Callbacks.** The runtime can suspend on an externally-completed callback,
-  but nothing in Volcano can complete one, so the facade leaves it out. Wait on
-  your own state with `ctx.waitUntil` instead.
+  but Volcano exposes no callback completion API, so the facade leaves it out.
+  Wait on your own state with `ctx.waitUntil` instead. The local engine rejects
+  raw callback operations instead of leaving an execution suspended forever.
 - **Durable invoke.** Call another function from inside a step —
   `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
   than chaining durable executions.
-- **Local development.** Durable execution is a cloud capability; deploying a
-  durable function against a local project is refused rather than emulated.
 
 ## Next steps
 
