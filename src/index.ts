@@ -631,7 +631,12 @@ class VolcanoAuth {
     try {
       const outcome = await this._awaitFunctionResolution(pending, options.authContext);
       if (outcome.error !== null) {
-        return await this._handleFunctionResolutionError(outcome, functionName, options);
+        return await this._handleFunctionResolutionError(
+          outcome.error,
+          outcome.status,
+          functionName,
+          options,
+        );
       }
       return { functionId: outcome.functionId, invokeUrl: outcome.invokeUrl, token };
     } finally {
@@ -660,7 +665,8 @@ class VolcanoAuth {
   }
 
   private async _handleFunctionResolutionError(
-    outcome: ResolutionOutcome,
+    error: Error,
+    status: number | null,
     functionName: string,
     options: {
       authContext: AuthContext;
@@ -668,13 +674,10 @@ class VolcanoAuth {
       allowRefresh?: boolean;
     },
   ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
-    if (outcome.error === null) {
-      throw new Error('Expected function resolution error');
+    if (status === 401 && !options.useAnonKey && options.allowRefresh !== false) {
+      return await this._retryFunctionResolution(functionName, options, error);
     }
-    if (outcome.status === 401 && !options.useAnonKey && options.allowRefresh !== false) {
-      return await this._retryFunctionResolution(functionName, options, outcome.error);
-    }
-    throw outcome.error;
+    throw error;
   }
 
   private async _retryFunctionResolution(
