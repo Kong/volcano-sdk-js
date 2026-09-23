@@ -58,6 +58,78 @@ describe('Storage', () => {
     });
   });
 
+  describe('JavaScript option compatibility', () => {
+    const absentValues = [undefined, null, false, 0, Number.NaN, ''];
+
+    it.each(absentValues)('omits a falsy list prefix (%s)', async (prefix) => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ objects: [] }) });
+
+      const result = await volcano.storage.from('files').list(prefix);
+
+      expect(result.error).toBeNull();
+      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/files');
+    });
+
+    it.each(absentValues)('omits falsy list options (%s)', async (value) => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ objects: [] }) });
+
+      const result = await volcano.storage.from('files').list('', {
+        limit: value,
+        cursor: value,
+      });
+
+      expect(result.error).toBeNull();
+      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/files');
+    });
+
+    it.each(absentValues)('rejects a falsy upload size locally (%s)', async (totalSize) => {
+      const result = await volcano.storage
+        .from('files')
+        .createUploadSession('file.bin', { totalSize });
+
+      expect(result.error.message).toBe('totalSize is required');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it.each(absentValues)('defaults a falsy session content type (%s)', async (contentType) => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      const result = await volcano.storage
+        .from('files')
+        .createUploadSession('file.bin', { totalSize: 1, contentType });
+
+      expect(result.error).toBeNull();
+      expect(JSON.parse(fetch.mock.calls[0][1].body).content_type).toBe('application/octet-stream');
+    });
+
+    it.each(absentValues)('defaults a falsy Blob content type (%s)', async (contentType) => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      const result = await volcano.storage
+        .from('files')
+        .upload('file.bin', new Blob(['data']), { contentType });
+
+      expect(result.error).toBeNull();
+      expect(fetch.mock.calls[0][1].body.get('file').type).toBe('application/octet-stream');
+    });
+
+    it.each(absentValues)('omits a falsy download range (%s)', async (range) => {
+      global.fetch.mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['data']) });
+
+      const result = await volcano.storage.from('files').download('file.bin', { range });
+
+      expect(result.error).toBeNull();
+      expect(fetch.mock.calls[0][1].headers.Range).toBeUndefined();
+    });
+
+    it('rejects null session options locally', async () => {
+      const result = await volcano.storage.from('files').createUploadSession('file.bin', null);
+
+      expect(result.error.message).toBe('totalSize is required');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('upload()', () => {
     it('should upload a File successfully', async () => {
       const mockResponse = {
