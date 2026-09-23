@@ -20,7 +20,8 @@
         "!src/generated/model/**",
         "!src/generated/client.ts",
         "!src/generated/volcano-fetch.ts",
-        "!src/generated-runtime/model/**",
+        "!src/generated/openapi.d.ts",
+        "!src/generated-runtime/**",
         "__tests__/**/*.{js,ts,cjs}",
         "scripts/**/*.{mjs,cjs}",
         "test/types/**/*.ts",
@@ -33,9 +34,5 @@
         "@/*": ["./src/*"]
       }
     }
-  },
-  "ignoreIssues": {
-    "src/generated-runtime/client.js": ["exports"],
-    "src/generated/openapi.d.ts": ["types"]
   }
 }
