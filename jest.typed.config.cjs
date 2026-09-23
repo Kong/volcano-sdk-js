@@ -2,6 +2,11 @@ const base = require('./jest.config.js');
 
 module.exports = {
   ...base,
+  moduleNameMapper: {
+    '^\\.\\./src(?:/index(?:\\.js)?)?$': '<rootDir>/src/index.ts',
+    '^\\.\\./src/realtime$': '<rootDir>/src/realtime.ts',
+    ...base.moduleNameMapper,
+  },
   collectCoverage: true,
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/generated/**'],
   coverageThreshold: {
