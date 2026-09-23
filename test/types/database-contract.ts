@@ -4,7 +4,7 @@ import {
   type MutationBuilder,
   type QueryBuilder,
   type QueryResult,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 type ExistingOptions = { userId?: string | null };
 type ExistingFunction = (base: string, options?: ExistingOptions) => string;

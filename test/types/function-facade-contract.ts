@@ -3,7 +3,7 @@ import type {
   DurableExecution,
   FunctionInvokeResponse,
   Functions,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 declare const functions: Functions;
 declare const durable: Durable;

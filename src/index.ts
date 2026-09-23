@@ -87,7 +87,10 @@ import {
   getSessions as getAccountSessions,
 } from './auth-user-sessions.ts';
 import { MutationBuilder } from './database-mutations.ts';
-import { QueryBuilder, queryDatabaseSelectTransport } from './database-query.ts';
+import {
+  QueryBuilder as RuntimeQueryBuilder,
+  queryDatabaseSelectTransport,
+} from './database-query.ts';
 import { DurableFacade } from './durable-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
@@ -129,6 +132,7 @@ import type {
   JsonValue,
   Logs,
   ProjectLocks,
+  QueryBuilder as PublicQueryBuilder,
   Storage,
   User,
   VolcanoAuthConfig,
@@ -724,8 +728,8 @@ class VolcanoAuth {
   // Query Builder Methods
   // ========================================================================
 
-  from(table: string): QueryBuilder {
-    return new QueryBuilder(this, table, this._currentDatabaseName);
+  from(table: string): RuntimeQueryBuilder {
+    return new RuntimeQueryBuilder(this, table, this._currentDatabaseName);
   }
 
   database(databaseName: string): this {
@@ -1299,11 +1303,13 @@ async function loadRealtime(): Promise<{
 // (e.g. esbuild --bundle --format=cjs), producing "handler is not a function"
 // at runtime. See VOL-505.
 export { loadRealtime, VolcanoAuth, VolcanoAuth as VolcanoClient };
-export { QueryBuilder } from './database-query.ts';
+export const QueryBuilder = RuntimeQueryBuilder;
+export type QueryBuilder<T = Record<string, JsonValue>> = PublicQueryBuilder<T>;
 export { isBrowser } from './next/request.ts';
 export { StorageFileApi } from './storage-file.ts';
 export default VolcanoAuth;
 
+export type { DatabaseConnectionStringOptions } from './database-connection-string.ts';
 export { databaseConnectionString } from './database-connection-string.ts';
 export {
   AuthRefreshDiscardedError,

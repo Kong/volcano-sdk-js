@@ -10,12 +10,12 @@ import type {
   QueryBuilder,
   MutationBuilder,
   UploadSessionStatusResponse,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 import {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
   VolcanoSystemError,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 type Assert<T extends true> = T;
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
@@ -349,7 +349,7 @@ const primaryKey: string | number | undefined = postgresChange.id;
 const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
 void [primaryKey, deliveryMode];
 
-async function functionErrorMetadata(functions: import('../../src/index.js').Functions) {
+async function functionErrorMetadata(functions: import('../../src/index.ts').Functions) {
   const { error } = await functions.invoke('echo', { value: 'contract' });
   const status: number | null | undefined = error?.status;
   const code: string | undefined = error?.code;

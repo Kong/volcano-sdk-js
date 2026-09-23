@@ -544,7 +544,10 @@ export class StorageFileApi {
     );
   }
 
-  async abortUploadSession(path: string, sessionId: string): Promise<{ error: Error | null }> {
+  async abortUploadSession(
+    path: string,
+    sessionId: string,
+  ): Promise<{ error: StorageError | null }> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return { error: authError.error };

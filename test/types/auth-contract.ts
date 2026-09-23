@@ -1,10 +1,10 @@
-import type { Auth, ProjectLockLease, ProjectLocks, User, UserStatus } from '../../src/index.js';
+import type { Auth, ProjectLockLease, ProjectLocks, User, UserStatus } from '../../src/index.ts';
 import {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
   VolcanoClient,
   VolcanoSystemError,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 declare const user: User;
 declare const auth: Auth;

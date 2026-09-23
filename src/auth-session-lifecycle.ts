@@ -1,4 +1,5 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
+import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import {
   assertAuthTokenResponse,
@@ -19,18 +20,11 @@ interface SuccessfulRequest extends RequestBase {
   error: null;
 }
 
-interface FailedRequest extends RequestBase {
-  ok: false;
-  error: Error;
-}
-
-type RequestResult = SuccessfulRequest | FailedRequest;
-
 export interface SuccessfulRefresh extends SuccessfulRequest {
   data: CompleteSessionFields & AuthTokenFields;
 }
 
-export type FailedRefresh = FailedRequest;
+export type FailedRefresh = RequestFailure;
 
 export type RefreshResult = SuccessfulRefresh | FailedRefresh;
 export interface SignOutResult {
@@ -123,7 +117,7 @@ async function logoutError(
 }
 
 function assertUsablePreceding(preceding: PrecedingRefresh, verified: boolean): void {
-  if (preceding !== null && !preceding.ok && !verified) {
+  if (preceding !== null && preceding.ok !== true && !verified) {
     throw preceding.error;
   }
 }
@@ -189,7 +183,7 @@ export async function revokeAccessSession(
     return previousFailure(preceding, result.error);
   }
   const refreshed = await host._fetchSessionRefresh(context);
-  if (!refreshed.ok) {
+  if (refreshed.ok !== true) {
     return refreshed.error;
   }
   result = await removeSession(host, path, refreshed.data.access_token);
@@ -249,7 +243,7 @@ export async function fetchSessionRefresh(
     method: 'POST',
     body: JSON.stringify({ refresh_token: context.refreshToken }),
   });
-  if (result.ok) {
+  if (result.ok === true) {
     validateSuccessfulRefresh(result, context, expectedUserId(host, context));
     context.operations.verifyPair(result.data);
     return result;
@@ -286,7 +280,7 @@ async function refreshResult(
 ): Promise<RefreshResult> {
   const result = await host._fetchSessionRefresh(context);
   if (context.operations.signingOut === null) {
-    if (result.ok) {
+    if (result.ok === true) {
       host._setRefreshedSession(result.data, context);
     } else if (result.status === 401 || result.status === 403) {
       context.operations.refreshClearedSession = host._clearSession(context);
@@ -300,7 +294,7 @@ function settledRefresh(
   context: AuthContext,
   result: RefreshResult,
 ): RefreshResponse {
-  if (!result.ok) {
+  if (result.ok !== true) {
     return { session: null, error: result.error };
   }
   if (!host._isAuthContextCurrent(context) || context.operations.signingOut !== null) {
