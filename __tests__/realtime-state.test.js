@@ -503,11 +503,17 @@ describe('realtime server state contract', () => {
     );
   });
 
-  test('ignores an empty bound-client database selector', () => {
-    const { realtime } = createRealtime({ volcanoClient: { _currentDatabaseName: '' } });
-    expect(realtime.channel('public:items', { type: 'postgres' }).name).toBe(
-      'postgres:public:items',
+  test('ignores an empty bound-client database selector for identity and auto-fetch', async () => {
+    const database = jest.fn();
+    const { realtime } = createRealtime({
+      volcanoClient: { _currentDatabaseName: '', from: jest.fn(), database },
+    });
+    const channel = realtime.channel('public:items', { type: 'postgres' });
+    expect(channel.name).toBe('postgres:public:items');
+    await expect(channel._fetchRow('public', 'items', 'row-1')).rejects.toThrow(
+      'Database name not set',
     );
+    expect(database).not.toHaveBeenCalled();
   });
 
   test('ignores a non-string bound-client database selector', () => {
