@@ -2,8 +2,8 @@ import { mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { batchResult } from './durable-batch-result.ts';
 import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
 import { waitDuration } from './durable-duration.ts';
+import { loadEngine } from './durable-engine.ts';
 import { parallelBranches } from './durable-parallel-branches.ts';
-import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
 /**
  * Volcano SDK - Durable function authoring API
@@ -31,35 +31,6 @@ import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
  * between the operations runs again on every resume, so it has to reach the
  * same operations in the same order.
  */
-
-/**
- * The runtime that does the checkpointing is installed by Volcano when it builds
- * a function deployed as durable, so nothing here appears in a function's own
- * dependencies. It is declared as an optional peer, which is what lets the SDK
- * resolve it under a strict node_modules layout, and loaded on the first
- * invocation rather than imported: the SDK also runs in browsers and in standard
- * functions, where a static import would break the bundle, and its absence is
- * worth a real error message instead of a module-resolution failure.
- */
-const runtimeSpecifier = '@aws/durable-execution-sdk-js';
-
-let enginePromise = null;
-
-function loadEngine() {
-  enginePromise ??= resolveEngine();
-  return enginePromise;
-}
-
-async function resolveEngine() {
-  try {
-    // The runtime ships both module formats, so the loaded namespace is either
-    // its own exports or, for the CommonJS build, those exports under `default`.
-    const loaded = await import(runtimeSpecifier);
-    return loaded.withDurableExecution ? loaded : loaded.default;
-  } catch (cause) {
-    throw new DurableRuntimeMissingError(cause);
-  }
-}
 
 /**
  * Wraps a handler so Volcano runs it as a durable execution.
