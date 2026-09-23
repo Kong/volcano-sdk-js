@@ -44,6 +44,7 @@ import {
   VolcanoSystemError,
 } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
+import { functionInvokeResult, functionWasDispatched } from './function-invocation-response.ts';
 import { resolveFunctionByHttp } from './function-resolution.ts';
 import {
   clearFunctionResolveCache,
@@ -68,8 +69,6 @@ import {
 import { cloneJsonValue } from './json-clone.ts';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
-import { parseResponseBody } from './response-body.ts';
-import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
 import { StorageFileApi } from './storage-file.ts';
 import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './token-claims.ts';
@@ -120,10 +119,6 @@ const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
-// Present only once the platform has dispatched to the function. Its absence on
-// a 404 is what says the id we cached no longer names anything, as opposed to
-// the function itself answering 404.
-const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 // The idempotency header's documented limit. Checked here so a name that is too
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
@@ -1490,8 +1485,7 @@ class VolcanoAuth {
           this.timeout,
         );
 
-        const versionHeader = getHeaderValue(response, 'x-volcano-version');
-        const dispatched = Boolean(getHeaderValue(response, FUNCTION_INVOKED_HEADER));
+        const dispatched = functionWasDispatched(response);
         functionDispatched = dispatched;
         // A 401 the platform raised means this token was rejected before the
         // function ran, so refreshing can help. A 401 the function chose is its
@@ -1530,36 +1524,7 @@ class VolcanoAuth {
           }
         }
 
-        const data = await parseResponseBody(response);
-        const headers = responseHeadersToObject(response);
-        const version = versionHeader || null;
-
-        // A non-2xx response the platform produced never reached a running
-        // function — a failed or provisioning deploy, a quota refusal, a
-        // gateway that could not route. Surface it as a system error, distinct
-        // from a function's own error response, which comes back as `data`.
-        //
-        // The split keys on x-volcano-function-invoked, which the platform sets
-        // only after dispatch. It cannot key on x-volcano-version: the server
-        // stamps that on every response, errors included, so the branch would
-        // never be taken and every platform failure would be returned as though
-        // the function had answered. Both headers are CORS-exposed on the
-        // invoke domain, without which a browser cannot read either.
-        if (!response.ok && !dispatched) {
-          const message =
-            data && typeof data === 'object' && data.error
-              ? data.error
-              : `Invoke request failed with status ${response.status}`;
-          return {
-            data: null,
-            status: response.status,
-            headers,
-            version,
-            error: new VolcanoSystemError(message, apiRequestError(response, data, message)),
-          };
-        }
-
-        return { data, status: response.status, headers, version, error: null };
+        return await functionInvokeResult(response, dispatched);
       } catch (error) {
         // Transport failures (network down, timeout, DNS) are also platform-level.
         return {
