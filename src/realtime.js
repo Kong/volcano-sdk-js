@@ -47,33 +47,9 @@
 import { loadCentrifuge } from './realtime-centrifuge.ts';
 import { postgresBaseChannelFromParts, sdkChannelFromParts } from './realtime-channel-name.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
+import { loadWebSocket } from './realtime-websocket.ts';
 
 const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
-
-// Load WebSocket for Node.js environments
-let WebSocketImpl = null;
-async function loadWebSocket() {
-  if (WebSocketImpl) {
-    return WebSocketImpl;
-  }
-
-  // Check if we're in a browser environment
-  if (typeof window !== 'undefined' && window.WebSocket) {
-    WebSocketImpl = window.WebSocket;
-    return WebSocketImpl;
-  }
-
-  // Node.js environment - try to load ws package
-  try {
-    const ws = await import('ws');
-    WebSocketImpl = ws.default || ws.WebSocket || ws;
-    return WebSocketImpl;
-  } catch {
-    throw new Error(
-      'Unable to load a WebSocket implementation. In Node.js, reinstall @volcano.dev/sdk or pass a custom webSocket implementation.',
-    );
-  }
-}
 
 /**
  * VolcanoRealtime - Main realtime client
