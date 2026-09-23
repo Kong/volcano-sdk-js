@@ -58,7 +58,10 @@ export function isTransportClient(value: unknown): value is TransportClient {
 
 function currentDatabaseName(client: unknown): string | null {
   const name = property(client, '_currentDatabaseName');
-  return typeof name === 'string' && name !== '' ? name : null;
+  if (typeof name !== 'string') {
+    return null;
+  }
+  return name === '' ? null : name;
 }
 
 function channelDatabaseName(

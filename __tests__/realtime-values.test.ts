@@ -50,10 +50,10 @@ describe('untrusted realtime payloads', () => {
   });
 
   test('clones nested arrays while preserving scalar values', () => {
-    const state = { label: 'ready', steps: [{ label: 'first' }] };
+    const state = { label: 'ready', steps: [{ label: 'first' }], optional: undefined };
     const snapshot = clonePresenceState(state);
     state.steps.push({ label: 'second' });
-    expect(snapshot).toEqual({ label: 'ready', steps: [{ label: 'first' }] });
+    expect(snapshot).toEqual({ label: 'ready', steps: [{ label: 'first' }], optional: undefined });
   });
 
   test('reads fields only from objects', () => {

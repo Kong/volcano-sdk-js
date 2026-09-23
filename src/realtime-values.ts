@@ -22,11 +22,12 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function clonePresenceState(state: Record<string, unknown>): Record<string, unknown> {
-  const copied = cloneJsonValue(state);
-  if (!record(copied)) {
-    throw new TypeError('Presence state must be a JSON object');
-  }
-  return copied;
+  return Object.fromEntries(
+    Object.entries(state).map(([key, value]) => [
+      key,
+      value === undefined ? undefined : cloneJsonValue(value),
+    ]),
+  );
 }
 
 function normalizePresenceInfo(info: unknown): unknown {
