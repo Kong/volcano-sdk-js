@@ -1,8 +1,8 @@
 /** @jest-environment node */
 import { expect, jest, test } from '@jest/globals';
-import { downloadStorageObject, renderAuthPagePreview } from '../src/generated/client.ts';
+import { authSignin, downloadStorageObject } from '../src/generated/client.ts';
 
-test('managed page previews return HTML as a string', async () => {
+test('generated fetch preserves text responses as strings', async () => {
   const html = '<!doctype html><title>Preview</title>';
   const volcanoClient = {
     _generatedFetch: jest.fn(() =>
@@ -12,10 +12,8 @@ test('managed page previews return HTML as a string', async () => {
     ),
   };
 
-  const result = await renderAuthPagePreview(
-    'project-id',
-    'login',
-    { ticket: 'preview-ticket' },
+  const result = await authSignin(
+    { email: 'user@example.test', password: 'secret' },
     { volcanoClient, volcanoAuthorization: 'session' },
   );
 
