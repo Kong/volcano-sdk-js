@@ -148,9 +148,7 @@ class RealtimeChannel {
         this._activationPromise = null;
       }
     }
-    if (this._type === 'presence') {
-      await this._ensureTrackedPresenceAcknowledged();
-    }
+    await this._ensureTrackedPresenceAcknowledged();
   }
 
   unsubscribe(): void {
@@ -458,23 +456,27 @@ class RealtimeChannel {
       return;
     }
     this._subscription.setData(this._myPresenceState);
-    if (this._activationPromise !== null) {
-      await this._activationPromise;
+    if (this._activationPromise === null) {
+      return this._ensureTrackedPresenceAcknowledged();
     }
-    if (this._paused && this._presenceResubscribePromise === null) {
-      return;
-    }
+    await this._activationPromise;
     await this._ensureTrackedPresenceAcknowledged();
   }
 
   /** @internal */
   async _ensureTrackedPresenceAcknowledged(): Promise<void> {
-    while (this._presenceAcknowledgedVersion < this._presenceStateVersion) {
-      if (this._paused && this._presenceResubscribePromise === null) {
-        return;
-      }
-      await this._awaitTrackedResubscribe();
+    if (this._presenceAcknowledgedVersion >= this._presenceStateVersion) {
+      return;
     }
+    if (this._paused && this._presenceResubscribePromise === null) {
+      return;
+    }
+    const acknowledgedVersion = this._presenceAcknowledgedVersion;
+    await this._awaitTrackedResubscribe();
+    if (this._presenceAcknowledgedVersion <= acknowledgedVersion) {
+      throw new Error('Tracked presence state made no progress');
+    }
+    await this._ensureTrackedPresenceAcknowledged();
   }
 
   /** @internal */
@@ -492,21 +494,24 @@ class RealtimeChannel {
 
   /** @internal */
   async _resubscribeTrackedPresence(): Promise<void> {
-    while (this._presenceAcknowledgedVersion < this._presenceStateVersion) {
-      const stateVersion = this._presenceStateVersion;
-      this._pauseSubscription();
-      const lifecycleVersion = this._lifecycleVersion;
-      await this._activateSubscription();
-      if (this._lifecycleVersion !== lifecycleVersion) {
-        return;
-      }
-      if (this._presenceAcknowledgedVersion < stateVersion) {
-        throw new Error('Tracked presence state was not acknowledged');
-      }
-      if (stateVersion !== this._presenceStateVersion) {
-        this._updateTrackedSubscriptionData();
-      }
+    if (this._presenceAcknowledgedVersion >= this._presenceStateVersion) {
+      return;
     }
+    const acknowledgedVersion = this._presenceAcknowledgedVersion;
+    const stateVersion = this._presenceStateVersion;
+    this._pauseSubscription();
+    const lifecycleVersion = this._lifecycleVersion;
+    await this._activateSubscription();
+    if (this._lifecycleVersion !== lifecycleVersion) {
+      return;
+    }
+    if (this._presenceAcknowledgedVersion <= acknowledgedVersion) {
+      throw new Error('Tracked presence state made no progress');
+    }
+    if (stateVersion !== this._presenceStateVersion) {
+      this._updateTrackedSubscriptionData();
+    }
+    await this._resubscribeTrackedPresence();
   }
 
   /** @internal */

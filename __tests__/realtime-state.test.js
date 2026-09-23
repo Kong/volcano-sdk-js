@@ -698,6 +698,7 @@ describe('realtime server state contract', () => {
     firstReady.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sent).toEqual([{ status: 'away' }, { status: 'busy' }]);
+    expect(subscription.setData).toHaveBeenCalledTimes(3);
     expect(secondResolved).toBe(false);
 
     secondReady.resolve();
@@ -896,11 +897,87 @@ describe('realtime server state contract', () => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('lobby', { type: 'presence' });
     channel._presenceStateVersion = 1;
-    channel._activateSubscription = jest.fn().mockResolvedValue(undefined);
+    channel._activateSubscription = jest
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Unexpected retry'));
 
     await expect(channel._resubscribeTrackedPresence()).rejects.toThrow(
-      'Tracked presence state was not acknowledged',
+      'Tracked presence state made no progress',
     );
     expect(channel._activateSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  test('fails a completed tracked-state promise that made no acknowledgment progress', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    channel._presenceStateVersion = 1;
+    channel._awaitTrackedResubscribe = jest
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Unexpected retry'));
+
+    await expect(channel._ensureTrackedPresenceAcknowledged()).rejects.toThrow(
+      'Tracked presence state made no progress',
+    );
+    expect(channel._awaitTrackedResubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps a newer activation promise when an older activation settles', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('room');
+    const older = deferred();
+    const newer = deferred();
+    channel._activationPromise = older.promise;
+    const waiting = channel._awaitActivation();
+    channel._activationPromise = newer.promise;
+    older.resolve();
+
+    await waiting;
+    expect(channel._activationPromise).toBe(newer.promise);
+    newer.resolve();
+  });
+
+  test('track waits for initial activation before attempting a replacement', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('room', { type: 'presence' });
+    await channel.subscribe();
+    const activation = deferred();
+    channel._activationPromise = activation.promise;
+    const tracked = channel.track({ status: 'away' });
+    expect(subscriptions[0].unsubscribe).not.toHaveBeenCalled();
+
+    activation.resolve();
+    await tracked;
+    expect(subscriptions[0].unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not retry presence after its current state was already acknowledged', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('room', { type: 'presence' });
+    channel._presenceStateVersion = 1;
+    channel._presenceAcknowledgedVersion = 1;
+    channel._activateSubscription = jest.fn();
+
+    await channel._resubscribeTrackedPresence();
+    expect(channel._activateSubscription).not.toHaveBeenCalled();
+  });
+
+  test('only updates a tracked transport when both subscription and state exist', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('room', { type: 'presence' });
+    channel._updateTrackedSubscriptionData();
+    await channel.subscribe();
+    const subscription = subscriptions[0];
+    channel._updateTrackedSubscriptionData();
+    expect(subscription.setData).not.toHaveBeenCalled();
+
+    channel._myPresenceState = { status: 'away' };
+    channel._updateTrackedSubscriptionData();
+    expect(subscription.setData).toHaveBeenCalledTimes(1);
+    expect(subscription.setData).toHaveBeenCalledWith({ status: 'away' });
+    channel._subscription = null;
+    channel._updateTrackedSubscriptionData();
+    expect(subscription.setData).toHaveBeenCalledTimes(1);
   });
 });

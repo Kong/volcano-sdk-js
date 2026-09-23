@@ -560,7 +560,9 @@ test('unsubscribe clears only the pending fetch timer that exists', () => {
   const clear = jest.spyOn(globalThis, 'clearTimeout');
   try {
     const state = new State();
-    const timer = setTimeout(jest.fn(), 100);
+    const timer = setTimeout(() => {
+      state.syncs += 1;
+    }, 100);
     state._pendingFetches.set('timed', { timer, ids: new Map() });
     state._pendingFetches.set('untimed', { timer: null, ids: new Map() });
     state.unsubscribe();

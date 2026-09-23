@@ -381,7 +381,7 @@ describe('Realtime Auto-Fetch', () => {
     });
 
     test('batches multiple fetch requests within window', async () => {
-      const { client: mockClient } = createMockVolcanoClient([
+      const { client: mockClient, query } = createMockVolcanoClient([
         { id: 1, name: 'Alice' },
         { id: 2, name: 'Bob' },
         { id: 3, name: 'Charlie' },
@@ -415,6 +415,7 @@ describe('Realtime Auto-Fetch', () => {
       expect(mockClient.database).toHaveBeenCalledWith('testdb');
       expect(mockClient.from).toHaveBeenCalledTimes(1);
       expect(mockClient.from).toHaveBeenCalledWith('users');
+      expect(query.in).toHaveBeenCalledWith('id', ['1', '2', '3']);
     });
 
     test('uses schema-qualified table names for non-public schemas', async () => {
