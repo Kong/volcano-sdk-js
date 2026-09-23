@@ -1,10 +1,29 @@
 import { apiRequestError } from './api-errors.ts';
 import {
+  cancelEmailChange as cancelAccountEmailChange,
+  confirmEmail as confirmAccountEmail,
+  confirmEmailChange as confirmAccountEmailChange,
+  convertAnonymous as convertAnonymousAccount,
+  forgotPassword as forgotAccountPassword,
+  getSession as getAccountSession,
+  getUser as getAccountUser,
+  onAuthStateChange as subscribeToAuthState,
+  requestEmailChange as requestAccountEmailChange,
+  resendConfirmation as resendAccountConfirmation,
+  resetPassword as resetAccountPassword,
+  resetPasswordForEmail as resetAccountPasswordForEmail,
+  setSession as adoptAccountSession,
+  signIn as signInAccount,
+  signInAnonymously as signInAnonymousAccount,
+  signUp as signUpAccount,
+  signUpAnonymous as signUpAnonymousAccount,
+  updateUser as updateAccountUser,
+} from './auth-account.ts';
+import {
   generateAuthStateNonce,
   getStorageItem,
   hasOAuthCallbackInUrl,
   hasSessionInUrl,
-  OAUTH_RESPONSE_QUERY_KEYS,
   peekAuthRedirectUrl,
   peekAuthState,
   removeOAuthResponseParams,
@@ -16,8 +35,24 @@ import {
   takeAuthRedirectUrl,
   takeAuthState,
 } from './auth-browser.ts';
-import { sessionIdsEqual, validateSessionContinuation } from './auth-continuity.ts';
 import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
+import { anonFetch, authFetchUrl, authFetchWithContext } from './auth-http.ts';
+import {
+  getHostedAuthUrl as createHostedAuthUrl,
+  resolveOAuthRedirectTarget,
+  resolveProjectIdForHostedAuth,
+  signInWithHostedAuth as beginHostedAuth,
+  signInWithOAuth as beginOAuth,
+  signInWithProvider,
+} from './auth-oauth-url.ts';
+import {
+  callOAuthAPI as callProviderAPI,
+  getLinkedOAuthProviders as getAccountLinkedProviders,
+  getOAuthProviderToken as getAccountProviderToken,
+  linkOAuthProvider as linkAccountProvider,
+  refreshOAuthToken as refreshAccountProviderToken,
+  unlinkOAuthProvider as unlinkAccountProvider,
+} from './auth-provider.ts';
 import {
   completeOAuthExchange,
   consumeOAuthCodeFromUrl,
@@ -34,7 +69,21 @@ import {
   signOut,
   signOutCaptured,
 } from './auth-session-lifecycle.ts';
-import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
+import {
+  adoptSessionInMemory,
+  captureAuthContext,
+  clearSession,
+  clearSessionAtGeneration,
+  isAuthContextCurrent,
+  notifyAuthCallbacks,
+  setRefreshedSession,
+  setSession,
+} from './auth-session-state.ts';
+import {
+  deleteAllOtherSessions as deleteAccountOtherSessions,
+  deleteSession as deleteAccountSession,
+  getSessions as getAccountSessions,
+} from './auth-user-sessions.ts';
 import { MutationBuilder } from './database-mutations.ts';
 import { QueryBuilder } from './database-query.ts';
 import { DurableFacade } from './durable-facade.ts';
@@ -66,12 +115,10 @@ import {
   stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
-import { cloneJsonValue } from './json-clone.ts';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
-import { safeJsonParse } from './response-json.ts';
 import { StorageFileApi } from './storage-file.ts';
-import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './token-claims.ts';
+import { extractRequiredProjectIdFromToken } from './token-claims.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -116,7 +163,6 @@ import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './
 
 const DEFAULT_API_URL = 'https://api.volcano.dev';
 const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
-const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
 // The idempotency header's documented limit. Checked here so a name that is too
@@ -186,6 +232,7 @@ class VolcanoAuth {
     // Keep a terminal callback error until initialize()/refreshSession() consumes
     // it or a new session is set or cleared.
     this._oauthExchangeError = null;
+    this._authCallbacks = [];
     this._functionResolveState = getSharedFunctionResolveState();
     this._transport = (config.transportFactory || (() => GENERATED_TRANSPORT))(this);
     this._durableFacade = new DurableFacade(this);
@@ -340,114 +387,11 @@ class VolcanoAuth {
   }
 
   async _authFetchWithContext(path, options = {}) {
-    if (this._oauthExchangePromise) {
-      await this._completeOAuthExchange();
-    }
-    const context = this._captureAuthContext();
-    if (!context.accessToken) {
-      return {
-        result: {
-          ok: false,
-          status: null,
-          error: this._oauthExchangeError || new Error('No active session'),
-          data: null,
-        },
-        context,
-      };
-    }
-
-    const requestPath = typeof path === 'function' ? path() : path;
-    const requestOptions = typeof options === 'function' ? options() : options;
-    if (!this._isAuthContextCurrent(context)) {
-      return { result: authSessionChangedResult(), context };
-    }
-    const result = await this._authFetchUrl(`${this.apiUrl}${requestPath}`, requestOptions);
-    return { result, context };
+    return authFetchWithContext(this, path, options);
   }
 
   async _authFetchUrl(url, fetchOptions = {}) {
-    const context = this._captureAuthContext();
-    let retryFailure = null;
-    let accessToken = context.accessToken;
-
-    for (;;) {
-      try {
-        const { response, data } = await fetchWithTimeout(
-          url,
-          {
-            ...fetchOptions,
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              ...fetchOptions.headers,
-            },
-          },
-          this.timeout,
-          async (response, signal) => ({
-            response,
-            data: await safeJsonParse(response, signal),
-          }),
-        );
-
-        if (!response.ok) {
-          // Try token refresh once on 401. retryFailure is lexical state, so
-          // callers cannot bypass the retry boundary through request options.
-          if (response.status === 401 && !retryFailure) {
-            retryFailure = {
-              ok: false,
-              status: response.status,
-              error: apiRequestError(response, data, 'Session expired'),
-              data,
-            };
-            if (!context.refreshToken) {
-              return retryFailure;
-            }
-            const refreshed = await this._refreshSessionForContext(context);
-            if (refreshed.error) {
-              if (AuthRefreshDiscardedError.is(refreshed.error)) {
-                return {
-                  ok: false,
-                  status: refreshed.error.status,
-                  error: refreshed.error,
-                  data: null,
-                };
-              }
-              return retryFailure;
-            }
-            if (!this._isAuthContextCurrent(context)) {
-              return {
-                ok: false,
-                status: 409,
-                error: new AuthRefreshDiscardedError(),
-                data: null,
-              };
-            }
-            accessToken = this.accessToken;
-            continue;
-          }
-          return {
-            ok: false,
-            status: response.status,
-            error: apiRequestError(response, data),
-            data,
-          };
-        }
-
-        return {
-          ok: true,
-          status: response.status,
-          data,
-          error: null,
-        };
-      } catch (error) {
-        return {
-          ok: false,
-          status: null,
-          error: error instanceof Error ? error : new Error('Request failed'),
-          data: null,
-        };
-      }
-    }
+    return authFetchUrl(this, url, fetchOptions);
   }
 
   _generatedOptions(volcanoAuthorization, headers, responseType) {
@@ -584,40 +528,7 @@ class VolcanoAuth {
    * @private
    */
   async _anonFetch(path, options = {}) {
-    try {
-      const response = await fetchWithTimeout(
-        `${this.apiUrl}${path}`,
-        {
-          ...options,
-          headers: {
-            Authorization: `Bearer ${this.anonKey}`,
-            'Content-Type': 'application/json',
-            ...options.headers,
-          },
-        },
-        this.timeout,
-      );
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return {
-          ok: false,
-          status: response.status,
-          error: apiRequestError(response, data),
-          data,
-        };
-      }
-
-      return { ok: true, status: response.status, data, error: null };
-    } catch (error) {
-      return {
-        ok: false,
-        status: null,
-        error: error instanceof Error ? error : new Error('Request failed'),
-        data: null,
-      };
-    }
+    return anonFetch(this, path, options);
   }
 
   // ========================================================================
@@ -649,120 +560,20 @@ class VolcanoAuth {
   // Authentication Methods
   // ========================================================================
 
-  async signUp({ email, password, metadata = {}, signInWhenAllowed = false }) {
-    const result = await this._anonFetch('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, user_metadata: metadata }),
-    });
-
-    if (!result.ok) {
-      return {
-        user: null,
-        session: null,
-        confirmationRequired: false,
-        message: null,
-        error: result.error,
-      };
-    }
-
-    // Session-less signup (VOL-309): the server returns a uniform acknowledgement
-    // with no user object and no session tokens — identical for a new account and
-    // an already-registered email, so it cannot be used to enumerate addresses.
-    const confirmationRequired = Boolean(result.data?.confirmation_required);
-    const message = result.data?.message ?? null;
-
-    // Opt-in convenience: when the project does not require email confirmation the
-    // account is usable immediately, so establish a session with a follow-up signIn
-    // using the same credentials. Off by default so signUp mirrors the server's
-    // session-less contract unless the caller asks for auto sign-in. If the follow-up
-    // signIn fails, its error is surfaced while the account still exists server-side.
-    if (signInWhenAllowed && !confirmationRequired) {
-      const signInResult = await this.signIn({ email, password });
-      return {
-        user: signInResult.user,
-        session: signInResult.session,
-        confirmationRequired,
-        message,
-        error: signInResult.error,
-      };
-    }
-
-    // Default path: caller obtains a session via a separate signIn.
-    return {
-      user: null,
-      session: null,
-      confirmationRequired,
-      message,
-      error: null,
-    };
+  async signUp(options) {
+    return signUpAccount(this, options);
   }
 
-  async signIn({ email, password }) {
-    const expectedGeneration = this._sessionGeneration;
-    let response;
-    try {
-      response = await this._transport.authSignin(
-        { email, password },
-        this._generatedOptions('anon'),
-      );
-    } catch (error) {
-      return {
-        user: null,
-        session: null,
-        error: error instanceof Error ? error : new Error('Sign in failed'),
-      };
-    }
-
-    if (!this._setSession(response.data, expectedGeneration)) {
-      return { user: null, session: null, error: new AuthSessionChangedError() };
-    }
-    return {
-      user: response.data.user,
-      session: {
-        access_token: response.data.access_token,
-        refresh_token: response.data.refresh_token,
-        expires_in: response.data.expires_in,
-      },
-      error: null,
-    };
+  async signIn(options) {
+    return signInAccount(this, options);
   }
 
   getSession() {
-    if (!this.accessToken) {
-      return Promise.resolve({ data: { session: null }, error: null });
-    }
-
-    const user = this.currentUser === null ? null : cloneJsonValue(this.currentUser);
-    return Promise.resolve({
-      data: {
-        session: {
-          access_token: this.accessToken,
-          refresh_token: this.refreshToken,
-          user,
-        },
-      },
-      error: null,
-    });
+    return getAccountSession(this);
   }
 
   setSession(session) {
-    let ownedSession;
-    try {
-      ownedSession = cloneJsonValue(session);
-    } catch {
-      return Promise.resolve({
-        data: { session: null },
-        error: new TypeError('Session must be cloneable'),
-      });
-    }
-
-    const validationError = validateCompleteSession(ownedSession);
-    if (validationError) {
-      return Promise.resolve({ data: { session: null }, error: validationError });
-    }
-
-    this._adoptSessionInMemory(ownedSession);
-    return this.getSession();
+    return adoptAccountSession(this, session);
   }
 
   async signOut() {
@@ -778,54 +589,11 @@ class VolcanoAuth {
   }
 
   async getUser() {
-    // Transparently adopt a session handed off by the managed hosted auth pages
-    // (tokens in the URL fragment) so callers only ever need getUser().
-    const adoptedFromUrl = this._consumeSessionFromUrl();
-
-    const { result, context } = await this._authFetchWithContext('/auth/user');
-
-    if (!result.ok) {
-      return { user: null, error: result.error };
-    }
-    if (
-      !this._isAuthContextCurrent(context) ||
-      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
-    ) {
-      return { user: null, error: new AuthSessionChangedError() };
-    }
-
-    this.currentUser = result.data.user;
-    // Announce the redirect adoption — whether it happened just now or earlier
-    // at construction — exactly once, so onAuthStateChange listeners see the
-    // SIGNED_IN transition on the common hosted-redirect path too.
-    if (adoptedFromUrl || this._pendingUrlAuthNotify) {
-      this._pendingUrlAuthNotify = false;
-      this._notifyAuthCallbacks(this.currentUser);
-    }
-    return { user: result.data.user, error: null };
+    return getAccountUser(this);
   }
 
   async updateUser(options) {
-    const { result, context } = await this._authFetchWithContext('/auth/user', () => {
-      const { password, metadata } = options;
-      return {
-        method: 'PUT',
-        body: JSON.stringify({ password, user_metadata: metadata }),
-      };
-    });
-
-    if (!result.ok) {
-      return { user: null, error: result.error };
-    }
-    if (
-      !this._isAuthContextCurrent(context) ||
-      (this.currentUser?.id && result.data.user?.id !== this.currentUser.id)
-    ) {
-      return { user: null, error: new AuthSessionChangedError() };
-    }
-
-    this.currentUser = result.data.user;
-    return { user: result.data.user, error: null };
+    return updateAccountUser(this, options);
   }
 
   async refreshSession() {
@@ -850,21 +618,7 @@ class VolcanoAuth {
    * @returns {Function} Unsubscribe function
    */
   onAuthStateChange(callback) {
-    if (!this._authCallbacks) {
-      this._authCallbacks = [];
-    }
-    this._authCallbacks.push(callback);
-
-    // Call immediately with current state
-    try {
-      callback(this.currentUser);
-    } catch (err) {
-      console.error('[VolcanoAuth] Error in auth state callback:', err);
-    }
-
-    return () => {
-      this._authCallbacks = this._authCallbacks.filter((cb) => cb !== callback);
-    };
+    return subscribeToAuthState(this, callback);
   }
 
   // ========================================================================
@@ -872,55 +626,15 @@ class VolcanoAuth {
   // ========================================================================
 
   async signInAnonymously(metadata = {}) {
-    const expectedGeneration = this._sessionGeneration;
-    const result = await this._anonFetch('/auth/signup-anonymous', {
-      method: 'POST',
-      body: JSON.stringify({ user_metadata: metadata }),
-    });
-
-    if (!result.ok) {
-      return { user: null, session: null, error: result.error };
-    }
-
-    if (!this._setSession(result.data, expectedGeneration)) {
-      return { user: null, session: null, error: new AuthSessionChangedError() };
-    }
-    return {
-      user: result.data.user,
-      session: {
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
-        expires_in: result.data.expires_in,
-      },
-      error: null,
-    };
+    return signInAnonymousAccount(this, metadata);
   }
 
   async signUpAnonymous(metadata = {}) {
-    return this.signInAnonymously(metadata);
+    return signUpAnonymousAccount(this, metadata);
   }
 
   async convertAnonymous(options) {
-    const { result, context } = await this._authFetchWithContext(
-      '/auth/user/convert-anonymous',
-      () => {
-        const { email, password, metadata = {} } = options;
-        return {
-          method: 'POST',
-          body: JSON.stringify({ email, password, user_metadata: metadata }),
-        };
-      },
-    );
-
-    if (!result.ok) {
-      return { user: null, error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { user: null, error: new AuthSessionChangedError() };
-    }
-
-    this.currentUser = result.data.user;
-    return { user: result.data.user, error: null };
+    return convertAnonymousAccount(this, options);
   }
 
   // ========================================================================
@@ -928,27 +642,11 @@ class VolcanoAuth {
   // ========================================================================
 
   async confirmEmail(token) {
-    const result = await this._anonFetch('/auth/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    });
-
-    if (!result.ok) {
-      return { message: null, error: result.error };
-    }
-    return { message: result.data?.message ?? null, error: null };
+    return confirmAccountEmail(this, token);
   }
 
   async resendConfirmation(email) {
-    const result = await this._anonFetch('/auth/resend-confirmation', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-
-    if (!result.ok) {
-      return { message: null, error: result.error };
-    }
-    return { message: result.data?.message ?? null, error: null };
+    return resendAccountConfirmation(this, email);
   }
 
   // ========================================================================
@@ -956,31 +654,15 @@ class VolcanoAuth {
   // ========================================================================
 
   async forgotPassword(email) {
-    const result = await this._anonFetch('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-
-    if (!result.ok) {
-      return { message: null, error: result.error };
-    }
-    return { message: result.data?.message ?? null, error: null };
+    return forgotAccountPassword(this, email);
   }
 
   async resetPasswordForEmail(email) {
-    return this.forgotPassword(email);
+    return resetAccountPasswordForEmail(this, email);
   }
 
-  async resetPassword({ token, newPassword }) {
-    const result = await this._anonFetch('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, new_password: newPassword }),
-    });
-
-    if (!result.ok) {
-      return { message: null, error: result.error };
-    }
-    return { message: result.data?.message ?? null, error: null };
+  async resetPassword(options) {
+    return resetAccountPassword(this, options);
   }
 
   // ========================================================================
@@ -988,57 +670,15 @@ class VolcanoAuth {
   // ========================================================================
 
   async requestEmailChange(newEmail) {
-    const { result, context } = await this._authFetchWithContext('/auth/user/change-email', () => ({
-      method: 'POST',
-      body: JSON.stringify({ new_email: newEmail }),
-    }));
-
-    if (!result.ok) {
-      return { message: null, newEmail: null, error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { message: null, newEmail: null, error: new AuthSessionChangedError() };
-    }
-    return {
-      message: result.data?.message ?? null,
-      newEmail: result.data?.new_email ?? null,
-      emailChangeToken: result.data?.email_change_token,
-      error: null,
-    };
+    return requestAccountEmailChange(this, newEmail);
   }
 
   async confirmEmailChange(emailChangeToken) {
-    const { result, context } = await this._authFetchWithContext(
-      '/auth/user/confirm-email-change',
-      () => ({
-        method: 'POST',
-        body: JSON.stringify({ email_change_token: emailChangeToken }),
-      }),
-    );
-
-    if (!result.ok) {
-      return { user: null, error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { user: null, error: new AuthSessionChangedError() };
-    }
-
-    this.currentUser = result.data.user;
-    return { user: result.data.user, error: null };
+    return confirmAccountEmailChange(this, emailChangeToken);
   }
 
   async cancelEmailChange() {
-    const { result, context } = await this._authFetchWithContext('/auth/user/cancel-email-change', {
-      method: 'DELETE',
-    });
-
-    if (!result.ok) {
-      return { message: null, error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { message: null, error: new AuthSessionChangedError() };
-    }
-    return { message: result.data?.message ?? null, error: null };
+    return cancelAccountEmailChange(this);
   }
 
   // ========================================================================
@@ -1046,239 +686,60 @@ class VolcanoAuth {
   // ========================================================================
 
   signInWithOAuth(provider, options = {}) {
-    sanitizeProvider(provider);
-    if (!isBrowser()) {
-      throw new Error(
-        'OAuth sign-in is only available in browser environment. Use server-side auth flow for SSR.',
-      );
-    }
-    // Bind the returned authorization code to this flow with a one-time nonce.
-    const nonce = this._generateAuthStateNonce();
-
-    const redirectBase = this._resolveOAuthRedirectTarget(options.redirectTo);
-    const redirectTarget = new URL(redirectBase);
-    for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
-      if (redirectTarget.searchParams.has(key)) {
-        throw new Error(`OAuth redirectTo must not contain the reserved "${key}" query parameter`);
-      }
-    }
-    const redirectURL = redirectTarget.toString();
-    this._storeAuthState(nonce, redirectURL);
-    // Keep the nonce in the legacy location during the backend rollout. New
-    // servers remove this reserved transport parameter before exact redirect
-    // matching; older servers echo it in their token-fragment response.
-    const transportRedirectURL = new URL(redirectURL);
-    const separator = transportRedirectURL.search ? '&' : '?';
-    transportRedirectURL.search = `${transportRedirectURL.search}${separator}vh_state=${encodeURIComponent(nonce)}`;
-
-    const oauthUrl =
-      `${this.apiUrl}/auth/oauth/${provider}/authorize` +
-      `?anon_key=${encodeURIComponent(this.anonKey)}` +
-      `&redirect_url=${encodeURIComponent(transportRedirectURL.toString())}` +
-      `&client_state=${encodeURIComponent(nonce)}` +
-      `&response_mode=code`;
-    try {
-      if (window.location && typeof window.location.assign === 'function') {
-        window.location.assign(oauthUrl);
-      } else {
-        window.location.href = oauthUrl;
-      }
-    } catch (err) {
-      const message = String((err && err.message) || err || '');
-      if (!message.includes('Not implemented: navigation')) {
-        throw err;
-      }
-    }
-    return oauthUrl;
+    return beginOAuth(this, provider, options);
   }
 
-  // Resolve where the OAuth callback should return the browser. Defaults to the
-  // current page (without query/hash), which is also the page that will adopt
-  // the returned session.
   _resolveOAuthRedirectTarget(redirectTo) {
-    if (typeof redirectTo === 'string' && redirectTo.trim() !== '') {
-      return redirectTo.trim();
-    }
-    const loc = window.location;
-    return `${loc.origin}${loc.pathname}`;
+    return resolveOAuthRedirectTarget(redirectTo);
   }
 
-  // Build the managed hosted-auth URL for this project and store a one-time nonce
-  // so the returned session can be bound to this flow. Pass { action: 'signup' |
-  // 'login' | 'forgot-password' } to deep-link a step. Browser-only.
   getHostedAuthUrl(options = {}) {
-    if (!isBrowser()) {
-      throw new Error('getHostedAuthUrl is only available in the browser.');
-    }
-    const projectId = this._resolveProjectIdForHostedAuth(options.projectId);
-    const nonce = this._generateAuthStateNonce();
-    this._storeAuthState(nonce);
-
-    const url = new URL(`${this.apiUrl}/projects/${projectId}/auth/hosted`);
-    url.searchParams.set('anon_key', this.anonKey);
-    if (options.action) {
-      url.searchParams.set('action', String(options.action));
-    }
-    url.searchParams.set('state', nonce);
-    return url.toString();
+    return createHostedAuthUrl(this, options);
   }
 
-  // Redirect the browser to the managed hosted-auth pages (stores the nonce).
   signInWithHostedAuth(options = {}) {
-    const url = this.getHostedAuthUrl(options);
-    try {
-      if (window.location && typeof window.location.assign === 'function') {
-        window.location.assign(url);
-      } else {
-        window.location.href = url;
-      }
-    } catch (err) {
-      const message = String((err && err.message) || err || '');
-      if (!message.includes('Not implemented: navigation')) {
-        throw err;
-      }
-    }
-    return url;
+    return beginHostedAuth(this, options);
   }
 
   _resolveProjectIdForHostedAuth(explicitProjectId) {
-    if (typeof explicitProjectId === 'string' && explicitProjectId.trim() !== '') {
-      return explicitProjectId.trim();
-    }
-    try {
-      return extractRequiredProjectIdFromToken(this.anonKey);
-    } catch {
-      throw new Error(
-        'Unable to determine project id for hosted auth. Pass { projectId } to getHostedAuthUrl()/signInWithHostedAuth().',
-      );
-    }
+    return resolveProjectIdForHostedAuth(this, explicitProjectId);
   }
 
   signInWithGoogle() {
-    return this.signInWithOAuth('google');
+    return signInWithProvider(this, 'google');
   }
   signInWithGitHub() {
-    return this.signInWithOAuth('github');
+    return signInWithProvider(this, 'github');
   }
   signInWithMicrosoft() {
-    return this.signInWithOAuth('microsoft');
+    return signInWithProvider(this, 'microsoft');
   }
   signInWithApple() {
-    return this.signInWithOAuth('apple');
+    return signInWithProvider(this, 'apple');
   }
 
   async linkOAuthProvider(provider) {
-    sanitizeProvider(provider);
-    const { result, context } = await this._authFetchWithContext(`/auth/oauth/${provider}/link`, {
-      method: 'POST',
-    });
-
-    if (!this._isAuthContextCurrent(context)) {
-      return { data: null, error: new AuthSessionChangedError() };
-    }
-    if (!result.ok) {
-      return { data: null, error: result.error };
-    }
-    return { data: result.data, error: null };
+    return linkAccountProvider(this, provider);
   }
 
   async unlinkOAuthProvider(provider) {
-    sanitizeProvider(provider);
-    const { result, context } = await this._authFetchWithContext(`/auth/oauth/${provider}/unlink`, {
-      method: 'DELETE',
-    });
-
-    if (!this._isAuthContextCurrent(context)) {
-      return { error: new AuthSessionChangedError() };
-    }
-    if (!result.ok) {
-      return { error: result.error };
-    }
-    return { error: null };
+    return unlinkAccountProvider(this, provider);
   }
 
   async getLinkedOAuthProviders() {
-    const { result, context } = await this._authFetchWithContext('/auth/oauth/providers');
-
-    if (!this._isAuthContextCurrent(context)) {
-      return { providers: null, error: new AuthSessionChangedError() };
-    }
-    if (!result.ok) {
-      return { providers: null, error: result.error };
-    }
-    return { providers: result.data.providers || [], error: null };
+    return getAccountLinkedProviders(this);
   }
 
   async refreshOAuthToken(provider) {
-    sanitizeProvider(provider);
-    const { result, context } = await this._authFetchWithContext(
-      `/auth/oauth/${provider}/refresh-token`,
-      {
-        method: 'POST',
-      },
-    );
-
-    if (!this._isAuthContextCurrent(context)) {
-      return {
-        message: null,
-        provider: null,
-        expiresIn: null,
-        error: new AuthSessionChangedError(),
-      };
-    }
-
-    if (!result.ok) {
-      return { message: null, provider: null, expiresIn: null, error: result.error };
-    }
-    return {
-      message: result.data.message,
-      provider: result.data.provider,
-      expiresIn: result.data.expires_in,
-      error: null,
-    };
+    return refreshAccountProviderToken(this, provider);
   }
 
   async getOAuthProviderToken(provider) {
-    sanitizeProvider(provider);
-    const { result, context } = await this._authFetchWithContext(`/auth/oauth/${provider}/token`);
-
-    if (!this._isAuthContextCurrent(context)) {
-      return {
-        message: null,
-        provider: null,
-        expiresIn: null,
-        error: new AuthSessionChangedError(),
-      };
-    }
-    if (!result.ok) {
-      return { message: null, provider: null, expiresIn: null, error: result.error };
-    }
-    return {
-      message: result.data.message,
-      provider: result.data.provider,
-      expiresIn: result.data.expires_in,
-      error: null,
-    };
+    return getAccountProviderToken(this, provider);
   }
 
   async callOAuthAPI(provider, params) {
-    sanitizeProvider(provider);
-    const { result, context } = await this._authFetchWithContext(
-      `/auth/oauth/${provider}/call-api`,
-      () => {
-        const { endpoint, method = 'GET', body = null } = params;
-        return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
-      },
-    );
-
-    if (!this._isAuthContextCurrent(context)) {
-      return { data: null, error: new AuthSessionChangedError() };
-    }
-
-    if (!result.ok) {
-      return { data: null, error: result.error };
-    }
-    return { data: result.data.data, error: null };
+    return callProviderAPI(this, provider, params);
   }
 
   // ========================================================================
@@ -1286,96 +747,15 @@ class VolcanoAuth {
   // ========================================================================
 
   async getSessions(options = {}) {
-    const { result, context } = await this._authFetchWithContext(() => {
-      const { page = 1, limit = DEFAULT_SESSIONS_LIMIT } = options;
-      const params = new URLSearchParams();
-      if (page > 1) {
-        params.set('page', page.toString());
-      }
-      if (limit !== DEFAULT_SESSIONS_LIMIT) {
-        params.set('limit', limit.toString());
-      }
-      const queryString = params.toString();
-      return `/auth/user/sessions${queryString ? `?${queryString}` : ''}`;
-    });
-
-    if (!this._isAuthContextCurrent(context)) {
-      return {
-        sessions: null,
-        total: 0,
-        page: 1,
-        limit: DEFAULT_SESSIONS_LIMIT,
-        total_pages: 0,
-        error: new AuthSessionChangedError(),
-      };
-    }
-    if (!result.ok) {
-      return {
-        sessions: null,
-        total: 0,
-        page: 1,
-        limit: DEFAULT_SESSIONS_LIMIT,
-        total_pages: 0,
-        error: result.error,
-      };
-    }
-    return {
-      sessions: result.data.sessions,
-      total: result.data.total,
-      page: result.data.page,
-      limit: result.data.limit,
-      total_pages: result.data.total_pages,
-      error: null,
-    };
+    return getAccountSessions(this, options);
   }
 
   async deleteSession(sessionId) {
-    const { result, context } = await this._authFetchWithContext(
-      `/auth/user/sessions/${encodeURIComponent(sessionId)}`,
-      {
-        method: 'DELETE',
-      },
-    );
-
-    const deletesCurrentSession = sessionIdsEqual(
-      extractSessionIdFromToken(context.accessToken),
-      sessionId,
-    );
-    if (deletesCurrentSession && (result.ok || result.status === null)) {
-      if (!this._clearSessionAtGeneration(context.generation)) {
-        const sessionChangedError = new AuthSessionChangedError();
-        if (result.error) {
-          Object.defineProperty(sessionChangedError, 'cause', {
-            configurable: true,
-            value: result.error,
-            writable: true,
-          });
-        }
-        return { error: sessionChangedError };
-      }
-      return { error: result.error };
-    }
-    if (!result.ok) {
-      return { error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { error: new AuthSessionChangedError() };
-    }
-    return { error: null };
+    return deleteAccountSession(this, sessionId);
   }
 
   async deleteAllOtherSessions() {
-    const { result, context } = await this._authFetchWithContext('/auth/user/sessions', {
-      method: 'DELETE',
-    });
-
-    if (!result.ok) {
-      return { error: result.error };
-    }
-    if (!this._isAuthContextCurrent(context)) {
-      return { error: new AuthSessionChangedError() };
-    }
-    return { error: null };
+    return deleteAccountOtherSessions(this);
   }
 
   // ========================================================================
@@ -1625,111 +1005,35 @@ class VolcanoAuth {
   // ========================================================================
 
   _captureAuthContext() {
-    return Object.freeze({
-      generation: this._sessionGeneration,
-      operations: this._sessionOperations,
-      userId: this.currentUser?.id ?? null,
-      accessToken: this.accessToken,
-      refreshToken: this.refreshToken,
-    });
+    return captureAuthContext(this);
   }
 
   _adoptSessionInMemory(session) {
-    this._sessionGeneration += 1;
-    this._sessionOperations = new AuthSessionOperations();
-    this._oauthExchangeError = null;
-    this._pendingUrlAuthNotify = false;
-    this.accessToken = session.access_token;
-    this.refreshToken = session.refresh_token;
-    this.currentUser = session.user;
+    adoptSessionInMemory(this, session);
   }
 
   _isAuthContextCurrent(context) {
-    return context.generation === this._sessionGeneration;
+    return isAuthContextCurrent(this, context);
   }
 
   _setSession(data, expectedGeneration = this._sessionGeneration) {
-    if (expectedGeneration !== this._sessionGeneration) {
-      return false;
-    }
-
-    this._oauthExchangeError = null;
-    this.accessToken = data.access_token;
-    this.refreshToken = data.refresh_token ?? null;
-    this.currentUser = data.user;
-    this._sessionGeneration += 1;
-    this._sessionOperations = new AuthSessionOperations(data);
-    this._pendingUrlAuthNotify = false;
-
-    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    if (this.refreshToken) {
-      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
-    } else {
-      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-    }
-
-    this._notifyAuthCallbacks(this.currentUser);
-    return true;
+    return setSession(this, data, expectedGeneration);
   }
 
   _setRefreshedSession(data, context) {
-    if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
-      return false;
-    }
-
-    validateSessionContinuation(data, context, this.currentUser?.id);
-
-    this._oauthExchangeError = null;
-    this.accessToken = data.access_token;
-    this.refreshToken = data.refresh_token;
-    this.currentUser = data.user;
-    this._pendingUrlAuthNotify = false;
-
-    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
-
-    this._notifyAuthCallbacks(this.currentUser);
-    return true;
+    return setRefreshedSession(this, data, context);
   }
 
   _clearSession(context) {
-    if (!this._isAuthContextCurrent(context) || context.refreshToken !== this.refreshToken) {
-      return false;
-    }
-
-    return this._clearSessionAtGeneration(context.generation);
+    return clearSession(this, context);
   }
 
   _clearSessionAtGeneration(generation) {
-    if (generation !== this._sessionGeneration) {
-      return false;
-    }
-
-    this._oauthExchangeError = null;
-    this._sessionOperations.clearLocalCredentials();
-    this.accessToken = null;
-    this.refreshToken = null;
-    this.currentUser = null;
-    this._sessionGeneration += 1;
-    this._pendingUrlAuthNotify = false;
-
-    this._removeStorageItem(STORAGE_KEY_ACCESS_TOKEN);
-    this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-
-    this._notifyAuthCallbacks(null);
-    return true;
+    return clearSessionAtGeneration(this, generation);
   }
 
   _notifyAuthCallbacks(user) {
-    if (this._authCallbacks) {
-      this._authCallbacks.forEach((cb) => {
-        try {
-          cb(user);
-        } catch (err) {
-          console.error('[VolcanoAuth] Error in auth state callback:', err);
-        }
-      });
-    }
+    notifyAuthCallbacks(this, user);
   }
 
   // ========================================================================
