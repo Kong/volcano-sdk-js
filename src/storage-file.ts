@@ -203,15 +203,12 @@ async function deletePaths(
   return { deleted, failures };
 }
 
-function uploadSessionBody(
-  path: string,
-  options: Partial<CreateUploadSessionOptions> | null | undefined,
-): object {
+function uploadSessionBody(path: string, options: Partial<CreateUploadSessionOptions>): object {
   return {
     filename: legacyStringDefault(path.split('/').pop(), path),
-    content_type: legacyValueDefault(options?.contentType, 'application/octet-stream'),
-    total_size: options?.totalSize,
-    part_size: options?.partSize,
+    content_type: legacyValueDefault(options.contentType, 'application/octet-stream'),
+    total_size: options.totalSize,
+    part_size: options.partSize,
   };
 }
 
@@ -226,11 +223,9 @@ function removeError(
     { failures },
   );
   for (const field of ['status', 'code', 'retryAfter']) {
-    if (field in firstError) {
-      const value: unknown = Reflect.get(firstError, field);
-      if (value !== undefined) {
-        Reflect.set(error, field, value);
-      }
+    const value: unknown = Reflect.get(firstError, field);
+    if (value !== undefined) {
+      Reflect.set(error, field, value);
     }
   }
   return error;
@@ -463,7 +458,7 @@ export class StorageFileApi {
       return authError;
     }
 
-    if (!Boolean(options?.totalSize)) {
+    if (options === null || options === undefined || !Boolean(options.totalSize)) {
       return errorResult('totalSize is required');
     }
 

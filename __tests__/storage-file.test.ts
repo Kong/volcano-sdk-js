@@ -226,9 +226,22 @@ test.each([new Error('download failed'), 'download failed'])(
     given.download.mockRejectedValue(failure);
     const result = await given.api.download('file.bin');
     expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe(
+      failure instanceof Error ? 'download failed' : 'Download failed',
+    );
   },
 );
+
+test('rejects a malformed binary result from a custom transport', async () => {
+  const given = fixture();
+  Reflect.set(given.host._transport, 'downloadStorageObject', () =>
+    Promise.resolve({ data: 'not a Blob' }),
+  );
+  await expect(given.api.download('file.bin')).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid storage download response'),
+  });
+});
 
 test('does not download without a session', async () => {
   const given = fixture(null);
@@ -249,6 +262,10 @@ test('lists objects with the same prefix, limit, and cursor query shape', async 
   expect(given.fetch.mock.calls[0]?.[0]).toBe(
     `${apiUrl}/storage/bucket?prefix=photos%2F&limit=2&cursor=last`,
   );
+  expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
+    method: 'GET',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+  });
 });
 
 test.each([undefined, null, false, 0, Number.NaN, ''])(
@@ -297,7 +314,11 @@ test.each([null, 3, { objects: 'not an array' }])(
     given.fetch.mockResolvedValue(Response.json(payload));
     const result = await given.api.list();
     expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(TypeError);
+    expect(result.error?.message).toBe(
+      typeof payload !== 'object' || payload === null
+        ? 'Storage list response is not an object'
+        : 'Storage list response has invalid objects',
+    );
     expect(result.nextCursor).toBeNull();
   },
 );
@@ -357,6 +378,13 @@ test('partial removal preserves the first HTTP error and every failed path', asy
     retryAfter: 2,
     failures: [{ path: 'denied.bin', error: { message: 'denied' } }],
   });
+});
+
+test('partial removal names each failed path in order', async () => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({ error: 'denied' }, { status: 403 }));
+  const result = await given.api.remove(['first.bin', 'second.bin']);
+  expect(result.error?.message).toBe('Failed to delete 2 file(s): first.bin, second.bin');
 });
 
 test('remove does not copy absent or undefined error metadata', async () => {
