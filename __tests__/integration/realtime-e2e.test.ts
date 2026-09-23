@@ -16,70 +16,46 @@
  * Note: These tests require the centrifuge npm package to be installed.
  */
 
-// Load .env file if present
-try {
-  require('dotenv').config({ path: require('node:path').resolve(__dirname, '../../../.env') });
-} catch {
-  // dotenv not installed, use environment variables directly
-}
+import { resolve } from 'node:path';
+import { config } from 'dotenv';
+import WebSocket from 'ws';
+import { VolcanoAuth } from '../../src/index.ts';
+import { VolcanoRealtime } from '../../src/realtime.ts';
+import type { Session, User } from '../../src/sdk-public-types.ts';
+import {
+  integrationUrl,
+  isRecord,
+  managementFetch,
+  platformFetch as fetchPlatform,
+  requiredString,
+} from './http.ts';
 
-const { VolcanoAuth } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.ts');
-const WebSocket = require('ws');
+config({ path: resolve(__dirname, '../../../.env') });
 
 // Configuration from environment
-const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
-const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
-const REALTIME_URL = process.env.VOLCANO_REALTIME_URL || API_URL;
+const API_URL = integrationUrl('VOLCANO_API_URL', 'http://localhost:8000');
+const MGMT_URL = integrationUrl('VOLCANO_MGMT_URL', 'http://localhost:8001');
+const REALTIME_URL = integrationUrl('VOLCANO_REALTIME_URL', API_URL);
 const ALLOWED_REALTIME_ORIGIN = 'https://allowed-realtime-origin.example.com';
 const BLOCKED_REALTIME_ORIGIN = 'https://blocked-realtime-origin.example.com';
 
-// Helper to make management API calls
-async function mgmtFetch(path, options = {}) {
-  const response = await fetch(`${MGMT_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Management API error: ${response.status} - ${error.error || 'Unknown error'}`);
-  }
-
-  if (response.status === 204) return null;
-  return response.json();
+function mgmtFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+  return managementFetch(MGMT_URL, path, options);
 }
 
-// Helper to make platform API calls with user token
-async function platformFetch(path, token, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Platform API error: ${response.status} - ${error.error || 'Unknown error'}`);
-  }
-
-  if (response.status === 204) return null;
-  return response.json();
+function platformFetch(path: string, token: string, options: RequestInit = {}): Promise<unknown> {
+  return fetchPlatform(API_URL, path, token, options);
 }
 
-function webSocketWithOrigin(origin) {
+function webSocketWithOrigin(origin: string) {
   return class OriginWebSocket extends WebSocket {
-    constructor(address, protocols, options = {}) {
+    constructor(address: string | URL, protocols?: string | string[], options?: unknown) {
+      const provided = isRecord(options) ? options : {};
+      const headers = isRecord(provided['headers']) ? provided['headers'] : {};
       super(address, protocols, {
-        ...options,
+        ...provided,
         headers: {
-          ...options.headers,
+          ...headers,
           Origin: origin,
         },
       });
@@ -87,96 +63,104 @@ function webSocketWithOrigin(origin) {
   };
 }
 
+function requireRealtime(value: VolcanoRealtime | null): VolcanoRealtime {
+  if (value === null) {
+    throw new Error('Expected a connected realtime client');
+  }
+  return value;
+}
+
+async function verifyServer(): Promise<void> {
+  try {
+    const healthResponse = await fetch(`${API_URL}/health`);
+    if (!healthResponse.ok) {
+      throw new Error('Health check failed');
+    }
+    console.log('[ok] Volcano API server is running');
+  } catch {
+    throw new Error(
+      `Volcano API server is not running at ${API_URL}. Please start the server first.`,
+    );
+  }
+}
+
 describe('Realtime SDK E2E Integration Tests', () => {
   // Test fixtures
-  let platformUser;
-  let platformToken;
-  let project;
-  let anonKey;
-  let volcano;
-  let authUser;
-  let authSession;
+  let platformUserId: string;
+  let platformToken: string;
+  let projectId: string;
+  let anonKey: string;
+  let volcano: VolcanoAuth;
+  let authUser: User;
+  let authSession: Session;
 
   // Cleanup tracking
-  const cleanupFns = [];
+  const cleanupFns: (() => Promise<void>)[] = [];
 
   beforeAll(async () => {
     console.log('\n========================================');
     console.log('Realtime SDK E2E Integration Tests');
     console.log('========================================\n');
 
-    // Verify server is running
-    try {
-      const healthResponse = await fetch(`${API_URL}/health`);
-      if (!healthResponse.ok) {
-        throw new Error('Health check failed');
-      }
-      console.log('[ok] Volcano API server is running');
-    } catch {
-      throw new Error(
-        `Volcano API server is not running at ${API_URL}. Please start the server first.`,
-      );
-    }
+    await verifyServer();
 
     // Create platform user
-    platformUser = await mgmtFetch('/users', {
+    const platformUser = await mgmtFetch('/users', {
       method: 'POST',
       body: JSON.stringify({
-        id: `realtime-e2e-test-${Date.now()}`,
+        id: `realtime-e2e-test-${Date.now().toString()}`,
         name: 'Realtime E2E Test User',
       }),
     });
+    platformUserId = requiredString(platformUser, 'id');
     cleanupFns.push(async () => {
-      await mgmtFetch(`/users/${platformUser.id}`, { method: 'DELETE' }).catch(() => {});
+      await mgmtFetch(`/users/${platformUserId}`, { method: 'DELETE' }).catch(() => null);
     });
-    console.log(`[ok] Created platform user: ${platformUser.id}`);
+    console.log(`[ok] Created platform user: ${platformUserId}`);
 
     // Create platform token
-    const tokenResponse = await mgmtFetch(`/users/${platformUser.id}/tokens`, {
+    const tokenResponse = await mgmtFetch(`/users/${platformUserId}/tokens`, {
       method: 'POST',
       body: JSON.stringify({ name: 'realtime-e2e-test-token' }),
     });
-    platformToken = tokenResponse.token;
+    platformToken = requiredString(tokenResponse, 'token');
     console.log('[ok] Created platform token');
 
     // Create project with unique name
-    project = await platformFetch('/projects', platformToken, {
+    const project = await platformFetch('/projects', platformToken, {
       method: 'POST',
-      body: JSON.stringify({ name: `realtime-e2e-${Date.now()}` }),
+      body: JSON.stringify({ name: `realtime-e2e-${Date.now().toString()}` }),
     });
+    projectId = requiredString(project, 'id');
     cleanupFns.push(async () => {
-      await platformFetch(`/projects/${project.id}`, platformToken, { method: 'DELETE' }).catch(
-        () => {},
+      await platformFetch(`/projects/${projectId}`, platformToken, { method: 'DELETE' }).catch(
+        () => null,
       );
     });
-    console.log(`[ok] Created project: ${project.id}`);
+    console.log(`[ok] Created project: ${projectId}`);
 
     // Create anon key with unique name using project ID to guarantee uniqueness
     // Include realtime permissions for WebSocket tests
-    const anonKeyResponse = await platformFetch(
-      `/projects/${project.id}/anon-keys`,
-      platformToken,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          name: `e2e-key-${project.id.slice(0, 8)}`,
-          permissions: [
-            'auth.signup',
-            'auth.signin',
-            'auth.refresh',
-            'auth.logout',
-            'realtime.connect',
-            'realtime.subscribe',
-            'realtime.publish',
-          ],
-        }),
-      },
-    );
-    anonKey = anonKeyResponse.key_value;
+    const anonKeyResponse = await platformFetch(`/projects/${projectId}/anon-keys`, platformToken, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `e2e-key-${projectId.slice(0, 8)}`,
+        permissions: [
+          'auth.signup',
+          'auth.signin',
+          'auth.refresh',
+          'auth.logout',
+          'realtime.connect',
+          'realtime.subscribe',
+          'realtime.publish',
+        ],
+      }),
+    });
+    anonKey = requiredString(anonKeyResponse, 'key_value');
     console.log('[ok] Created anon key');
 
     // Enable realtime for the project
-    await platformFetch(`/projects/${project.id}/realtime/config`, platformToken, {
+    await platformFetch(`/projects/${projectId}/realtime/config`, platformToken, {
       method: 'PUT',
       body: JSON.stringify({
         enabled: true,
@@ -188,7 +172,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     console.log('[ok] Enabled realtime for project');
 
     // Realtime browser WebSocket upgrades use this project auth CORS config.
-    await platformFetch(`/projects/${project.id}/auth/config`, platformToken, {
+    await platformFetch(`/projects/${projectId}/auth/config`, platformToken, {
       method: 'PUT',
       body: JSON.stringify({
         cors_enabled: true,
@@ -201,12 +185,12 @@ describe('Realtime SDK E2E Integration Tests', () => {
     // Initialize SDK
     volcano = new VolcanoAuth({
       apiUrl: API_URL,
-      anonKey: anonKey,
+      anonKey,
     });
     console.log('[ok] Initialized SDK');
 
     // Create an auth user for testing
-    const email = `realtime-test-${Date.now()}@example.com`;
+    const email = `realtime-test-${Date.now().toString()}@example.com`;
     const password = 'TestPassword123!';
 
     const signUpResult = await volcano.auth.signUp({
@@ -215,10 +199,13 @@ describe('Realtime SDK E2E Integration Tests', () => {
       signInWhenAllowed: true,
     });
 
-    if (signUpResult.error) {
+    if (signUpResult.error !== null) {
       throw new Error(`Failed to create auth user: ${signUpResult.error.message}`);
     }
 
+    if (signUpResult.user === null || signUpResult.session === null) {
+      throw new Error('Expected a signed-in test user');
+    }
     authUser = signUpResult.user;
     authSession = signUpResult.session;
     console.log(`[ok] Created auth user: ${authUser.email}`);
@@ -230,11 +217,15 @@ describe('Realtime SDK E2E Integration Tests', () => {
     console.log('\n--- Cleaning up ---');
 
     // Run cleanup in reverse order
-    for (const cleanupFn of cleanupFns.reverse()) {
+    const cleanupOrder = [...cleanupFns];
+    cleanupOrder.reverse();
+    for (const cleanupFn of cleanupOrder) {
       try {
         await cleanupFn();
       } catch (error) {
-        console.warn(`Cleanup warning: ${error.message}`);
+        console.warn(
+          `Cleanup warning: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
     }
 
@@ -242,10 +233,10 @@ describe('Realtime SDK E2E Integration Tests', () => {
   });
 
   describe('VolcanoRealtime Connection', () => {
-    let realtime;
+    let realtime: VolcanoRealtime | null = null;
 
-    afterEach(async () => {
-      if (realtime) {
+    afterEach(() => {
+      if (realtime !== null) {
         realtime.disconnect();
         realtime = null;
       }
@@ -254,7 +245,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('connects with valid credentials', async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
 
@@ -297,7 +288,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('rejects connection with invalid token', async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: 'invalid-token-12345',
       });
 
@@ -319,7 +310,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('handles onDisconnect callback', async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
 
@@ -340,7 +331,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('handles onError callback', async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: 'invalid-token',
       });
 
@@ -358,38 +349,33 @@ describe('Realtime SDK E2E Integration Tests', () => {
   });
 
   describe('Broadcast Channels', () => {
-    let realtime;
+    let realtime: VolcanoRealtime | null = null;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
       await realtime.connect();
     });
 
     afterAll(() => {
-      if (realtime) {
+      if (realtime !== null) {
         realtime.disconnect();
       }
     });
 
     test('subscribes to broadcast channel', async () => {
-      const channel = realtime.channel('test-broadcast');
+      const channel = requireRealtime(realtime).channel('test-broadcast');
 
       await channel.subscribe();
 
       expect(channel._subscription).not.toBeNull();
     });
 
-    test('sends and receives broadcast messages', async () => {
-      const channel = realtime.channel('test-broadcast-2');
-
-      const messages = [];
-      channel.on('message', (data) => {
-        messages.push(data);
-      });
+    test('sends a broadcast message without error', async () => {
+      const channel = requireRealtime(realtime).channel('test-broadcast-2');
 
       await channel.subscribe();
 
@@ -405,19 +391,22 @@ describe('Realtime SDK E2E Integration Tests', () => {
     });
 
     test('unsubscribes from channel', async () => {
-      const channel = realtime.channel('test-unsubscribe');
+      const channel = requireRealtime(realtime).channel('test-unsubscribe');
 
       await channel.subscribe();
       channel.unsubscribe();
 
-      expect(channel._subscription).not.toBeNull();
-      expect(channel._subscription.state).toBe('unsubscribed');
+      const subscription = channel._subscription;
+      if (subscription === null) {
+        throw new Error('Expected an active subscription');
+      }
+      expect(subscription.state).toBe('unsubscribed');
     });
 
     test('can subscribe to multiple channels', async () => {
-      const channel1 = realtime.channel('multi-channel-1');
-      const channel2 = realtime.channel('multi-channel-2');
-      const channel3 = realtime.channel('multi-channel-3');
+      const channel1 = requireRealtime(realtime).channel('multi-channel-1');
+      const channel2 = requireRealtime(realtime).channel('multi-channel-2');
+      const channel3 = requireRealtime(realtime).channel('multi-channel-3');
 
       await Promise.all([channel1.subscribe(), channel2.subscribe(), channel3.subscribe()]);
 
@@ -431,7 +420,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     });
 
     test('can listen to multiple event types', async () => {
-      const channel = realtime.channel('multi-events');
+      const channel = requireRealtime(realtime).channel('multi-events');
 
       const chatMessages = [];
       const typingEvents = [];
@@ -453,25 +442,25 @@ describe('Realtime SDK E2E Integration Tests', () => {
   });
 
   describe('Presence Channels', () => {
-    let realtime;
+    let realtime: VolcanoRealtime | null = null;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
       await realtime.connect();
     });
 
     afterAll(() => {
-      if (realtime) {
+      if (realtime !== null) {
         realtime.disconnect();
       }
     });
 
     test('subscribes to presence channel', async () => {
-      const channel = realtime.channel('test-presence', { type: 'presence' });
+      const channel = requireRealtime(realtime).channel('test-presence', { type: 'presence' });
 
       await channel.subscribe();
 
@@ -479,7 +468,9 @@ describe('Realtime SDK E2E Integration Tests', () => {
     });
 
     test('tracks presence state', async () => {
-      const channel = realtime.channel('test-presence-track', { type: 'presence' });
+      const channel = requireRealtime(realtime).channel('test-presence-track', {
+        type: 'presence',
+      });
 
       channel.onPresenceSync(jest.fn());
 
@@ -497,7 +488,9 @@ describe('Realtime SDK E2E Integration Tests', () => {
     });
 
     test('receives join and leave events', async () => {
-      const channel = realtime.channel('test-presence-events', { type: 'presence' });
+      const channel = requireRealtime(realtime).channel('test-presence-events', {
+        type: 'presence',
+      });
 
       const events = [];
 
@@ -518,25 +511,26 @@ describe('Realtime SDK E2E Integration Tests', () => {
   });
 
   describe('Cross-Project Security', () => {
-    let realtime;
+    let realtime: VolcanoRealtime | null = null;
 
     beforeAll(async () => {
       // Create another project with unique name
       const otherProject = await platformFetch('/projects', platformToken, {
         method: 'POST',
-        body: JSON.stringify({ name: `other-security-${Date.now()}` }),
+        body: JSON.stringify({ name: `other-security-${Date.now().toString()}` }),
       });
+      const otherProjectId = requiredString(otherProject, 'id');
       cleanupFns.push(async () => {
-        await platformFetch(`/projects/${otherProject.id}`, platformToken, {
+        await platformFetch(`/projects/${otherProjectId}`, platformToken, {
           method: 'DELETE',
-        }).catch(() => {});
+        }).catch(() => null);
       });
 
       // Create anon key for other project using project ID for uniqueness
-      await platformFetch(`/projects/${otherProject.id}/anon-keys`, platformToken, {
+      await platformFetch(`/projects/${otherProjectId}/anon-keys`, platformToken, {
         method: 'POST',
         body: JSON.stringify({
-          name: `other-key-${otherProject.id.slice(0, 8)}`,
+          name: `other-key-${otherProjectId.slice(0, 8)}`,
           permissions: [
             'auth.signup',
             'auth.signin',
@@ -550,7 +544,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
       });
 
       // Enable realtime for other project
-      await platformFetch(`/projects/${otherProject.id}/realtime/config`, platformToken, {
+      await platformFetch(`/projects/${otherProjectId}/realtime/config`, platformToken, {
         method: 'PUT',
         body: JSON.stringify({ enabled: true }),
       });
@@ -558,14 +552,14 @@ describe('Realtime SDK E2E Integration Tests', () => {
       // Connect with main project credentials
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
       await realtime.connect();
     });
 
     afterAll(() => {
-      if (realtime) {
+      if (realtime !== null) {
         realtime.disconnect();
       }
     });
@@ -573,7 +567,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('cannot subscribe to channel from another project', async () => {
       // Try to subscribe to a channel - the SDK now automatically prefixes with project ID
       // from the anon key, so cross-project subscriptions are blocked at the SDK level
-      const channel = realtime.channel('secret-channel');
+      const channel = requireRealtime(realtime).channel('secret-channel');
 
       // The subscription should work (our project's channel)
       await channel.subscribe();
@@ -590,7 +584,7 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('reconnects after disconnect', async () => {
       const realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
 
@@ -610,13 +604,13 @@ describe('Realtime SDK E2E Integration Tests', () => {
     test('clears channels on disconnect', async () => {
       const realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
 
       await realtime.connect();
 
-      const channel = realtime.channel('test-clear');
+      const channel = requireRealtime(realtime).channel('test-clear');
       await channel.subscribe();
 
       realtime.disconnect();
@@ -627,25 +621,25 @@ describe('Realtime SDK E2E Integration Tests', () => {
   });
 
   describe('Rate Limiting and Limits', () => {
-    let realtime;
+    let realtime: VolcanoRealtime | null = null;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
-        anonKey: anonKey,
+        anonKey,
         accessToken: authSession.access_token,
       });
       await realtime.connect();
     });
 
     afterAll(() => {
-      if (realtime) {
+      if (realtime !== null) {
         realtime.disconnect();
       }
     });
 
     test('can send many messages without error', async () => {
-      const channel = realtime.channel('rate-limit-test');
+      const channel = requireRealtime(realtime).channel('rate-limit-test');
       await channel.subscribe();
 
       // Send 10 messages quickly

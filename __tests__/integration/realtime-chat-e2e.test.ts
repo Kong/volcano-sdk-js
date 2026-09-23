@@ -12,29 +12,16 @@
 import { VolcanoAuth } from '../../src/index.ts';
 import { VolcanoRealtime } from '../../src/realtime.ts';
 import type { AuthResponse, Session, User } from '../../src/sdk-public-types.ts';
+import {
+  integrationUrl,
+  isRecord,
+  managementFetch,
+  platformFetch as fetchPlatform,
+  requiredString,
+} from './http.ts';
 
-// Configuration from environment
-const configuredApiUrl = process.env['VOLCANO_API_URL'];
-const configuredMgmtUrl = process.env['VOLCANO_MGMT_URL'];
-const API_URL =
-  configuredApiUrl === undefined || configuredApiUrl === ''
-    ? 'http://localhost:8000'
-    : configuredApiUrl;
-const MGMT_URL =
-  configuredMgmtUrl === undefined || configuredMgmtUrl === ''
-    ? 'http://localhost:8001'
-    : configuredMgmtUrl;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (!isRecord(value) || typeof value[field] !== 'string') {
-    throw new Error(`Expected ${field} in integration response`);
-  }
-  return value[field];
-}
+const API_URL = integrationUrl('VOLCANO_API_URL', 'http://localhost:8000');
+const MGMT_URL = integrationUrl('VOLCANO_MGMT_URL', 'http://localhost:8001');
 
 function assertSignedIn(
   value: AuthResponse,
@@ -69,65 +56,12 @@ function connectionUserId(value: unknown): unknown {
   return connectionInfo(value)?.['user_id'];
 }
 
-function responseError(value: unknown): string {
-  if (!isRecord(value)) {
-    return 'Unknown error';
-  }
-  const error = value['error'];
-  return typeof error === 'string' && error !== '' ? error : 'Unknown error';
+function mgmtFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+  return managementFetch(MGMT_URL, path, options);
 }
 
-function requestHeaders(options: RequestInit, token?: string): Headers {
-  const headers = new Headers(options.headers);
-  if (!headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (token !== undefined && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  return headers;
-}
-
-// Helper to make management API calls
-async function mgmtFetch(path: string, options: RequestInit = {}): Promise<unknown> {
-  const response = await fetch(`${MGMT_URL}${path}`, {
-    ...options,
-    headers: requestHeaders(options),
-  });
-
-  if (!response.ok) {
-    const error: unknown = await response.json().catch(() => ({}));
-    throw new Error(
-      `Management API error: ${response.status.toString()} - ${responseError(error)}`,
-    );
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-  return response.json();
-}
-
-// Helper to make platform API calls with user token
-async function platformFetch(
-  path: string,
-  token: string,
-  options: RequestInit = {},
-): Promise<unknown> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: requestHeaders(options, token),
-  });
-
-  if (!response.ok) {
-    const error: unknown = await response.json().catch(() => ({}));
-    throw new Error(`Platform API error: ${response.status.toString()} - ${responseError(error)}`);
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-  return response.json();
+function platformFetch(path: string, token: string, options: RequestInit = {}): Promise<unknown> {
+  return fetchPlatform(API_URL, path, token, options);
 }
 
 describe('Realtime Chat E2E', () => {
