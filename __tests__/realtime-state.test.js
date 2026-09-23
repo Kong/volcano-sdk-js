@@ -232,6 +232,14 @@ describe('realtime server state contract', () => {
     expect(onScoped).not.toHaveBeenCalled();
   });
 
+  test('does not attempt a Postgres fallback for an unmatched broadcast publication', () => {
+    const { realtime } = createRealtime();
+    const lookup = jest.spyOn(realtime._channels, 'get');
+    realtime._handleServerPublication({ channel: 'project:broadcast:missing', data: {} });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith('broadcast:missing');
+  });
+
   function expectExactScopedRecipient(accessToken) {
     const { realtime } = createRealtime({ accessToken });
     const legacy = realtime.channel('public:items', { type: 'postgres' });
@@ -495,8 +503,15 @@ describe('realtime server state contract', () => {
     );
   });
 
-  test.each(['', 7])('ignores an unusable bound-client database selector %s', (name) => {
-    const { realtime } = createRealtime({ volcanoClient: { _currentDatabaseName: name } });
+  test('ignores an empty bound-client database selector', () => {
+    const { realtime } = createRealtime({ volcanoClient: { _currentDatabaseName: '' } });
+    expect(realtime.channel('public:items', { type: 'postgres' }).name).toBe(
+      'postgres:public:items',
+    );
+  });
+
+  test('ignores a non-string bound-client database selector', () => {
+    const { realtime } = createRealtime({ volcanoClient: { _currentDatabaseName: 7 } });
     expect(realtime.channel('public:items', { type: 'postgres' }).name).toBe(
       'postgres:public:items',
     );

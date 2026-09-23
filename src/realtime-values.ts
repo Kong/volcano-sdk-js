@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './json-clone.ts';
 import type {
   ConnectContext,
   DisconnectContext,
@@ -20,22 +21,12 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function clonePresenceValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => clonePresenceValue(item));
-  }
-  if (record(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, clonePresenceValue(item)]),
-    );
-  }
-  return value;
-}
-
 function clonePresenceState(state: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(state).map(([key, item]) => [key, clonePresenceValue(item)]),
-  );
+  const copied = cloneJsonValue(state);
+  if (!record(copied)) {
+    throw new TypeError('Presence state must be a JSON object');
+  }
+  return copied;
 }
 
 function normalizePresenceInfo(info: unknown): unknown {
@@ -43,8 +34,11 @@ function normalizePresenceInfo(info: unknown): unknown {
     return info;
   }
   const normalized = clonePresenceState(info);
-  if (normalized['data'] === undefined && normalized['chanInfo'] !== undefined) {
-    normalized['data'] = clonePresenceValue(normalized['chanInfo']);
+  if (normalized['data'] !== undefined) {
+    return normalized;
+  }
+  if (normalized['chanInfo'] !== undefined) {
+    normalized['data'] = cloneJsonValue(normalized['chanInfo']);
   }
   return normalized;
 }
