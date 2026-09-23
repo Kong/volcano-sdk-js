@@ -1,3 +1,5 @@
+import { extractRequiredProjectIdFromToken } from './token-claims.ts';
+
 const DEFAULT_MAX_ENTRIES = 1024;
 const PRUNE_INTERVAL_MS = 5000;
 
@@ -26,6 +28,24 @@ export function getSharedFunctionResolveState(): FunctionResolveState {
   };
   globalThis.__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__ = state;
   return state;
+}
+
+export function functionResolveCacheKey(
+  apiUrl: string,
+  functionName: string,
+  token: string,
+  useAnonKey: boolean,
+): string {
+  if (useAnonKey) {
+    return `${apiUrl}|anon:${token}|${functionName}`;
+  }
+  const projectScope = extractRequiredProjectIdFromToken(token);
+  return `${apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
+}
+
+export function clearFunctionResolveCache(state: FunctionResolveState, cacheKey: string): void {
+  state.cache.delete(cacheKey);
+  state.inFlight.delete(cacheKey);
 }
 
 function cacheExpiry(value: unknown): number | null {

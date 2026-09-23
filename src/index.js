@@ -45,11 +45,13 @@ import {
 } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import {
+  clearFunctionResolveCache,
   clearSharedFunctionResolveStateForTests,
+  functionResolveCacheKey,
   getSharedFunctionResolveState,
   pruneFunctionResolveCache,
 } from './function-resolve-cache.ts';
-import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
+import { functionInvokeUrl, sanitizeFunctionIdentifierForHost } from './function-url.ts';
 import {
   acquireProjectLock,
   authSignin,
@@ -482,36 +484,16 @@ class VolcanoAuth {
   }
 
   _getFunctionInvokeUrl(functionIdentifier, resolvedInvokeUrl) {
-    const hostLabel = sanitizeFunctionIdentifierForHost(functionIdentifier);
-    if (!hostLabel) {
-      throw new Error(
-        'functionId must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars',
-      );
-    }
-
-    // Functions answer on their own domain, unrelated to the API's, so only
-    // /functions/resolve can name the endpoint. A deployment serving no public
-    // invocation domain, as in local development, omits it; the API invoke
-    // path reaches the function there.
-    const invokeUrl = validInvokeUrl(resolvedInvokeUrl, this.apiUrl);
-    if (!invokeUrl) {
-      return `${this.apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
-    }
-    return invokeUrl;
+    return functionInvokeUrl(this.apiUrl, functionIdentifier, resolvedInvokeUrl);
   }
 
   _functionResolveCacheKey(functionName, token, useAnonKey) {
-    if (useAnonKey) {
-      return `${this.apiUrl}|anon:${token}|${functionName}`;
-    }
-    const projectScope = extractRequiredProjectIdFromToken(token);
-    return `${this.apiUrl}|project:${projectScope}|token:${token}|${functionName}`;
+    return functionResolveCacheKey(this.apiUrl, functionName, token, useAnonKey);
   }
 
   _clearFunctionResolveCache(functionName, token, useAnonKey) {
     const cacheKey = this._functionResolveCacheKey(functionName, token, useAnonKey);
-    this._functionResolveState.cache.delete(cacheKey);
-    this._functionResolveState.inFlight.delete(cacheKey);
+    clearFunctionResolveCache(this._functionResolveState, cacheKey);
   }
 
   async _resolveFunctionIdByName(
