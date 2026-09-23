@@ -16,11 +16,7 @@ import {
   takeAuthRedirectUrl,
   takeAuthState,
 } from './auth-browser.ts';
-import {
-  sessionIdsEqual,
-  validateRefreshSource,
-  validateSessionContinuation,
-} from './auth-continuity.ts';
+import { sessionIdsEqual, validateSessionContinuation } from './auth-continuity.ts';
 import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import {
   completeOAuthExchange,
@@ -29,6 +25,15 @@ import {
   replaceSessionFromUrl,
 } from './auth-redirect.ts';
 import { AuthSessionOperations } from './auth-session.ts';
+import {
+  fetchSessionRefresh,
+  performSessionRefresh,
+  refreshSession,
+  refreshSessionForContext,
+  revokeAccessSession,
+  signOut,
+  signOutCaptured,
+} from './auth-session-lifecycle.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { MutationBuilder } from './database-mutations.ts';
 import { QueryBuilder } from './database-query.ts';
@@ -841,82 +846,15 @@ class VolcanoAuth {
   }
 
   async signOut() {
-    if (this._oauthExchangePromise) {
-      await this._completeOAuthExchange();
-    }
-    const context = this._captureAuthContext();
-    if (!context.accessToken && !context.refreshToken) {
-      return context.operations.pendingSignOut() || { error: null };
-    }
-    return context.operations.signOut((refreshing) => this._signOutCaptured(context, refreshing));
+    return signOut(this);
   }
 
   async _signOutCaptured(context, refreshing) {
-    let logoutError = null;
-    const sessionId = extractSessionIdFromToken(context.accessToken);
-    try {
-      const preceding = refreshing
-        ? await refreshing.catch((error) => ({ ok: false, error }))
-        : null;
-      const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
-      const refreshToken = preceding?.ok ? preceding.data.refresh_token : context.refreshToken;
-      const verified = context.operations.hasVerifiedPair(accessToken, refreshToken);
-      if (sessionId && !verified) {
-        logoutError = await this._revokeAccessSession(context, sessionId, preceding);
-      } else if (refreshToken) {
-        if (preceding && !preceding.ok && !verified) {
-          throw preceding.error;
-        }
-        const result = await this._anonFetch('/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({
-            refresh_token: refreshToken,
-          }),
-        });
-        logoutError = result.error;
-      }
-    } catch (error) {
-      logoutError = error instanceof Error ? error : new Error('Session revocation failed');
-    }
-    const cleared = sessionId
-      ? this._clearSessionAtGeneration(context.generation)
-      : this._clearSession(context);
-    if (!cleared) {
-      const sessionChangedError = new AuthSessionChangedError();
-      if (logoutError) {
-        Object.defineProperty(sessionChangedError, 'cause', {
-          configurable: true,
-          value: logoutError,
-          writable: true,
-        });
-      }
-      return { error: sessionChangedError };
-    }
-    return { error: logoutError };
+    return signOutCaptured(this, context, refreshing);
   }
 
   async _revokeAccessSession(context, sessionId, preceding) {
-    // Claiming sign-out prevents new refreshes. Retain the one already running
-    // even if explicit adoption replaces the client's current session.
-    const accessToken = preceding?.ok ? preceding.data.access_token : context.accessToken;
-    const path = `/auth/user/sessions/${encodeURIComponent(sessionId)}`;
-    const remove = (credential) =>
-      this._anonFetch(path, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${credential}` },
-      });
-    let result = await remove(accessToken);
-    if (result.status === 401 && context.refreshToken) {
-      if (preceding) {
-        return preceding.error || result.error;
-      }
-      const refreshed = await this._fetchSessionRefresh(context);
-      if (!refreshed.ok) {
-        return refreshed.error;
-      }
-      result = await remove(refreshed.data.access_token);
-    }
-    return result.error;
+    return revokeAccessSession(this, context, sessionId, preceding);
   }
 
   async getUser() {
@@ -971,101 +909,19 @@ class VolcanoAuth {
   }
 
   async refreshSession() {
-    await this._completeOAuthExchange();
-    if (this._oauthExchangeError && !this.refreshToken) {
-      const error = this._oauthExchangeError;
-      this._oauthExchangeError = null;
-      return { session: null, error };
-    }
-    this._oauthExchangeError = null;
-    if (!this.refreshToken) {
-      return { session: null, error: new Error('No refresh token') };
-    }
-
-    return this._refreshSessionForContext(this._captureAuthContext());
+    return refreshSession(this);
   }
 
   async _refreshSessionForContext(context) {
-    if (!this._isAuthContextCurrent(context)) {
-      return { session: null, error: new AuthRefreshDiscardedError() };
-    }
-    if (context.refreshToken !== this.refreshToken) {
-      return { session: null, error: null };
-    }
-    if (!context.refreshToken) {
-      return { session: null, error: new Error('No refresh token') };
-    }
-
-    try {
-      validateRefreshSource(context);
-    } catch (error) {
-      return { session: null, error };
-    }
-
-    return this._performSessionRefresh(context);
+    return refreshSessionForContext(this, context);
   }
 
   async _fetchSessionRefresh(context) {
-    const verified = context.operations.hasVerifiedPair(context.accessToken, context.refreshToken);
-    context.operations.verifyPair(null);
-    const result = await this._anonFetch('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: context.refreshToken }),
-    });
-    if (result.ok) {
-      validateSessionContinuation(
-        result.data,
-        context,
-        this._isAuthContextCurrent(context) ? this.currentUser?.id : context.userId,
-      );
-      context.operations.verifyPair(result.data);
-    } else if (result.status === 429 && verified) {
-      // The rate-limit gate rejects before token rotation.
-      context.operations.verifyPair({
-        access_token: context.accessToken,
-        refresh_token: context.refreshToken,
-      });
-    }
-    return result;
+    return fetchSessionRefresh(this, context);
   }
 
   async _performSessionRefresh(context) {
-    try {
-      const refreshing = context.operations.refresh(async () => {
-        const result = await this._fetchSessionRefresh(context);
-        if (!context.operations.signingOut) {
-          if (result.ok) {
-            this._setRefreshedSession(result.data, context);
-          } else if (result.status === 401 || result.status === 403) {
-            context.operations.refreshClearedSession = this._clearSession(context);
-          }
-        }
-        return result;
-      });
-      if (!refreshing) {
-        return { session: null, error: new AuthRefreshDiscardedError() };
-      }
-      const result = await refreshing;
-      if (!result.ok) {
-        return { session: null, error: result.error };
-      }
-      if (!this._isAuthContextCurrent(context) || context.operations.signingOut) {
-        return { session: null, error: new AuthRefreshDiscardedError() };
-      }
-      return {
-        session: {
-          access_token: result.data.access_token,
-          refresh_token: result.data.refresh_token,
-          expires_in: result.data.expires_in,
-        },
-        error: null,
-      };
-    } catch (error) {
-      if (!this._isAuthContextCurrent(context)) {
-        return { session: null, error: new AuthRefreshDiscardedError() };
-      }
-      return { session: null, error: error instanceof Error ? error : new Error('Refresh failed') };
-    }
+    return performSessionRefresh(this, context);
   }
 
   /**
