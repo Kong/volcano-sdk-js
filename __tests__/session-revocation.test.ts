@@ -9,6 +9,7 @@ import {
   reply,
   resultError,
   signal,
+  within,
 } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -55,7 +56,7 @@ describe('captured-session revocation coordination', () => {
       return response.promise;
     });
     const signingOut = current.auth.signOut();
-    await entered.promise;
+    await within(entered.promise, 'revocation request start');
     const refreshing = await current.auth.refreshSession();
     response.resolve(reply(204));
     expect(refreshing.error).toBeInstanceOf(AuthRefreshDiscardedError);
@@ -81,14 +82,14 @@ describe('captured-session revocation coordination', () => {
         return deletion.promise;
       });
       const refreshing = current.auth.refreshSession();
-      await entered.promise;
+      await within(entered.promise, 'revocation request start');
       const signingOut = current.auth.signOut();
       // Let sign-out capture ownership before replacing the public session.
       await Promise.resolve();
       await replaceAtPhase(current, replace, 'before-refresh-finishes');
       response.resolve(renewed());
-      await refreshing;
-      await deleting.promise;
+      await within(refreshing, 'session refresh');
+      await within(deleting.promise, 'session deletion start');
       await replaceAtPhase(current, replace, 'after-refresh-finishes');
       deletion.resolve(reply(204));
       const outcome = await signingOut;
@@ -115,11 +116,11 @@ describe('captured-session revocation coordination', () => {
         return Promise.resolve(reply(401, { error: 'expired access' }));
       });
       const refreshing = current.auth.refreshSession();
-      await entered.promise;
+      await within(entered.promise, 'revocation request start');
       const signingOut = current.auth.signOut();
       await Promise.resolve();
       response.resolve(reply(status, { error: 'refresh rejected' }));
-      await refreshing;
+      await within(refreshing, 'session refresh');
       const outcome = await signingOut;
       expect(outcome.error).not.toBeInstanceOf(AuthSessionChangedError);
       expect(outcome.error?.message).toBe('refresh rejected');
@@ -137,7 +138,7 @@ describe('captured-session revocation coordination', () => {
       return response.promise;
     });
     const first = current.auth.signOut();
-    await entered.promise;
+    await within(entered.promise, 'revocation request start');
     const second = current.auth.signOut();
     response.resolve(reply(204));
     expect(await Promise.all([first, second])).toEqual([{ error: null }, { error: null }]);
@@ -208,11 +209,11 @@ it.each([false, true])(
     });
     await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
     const refreshing = current.auth.refreshSession();
-    await entered.promise;
+    await within(entered.promise, 'revocation request start');
     const pendingLogout = joined ? current.auth.signOut() : null;
     await Promise.resolve();
     response.resolve(reply(429, { error: 'throttled' }));
-    await refreshing;
+    await within(refreshing, 'session refresh');
     expect(await resultError(pendingLogout ?? current.auth.signOut())).toBeNull();
     expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual([
       '/auth/signin',
@@ -291,10 +292,10 @@ it('does not retain credentials when refresh finishes after current-session dele
   });
   const owner = current._sessionOperations;
   const refreshing = current.auth.refreshSession();
-  await entered.promise;
+  await within(entered.promise, 'revocation request start');
   expect(await resultError(current.auth.deleteSession(SESSION))).toBeNull();
   response.resolve(renewed());
-  await refreshing;
+  await within(refreshing, 'session refresh');
   expect(current.accessToken).toBeNull();
   expect(owner.verifiedPair).toBeNull();
   expect(owner.refreshing).toBeNull();
