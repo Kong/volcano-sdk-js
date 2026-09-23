@@ -62,6 +62,7 @@ describe('Next.js middleware helpers', () => {
 
   test.each([
     ['server message', Response.json({ error: 'denied' }, { status: 401 }), 'denied'],
+    ['empty server message', Response.json({ error: '' }, { status: 401 }), 'Auth failed: 401'],
     ['fallback message', Response.json({}, { status: 403 }), 'Auth failed: 403'],
     ['non-object body', Response.json(null, { status: 401 }), 'Auth failed: 401'],
     ['malformed body', new Response('not json', { status: 502 }), 'Auth failed: 502'],
@@ -85,6 +86,8 @@ describe('Next.js middleware helpers', () => {
 
   test.each([
     ['non-object body', null],
+    ['missing id', { user: { email: 'test@example.com', status: 'active' } }],
+    ['missing email', { user: { id: 'user-123', status: 'active' } }],
     ['missing required status', { user: { id: 'user-123', email: 'test@example.com' } }],
     ['invalid metadata', { user: { ...user('user-123'), user_metadata: 'invalid' } }],
     ['invalid created timestamp', { user: { ...user('user-123'), created_at: 123 } }],
@@ -122,10 +125,12 @@ describe('Next.js middleware helpers', () => {
     const failure = new Error('offline');
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
 
-    await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
+    const result = await createServerClient(config).getUser('access-token');
+    expect(result).toEqual({
       user: null,
       error: failure,
     });
+    expect(result.error).toBe(failure);
   });
 
   test.each([
@@ -226,11 +231,13 @@ describe('Next.js middleware helpers', () => {
     const failure = new Error('offline');
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
 
-    await expect(createServerClient(config).refreshToken('current-refresh')).resolves.toEqual({
+    const result = await createServerClient(config).refreshToken('current-refresh');
+    expect(result).toEqual({
       accessToken: null,
       refreshToken: null,
       error: failure,
     });
+    expect(result.error).toBe(failure);
   });
 
   test('defaults to the production API URL when no override is supplied', async () => {
@@ -260,6 +267,17 @@ describe('Next.js middleware helpers', () => {
 
     await expect(withAuth(request, createServerClient(config))).resolves.toBeNull();
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('withAuth does not ask the client to validate a blank bearer token', async () => {
+    const request = new Request('https://app.test.com/dashboard');
+    jest.spyOn(request.headers, 'get').mockReturnValue('Bearer ');
+    const client = {
+      getUser: () => Promise.reject(new Error('Unexpected validation request')),
+      refreshToken: () => Promise.reject(new Error('Unexpected refresh request')),
+    };
+
+    await expect(withAuth(request, client)).resolves.toBeNull();
   });
 
   test('withAuth uses the Authorization header and returns the user', async () => {
