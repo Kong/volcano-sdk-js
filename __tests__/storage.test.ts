@@ -303,7 +303,7 @@ describe('Storage', () => {
                 access_token: sessionToken(undefined, true),
                 refresh_token: 'new-refresh',
                 expires_in: 3600,
-                user: { id: 'user-123' },
+                user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
               }),
           }),
         )
@@ -550,7 +550,7 @@ describe('Storage', () => {
               access_token: sessionToken(undefined, true),
               refresh_token: 'new-refresh-token',
               expires_in: 3600,
-              user: { id: 'user-123' },
+              user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
             }),
         }),
       );

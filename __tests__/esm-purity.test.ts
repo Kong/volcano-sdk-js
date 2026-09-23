@@ -97,6 +97,12 @@ test('ignores export-like text inside comments and strings', () => {
 });
 
 describe('VOL-505: SDK ES output carries no CJS/UMD/global export statements', () => {
+  test('legacy source-path shim delegates only to the built CJS entrypoint', () => {
+    expect(readFileSync(join(ROOT, 'src/index.js'), 'utf8').trim()).toBe(
+      "// Hosting's integration harness still imports this source path during the TypeScript migration.\nmodule.exports = require('../dist/index.js');",
+    );
+  });
+
   describe('entry sources are pure ES modules', () => {
     for (const rel of SOURCES) {
       test(`${rel} hand-rolls no CJS/UMD export statements`, () => {

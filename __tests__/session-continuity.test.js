@@ -10,7 +10,8 @@ function refresh(sessionId = '00000000-0000-4000-8000-000000000001', userId = 'u
   return reply(200, {
     access_token: token(sessionId, true),
     refresh_token: 'rotated',
-    user: { id: userId },
+    expires_in: 3600,
+    user: { id: userId, email: 'fixture@example.com', status: 'active' },
   });
 }
 function client() {
@@ -35,7 +36,9 @@ describe('server session continuity', () => {
   ])('rejects a different session for %s, profile validated: %s', async (userId, profileFirst) => {
     const current = client();
     if (profileFirst) {
-      global.fetch.mockResolvedValueOnce(reply(200, { user: { id: 'user-a' } }));
+      global.fetch.mockResolvedValueOnce(
+        reply(200, { user: { id: 'user-a', email: 'fixture@example.com', status: 'active' } }),
+      );
       await current.auth.getUser();
     }
     global.fetch
@@ -69,7 +72,7 @@ describe('server session continuity', () => {
             await current.auth.setSession({
               access_token: 'replacement',
               refresh_token: 'replacement-refresh',
-              user: { id: 'other' },
+              user: { id: 'other', email: 'fixture@example.com', status: 'active' },
             });
           return refresh();
         })
@@ -198,7 +201,7 @@ describe('server session continuity', () => {
     await current.auth.setSession({
       access_token: token('00000000-0000-4000-8000-000000000002'),
       refresh_token: 'new-refresh',
-      user: { id: 'user-b' },
+      user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
     });
     const refreshingNew = current.auth.refreshSession();
     await newRequested;
@@ -221,10 +224,12 @@ it.each([false, true])(
     await current.auth.setSession({
       access_token: 'opaque',
       refresh_token: 'foreign-refresh',
-      user: { id: 'user-a' },
+      user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
     });
     if (enriched) {
-      global.fetch.mockResolvedValueOnce(reply(200, { user: { id: 'user-a' } }));
+      global.fetch.mockResolvedValueOnce(
+        reply(200, { user: { id: 'user-a', email: 'fixture@example.com', status: 'active' } }),
+      );
       await current.auth.getUser();
       global.fetch.mockClear();
     }

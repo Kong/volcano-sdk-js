@@ -15,7 +15,8 @@ function refreshed() {
   return reply(200, {
     access_token: token(true),
     refresh_token: 'new-refresh',
-    user: { id: 'user' },
+    expires_in: 3600,
+    user: { id: 'user', email: 'fixture@example.com', status: 'active' },
   });
 }
 function client(refreshToken = 'old-refresh') {
@@ -92,7 +93,7 @@ test.each(['getter', 'toJSON'])('captures ownership before payload %s', async (b
     void target.auth.setSession({
       access_token: token(true),
       refresh_token: 'replacement-refresh',
-      user: { id: 'other' },
+      user: { id: 'other', email: 'fixture@example.com', status: 'active' },
     });
     return 'changed';
   };
@@ -136,7 +137,7 @@ test('does not adopt a replacement session from a rejected-refresh callback', as
       void target.auth.setSession({
         access_token: token(true),
         refresh_token: 'replacement-refresh',
-        user: { id: 'other' },
+        user: { id: 'other', email: 'fixture@example.com', status: 'active' },
       });
     }
   });
