@@ -187,3 +187,20 @@ test('a failing auth callback does not prevent later subscribers from receiving 
   expect(next).toHaveBeenCalledWith(user);
   error.mockRestore();
 });
+
+test('new listeners join after the current auth notification finishes', () => {
+  const { host } = fixture();
+  const received: string[] = [];
+  host._authCallbacks.push(() => {
+    received.push('existing');
+    host._authCallbacks.push(() => {
+      received.push('new');
+    });
+  });
+
+  notifyAuthCallbacks(host, user);
+  expect(received).toEqual(['existing']);
+
+  notifyAuthCallbacks(host, user);
+  expect(received).toEqual(['existing', 'existing', 'new']);
+});

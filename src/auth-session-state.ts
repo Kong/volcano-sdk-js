@@ -128,7 +128,7 @@ export function clearSessionAtGeneration(host: AuthSessionStateHost, generation:
 }
 
 export function notifyAuthCallbacks(host: AuthSessionStateHost, user: unknown): void {
-  for (const callback of host._authCallbacks) {
+  for (const callback of host._authCallbacks.slice()) {
     try {
       callback(user);
     } catch (error) {
