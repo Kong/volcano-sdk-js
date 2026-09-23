@@ -50,5 +50,5 @@ module.exports = {
   },
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
 };

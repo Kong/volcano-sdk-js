@@ -12,8 +12,16 @@ jest.setTimeout(120000);
 
 // Validate required environment
 beforeAll(() => {
-  const apiUrl = process.env.VOLCANO_API_URL || 'http://localhost:8000';
-  const mgmtUrl = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
+  const configuredApiUrl = process.env['VOLCANO_API_URL'];
+  const configuredMgmtUrl = process.env['VOLCANO_MGMT_URL'];
+  const apiUrl =
+    configuredApiUrl === undefined || configuredApiUrl === ''
+      ? 'http://localhost:8000'
+      : configuredApiUrl;
+  const mgmtUrl =
+    configuredMgmtUrl === undefined || configuredMgmtUrl === ''
+      ? 'http://localhost:8001'
+      : configuredMgmtUrl;
 
   console.log(`Integration tests configured:`);
   console.log(`  API URL: ${apiUrl}`);
