@@ -46,6 +46,12 @@
 
 import { loadCentrifuge } from './realtime-centrifuge.ts';
 import { channelFetchConfig, globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
+import {
+  attachConnectionHandlers,
+  connectionOptions,
+  detachConnectionHandlers,
+  waitForConnection,
+} from './realtime-connection.ts';
 import { serverEventRoute } from './realtime-event-route.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 import { loadWebSocket } from './realtime-websocket.ts';
@@ -183,18 +189,15 @@ class VolcanoRealtime {
 
     const wsUrl = `${this.wsUrl}?apikey=${encodeURIComponent(this.anonKey)}`;
 
-    this._client = new CentrifugeClient(wsUrl, {
-      token: this.accessToken,
-      getToken: this.getToken
-        ? async () => {
-            const token = await this.getToken();
-            this._adoptAccessToken(token);
-            return token;
-          }
-        : undefined,
-      debug: false,
-      websocket: WebSocket,
-    });
+    this._client = new CentrifugeClient(
+      wsUrl,
+      connectionOptions(
+        this.accessToken,
+        this.getToken,
+        (token) => this._adoptAccessToken(token),
+        WebSocket,
+      ),
+    );
 
     // Set up event handlers (store references for cleanup)
     this._clientHandlers = {
@@ -229,41 +232,8 @@ class VolcanoRealtime {
       },
     };
 
-    this._client.on('connected', this._clientHandlers.connected);
-    this._client.on('disconnected', this._clientHandlers.disconnected);
-    this._client.on('error', this._clientHandlers.error);
-    this._client.on('publication', this._clientHandlers.publication);
-    this._client.on('join', this._clientHandlers.join);
-    this._client.on('leave', this._clientHandlers.leave);
-    this._client.on('subscribed', this._clientHandlers.subscribed);
-
-    // Connect and wait for connected event
-    return new Promise((resolve, reject) => {
-      const client = this._client;
-      const timeout = setTimeout(() => {
-        reject(new Error('Connection timeout'));
-      }, 10000);
-
-      function cleanupConnectionListeners() {
-        clearTimeout(timeout);
-        client.off('connected', onConnected);
-        client.off('error', onError);
-      }
-
-      function onConnected() {
-        cleanupConnectionListeners();
-        resolve();
-      }
-
-      function onError(ctx) {
-        cleanupConnectionListeners();
-        reject(new Error(ctx.error?.message || 'Connection failed'));
-      }
-
-      client.on('connected', onConnected);
-      client.on('error', onError);
-      client.connect();
-    });
+    attachConnectionHandlers(this._client, this._clientHandlers);
+    return waitForConnection(this._client);
   }
 
   _adoptAccessToken(token) {
@@ -299,13 +269,7 @@ class VolcanoRealtime {
     if (this._client) {
       // Remove event handlers first to prevent memory leaks
       if (this._clientHandlers) {
-        this._client.off('connected', this._clientHandlers.connected);
-        this._client.off('disconnected', this._clientHandlers.disconnected);
-        this._client.off('error', this._clientHandlers.error);
-        this._client.off('publication', this._clientHandlers.publication);
-        this._client.off('join', this._clientHandlers.join);
-        this._client.off('leave', this._clientHandlers.leave);
-        this._client.off('subscribed', this._clientHandlers.subscribed);
+        detachConnectionHandlers(this._client, this._clientHandlers);
         this._clientHandlers = null;
       }
 
