@@ -1,7 +1,7 @@
-import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
+import { mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { batchResult } from './durable-batch-result.ts';
-import { optionalDuration, waitDuration } from './durable-duration.ts';
-import { toRetryStrategy } from './durable-retry.ts';
+import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
+import { waitDuration } from './durable-duration.ts';
 import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
 /**
@@ -201,72 +201,6 @@ function parallelBranches(branches, engine) {
       func: (branchContext) => branch.run(durableContext(branchContext, engine)),
     };
   });
-}
-
-function stepConfig(options, engine) {
-  const config = {};
-  if (options.atMostOnce) {
-    config.semantics = engine.StepSemantics.AtMostOncePerRetry;
-  }
-  const retryStrategy = toRetryStrategy(options.retry, engine);
-  if (retryStrategy) {
-    config.retryStrategy = retryStrategy;
-  }
-  return config;
-}
-
-/**
- * A condition is a poll loop the platform runs: the check returns the state the
- * next check receives, `until` decides when that state is good enough, and the
- * interval between checks is suspended rather than slept through.
- */
-function conditionConfig(options, engine) {
-  if (typeof options.until !== 'function') {
-    throw new TypeError('ctx.waitUntil() requires an `until` predicate in its options');
-  }
-  // The engine requires it — it is the value `until` is first asked about — and
-  // refuses the wait with a message naming its own config shape rather than
-  // this one. Caught here so the error names the option the caller writes, and
-  // before the step is registered.
-  if (options.initialState === undefined) {
-    throw new TypeError(
-      'ctx.waitUntil() requires an `initialState` in its options, which is what `until` is given until the state changes',
-    );
-  }
-  // A condition is bounded by how many times it is checked, not by a deadline:
-  // the platform holds the wait between checks and has no clock to compare
-  // against when it resumes. Refused rather than ignored, because a wait that
-  // was meant to give up after an hour would otherwise poll until the
-  // execution's own ceiling.
-  if (options.timeout !== undefined) {
-    throw new TypeError(
-      'ctx.waitUntil() has no `timeout`: bound the wait with `maxAttempts`, `interval` and `maxInterval`',
-    );
-  }
-
-  return {
-    initialState: options.initialState,
-    waitStrategy: engine.createWaitStrategy(
-      engineConfig({
-        shouldContinuePolling: (state) => !options.until(state),
-        maxAttempts: options.maxAttempts,
-        initialDelay: optionalDuration(options.interval, 'interval'),
-        maxDelay: optionalDuration(options.maxInterval, 'maxInterval'),
-        backoffRate: options.backoffRate,
-      }),
-    ),
-  };
-}
-
-function batchConfig(options = {}) {
-  const config = {};
-  if (options.concurrency !== undefined) {
-    config.maxConcurrency = options.concurrency;
-  }
-  if (options.minSucceeded !== undefined) {
-    config.completionConfig = { minSuccessful: options.minSucceeded };
-  }
-  return config;
 }
 
 export { durable };
