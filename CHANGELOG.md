@@ -46,10 +46,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.11.0](https://github.com/Kong/volcano-sdk-js/compare/v1.10.5...v1.11.0) (2026-09-23)
 
-
 ### Features
 
-* **next:** migrate middleware to TypeScript ([#206](https://github.com/Kong/volcano-sdk-js/issues/206)) ([a21ccb4](https://github.com/Kong/volcano-sdk-js/commit/a21ccb45ecbaeeca3eabba198481ac430e0e469b))
+- **next:** migrate middleware to TypeScript ([#206](https://github.com/Kong/volcano-sdk-js/issues/206)) ([a21ccb4](https://github.com/Kong/volcano-sdk-js/commit/a21ccb45ecbaeeca3eabba198481ac430e0e469b))
 
 ## [1.10.5](https://github.com/Kong/volcano-sdk-js/compare/v1.10.4...v1.10.5) (2026-09-22)
 
