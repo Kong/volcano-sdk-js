@@ -44,32 +44,11 @@
  * ```
  */
 
+import { loadCentrifuge } from './realtime-centrifuge.ts';
 import { postgresBaseChannelFromParts, sdkChannelFromParts } from './realtime-channel-name.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 
-// Centrifuge client - dynamically imported
-let Centrifuge = null;
 const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
-
-/**
- * Dynamically imports the Centrifuge client
- */
-async function loadCentrifuge() {
-  if (Centrifuge) {
-    return Centrifuge;
-  }
-
-  try {
-    // Try ES module import
-    const module = await import('centrifuge');
-    Centrifuge = module.Centrifuge || module.default;
-    return Centrifuge;
-  } catch {
-    throw new Error(
-      'Unable to load the SDK realtime dependency. Reinstall @volcano.dev/sdk or check that package dependencies were installed.',
-    );
-  }
-}
 
 // Load WebSocket for Node.js environments
 let WebSocketImpl = null;
