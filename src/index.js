@@ -35,10 +35,8 @@ import {
   uploadStorageObject,
 } from './generated-runtime/client.js';
 import { cloneJsonValue } from './json-clone.ts';
-import { secureRandomUnit } from './lock-random.ts';
-import { lockRequestStart, LockSession } from './lock-session.ts';
-import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
 import { isBrowser } from './next/request.ts';
+import { ProjectLocksApi } from './project-locks.ts';
 import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
@@ -133,10 +131,6 @@ const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
 const MAX_EXECUTION_NAME_LENGTH = 255;
-// Both codes mean the lock is unavailable right now rather than that the request
-// failed: another live holder, or this caller's own lapsed lease still inside
-// the takeover grace window.
-const LOCK_CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
 const GENERATED_TRANSPORT = {
   acquireProjectLock,
   authSignin,
@@ -157,143 +151,6 @@ const GENERATED_TRANSPORT = {
 function authSessionChangedResult() {
   const error = new AuthSessionChangedError();
   return { data: null, status: error.status, headers: {}, version: null, error };
-}
-
-class ProjectLocksApi {
-  constructor(client) {
-    this.client = client;
-  }
-
-  async acquire(key, options = {}) {
-    const ttl = validateLockOptions(key, options);
-    const token = options.token || crypto.randomUUID();
-    const requestId = options.requestId || crypto.randomUUID();
-    const lease = { key, token, expiresAt: null, fencingToken: null };
-    await this.client._completeOAuthExchange();
-    const requestOptions = this.client._generatedOptions('anon', {
-      Authorization: `Bearer ${this.client.accessToken}`,
-      'X-Volcano-Lock-Token': token,
-      'X-Volcano-Request-Id': requestId,
-    });
-    let response;
-    let requestError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        response = await this.client._transport.acquireProjectLock(
-          encodeURIComponent(key),
-          { ttl_seconds: ttl },
-          requestOptions,
-        );
-        requestError = null;
-        break;
-      } catch (error) {
-        requestError = error instanceof Error ? error : new Error('Lock acquisition failed');
-        if (requestError.status != null && requestError.status !== 503) {
-          break;
-        }
-      }
-    }
-    if (response) {
-      lease.expiresAt = response.data.expires_at;
-      lease.fencingToken = response.data.fencing_token ?? null;
-      return { acquired: true, lease, error: null };
-    }
-    if (requestError?.status === 409 && LOCK_CONTENTION_CODES.has(requestError.info?.code)) {
-      return { acquired: false, lease: null, error: null };
-    }
-    return { acquired: false, lease, error: requestError };
-  }
-
-  async renew(key, lease, options = {}) {
-    const ttl = validateLockOptions(key, options);
-    validateLease(key, lease);
-    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}/lease`, {
-      method: 'PATCH',
-      headers: {
-        'X-Volcano-Lock-Token': lease.token,
-        'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
-      },
-      body: JSON.stringify({ ttl_seconds: ttl }),
-      signal: options.signal,
-    });
-    if (!result.ok) {
-      return { lease, error: result.error };
-    }
-    lease.expiresAt = result.data.expires_at;
-    lease.fencingToken = result.data.fencing_token ?? lease.fencingToken;
-    return { lease, error: null };
-  }
-
-  async release(key, lease, options = {}) {
-    validateLockKey(key);
-    validateLease(key, lease);
-    try {
-      await this.client._transport.releaseProjectLock(
-        encodeURIComponent(key),
-        this.client._generatedOptions('session', {
-          'X-Volcano-Lock-Token': lease.token,
-          'X-Volcano-Request-Id': options.requestId || crypto.randomUUID(),
-        }),
-      );
-      return { error: null };
-    } catch (error) {
-      return { error: error instanceof Error ? error : new Error('Lock release failed') };
-    }
-  }
-
-  async get(key, options = {}) {
-    validateLockKey(key);
-    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}`, {
-      method: 'GET',
-      headers: { 'X-Volcano-Request-Id': options.requestId || crypto.randomUUID() },
-    });
-    if (!result.ok) {
-      return { state: null, error: result.error };
-    }
-    return {
-      state: {
-        held: result.data.held === true,
-        expiresAt: result.data.expires_at ?? null,
-        fencingToken: result.data.fencing_token ?? null,
-      },
-      error: null,
-    };
-  }
-
-  async forceRelease(key, options = {}) {
-    validateLockKey(key);
-    const result = await this.client._authFetch(`/locks/${encodeURIComponent(key)}`, {
-      method: 'DELETE',
-      headers: { 'X-Volcano-Request-Id': options.requestId || crypto.randomUUID() },
-    });
-    return { error: result.ok ? null : result.error };
-  }
-
-  async withLock(key, options, callback) {
-    if (typeof callback !== 'function') {
-      throw new TypeError('callback must be a function');
-    }
-    const ttl = validateLockOptions(key, options);
-    const startedAt = lockRequestStart();
-    const acquired = await this.acquire(key, {
-      ttl,
-      token: options.token,
-      requestId: options.requestId,
-    });
-    if (!acquired.acquired || acquired.error) {
-      return { acquired: acquired.acquired, data: null, error: acquired.error };
-    }
-
-    const session = new LockSession({
-      locks: this,
-      key,
-      ttl,
-      lease: acquired.lease,
-      startedAt,
-      random: secureRandomUnit,
-    });
-    return { acquired: true, ...(await session.run(callback)) };
-  }
 }
 
 // ============================================================================
