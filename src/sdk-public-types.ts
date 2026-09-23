@@ -78,7 +78,7 @@ export interface User {
 
 export interface Session {
   access_token: string;
-  refresh_token?: string;
+  refresh_token?: string | undefined;
   expires_in: number;
 }
 
