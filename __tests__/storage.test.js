@@ -174,6 +174,17 @@ describe('Storage', () => {
       expect(data).toEqual(mockResponse);
     });
 
+    it('defaults a null content type for Blob uploads', async () => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      const { error } = await volcano.storage
+        .from('files')
+        .upload('file.bin', new Blob(['data']), { contentType: null });
+
+      expect(error).toBeNull();
+      expect(fetch.mock.calls[0][1].body.get('file').type).toBe('application/octet-stream');
+    });
+
     it('should return error for invalid file body type', async () => {
       const { data, error } = await volcano.storage
         .from('files')
@@ -266,6 +277,18 @@ describe('Storage', () => {
           }),
         }),
       );
+    });
+
+    it('omits a null Range header', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['data'])),
+      });
+
+      const { error } = await volcano.storage.from('files').download('file.bin', { range: null });
+
+      expect(error).toBeNull();
+      expect(fetch.mock.calls[0][1].headers.Range).toBeUndefined();
     });
 
     it('should return error when not authenticated', async () => {

@@ -81,10 +81,8 @@ function uploadFileName(path: string): string {
   return name.length === 0 ? 'file' : name;
 }
 
-function uploadContentType(contentType: string | undefined): string {
-  return contentType === undefined || contentType.length === 0
-    ? 'application/octet-stream'
-    : contentType;
+function uploadContentType(contentType: unknown): string {
+  return Boolean(contentType) ? String(contentType) : 'application/octet-stream';
 }
 
 /** Download as a Blob so a JSON-looking file keeps its original bytes. */
@@ -113,9 +111,8 @@ export async function downloadStorageFile(
 }
 
 function downloadHeaders(options: StorageDownloadOptions): { Range: string } | undefined {
-  return options.range === undefined || options.range.length === 0
-    ? undefined
-    : { Range: options.range };
+  const range: unknown = options.range;
+  return Boolean(range) ? { Range: String(range) } : undefined;
 }
 
 function transferError(value: unknown, message: string): Error {
