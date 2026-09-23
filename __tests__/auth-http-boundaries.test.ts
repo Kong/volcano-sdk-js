@@ -85,6 +85,44 @@ test('authenticated and anonymous requests preserve Headers and tuple header inp
   );
 });
 
+test('header overrides replace defaults case-insensitively without combining wire values', async () => {
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+  const host = fixture();
+
+  await authFetchUrl(host, `${host.apiUrl}/auth/user`, {
+    headers: new Headers({
+      authorization: 'Bearer custom',
+      'content-type': 'text/plain',
+      'X-Trace': 'from-headers',
+    }),
+  });
+  await anonFetch(host, '/auth/signup', {
+    headers: [
+      ['authorization', 'Bearer anonymous-override'],
+      ['CONTENT-TYPE', 'application/vnd.volcano+json'],
+      ['X-Trace', 'first'],
+      ['x-trace', 'last'],
+    ],
+  });
+
+  const authenticated = fetch.mock.calls[0]?.[1]?.headers;
+  expect(authenticated).toEqual({
+    Authorization: 'Bearer custom',
+    'Content-Type': 'text/plain',
+    'x-trace': 'from-headers',
+  });
+  expect(new Headers(authenticated).get('authorization')).toBe('Bearer custom');
+  expect(new Headers(authenticated).get('content-type')).toBe('text/plain');
+
+  const anonymous = fetch.mock.calls[1]?.[1]?.headers;
+  expect(anonymous).toEqual({
+    Authorization: 'Bearer anonymous-override',
+    'Content-Type': 'application/vnd.volcano+json',
+    'X-Trace': 'last',
+  });
+  expect(new Headers(anonymous).get('authorization')).toBe('Bearer anonymous-override');
+});
+
 test('refresh completion cannot retry after the captured session changes', async () => {
   const fetch = jest
     .spyOn(globalThis, 'fetch')

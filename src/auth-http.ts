@@ -81,8 +81,15 @@ function requestHeaders(token: string | null, source?: HeadersInit): Record<stri
     Authorization: `Bearer ${String(token)}`,
     'Content-Type': 'application/json',
   };
+  const names = new Map<string, string>([
+    ['authorization', 'Authorization'],
+    ['content-type', 'Content-Type'],
+  ]);
   for (const [name, value] of headerEntries(source)) {
-    headers[name] = value;
+    const normalized = name.toLowerCase();
+    const existing = names.get(normalized) ?? name;
+    headers[existing] = value;
+    names.set(normalized, existing);
   }
   return headers;
 }
