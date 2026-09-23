@@ -97,7 +97,7 @@ describe('realtime channel facade', () => {
       table: 'tasks',
     });
     await channel._flushFetch('public', 'tasks');
-    expect(rejected).toEqual([new TypeError('volcanoClient.from not available')]);
+    expect(rejected).toEqual([new TypeError('volcanoClient must be an object')]);
     expect(channel._pendingFetches.size).toBe(0);
   });
 
