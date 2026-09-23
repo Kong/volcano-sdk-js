@@ -13,6 +13,11 @@ import {
   VolcanoSystemError,
 } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
+import {
+  clearSharedFunctionResolveStateForTests,
+  getSharedFunctionResolveState,
+  pruneFunctionResolveCache,
+} from './function-resolve-cache.ts';
 import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from './function-url.ts';
 import {
   acquireProjectLock,
@@ -118,9 +123,6 @@ const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 // a 404 is what says the id we cached no longer names anything, as opposed to
 // the function itself answering 404.
 const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
-const GLOBAL_FUNCTION_RESOLVE_STATE_KEY = '__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__';
-const DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES = 1024;
-const FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS = 5000;
 // The idempotency header's documented limit. Checked here so a name that is too
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
@@ -165,65 +167,6 @@ function cloneJsonValue(value) {
 function authSessionChangedResult() {
   const error = new AuthSessionChangedError();
   return { data: null, status: error.status, headers: {}, version: null, error };
-}
-
-function getSharedRuntimeObject() {
-  if (typeof globalThis !== 'undefined') {
-    return globalThis;
-  }
-  if (typeof window !== 'undefined') {
-    return window;
-  }
-  if (typeof global !== 'undefined') {
-    return global;
-  }
-  return {};
-}
-
-function getSharedFunctionResolveState() {
-  const runtime = getSharedRuntimeObject();
-  if (!runtime[GLOBAL_FUNCTION_RESOLVE_STATE_KEY]) {
-    runtime[GLOBAL_FUNCTION_RESOLVE_STATE_KEY] = {
-      cache: new Map(),
-      inFlight: new Map(),
-      maxEntries: DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES,
-      lastPruneAtMs: 0,
-    };
-  }
-  return runtime[GLOBAL_FUNCTION_RESOLVE_STATE_KEY];
-}
-
-function pruneFunctionResolveCache(state, nowMs = Date.now(), force = false) {
-  if (!force && nowMs - state.lastPruneAtMs < FUNCTION_RESOLVE_CACHE_PRUNE_INTERVAL_MS) {
-    return;
-  }
-  state.lastPruneAtMs = nowMs;
-
-  for (const [key, value] of state.cache.entries()) {
-    if (!value || typeof value.expiresAt !== 'number' || value.expiresAt <= nowMs) {
-      state.cache.delete(key);
-    }
-  }
-
-  if (state.cache.size <= state.maxEntries) {
-    return;
-  }
-
-  const sortedByExpiry = Array.from(state.cache.entries()).sort(
-    (a, b) => (a[1].expiresAt || 0) - (b[1].expiresAt || 0),
-  );
-  const overflowCount = state.cache.size - state.maxEntries;
-  for (let i = 0; i < overflowCount; i += 1) {
-    state.cache.delete(sortedByExpiry[i][0]);
-  }
-}
-
-function clearSharedFunctionResolveStateForTests() {
-  const state = getSharedFunctionResolveState();
-  state.cache.clear();
-  state.inFlight.clear();
-  state.maxEntries = DEFAULT_FUNCTION_RESOLVE_CACHE_MAX_ENTRIES;
-  state.lastPruneAtMs = 0;
 }
 
 /**
