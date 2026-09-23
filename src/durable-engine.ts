@@ -4,7 +4,7 @@ interface DurableEngine {
   withDurableExecution(
     handler: (input: unknown, context: unknown) => unknown,
   ): (event: unknown, functionContext: unknown) => Promise<unknown>;
-  StepSemantics: { AtMostOncePerRetry: unknown };
+  StepSemantics: { AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY' };
   createRetryStrategy(config: Record<string, unknown>): unknown;
   createWaitStrategy(config: Record<string, unknown>): unknown;
 }
@@ -35,7 +35,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasStrategies(value: Record<string, unknown>): boolean {
   return (
     isRecord(value['StepSemantics']) &&
-    'AtMostOncePerRetry' in value['StepSemantics'] &&
+    value['StepSemantics']['AtMostOncePerRetry'] === 'AT_MOST_ONCE_PER_RETRY' &&
     typeof value['createRetryStrategy'] === 'function' &&
     typeof value['createWaitStrategy'] === 'function'
   );

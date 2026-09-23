@@ -6,7 +6,7 @@ const engine = {
     (handler: (input: unknown, context: unknown) => unknown) =>
     (event: unknown, context: unknown): Promise<unknown> =>
       Promise.resolve(handler(event, context)),
-  StepSemantics: { AtMostOncePerRetry: 'once' },
+  StepSemantics: { AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY' },
   createRetryStrategy: (config: Record<string, unknown>): unknown => config,
   createWaitStrategy: (config: Record<string, unknown>): unknown => config,
 };
@@ -32,6 +32,9 @@ describe('durable runtime boundary', () => {
     { ...engine, withDurableExecution: undefined },
     { ...engine, StepSemantics: null },
     { ...engine, StepSemantics: {} },
+    { ...engine, StepSemantics: { AtMostOncePerRetry: undefined } },
+    { ...engine, StepSemantics: { AtMostOncePerRetry: null } },
+    { ...engine, StepSemantics: { AtMostOncePerRetry: 'AT_LEAST_ONCE_PER_RETRY' } },
     { ...engine, createRetryStrategy: undefined },
     { ...engine, createWaitStrategy: undefined },
   ])('rejects a runtime with an invalid API', (loaded: unknown) => {
