@@ -500,6 +500,9 @@ class RealtimeChannel {
       if (this._lifecycleVersion !== lifecycleVersion) {
         return;
       }
+      if (this._presenceAcknowledgedVersion < stateVersion) {
+        throw new Error('Tracked presence state was not acknowledged');
+      }
       if (stateVersion !== this._presenceStateVersion) {
         this._updateTrackedSubscriptionData();
       }

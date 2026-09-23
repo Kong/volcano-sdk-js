@@ -113,7 +113,7 @@ describe('auto-fetch database boundary', () => {
   });
 
   test('rejects a callable value that happens to expose query methods', () => {
-    const client = Object.assign(() => {}, {
+    const client = Object.assign(jest.fn(), {
       from: () => ({ select: () => ({ in: () => ({ data: [] }) }) }),
     });
     expect(() => fetchFrom(client)).toThrow('volcanoClient must be an object');

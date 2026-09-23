@@ -891,4 +891,16 @@ describe('realtime server state contract', () => {
     await channel.subscribe();
     expect(subscription.subscribe).toHaveBeenCalledTimes(3);
   });
+
+  test('fails a tracked-state retry that completes without acknowledging its snapshot', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    channel._presenceStateVersion = 1;
+    channel._activateSubscription = jest.fn().mockResolvedValue(undefined);
+
+    await expect(channel._resubscribeTrackedPresence()).rejects.toThrow(
+      'Tracked presence state was not acknowledged',
+    );
+    expect(channel._activateSubscription).toHaveBeenCalledTimes(1);
+  });
 });

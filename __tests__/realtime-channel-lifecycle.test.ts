@@ -58,14 +58,21 @@ class Subscription implements ChannelSubscription {
 
 class Client implements ChannelClient {
   readonly subscription = new Subscription();
-  readonly created: { name: string; joinLeave: boolean }[] = [];
+  readonly created: { name: string; joinLeave: boolean; data?: Record<string, unknown> }[] = [];
   readonly removed: ChannelSubscription[] = [];
   presenceResult: Promise<unknown> = Promise.resolve({ clients: {} });
   presenceCalls: string[] = [];
   failRemove = false;
 
-  newSubscription(name: string, options: { joinLeave: boolean }): ChannelSubscription {
-    this.created.push({ name, joinLeave: options.joinLeave });
+  newSubscription(
+    name: string,
+    options: { joinLeave: boolean; data?: Record<string, unknown> },
+  ): ChannelSubscription {
+    this.created.push({
+      name,
+      joinLeave: options.joinLeave,
+      ...('data' in options ? { data: options.data } : {}),
+    });
     return this.subscription;
   }
 
@@ -87,6 +94,12 @@ class State implements ChannelLifecycleState {
   _realtime = { getClient: (): Client | null => this.client };
   _name = 'broadcast:room';
   _type = 'broadcast';
+  _databaseName: string | null = null;
+  _myPresenceState: Record<string, unknown> | undefined;
+  _presenceStateVersion = 0;
+  _presenceAcknowledgedVersion = 0;
+  _presenceResubscribePromise: Promise<void> | null = null;
+  _activationPromise: Promise<void> | null = null;
   _subscription: ChannelSubscription | null = null;
   _lifecycleVersion = 0;
   _paused = false;
@@ -122,6 +135,10 @@ class State implements ChannelLifecycleState {
       throw new Error('subscription missing');
     }
     await activateChannelSubscription(this, this._subscription);
+  }
+
+  _awaitActivation(): Promise<void> {
+    return this._activateSubscription();
   }
 
   _resetForIdentityChange(): void {
@@ -474,4 +491,83 @@ test('direct activation preserves the existing subscription and rejects stale id
   waiting.resolve();
   await expect(first).rejects.toThrow('Subscription changed');
   expect(subscription.unsubscribes).toBe(0);
+});
+
+test('readiness acknowledges only the presence version captured at activation', async () => {
+  const state = presenceState();
+  const subscription = new Subscription();
+  state._subscription = subscription;
+  state._presenceStateVersion = 3;
+  const waiting = deferredVoid();
+  subscription.readyResult = waiting.promise;
+  const ready = activateChannelSubscription(state, subscription);
+  state._presenceStateVersion = 4;
+  waiting.resolve();
+  await ready;
+  expect(state._presenceAcknowledgedVersion).toBe(3);
+  expect(state._paused).toBe(false);
+});
+
+test('broadcast readiness does not acknowledge presence state', async () => {
+  const state = new State();
+  state._presenceStateVersion = 3;
+  await subscribeChannel(state);
+  expect(state._presenceAcknowledgedVersion).toBe(0);
+});
+
+test('only postgres subscriptions send a nonempty database selector', async () => {
+  const state = new State();
+  state._databaseName = 'db';
+  await subscribeChannel(state);
+  const client = state.client;
+  if (client === null) {
+    throw new Error('client missing');
+  }
+  expect(client.created).toEqual([{ name: 'broadcast:room', joinLeave: false }]);
+  resetChannelForIdentityChange(state);
+  state._type = 'postgres';
+  state._databaseName = null;
+  await subscribeChannel(state);
+  expect(client.created.at(-1)).toEqual({ name: 'broadcast:room', joinLeave: false });
+  resetChannelForIdentityChange(state);
+  state._databaseName = '';
+  await subscribeChannel(state);
+  expect(client.created.at(-1)).toEqual({ name: 'broadcast:room', joinLeave: false });
+  resetChannelForIdentityChange(state);
+  state._databaseName = 'db';
+  await subscribeChannel(state);
+  expect(client.created.at(-1)).toEqual({
+    name: 'broadcast:room',
+    joinLeave: false,
+    data: { database_name: 'db' },
+  });
+});
+
+test('unsubscribe advances lifecycle and does not clear an absent timer', () => {
+  const state = new State();
+  const clear = jest.spyOn(globalThis, 'clearTimeout');
+  try {
+    state.unsubscribe();
+    expect(state._lifecycleVersion).toBe(1);
+    expect(clear).not.toHaveBeenCalled();
+  } finally {
+    clear.mockRestore();
+  }
+});
+
+test('unsubscribe clears only the pending fetch timer that exists', () => {
+  jest.useFakeTimers();
+  const clear = jest.spyOn(globalThis, 'clearTimeout');
+  try {
+    const state = new State();
+    const timer = setTimeout(jest.fn(), 100);
+    state._pendingFetches.set('timed', { timer, ids: new Map() });
+    state._pendingFetches.set('untimed', { timer: null, ids: new Map() });
+    state.unsubscribe();
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith(timer);
+  } finally {
+    clear.mockRestore();
+    jest.useRealTimers();
+  }
 });
