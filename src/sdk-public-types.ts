@@ -645,15 +645,15 @@ export interface StorageObject {
   id: string;
   bucket_id: string;
   name: string;
-  owner_id?: string;
+  owner_id?: string | null;
   /** Whether the file is publicly accessible (default: false) */
   is_public: boolean;
   size: number;
   mime_type: string;
   etag?: string;
   metadata?: Record<string, JsonValue>;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
   /**
    * Public URL for this file (only set for public files).
    * This URL requires no authentication and can be shared anywhere.
