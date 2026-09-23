@@ -46,6 +46,7 @@
 
 import { loadCentrifuge } from './realtime-centrifuge.ts';
 import { postgresBaseChannelFromParts, sdkChannelFromParts } from './realtime-channel-name.ts';
+import { channelFetchConfig, globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 import { loadWebSocket } from './realtime-websocket.ts';
 
@@ -104,11 +105,7 @@ class VolcanoRealtime {
 
     // Auto-fetch support (Phase 3)
     this._volcanoClient = config.volcanoClient || null;
-    this._fetchConfig = {
-      batchWindowMs: config.fetchConfig?.batchWindowMs || 20,
-      maxBatchSize: config.fetchConfig?.maxBatchSize || 50,
-      enabled: config.fetchConfig?.enabled !== false,
-    };
+    this._fetchConfig = globalFetchConfig(config.fetchConfig);
 
     // Database name for auto-fetch queries (optional)
     this._databaseName = config.databaseName || null;
@@ -158,9 +155,7 @@ class VolcanoRealtime {
    * Get the WebSocket URL for realtime connections
    */
   get wsUrl() {
-    const url = new URL(this.apiUrl);
-    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${url.host}/realtime/v1/websocket`;
+    return realtimeWebSocketUrl(this.apiUrl);
   }
 
   /**
@@ -552,11 +547,7 @@ class RealtimeChannel {
 
     // Auto-fetch support (Phase 3)
     const parentFetchConfig = realtime.getFetchConfig();
-    this._fetchConfig = {
-      batchWindowMs: options.fetchBatchWindowMs || parentFetchConfig.batchWindowMs,
-      maxBatchSize: options.fetchMaxBatchSize || parentFetchConfig.maxBatchSize,
-      enabled: options.autoFetch !== false && parentFetchConfig.enabled,
-    };
+    this._fetchConfig = channelFetchConfig(parentFetchConfig, options);
     this._pendingFetches = new Map(); // table -> { ids: Map<id, {resolve, reject}>, timer }
 
     // Event handler references for cleanup
