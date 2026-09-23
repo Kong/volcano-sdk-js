@@ -1,4 +1,4 @@
-const { sessionToken } = require('./session-fixtures.js');
+const { sessionToken } = require('./session-fixtures.ts');
 const { VolcanoAuth } = require('../src/index.js');
 
 describe('Storage', () => {
