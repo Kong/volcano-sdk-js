@@ -10,9 +10,10 @@
  * invoke_url.
  */
 
-const http = require('node:http');
-
-const { VolcanoAuth } = require('../src/index.js');
+import * as http from 'node:http';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { VolcanoAuth, VolcanoSystemError } from '../src/index.js';
+import { realFetch } from './setup.ts';
 
 const FUNCTION_ID = '3cd3e058-e3ff-42a5-ae4d-650ef9b45746';
 // Signed with the project the SDK requires on a function token.
@@ -22,20 +23,43 @@ const ACCESS_TOKEN = [
   'signature',
 ].join('.');
 
+type HttpReply = readonly [status: number, payload: unknown, headers?: Record<string, string>];
+type Respond = (target: string) => HttpReply | Promise<HttpReply>;
+
+interface RecordedRequest {
+  target: string;
+  body: unknown;
+  authorization: string | null;
+}
+
 /** Starts a local HTTP server that answers from `respond` and records requests. */
-async function startServer(respond) {
-  const requests = [];
+async function startServer(respond: Respond) {
+  const requests: RecordedRequest[] = [];
   const server = http.createServer((request, response) => {
-    const chunks = [];
-    request.on('data', (chunk) => chunks.push(chunk));
-    request.on('end', async () => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      void respondToRequest().catch((error: unknown) => {
+        response.destroy(error instanceof Error ? error : new Error('Server response failed'));
+      });
+    });
+    async function respondToRequest(): Promise<void> {
+      const target = request.url;
+      if (target === undefined) {
+        response.writeHead(400);
+        response.end();
+        return;
+      }
       const body = Buffer.concat(chunks).toString();
       requests.push({
-        target: request.url,
-        body: body ? JSON.parse(body) : null,
-        authorization: request.headers.authorization || null,
+        target,
+        body: body.length > 0 ? JSON.parse(body) : null,
+        authorization:
+          request.headers.authorization !== undefined && request.headers.authorization.length > 0
+            ? request.headers.authorization
+            : null,
       });
-      const [status, payload, extraHeaders] = await respond(request.url);
+      const [status, payload, extraHeaders] = await respond(target);
       const encoded = JSON.stringify(payload);
       response.writeHead(status, {
         'Content-Type': 'application/json',
@@ -46,50 +70,63 @@ async function startServer(respond) {
         ...extraHeaders,
       });
       response.end(encoded);
-    });
+    }
   });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new TypeError('Expected a bound TCP port');
+  }
   return {
     requests,
-    url: `http://127.0.0.1:${server.address().port}`,
+    url: `http://127.0.0.1:${String(address.port)}`,
     targets: () => requests.map((request) => request.target),
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => {
+          if (error !== undefined) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        }),
+      ),
   };
 }
 
-function apiServer(resolvePayload, { status = 200, resolveDelayMs = 0 } = {}) {
+function apiServer(
+  resolvePayload: unknown,
+  { status = 200, resolveDelayMs = 0 }: { status?: number; resolveDelayMs?: number } = {},
+) {
   return startServer(async (target) => {
     if (!target.startsWith('/functions/resolve')) {
       return [200, { ok: 'via-api' }];
     }
-    if (resolveDelayMs) {
-      await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
+    if (resolveDelayMs !== 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, resolveDelayMs));
     }
     return [status, resolvePayload];
   });
 }
 
-function client(apiUrl) {
-  const volcano = new VolcanoAuth({ apiUrl, anonKey: 'ak-test-anon-key' });
-  volcano.accessToken = ACCESS_TOKEN;
-  return volcano;
+function client(apiUrl: string) {
+  return new VolcanoAuth({ apiUrl, anonKey: 'ak-test-anon-key', accessToken: ACCESS_TOKEN });
 }
 
 describe('function invocation over HTTP', () => {
-  let servers;
+  let servers: Awaited<ReturnType<typeof startServer>>[];
 
   beforeEach(() => {
     servers = [];
     // The shared setup mocks fetch; these tests need the real one.
-    global.fetch = global.__realFetch;
-    VolcanoAuth.__resetFunctionResolveCacheForTests?.();
+    globalThis.fetch = realFetch;
   });
 
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.close()));
   });
 
-  const track = (server) => {
+  const track = (server: Awaited<ReturnType<typeof startServer>>) => {
     servers.push(server);
     return server;
   };
@@ -114,8 +151,8 @@ describe('function invocation over HTTP', () => {
 
     expect(api.targets()).toEqual(['/functions/resolve?name=my-function']);
     expect(functions.targets()).toEqual(['/', '/', '/']);
-    expect(functions.requests[0].body).toEqual({ payload: { user_id: 'u-1' } });
-    expect(functions.requests[0].authorization).toBe(`Bearer ${ACCESS_TOKEN}`);
+    expect(functions.requests[0]?.body).toEqual({ payload: { user_id: 'u-1' } });
+    expect(functions.requests[0]?.authorization).toBe(`Bearer ${ACCESS_TOKEN}`);
   });
 
   it('falls back to the API path without a resolved endpoint', async () => {
@@ -218,8 +255,8 @@ describe('function invocation over HTTP', () => {
     expect(data).toBeNull();
     expect(status).toBe(400);
     expect(error).not.toBeNull();
-    expect(error.isSystemError).toBe(true);
-    expect(error.message).toBe('function cannot be invoked (status: failed)');
+    expect(VolcanoSystemError.is(error)).toBe(true);
+    expect(error?.message).toBe('function cannot be invoked (status: failed)');
   });
 
   it('returns a function-authored error as data, not a system error', async () => {

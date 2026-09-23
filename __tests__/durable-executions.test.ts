@@ -1,4 +1,7 @@
-const { VolcanoClient } = require('../src/index.js');
+/** @jest-environment node */
+import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { VolcanoClient } from '../src/index.js';
+import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 const execution = {
   id: 'exec-1',
@@ -13,21 +16,35 @@ const execution = {
 
 const page = { data: [execution], page: 1, limit: 20, total: 1, has_more: false };
 
-function clientWithTransport(overrides = {}) {
+type TransportOperation = (...args: unknown[]) => Promise<{ data: unknown; status: number }>;
+type TransportMock = jest.Mock<TransportOperation>;
+
+interface DurableTransport {
+  getDurableExecution: TransportMock;
+  listDurableExecutions: TransportMock;
+  stopDurableExecution: TransportMock;
+}
+
+function clientWithTransport(overrides: Partial<DurableTransport> = {}) {
   const transport = {
-    getDurableExecution: jest.fn().mockResolvedValue({ data: execution, status: 200 }),
-    listDurableExecutions: jest.fn().mockResolvedValue({ data: page, status: 200 }),
+    getDurableExecution: jest
+      .fn<TransportOperation>()
+      .mockResolvedValue({ data: execution, status: 200 }),
+    listDurableExecutions: jest
+      .fn<TransportOperation>()
+      .mockResolvedValue({ data: page, status: 200 }),
     stopDurableExecution: jest
-      .fn()
+      .fn<TransportOperation>()
       .mockResolvedValue({ data: { ...execution, status: 'stopped' }, status: 200 }),
     ...overrides,
   };
-  const volcano = new VolcanoClient({
+  const options = {
     apiUrl: 'https://api.test.com',
     anonKey: 'ak-durable',
     accessToken: 'owner-token',
     transportFactory: () => transport,
-  });
+  };
+  const volcano = new VolcanoClient(options);
   return { volcano, transport };
 }
 
@@ -61,14 +78,14 @@ describe('durable.get / durable.list / durable.stop', () => {
     });
     // Strict, because a key carrying undefined is a query parameter the caller
     // never asked for.
-    expect(transport.listDurableExecutions.mock.calls[0][2]).toStrictEqual({});
+    expect(transport.listDurableExecutions.mock.calls[0]?.[2]).toStrictEqual({});
 
     await volcano.durable.list('proj-1', 'order-pipeline', {
       status: 'running',
       page: 2,
       limit: 50,
     });
-    expect(transport.listDurableExecutions.mock.calls[1][2]).toStrictEqual({
+    expect(transport.listDurableExecutions.mock.calls[1]?.[2]).toStrictEqual({
       status: 'running',
       page: 2,
       limit: 50,
@@ -86,7 +103,7 @@ describe('durable.get / durable.list / durable.stop', () => {
 
     expect(error).toBeNull();
     expect(status).toBe(200);
-    expect(data.status).toBe('stopped');
+    expect(data).toMatchObject({ status: 'stopped' });
     expect(transport.stopDurableExecution).toHaveBeenCalledWith(
       'proj-1',
       'order-pipeline',
@@ -101,7 +118,7 @@ describe('durable.get / durable.list / durable.stop', () => {
   test('refuses an empty identifier before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    const cases = [
+    const cases: [unknown[], string][] = [
       [['', 'order-pipeline', 'exec-1'], 'projectId'],
       [['proj-1', '  ', 'exec-1'], 'functionName'],
       [['proj-1', 'order-pipeline', undefined], 'executionId'],
@@ -109,16 +126,21 @@ describe('durable.get / durable.list / durable.stop', () => {
     ];
 
     for (const [args, field] of cases) {
-      for (const operation of ['get', 'stop']) {
-        const { data, status, error } = await volcano.durable[operation](...args);
-        expect(data).toBeNull();
-        expect(status).toBeNull();
-        expect(error.message).toContain(`${field} must be a non-empty string`);
+      for (const operation of [
+        volcano.durable.get.bind(volcano.durable),
+        volcano.durable.stop.bind(volcano.durable),
+      ]) {
+        const result: unknown = Reflect.apply(operation, undefined, args);
+        await expect(result).resolves.toMatchObject({
+          data: null,
+          status: null,
+          error: { message: expect.stringContaining(`${field} must be a non-empty string`) },
+        });
       }
     }
 
     const listed = await volcano.durable.list('proj-1', '');
-    expect(listed.error.message).toContain('functionName must be a non-empty string');
+    expect(listed.error?.message).toContain('functionName must be a non-empty string');
 
     expect(transport.getDurableExecution).not.toHaveBeenCalled();
     expect(transport.listDurableExecutions).not.toHaveBeenCalled();
@@ -132,17 +154,17 @@ describe('durable.get / durable.list / durable.stop', () => {
     await volcano.durable.stop('proj/1', 'order pipeline', 'exec#1');
     await volcano.durable.list('proj/1', 'order pipeline');
 
-    expect(transport.getDurableExecution.mock.calls[0].slice(0, 3)).toEqual([
+    expect(transport.getDurableExecution.mock.calls[0]?.slice(0, 3)).toEqual([
       'proj%2F1',
       'order%20pipeline',
       'exec%231',
     ]);
-    expect(transport.stopDurableExecution.mock.calls[0].slice(0, 3)).toEqual([
+    expect(transport.stopDurableExecution.mock.calls[0]?.slice(0, 3)).toEqual([
       'proj%2F1',
       'order%20pipeline',
       'exec%231',
     ]);
-    expect(transport.listDurableExecutions.mock.calls[0].slice(0, 2)).toEqual([
+    expect(transport.listDurableExecutions.mock.calls[0]?.slice(0, 2)).toEqual([
       'proj%2F1',
       'order%20pipeline',
     ]);
@@ -152,15 +174,16 @@ describe('durable.get / durable.list / durable.stop', () => {
   // nothing to send, and the platform's 401 costs a round trip to learn it.
   test('refuses an owner-scoped call with no session', async () => {
     const transport = {
-      getDurableExecution: jest.fn(),
-      listDurableExecutions: jest.fn(),
-      stopDurableExecution: jest.fn(),
+      getDurableExecution: jest.fn<TransportOperation>(),
+      listDurableExecutions: jest.fn<TransportOperation>(),
+      stopDurableExecution: jest.fn<TransportOperation>(),
     };
-    const volcano = new VolcanoClient({
+    const options = {
       apiUrl: 'https://api.test.com',
       anonKey: 'ak-durable',
       transportFactory: () => transport,
-    });
+    };
+    const volcano = new VolcanoClient(options);
 
     for (const call of [
       () => volcano.durable.get('proj-1', 'order-pipeline', 'exec-1'),
@@ -170,7 +193,7 @@ describe('durable.get / durable.list / durable.stop', () => {
       const { data, status, error } = await call();
       expect(data).toBeNull();
       expect(status).toBeNull();
-      expect(error.message).toContain('No active session');
+      expect(error?.message).toContain('No active session');
     }
 
     expect(transport.getDurableExecution).not.toHaveBeenCalled();
@@ -183,7 +206,9 @@ describe('durable.get / durable.list / durable.stop', () => {
   test('surfaces a platform refusal with its status', async () => {
     const refusal = Object.assign(new Error('durable function not found'), { status: 404 });
     const { volcano } = clientWithTransport({
-      getDurableExecution: jest.fn().mockRejectedValue(refusal),
+      getDurableExecution: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => Promise.reject(refusal)),
     });
 
     await expect(volcano.durable.get('proj-1', 'gone', 'exec-1')).resolves.toEqual({
@@ -195,39 +220,35 @@ describe('durable.get / durable.list / durable.stop', () => {
 
   test('reports a transport failure that carries no status', async () => {
     const { volcano } = clientWithTransport({
-      stopDurableExecution: jest.fn().mockRejectedValue('socket hang up'),
+      stopDurableExecution: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => rejectWithForeignValue('socket hang up')),
     });
 
     const { data, status, error } = await volcano.durable.stop('proj-1', 'order-pipeline', 'e-1');
 
     expect(data).toBeNull();
     expect(status).toBeNull();
-    expect(error.message).toBe('Failed to stop durable execution');
+    expect(error?.message).toBe('Failed to stop durable execution');
   });
 });
 
 // The transport tests above settle the credential and the validation; the route
 // and the method are the real transport's work, and a wrong one of those reads
 // or cancels nothing.
+function realClient() {
+  return new VolcanoClient({
+    apiUrl: 'https://api.test.com',
+    anonKey: 'ak-durable',
+    accessToken: 'owner-token',
+  });
+}
+
 describe('durable owner operations over the wire', () => {
   beforeEach(() => {
-    global.fetch.mockReset();
-    global.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: () => Promise.resolve(execution),
-      text: () => Promise.resolve(JSON.stringify(execution)),
-    });
+    jest.mocked(globalThis.fetch).mockReset();
+    jest.mocked(globalThis.fetch).mockResolvedValue(Response.json(execution));
   });
-
-  function realClient() {
-    return new VolcanoClient({
-      apiUrl: 'https://api.test.com',
-      anonKey: 'ak-durable',
-      accessToken: 'owner-token',
-    });
-  }
 
   test('reads an execution from the project collection', async () => {
     const { data, error } = await realClient().durable.get('proj-1', 'order-pipeline', 'exec-1');
@@ -235,18 +256,18 @@ describe('durable owner operations over the wire', () => {
     expect(error).toBeNull();
     expect(data).toEqual(execution);
 
-    const [url, init] = global.fetch.mock.calls[0];
-    expect(String(url)).toBe(
+    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    expect(url).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1',
     );
-    expect(init.method).toBe('GET');
-    expect(new Headers(init.headers).get('authorization')).toBe('Bearer owner-token');
+    expect(init?.method).toBe('GET');
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
 
   test('carries list filters as query parameters', async () => {
     await realClient().durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 5 });
 
-    expect(String(global.fetch.mock.calls[0][0])).toBe(
+    expect(jest.mocked(globalThis.fetch).mock.calls[0]?.[0]).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions?status=running&limit=5',
     );
   });
@@ -254,10 +275,10 @@ describe('durable owner operations over the wire', () => {
   test('posts a stop to the execution', async () => {
     await realClient().durable.stop('proj-1', 'order-pipeline', 'exec-1');
 
-    const [url, init] = global.fetch.mock.calls[0];
-    expect(String(url)).toBe(
+    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    expect(url).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop',
     );
-    expect(init.method).toBe('POST');
+    expect(init?.method).toBe('POST');
   });
 });
