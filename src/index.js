@@ -4,6 +4,7 @@ import {
   validateRefreshSource,
   validateSessionContinuation,
 } from './auth-continuity.ts';
+import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { FilterMixin } from './database-filters.ts';
@@ -168,46 +169,6 @@ function cloneJsonValue(value) {
 function authSessionChangedResult() {
   const error = new AuthSessionChangedError();
   return { data: null, status: error.status, headers: {}, version: null, error };
-}
-
-/**
- * Fetch with auth header and refresh retry on 401
- * @param {VolcanoAuth} volcanoAuth
- * @param {string} url
- * @param {RequestInit} options
- * @returns {Promise<Response>}
- */
-async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
-  await volcanoAuth._completeOAuthExchange();
-  const context = volcanoAuth._captureAuthContext();
-  const doFetch = (accessToken) =>
-    fetchWithTimeout(
-      url,
-      {
-        ...options,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          ...options.headers,
-        },
-      },
-      volcanoAuth.timeout,
-    );
-
-  let response = await doFetch(context.accessToken);
-  if (response.status === 401) {
-    const refreshed = await volcanoAuth._refreshSessionForContext(context);
-    if (AuthRefreshDiscardedError.is(refreshed.error)) {
-      throw refreshed.error;
-    }
-    if (!refreshed.error) {
-      if (!volcanoAuth._isAuthContextCurrent(context)) {
-        throw new AuthRefreshDiscardedError();
-      }
-      response = await doFetch(volcanoAuth.accessToken);
-    }
-  }
-
-  return response;
 }
 
 class ProjectLocksApi {
