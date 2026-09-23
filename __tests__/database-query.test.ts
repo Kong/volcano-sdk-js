@@ -28,10 +28,13 @@ function fixture(
 test.each([undefined, 'application/vnd.volcano+json'])(
   'typed SELECT transport preserves filter JSON and content type %p',
   async (contentType) => {
-    const fetchResponse = Response.json({ data: [{ id: 1 }] }, {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const fetchResponse = Response.json(
+      { data: [{ id: 1 }] },
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
     const generatedFetch = jest
       .fn<(path: string, options: RequestInit, mode: 'anon' | 'session') => Promise<Response>>()
       .mockResolvedValue(fetchResponse);
@@ -96,7 +99,11 @@ test('keeps a bare SELECT body and derives its count from rows', async () => {
   const builder = new QueryBuilder(client, 'records', 'db');
   builder.select('*');
   await expect(builder.execute()).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 1 });
-  expect(query).toHaveBeenCalledWith('db', { table: 'records' }, { volcanoAuthorization: 'session' });
+  expect(query).toHaveBeenCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
 });
 
 test('accepts an array projection and defaults order to ascending', async () => {

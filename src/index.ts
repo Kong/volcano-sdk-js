@@ -427,15 +427,23 @@ class VolcanoAuth {
   async searchLogs(
     projectId: string,
     request: import('./sdk-public-types.ts').LogSearchRequest,
-  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogSearchResponse>> {
+  ): Promise<
+    import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogSearchResponse>
+  > {
     const result = await this._postProjectLogRequest(projectId, 'search', request);
-    return result.error === null ? logSearchResult(result.data) : { data: null, error: result.error };
+    return result.error === null
+      ? logSearchResult(result.data)
+      : { data: null, error: result.error };
   }
 
   async getLogActivity(
     projectId: string,
     request: import('./sdk-public-types.ts').LogActivityRequest,
-  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogActivityResponse>> {
+  ): Promise<
+    import('./sdk-public-types.ts').LogsResponse<
+      import('./sdk-public-types.ts').LogActivityResponse
+    >
+  > {
     const result = await this._postProjectLogRequest(projectId, 'activity', request);
     return result.error === null
       ? logActivityResult(result.data)

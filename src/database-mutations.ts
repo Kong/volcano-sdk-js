@@ -20,7 +20,6 @@ export interface MutationResult {
 
 /** Builds a database mutation while retaining its session-scoped retry behavior. */
 export class MutationBuilder extends FilterBuilder {
-
   constructor(
     private readonly client: MutationClient,
     readonly table: string,

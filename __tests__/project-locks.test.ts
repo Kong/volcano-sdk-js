@@ -179,7 +179,12 @@ test('renews the same lease with an explicit cancellation signal', async () => {
 
 test('renewal keeps the prior fencing token when the response omits it', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue({ ok: true, status: 200, data: { expires_at: 'later' }, error: null });
+  given.fetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: { expires_at: 'later' },
+    error: null,
+  });
   const previous = lease();
   await given.locks.renew('leader', previous, { ttl: 5 });
   expect(previous.fencingToken).toBe(3);

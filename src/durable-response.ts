@@ -41,11 +41,7 @@ function isExecutionState(value: Record<string, unknown>): boolean {
 }
 
 function isExecutionError(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    optionalString(value['type']) &&
-    optionalString(value['message'])
-  );
+  return isRecord(value) && optionalString(value['type']) && optionalString(value['message']);
 }
 
 export function isDurableExecution(value: unknown): value is DurableExecution {

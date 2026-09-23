@@ -51,11 +51,7 @@ function isLogResource(value: unknown): value is LogResource {
 }
 
 function isLogDeployment(value: unknown): value is LogDeployment {
-  return (
-    isRecord(value) &&
-    typeof value['id'] === 'string' &&
-    optionalString(value['stage'])
-  );
+  return isRecord(value) && typeof value['id'] === 'string' && optionalString(value['stage']);
 }
 
 function isLogLevel(value: unknown): boolean {
