@@ -62,6 +62,20 @@ function authSessionChangedResult(): FunctionInvocationResult {
   return failed(error, error.status);
 }
 
+function snapshotPayload(payload: unknown): { body: string } | { error: Error } {
+  try {
+    // Snapshot before yielding so resolution and auth recovery cannot change the payload.
+    return { body: JSON.stringify({ payload }) };
+  } catch (reason) {
+    return {
+      error: new VolcanoSystemError(
+        reason instanceof Error ? reason.message : 'Invalid function payload',
+        { cause: reason },
+      ),
+    };
+  }
+}
+
 export async function invokeFunction(
   host: FunctionInvocationHost,
   functionName: unknown,
@@ -70,42 +84,44 @@ export async function invokeFunction(
   if (typeof functionName !== 'string' || functionName.length === 0) {
     return failed(new Error('functionName must be a non-empty string'));
   }
-  return new FunctionInvocation(host, functionName).run(payload);
+  const context = host._captureAuthContext();
+  const snapshot = snapshotPayload(payload);
+  if ('error' in snapshot) {
+    return failed(snapshot.error);
+  }
+  return new FunctionInvocation(host, functionName, context, snapshot.body).run();
 }
 
 class FunctionInvocation {
   private operationContext: AuthContext;
   private resolutionContext: AuthContext;
-  private useAnonKey = false;
+  private useAnonKey: boolean;
   private resolutionToken: string | null = null;
   private resolvedFunctionId: unknown;
   private resolvedInvokeUrl: unknown;
-  private invokeUrl = '';
-  private requestBody = '';
-  private dispatched = false;
+  private dispatched: boolean | null = null;
 
   constructor(
     private readonly host: FunctionInvocationHost,
     private readonly functionName: string,
+    context: AuthContext,
+    private readonly requestBody: string,
   ) {
-    this.operationContext = host._captureAuthContext();
-    this.resolutionContext = this.operationContext;
+    this.operationContext = context;
+    this.resolutionContext = context;
+    this.useAnonKey = !Boolean(context.accessToken);
   }
 
-  async run(payload: unknown): Promise<FunctionInvocationResult> {
-    const serializationError = this.serializePayload(payload);
-    if (serializationError !== null) {
-      return failed(serializationError);
-    }
+  async run(): Promise<FunctionInvocationResult> {
     if (!this.contextIsAvailable()) {
       return authSessionChangedResult();
     }
     await this.completeOAuthExchange();
-    const resolutionError = await this.initialResolution();
-    if (resolutionError !== null) {
-      return resolutionError;
+    const resolution = await this.initialResolution();
+    if (typeof resolution !== 'string') {
+      return resolution;
     }
-    let result = await this.invokeWithCurrentCredential();
+    let result = await this.invokeWithCurrentCredential(resolution);
     result = await this.retryDeletedFunction(result);
     return this.finalize(result);
   }
@@ -120,20 +136,6 @@ class FunctionInvocation {
     return result;
   }
 
-  private serializePayload(payload: unknown): Error | null {
-    try {
-      // Snapshot before yielding so resolution and auth recovery cannot change the payload.
-      const body = JSON.stringify({ payload });
-      this.requestBody = body;
-      return null;
-    } catch (reason) {
-      return new VolcanoSystemError(
-        reason instanceof Error ? reason.message : 'Invalid function payload',
-        { cause: reason },
-      );
-    }
-  }
-
   private contextIsAvailable(): boolean {
     return (
       this.host._isAuthContextCurrent(this.operationContext) &&
@@ -145,8 +147,8 @@ class FunctionInvocation {
     if (this.host._oauthExchangePromise !== null) {
       await this.host._completeOAuthExchange();
       this.operationContext = this.host._captureAuthContext();
+      this.useAnonKey = !Boolean(this.operationContext.accessToken);
     }
-    this.useAnonKey = !Boolean(this.operationContext.accessToken);
     this.resolutionContext = this.operationContext;
     this.resolutionToken = this.credential(this.resolutionContext);
   }
@@ -155,18 +157,17 @@ class FunctionInvocation {
     return this.useAnonKey ? this.host.anonKey : context.accessToken;
   }
 
-  private async initialResolution(): Promise<FunctionInvocationResult | null> {
+  private async initialResolution(): Promise<FunctionInvocationResult | string> {
     try {
       await this.resolveFunction();
     } catch (reason) {
       return failed(asError(reason, 'Failed to resolve function'));
     }
     try {
-      this.resolveInvokeUrl();
+      return this.resolveInvokeUrl();
     } catch (reason) {
       return failed(asError(reason, 'Invalid function identifier'));
     }
-    return null;
   }
 
   private async resolveFunction(): Promise<void> {
@@ -180,19 +181,16 @@ class FunctionInvocation {
     this.resolutionToken = resolution.token;
   }
 
-  private resolveInvokeUrl(): void {
-    this.invokeUrl = this.host._getFunctionInvokeUrl(
-      this.resolvedFunctionId,
-      this.resolvedInvokeUrl,
-    );
+  private resolveInvokeUrl(): string {
+    return this.host._getFunctionInvokeUrl(this.resolvedFunctionId, this.resolvedInvokeUrl);
   }
 
-  private async invokeWithCurrentCredential(): Promise<FunctionInvocationResult> {
+  private async invokeWithCurrentCredential(url: string): Promise<FunctionInvocationResult> {
     const context = this.host._captureAuthContext();
     if (!this.host._isAuthContextCurrent(this.operationContext)) {
       return authSessionChangedResult();
     }
-    return this.invokeOnce(this.invokeUrl, !this.useAnonKey, context, this.credential(context));
+    return this.invokeOnce(url, !this.useAnonKey, context, this.credential(context));
   }
 
   private async invokeOnce(
@@ -201,7 +199,6 @@ class FunctionInvocation {
     context: AuthContext,
     accessToken: string | null,
   ): Promise<FunctionInvocationResult> {
-    this.dispatched = false;
     if (!hasToken(accessToken) || context.operations.pendingSignOut() !== null) {
       return authSessionChangedResult();
     }
@@ -286,7 +283,7 @@ class FunctionInvocation {
     result: FunctionInvocationResult,
   ): Promise<FunctionInvocationResult> {
     // A function-authored 404 has been dispatched and must not run twice.
-    if (result.status !== 404 || this.dispatched) {
+    if (result.status !== 404 || this.dispatched === true) {
       return result;
     }
     if (!this.host._isAuthContextCurrent(this.operationContext)) {
@@ -301,8 +298,7 @@ class FunctionInvocation {
       this.resolutionContext = this.host._captureAuthContext();
       this.resolutionToken = this.credential(this.resolutionContext);
       await this.resolveFunction();
-      this.resolveInvokeUrl();
-      return await this.invokeWithCurrentCredential();
+      return await this.invokeWithCurrentCredential(this.resolveInvokeUrl());
     } catch (reason) {
       return failed(asError(reason, 'Failed to resolve function'));
     }
