@@ -1,6 +1,6 @@
 import { engineConfig, mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
+import { batchResult } from './durable-batch-result.ts';
 import { optionalDuration, waitDuration } from './durable-duration.ts';
-import { failureDetail } from './durable-failure-detail.ts';
 import { toRetryStrategy } from './durable-retry.ts';
 import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
@@ -201,50 +201,6 @@ function parallelBranches(branches, engine) {
       func: (branchContext) => branch.run(durableContext(branchContext, engine)),
     };
   });
-}
-
-/**
- * The engine's batch result carries methods and enum-valued statuses. Reduce it
- * to plain data: it is usually inspected, logged, and returned from the
- * handler, and a result that survives `JSON.stringify` is worth more here than
- * the convenience methods.
- *
- * Only the parts that survive a replay are carried over. A batch that finishes
- * early -- `minSucceeded` reached, say -- leaves items still in flight, and the
- * engine does not promise to reproduce those when the execution resumes: the
- * in-flight entries and the total count it observed live can both come back
- * different. Handing them to a handler would be handing it a value that changes
- * under replay, and a handler that branches on one takes a different path the
- * second time through. So the item list is the completed items, the count is how
- * many completed, and why the batch ended is `completionReason`, which is
- * stable.
- */
-function batchResult(batch) {
-  const items = batch.all
-    .filter((item) => item.status !== 'STARTED')
-    .map((item) => ({
-      index: item.index,
-      status: item.status.toLowerCase(),
-      result: item.result,
-      error: item.error === undefined ? undefined : failureDetail(item.error),
-    }));
-
-  return {
-    items,
-    results: batch.getResults(),
-    errors: batch.getErrors().map((error) => failureDetail(error)),
-    succeeded: batch.successCount,
-    failed: batch.failureCount,
-    completed: batch.successCount + batch.failureCount,
-    completionReason: completionReason(batch),
-    throwIfFailed: () => batch.throwIfError(),
-  };
-}
-
-function completionReason(batch) {
-  return typeof batch.completionReason === 'string'
-    ? batch.completionReason.toLowerCase()
-    : undefined;
 }
 
 function stepConfig(options, engine) {
