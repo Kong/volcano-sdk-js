@@ -54,6 +54,37 @@ describe('auto-fetch database boundary', () => {
     );
   });
 
+  test('leaves the client selection untouched when a legacy query lacks a selector', () => {
+    const writes: string[] = [];
+    const client = {
+      get _currentDatabaseName() {
+        return 'previous';
+      },
+      set _currentDatabaseName(name: string) {
+        writes.push(name);
+      },
+      from: () => ({}),
+      database: () => ({}),
+    };
+    expect(() => fetchFrom(client)).toThrow('Database name not set');
+    expect(writes).toEqual([]);
+  });
+
+  test('does not change a client when its database selector API is unavailable', () => {
+    const writes: string[] = [];
+    const client = {
+      get _currentDatabaseName() {
+        return 'previous';
+      },
+      set _currentDatabaseName(name: string) {
+        writes.push(name);
+      },
+      from: () => ({}),
+    };
+    expect(() => fetchFrom(client, 'db')).toThrow('volcanoClient.database not available');
+    expect(writes).toEqual([]);
+  });
+
   test('queries clients that directly expose from without a database selector', () => {
     const tables: string[] = [];
     const client = {

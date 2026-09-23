@@ -2,7 +2,7 @@ import type { PendingRow } from './realtime-internal-types.ts';
 import type { LightweightNotification } from './realtime-public-types.ts';
 import { property, record } from './realtime-values.ts';
 
-function selectedDatabase(client: unknown, name: string | null): unknown {
+function selectedDatabase(client: Record<string, unknown>, name: string | null): unknown {
   if (typeof property(client, 'from') !== 'function') {
     throw new TypeError('volcanoClient.from not available');
   }
@@ -71,8 +71,12 @@ function databaseFetchError(value: unknown): Error {
   );
 }
 
-function restoreDatabaseSelection(client: unknown, name: string | null, previous: unknown): void {
-  if (name === null || !record(client) || typeof property(client, 'database') !== 'function') {
+function restoreDatabaseSelection(
+  client: Record<string, unknown>,
+  name: string | null,
+  previous: unknown,
+): void {
+  if (name === null || typeof property(client, 'database') !== 'function') {
     return;
   }
   Reflect.set(client, '_currentDatabaseName', previous);
@@ -85,6 +89,9 @@ function runBatchQuery(
   table: string,
   ids: string[],
 ): unknown {
+  if (!record(client)) {
+    throw new TypeError('volcanoClient.from not available');
+  }
   const tableName = schema !== '' && schema !== 'public' ? `${schema}.${table}` : table;
   const previousDatabase = property(client, '_currentDatabaseName');
   try {
