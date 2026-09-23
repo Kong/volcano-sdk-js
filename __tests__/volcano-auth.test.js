@@ -185,8 +185,12 @@ describe('VolcanoAuth', () => {
 
   describe('auth.user()', () => {
     it('should return current user', () => {
-      volcano.currentUser = { id: 'user-123', email: 'test@example.com' };
-      expect(volcano.auth.user()).toEqual({ id: 'user-123', email: 'test@example.com' });
+      volcano.currentUser = { id: 'user-123', email: 'test@example.com', status: 'active' };
+      expect(volcano.auth.user()).toEqual({
+        id: 'user-123',
+        email: 'test@example.com',
+        status: 'active',
+      });
     });
 
     it('should return null when not authenticated', () => {
@@ -210,6 +214,7 @@ describe('VolcanoAuth', () => {
         user_metadata: { theme: 'dark' },
         created_at: '2026-08-28T00:00:00Z',
         updated_at: '2026-08-28T00:00:00Z',
+        status: 'active',
       };
       volcano.accessToken = 'access-token';
       volcano.refreshToken = 'refresh-token';
@@ -288,7 +293,7 @@ describe('VolcanoAuth', () => {
         await client.auth.setSession({
           access_token: 'replacement',
           refresh_token: 'refresh',
-          user: { id: 'other-user' },
+          user: { id: 'other-user', email: 'fixture@example.com', status: 'active' },
         });
         return { ok: true, status: 204 };
       });
@@ -304,7 +309,7 @@ describe('VolcanoAuth', () => {
         accessToken: sessionToken(),
         refreshToken: 'supplied-refresh',
       });
-      const user = { id: 'user-123', email: 'test@example.com' };
+      const user = { id: 'user-123', email: 'test@example.com', status: 'active' };
       global.fetch
         .mockResolvedValueOnce({ ok: true, json: async () => ({ user }) })
         .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ error: 'Expired' }) })
@@ -313,7 +318,8 @@ describe('VolcanoAuth', () => {
           json: async () => ({
             access_token: sessionToken(undefined, true),
             refresh_token: 'other-refresh',
-            user: { id: 'other-user' },
+            user: { id: 'other-user', email: 'fixture@example.com', status: 'active' },
+            expires_in: 3600,
           }),
         });
       await client.auth.getUser();
@@ -336,7 +342,7 @@ describe('VolcanoAuth', () => {
           }),
           refreshToken: 'supplied-refresh',
         });
-        const profile = { id: 'user-123', email: 'test@example.com' };
+        const profile = { id: 'user-123', email: 'test@example.com', status: 'active' };
         global.fetch.mockImplementation(async (url) => {
           if (url.endsWith('/auth/user'))
             return { ok: true, json: async () => ({ user: profile }) };
@@ -348,7 +354,8 @@ describe('VolcanoAuth', () => {
                 session_id: '00000000-0000-4000-8000-000000000012',
               }),
               refresh_token: 'other-refresh',
-              user: { id: 'other-user' },
+              user: { id: 'other-user', email: 'fixture@example.com', status: 'active' },
+              expires_in: 3600,
             }),
           };
         });
@@ -391,11 +398,17 @@ describe('VolcanoAuth', () => {
               renewed: true,
             }),
             refresh_token: 'rotated-b',
-            user: { id: 'user-b' },
+            user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
+            expires_in: 3600,
           }),
         });
         expect((await client.auth.refreshSession()).error).toBeNull();
-        pending.resolve({ ok: true, json: async () => ({ user: { id: 'user-a' } }) });
+        pending.resolve({
+          ok: true,
+          json: async () => ({
+            user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
+          }),
+        });
         expect((await profile).error).toBeInstanceOf(AuthSessionChangedError);
         expect(client.currentUser.id).toBe('user-b');
         expect(client.accessToken).toBe(
@@ -432,7 +445,7 @@ describe('VolcanoAuth', () => {
     it('validates and caches the profile without inventing refresh credentials', async () => {
       const client = new VolcanoAuth({ ...config, accessToken: 'supplied-access' });
       const initial = await client.auth.getSession();
-      const user = { id: 'user-123', email: 'test@example.com' };
+      const user = { id: 'user-123', email: 'test@example.com', status: 'active' };
       expect(global.fetch).not.toHaveBeenCalled();
       global.fetch.mockResolvedValueOnce({
         ok: true,
@@ -488,6 +501,7 @@ describe('VolcanoAuth', () => {
           user_metadata: { preferences: { theme: 'dark' } },
           created_at: '2026-08-28T00:00:00Z',
           updated_at: '2026-08-28T00:00:00Z',
+          status: 'active',
         },
       };
     }
@@ -525,7 +539,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'previous-access-token',
         refresh_token: 'previous-refresh-token',
-        user: { id: 'previous-user-id' },
+        user: { id: 'previous-user-id', email: 'fixture@example.com', status: 'active' },
       });
 
       await volcano.auth.setSession(completeSession());
@@ -571,7 +585,15 @@ describe('VolcanoAuth', () => {
       ],
       [
         'an empty user ID',
-        () => ({ ...completeSession(), user: { ...completeSession().user, id: ' ' } }),
+        () => ({
+          ...completeSession(),
+          user: {
+            ...completeSession().user,
+            id: ' ',
+            email: 'fixture@example.com',
+            status: 'active',
+          },
+        }),
       ],
       [
         'an unclonable session',
@@ -623,7 +645,8 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access-token',
             refresh_token: 'stale-refresh-token',
-            user: { id: 'stale-user-id' },
+            user: { id: 'stale-user-id', email: 'fixture@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
@@ -636,7 +659,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'previous-access-token',
         refresh_token: 'previous-refresh-token',
-        user: { id: 'previous-user-id' },
+        user: { id: 'previous-user-id', email: 'fixture@example.com', status: 'active' },
       });
       const { operation, response } = await deferRequest(() => volcano.auth.refreshSession());
 
@@ -648,7 +671,8 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access-token',
             refresh_token: 'stale-refresh-token',
-            user: { id: 'stale-user-id' },
+            user: { id: 'stale-user-id', email: 'fixture@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
@@ -661,7 +685,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'previous-access-token',
         refresh_token: 'previous-refresh-token',
-        user: { id: 'previous-user-id' },
+        user: { id: 'previous-user-id', email: 'fixture@example.com', status: 'active' },
       });
       const { operation, response } = await deferRequest(() => volcano.auth.signOut());
 
@@ -677,7 +701,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'previous-access-token',
         refresh_token: 'previous-refresh-token',
-        user: { id: 'previous-user-id' },
+        user: { id: 'previous-user-id', email: 'fixture@example.com', status: 'active' },
       });
       const { operation, response } = await deferRequest(() =>
         volcano.auth.updateUser({ metadata: { name: 'stale' } }),
@@ -687,7 +711,10 @@ describe('VolcanoAuth', () => {
       response.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ user: { id: 'stale-user-id' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'stale-user-id', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await operation;
@@ -773,7 +800,7 @@ describe('VolcanoAuth', () => {
           ok: true,
           json: () =>
             Promise.resolve({
-              user: { id: 'user-123', email: 'test@example.com' },
+              user: { id: 'user-123', email: 'test@example.com', status: 'active' },
               access_token: 'access-token-123',
               refresh_token: 'refresh-token-123',
               expires_in: 3600,
@@ -789,7 +816,7 @@ describe('VolcanoAuth', () => {
       // A follow-up signin was issued, establishing and persisting a session.
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(result.confirmationRequired).toBe(false);
-      expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com' });
+      expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com', status: 'active' });
       expect(result.session.access_token).toBe('access-token-123');
       expect(result.error).toBeNull();
       expect(localStorage.setItem).toHaveBeenCalledWith('volcano_access_token', 'access-token-123');
@@ -859,7 +886,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       callback.mockClear();
       localStorage.setItem.mockClear();
@@ -871,7 +898,7 @@ describe('VolcanoAuth', () => {
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
             expires_in: 3600,
-            user: { id: 'stale-user' },
+            user: { id: 'stale-user', email: 'fixture@example.com', status: 'active' },
           }),
       });
 
@@ -881,7 +908,11 @@ describe('VolcanoAuth', () => {
       expect(result.session).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+      expect(volcano.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(localStorage.setItem).not.toHaveBeenCalled();
       expect(localStorage.removeItem).not.toHaveBeenCalled();
       expect(callback).not.toHaveBeenCalled();
@@ -904,11 +935,14 @@ describe('VolcanoAuth', () => {
             access_token: 'first-access',
             refresh_token: 'first-refresh',
             expires_in: 3600,
-            user: { id: 'first-user' },
+            user: { id: 'first-user', email: 'fixture@example.com', status: 'active' },
           }),
       });
       await expect(first).resolves.toEqual(
-        expect.objectContaining({ user: { id: 'first-user' }, error: null }),
+        expect.objectContaining({
+          user: { id: 'first-user', email: 'fixture@example.com', status: 'active' },
+          error: null,
+        }),
       );
       secondResponse.resolve({
         ok: true,
@@ -917,7 +951,7 @@ describe('VolcanoAuth', () => {
             access_token: 'second-access',
             refresh_token: 'second-refresh',
             expires_in: 3600,
-            user: { id: 'second-user' },
+            user: { id: 'second-user', email: 'fixture@example.com', status: 'active' },
           }),
       });
 
@@ -927,12 +961,16 @@ describe('VolcanoAuth', () => {
       expect(secondResult.session).toBeNull();
       expect(AuthSessionChangedError.is(secondResult.error)).toBe(true);
       expect(volcano.accessToken).toBe('first-access');
-      expect(volcano.currentUser).toEqual({ id: 'first-user' });
+      expect(volcano.currentUser).toEqual({
+        id: 'first-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should sign in user successfully', async () => {
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
+        user: { id: 'user-123', email: 'test@example.com', status: 'active' },
         access_token: 'access-token-123',
         refresh_token: 'refresh-token-123',
         expires_in: 3600,
@@ -971,7 +1009,7 @@ describe('VolcanoAuth', () => {
 
     it('should include error:null on successful signin', async () => {
       const mockResponse = {
-        user: { id: 'user-123', email: 'test@example.com' },
+        user: { id: 'user-123', email: 'test@example.com', status: 'active' },
         access_token: 'access-token-123',
         refresh_token: 'refresh-token-123',
         expires_in: 3600,
@@ -1003,7 +1041,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'old-user' },
+        user: { id: 'old-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockResolvedValueOnce({
         ok: false,
@@ -1025,7 +1063,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'old-user' },
+        user: { id: 'old-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockReturnValueOnce(response.promise);
 
@@ -1035,7 +1073,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({ ok: true, json: () => Promise.resolve({}) });
 
@@ -1046,14 +1084,18 @@ describe('VolcanoAuth', () => {
         refresh_token: 'old-refresh',
       });
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+      expect(volcano.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('rejects a new refresh while opaque-token logout is pending', async () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       const started = createDeferred();
@@ -1079,7 +1121,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'old-user' },
+        user: { id: 'old-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockReturnValueOnce(response.promise);
 
@@ -1089,7 +1131,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -1127,11 +1169,11 @@ describe('VolcanoAuth', () => {
       '%s replays the original request after one refresh and caches the user',
       async (operation) => {
         const metadata = { roles: ['editor'] };
-        const profile = { id: 'user-123', email: 'updated@example.com' };
+        const profile = { id: 'user-123', email: 'updated@example.com', status: 'active' };
         await volcano.auth.setSession({
           access_token: sessionToken(),
           refresh_token: 'old-refresh',
-          user: { id: profile.id },
+          user: { id: profile.id, email: 'fixture@example.com', status: 'active' },
         });
         const invoke = {
           getUser: () => volcano.auth.getUser(),
@@ -1158,7 +1200,8 @@ describe('VolcanoAuth', () => {
               json: async () => ({
                 access_token: sessionToken(undefined, true),
                 refresh_token: 'new-refresh',
-                user: { id: profile.id, email: 'before-profile@example.com' },
+                user: { id: profile.id, email: 'before-profile@example.com', status: 'active' },
+                expires_in: 3600,
               }),
             };
           })
@@ -1220,7 +1263,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123', email: 'test@example.com' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'test@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.getUser();
@@ -1257,14 +1303,17 @@ describe('VolcanoAuth', () => {
             access_token: sessionToken(undefined, true),
             refresh_token: 'new-refresh-token',
             expires_in: 3600,
-            user: { id: 'user-123' },
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
           }),
       });
 
       // Retry call succeeds
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.getUser();
@@ -1281,7 +1330,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'shared-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockImplementation((url) => {
         if (url.endsWith('/auth/refresh')) {
@@ -1301,7 +1350,10 @@ describe('VolcanoAuth', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ user: { id: 'user-1' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+            }),
         });
       });
 
@@ -1315,7 +1367,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'new-access',
             refresh_token: 'new-refresh',
-            user: { id: 'user-1' },
+            user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -1323,8 +1375,14 @@ describe('VolcanoAuth', () => {
       const [firstResult, secondResult] = await Promise.all([first, second]);
 
       expect(refreshRequests).toBe(1);
-      expect(firstResult).toEqual({ user: { id: 'user-1' }, error: null });
-      expect(secondResult).toEqual({ user: { id: 'user-1' }, error: null });
+      expect(firstResult).toEqual({
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+        error: null,
+      });
+      expect(secondResult).toEqual({
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+        error: null,
+      });
       expect(userRequests).toBe(4);
       expect(volcano.accessToken).toBe('new-access');
     });
@@ -1336,7 +1394,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'shared-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockImplementation((url) => {
         if (url.endsWith('/auth/refresh')) {
@@ -1348,7 +1406,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 access_token: 'new-access',
                 refresh_token: 'new-refresh',
-                user: { id: 'user-1' },
+                user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
                 expires_in: 3600,
               }),
           });
@@ -1368,20 +1426,29 @@ describe('VolcanoAuth', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ user: { id: 'user-1' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+            }),
         });
       });
 
       const first = volcano.auth.getUser();
       const delayed = volcano.auth.getUser();
-      await expect(first).resolves.toEqual({ user: { id: 'user-1' }, error: null });
+      await expect(first).resolves.toEqual({
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+        error: null,
+      });
       delayedResponse.resolve({
         ok: false,
         status: 401,
         json: () => Promise.resolve({ error: 'Token expired' }),
       });
 
-      await expect(delayed).resolves.toEqual({ user: { id: 'user-1' }, error: null });
+      await expect(delayed).resolves.toEqual({
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
+        error: null,
+      });
       expect(refreshRequests).toBe(1);
       expect(userRequests).toBe(4);
       expect(volcano.accessToken).toBe('new-access');
@@ -1393,7 +1460,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch
         .mockResolvedValueOnce({
@@ -1413,7 +1480,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       refreshResponse.resolve({
         ok: true,
@@ -1422,7 +1489,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
-            user: { id: 'user-1' },
+            user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -1433,7 +1500,11 @@ describe('VolcanoAuth', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('does not replay after a refresh callback replaces the session', async () => {
@@ -1441,7 +1512,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'old-user' },
+        user: { id: 'old-user', email: 'fixture@example.com', status: 'active' },
       });
       volcano.auth.onAuthStateChange((user) => {
         if (!replaced && user?.refreshed === true) {
@@ -1449,7 +1520,7 @@ describe('VolcanoAuth', () => {
           volcano._setSession({
             access_token: 'replacement-access',
             refresh_token: 'replacement-refresh',
-            user: { id: 'user-2' },
+            user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
           });
         }
       });
@@ -1466,7 +1537,12 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'refreshed-access',
               refresh_token: 'refreshed-refresh',
-              user: { id: 'old-user', refreshed: true },
+              user: {
+                id: 'old-user',
+                refreshed: true,
+                email: 'fixture@example.com',
+                status: 'active',
+              },
               expires_in: 3600,
             }),
         });
@@ -1477,7 +1553,11 @@ describe('VolcanoAuth', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('does not refresh an already superseded request', async () => {
@@ -1486,7 +1566,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockImplementationOnce(() => {
         requestStarted.resolve();
@@ -1498,7 +1578,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       requestResponse.resolve({
         ok: false,
@@ -1512,7 +1592,11 @@ describe('VolcanoAuth', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
   });
 
@@ -1541,7 +1625,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'access-a',
         refresh_token: 'refresh-a',
-        user: { id: 'user-a' },
+        user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
       });
       volcano.auth.onAuthStateChange(callback);
       callback.mockClear();
@@ -1558,20 +1642,27 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'access-b',
         refresh_token: 'refresh-b',
-        user: { id: 'user-b' },
+        user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
       });
       callback.mockClear();
       response.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ user: { id: 'stale-user-a' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'stale-user-a', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await operation;
 
       expect(result.user).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
-      expect(volcano.currentUser).toEqual({ id: 'user-b' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-b',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(volcano.accessToken).toBe('access-b');
       expect(callback).not.toHaveBeenCalled();
       expect(volcano._pendingUrlAuthNotify).toBe(false);
@@ -1626,7 +1717,10 @@ describe('VolcanoAuth', () => {
       // No getUser() call — go straight to an authenticated operation.
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-redirect', email: 'r@example.com' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-redirect', email: 'r@example.com', status: 'active' },
+          }),
       });
       const result = await v.auth.updateUser({ metadata: { ok: true } });
 
@@ -1660,7 +1754,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-late' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-late', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await v.auth.getUser();
@@ -1687,7 +1784,8 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-ctor', email: 'c@example.com' } }),
+        json: () =>
+          Promise.resolve({ user: { id: 'user-ctor', email: 'c@example.com', status: 'active' } }),
       });
 
       // First getUser() announces the SIGNED_IN transition for the adoption that
@@ -1802,7 +1900,10 @@ describe('VolcanoAuth', () => {
       // present in window.location.hash.
       global.fetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-once', email: 'once@example.com' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-once', email: 'once@example.com', status: 'active' },
+          }),
       });
 
       await v.auth.getUser();
@@ -1920,7 +2021,7 @@ describe('VolcanoAuth', () => {
       v._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -1928,14 +2029,19 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
-            user: { id: 'stale-user' },
+            user: { id: 'stale-user', email: 'fixture@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
       await v._completeOAuthExchange();
 
       expect(v.accessToken).toBe('replacement-access');
-      expect(v.currentUser).toEqual({ id: 'replacement-user' });
+      expect(v.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(v._oauthExchangeError).toBeNull();
     });
 
@@ -1955,7 +2061,7 @@ describe('VolcanoAuth', () => {
       v._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -1965,7 +2071,11 @@ describe('VolcanoAuth', () => {
       await v._completeOAuthExchange();
 
       expect(v.accessToken).toBe('replacement-access');
-      expect(v.currentUser).toEqual({ id: 'replacement-user' });
+      expect(v.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(v._oauthExchangeError).toBeNull();
     });
 
@@ -1981,12 +2091,15 @@ describe('VolcanoAuth', () => {
               access_token: 'oauth-access',
               refresh_token: 'oauth-refresh',
               expires_in: 3600,
-              user: { id: 'oauth-user', email: 'oauth@example.com' },
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
             }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -2017,12 +2130,15 @@ describe('VolcanoAuth', () => {
               access_token: 'oauth-access',
               refresh_token: 'oauth-refresh',
               expires_in: 3600,
-              user: { id: 'oauth-user', email: 'oauth@example.com' },
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
             }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -2050,12 +2166,16 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'oauth-access',
               refresh_token: 'oauth-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com' },
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+              expires_in: 3600,
             }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -2081,12 +2201,16 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'oauth-access',
               refresh_token: 'oauth-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com' },
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+              expires_in: 3600,
             }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ user: { id: 'oauth-user', email: 'oauth@example.com' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -2201,7 +2325,8 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'signed-in-access',
               refresh_token: 'signed-in-refresh',
-              user: { id: 'signed-in-user', email: 'signed-in@example.com' },
+              user: { id: 'signed-in-user', email: 'signed-in@example.com', status: 'active' },
+              expires_in: 3600,
             }),
         });
 
@@ -2233,7 +2358,10 @@ describe('VolcanoAuth', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ user: { id: 'stored-user', email: 'stored@example.com' } }),
+          json: () =>
+            Promise.resolve({
+              user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -2247,7 +2375,7 @@ describe('VolcanoAuth', () => {
 
       const recovered = await v.initialize();
       expect(recovered).toEqual({
-        user: { id: 'stored-user', email: 'stored@example.com' },
+        user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
         error: null,
       });
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -2266,7 +2394,7 @@ describe('VolcanoAuth', () => {
             access_token: sessionToken(undefined, true),
             refresh_token: 'refreshed-refresh',
             expires_in: 3600,
-            user: { id: 'user-123' },
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
           }),
       });
 
@@ -2303,7 +2431,7 @@ describe('VolcanoAuth', () => {
             Promise.resolve({
               access_token: 'refreshed-access',
               refresh_token: 'refreshed-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com' },
+              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
               expires_in: 3600,
             }),
         });
@@ -2318,7 +2446,8 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'oauth-access',
             refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com' },
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
@@ -2360,7 +2489,8 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'oauth-access',
             refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com' },
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
@@ -2398,7 +2528,8 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'oauth-access',
             refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com' },
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
           }),
       });
 
@@ -2451,7 +2582,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123', email: 'test@example.com' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'test@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.updateUser({ password: 'newPassword123' });
@@ -2469,7 +2603,15 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123', metadata: { name: 'John' } } }),
+        json: () =>
+          Promise.resolve({
+            user: {
+              id: 'user-123',
+              metadata: { name: 'John' },
+              email: 'fixture@example.com',
+              status: 'active',
+            },
+          }),
       });
 
       const result = await volcano.auth.updateUser({ metadata: { name: 'John' } });
@@ -2509,7 +2651,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'shared-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockReturnValueOnce(response.promise);
 
@@ -2527,7 +2669,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'new-access',
             refresh_token: 'new-refresh',
-            user: { id: 'user-1' },
+            user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -2543,7 +2685,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       volcano.auth.onAuthStateChange(callback);
       callback.mockClear();
@@ -2556,7 +2698,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       callback.mockClear();
       localStorage.setItem.mockClear();
@@ -2568,7 +2710,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
-            user: { id: 'user-1' },
+            user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -2579,7 +2721,11 @@ describe('VolcanoAuth', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(volcano.accessToken).toBe('replacement-access');
       expect(volcano.refreshToken).toBe('replacement-refresh');
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(localStorage.store.volcano_access_token).toBe('replacement-access');
       expect(localStorage.store.volcano_refresh_token).toBe('replacement-refresh');
       expect(localStorage.setItem).not.toHaveBeenCalled();
@@ -2593,7 +2739,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       volcano.auth.onAuthStateChange(callback);
       callback.mockClear();
@@ -2606,7 +2752,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       callback.mockClear();
       localStorage.setItem.mockClear();
@@ -2624,7 +2770,11 @@ describe('VolcanoAuth', () => {
       expect(result.error.message).toBe('Old refresh token expired');
       expect(volcano.accessToken).toBe('replacement-access');
       expect(volcano.refreshToken).toBe('replacement-refresh');
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(localStorage.store.volcano_access_token).toBe('replacement-access');
       expect(localStorage.store.volcano_refresh_token).toBe('replacement-refresh');
       expect(localStorage.setItem).not.toHaveBeenCalled();
@@ -2636,7 +2786,7 @@ describe('VolcanoAuth', () => {
       const established = {
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       };
       volcano._setSession(established);
       global.fetch.mockResolvedValueOnce({
@@ -2659,7 +2809,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'old-access',
         refresh_token: 'valid-refresh',
-        user: { id: 'user-123', email: 'alice@example.com' },
+        user: { id: 'user-123', email: 'alice@example.com', status: 'active' },
       });
 
       global.fetch.mockResolvedValueOnce({
@@ -2668,7 +2818,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'new-access',
             refresh_token: 'new-refresh',
-            user: { id: 'user-123', email: 'alice@example.com' },
+            user: { id: 'user-123', email: 'alice@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -2686,7 +2836,7 @@ describe('VolcanoAuth', () => {
           session: {
             access_token: 'new-access',
             refresh_token: 'new-refresh',
-            user: { id: 'user-123', email: 'alice@example.com' },
+            user: { id: 'user-123', email: 'alice@example.com', status: 'active' },
           },
         },
         error: null,
@@ -2725,12 +2875,16 @@ describe('VolcanoAuth', () => {
 
   describe('Authentication - onAuthStateChange', () => {
     it('should call callback with current user', () => {
-      volcano.currentUser = { id: 'user-123' };
+      volcano.currentUser = { id: 'user-123', email: 'fixture@example.com', status: 'active' };
       const callback = jest.fn();
 
       volcano.auth.onAuthStateChange(callback);
 
-      expect(callback).toHaveBeenCalledWith({ id: 'user-123' });
+      expect(callback).toHaveBeenCalledWith({
+        id: 'user-123',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should call callback on session change', async () => {
@@ -2745,15 +2899,20 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'user-456' },
+            user: { id: 'user-456', email: 'fixture@example.com', status: 'active' },
             access_token: 'token',
             refresh_token: 'refresh',
+            expires_in: 3600,
           }),
       });
 
       await volcano.auth.signIn({ email: 'test@test.com', password: 'pass' });
 
-      expect(callback).toHaveBeenCalledWith({ id: 'user-456' });
+      expect(callback).toHaveBeenCalledWith({
+        id: 'user-456',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should return unsubscribe function', () => {
@@ -2770,7 +2929,7 @@ describe('VolcanoAuth', () => {
 
       // Trigger session change
       volcano._setSession({
-        user: { id: 'user-789' },
+        user: { id: 'user-789', email: 'fixture@example.com', status: 'active' },
         access_token: 'token',
         refresh_token: 'refresh',
       });
@@ -2792,13 +2951,21 @@ describe('VolcanoAuth', () => {
 
       // Trigger session change
       volcano._setSession({
-        user: { id: 'user-multi' },
+        user: { id: 'user-multi', email: 'fixture@example.com', status: 'active' },
         access_token: 'token',
         refresh_token: 'refresh',
       });
 
-      expect(callback1).toHaveBeenCalledWith({ id: 'user-multi' });
-      expect(callback2).toHaveBeenCalledWith({ id: 'user-multi' });
+      expect(callback1).toHaveBeenCalledWith({
+        id: 'user-multi',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
+      expect(callback2).toHaveBeenCalledWith({
+        id: 'user-multi',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should not crash if callback throws error', () => {
@@ -2819,7 +2986,7 @@ describe('VolcanoAuth', () => {
       // Trigger session change - should not throw
       expect(() => {
         volcano._setSession({
-          user: { id: 'user-err' },
+          user: { id: 'user-err', email: 'fixture@example.com', status: 'active' },
           access_token: 'token',
           refresh_token: 'refresh',
         });
@@ -2828,7 +2995,11 @@ describe('VolcanoAuth', () => {
       // Bad callback was called (and threw)
       expect(badCallback).toHaveBeenCalled();
       // Good callback still got called despite the error
-      expect(goodCallback).toHaveBeenCalledWith({ id: 'user-err' });
+      expect(goodCallback).toHaveBeenCalledWith({
+        id: 'user-err',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       // Error was logged
       expect(consoleError).toHaveBeenCalled();
 
@@ -2837,7 +3008,7 @@ describe('VolcanoAuth', () => {
 
     it('should not crash if callback throws error on initial registration', () => {
       const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-      volcano.currentUser = { id: 'current-user' };
+      volcano.currentUser = { id: 'current-user', email: 'fixture@example.com', status: 'active' };
 
       const badCallback = jest.fn(() => {
         throw new Error('Initial callback error');
@@ -2848,7 +3019,11 @@ describe('VolcanoAuth', () => {
         volcano.auth.onAuthStateChange(badCallback);
       }).not.toThrow();
 
-      expect(badCallback).toHaveBeenCalledWith({ id: 'current-user' });
+      expect(badCallback).toHaveBeenCalledWith({
+        id: 'current-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
       expect(consoleError).toHaveBeenCalled();
 
       consoleError.mockRestore();
@@ -2861,7 +3036,12 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'anon-123', is_anonymous: true },
+            user: {
+              id: 'anon-123',
+              is_anonymous: true,
+              email: 'fixture@example.com',
+              status: 'active',
+            },
             access_token: 'anon-token',
             refresh_token: 'anon-refresh',
             expires_in: 3600,
@@ -2887,7 +3067,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -2896,7 +3076,12 @@ describe('VolcanoAuth', () => {
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
             expires_in: 3600,
-            user: { id: 'stale-anonymous', is_anonymous: true },
+            user: {
+              id: 'stale-anonymous',
+              is_anonymous: true,
+              email: 'fixture@example.com',
+              status: 'active',
+            },
           }),
       });
 
@@ -2906,7 +3091,11 @@ describe('VolcanoAuth', () => {
       expect(result.session).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
       expect(volcano.accessToken).toBe('replacement-access');
-      expect(volcano.currentUser).toEqual({ id: 'replacement-user' });
+      expect(volcano.currentUser).toEqual({
+        id: 'replacement-user',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should sign up anonymous user', async () => {
@@ -2914,7 +3103,12 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'anon-123', is_anonymous: true },
+            user: {
+              id: 'anon-123',
+              is_anonymous: true,
+              email: 'fixture@example.com',
+              status: 'active',
+            },
             access_token: 'anon-token',
             refresh_token: 'anon-refresh',
             expires_in: 3600,
@@ -2933,7 +3127,13 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'anon-123', is_anonymous: true, metadata: { device: 'mobile' } },
+            user: {
+              id: 'anon-123',
+              is_anonymous: true,
+              metadata: { device: 'mobile' },
+              email: 'fixture@example.com',
+              status: 'active',
+            },
             access_token: 'anon-token',
             refresh_token: 'anon-refresh',
             expires_in: 3600,
@@ -2968,7 +3168,12 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'user-123', email: 'new@example.com', is_anonymous: false },
+            user: {
+              id: 'user-123',
+              email: 'new@example.com',
+              is_anonymous: false,
+              status: 'active',
+            },
           }),
       });
 
@@ -3196,7 +3401,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3206,7 +3411,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({ ok: true, json: () => Promise.resolve({}) });
 
@@ -3269,7 +3474,7 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            user: { id: 'user-123', email: 'new@example.com' },
+            user: { id: 'user-123', email: 'new@example.com', status: 'active' },
           }),
       });
 
@@ -3284,7 +3489,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user', email: 'old@example.com' },
+        user: { id: 'original-user', email: 'old@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3294,11 +3499,14 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user', email: 'replacement@example.com' },
+        user: { id: 'replacement-user', email: 'replacement@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'original-user', email: 'new@example.com' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'original-user', email: 'new@example.com', status: 'active' },
+          }),
       });
 
       const result = await request;
@@ -3308,6 +3516,7 @@ describe('VolcanoAuth', () => {
       expect(volcano.currentUser).toEqual({
         id: 'replacement-user',
         email: 'replacement@example.com',
+        status: 'active',
       });
     });
 
@@ -3348,7 +3557,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3358,7 +3567,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3466,7 +3675,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3476,7 +3685,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3494,7 +3703,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3504,7 +3713,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -3556,7 +3765,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3566,7 +3775,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3584,7 +3793,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3594,7 +3803,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -3644,7 +3853,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3654,7 +3863,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({ ok: true, status: 204 });
 
@@ -3668,7 +3877,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3678,7 +3887,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -3732,7 +3941,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3742,7 +3951,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3765,7 +3974,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3775,7 +3984,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -3830,7 +4039,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3840,7 +4049,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3863,7 +4072,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3873,7 +4082,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -3959,7 +4168,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3969,7 +4178,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -3987,7 +4196,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -3997,7 +4206,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -4089,7 +4298,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -4099,7 +4308,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -4125,7 +4334,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -4135,7 +4344,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -4184,7 +4393,7 @@ describe('VolcanoAuth', () => {
           session_id: sessionId,
         }),
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -4194,7 +4403,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({ ok: true, status: 204, json: () => Promise.resolve({}) });
 
@@ -4211,7 +4420,7 @@ describe('VolcanoAuth', () => {
           session_id: sessionId,
         }),
         refresh_token: 'current-refresh',
-        user: { id: 'current-user' },
+        user: { id: 'current-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockResolvedValueOnce({
         ok: true,
@@ -4234,7 +4443,7 @@ describe('VolcanoAuth', () => {
           session_id: sessionId,
         }),
         refresh_token: 'current-refresh',
-        user: { id: 'current-user' },
+        user: { id: 'current-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockRejectedValueOnce(new Error('connection lost'));
 
@@ -4254,7 +4463,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: accessToken,
         refresh_token: null,
-        user: { id: 'current-user' },
+        user: { id: 'current-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockResolvedValueOnce({
         ok: false,
@@ -4276,7 +4485,7 @@ describe('VolcanoAuth', () => {
           session_id: sessionId,
         }),
         refresh_token: 'old-refresh',
-        user: { id: 'current-user' },
+        user: { id: 'current-user', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch
         .mockResolvedValueOnce({
@@ -4293,7 +4502,7 @@ describe('VolcanoAuth', () => {
                 session_id: sessionId,
               }),
               refresh_token: 'new-refresh',
-              user: { id: 'current-user' },
+              user: { id: 'current-user', email: 'fixture@example.com', status: 'active' },
               expires_in: 3600,
             }),
         })
@@ -4347,7 +4556,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'original-access',
         refresh_token: 'original-refresh',
-        user: { id: 'original-user' },
+        user: { id: 'original-user', email: 'fixture@example.com', status: 'active' },
       });
       const response = createDeferred();
       global.fetch.mockReturnValueOnce(response.promise);
@@ -4357,7 +4566,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({ ok: true, status: 204, json: () => Promise.resolve({}) });
 
@@ -4645,7 +4854,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN,
         refresh_token: 'refresh-token',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockImplementationOnce(() => {
         requestStarted.resolve();
@@ -4680,7 +4889,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'refresh-token-a',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch.mockImplementationOnce(() => {
         requestStarted.resolve();
@@ -4692,7 +4901,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -4740,7 +4949,7 @@ describe('VolcanoAuth', () => {
       anonymousVolcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'refresh-token-a',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -4775,7 +4984,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'refresh-token-a',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch
         .mockResolvedValueOnce({
@@ -4799,7 +5008,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: false,
@@ -4822,7 +5031,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'refresh-token-a',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch
         .mockResolvedValueOnce({
@@ -4846,7 +5055,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       response.resolve({
         ok: true,
@@ -4878,7 +5087,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       global.fetch
         .mockResolvedValueOnce({
@@ -4908,7 +5117,7 @@ describe('VolcanoAuth', () => {
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       refreshResponse.resolve({
         ok: true,
@@ -4917,7 +5126,7 @@ describe('VolcanoAuth', () => {
           Promise.resolve({
             access_token: 'stale-access',
             refresh_token: 'stale-refresh',
-            user: { id: 'user-1' },
+            user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
             expires_in: 3600,
           }),
       });
@@ -4928,7 +5137,11 @@ describe('VolcanoAuth', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(3);
       expect(volcano.accessToken).toBe(TEST_ACCESS_TOKEN_PROJECT_B);
-      expect(volcano.currentUser).toEqual({ id: 'user-2' });
+      expect(volcano.currentUser).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should reject non-hostname-safe identifiers (no fallback)', async () => {
@@ -6043,7 +6256,7 @@ describe('VolcanoAuth', () => {
       instanceA._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
-        user: { id: 'user-b' },
+        user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
       });
       releaseResolve();
       const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
@@ -6086,7 +6299,7 @@ describe('VolcanoAuth', () => {
       instanceA._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
-        user: { id: 'user-b' },
+        user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
       });
       resolveGate.resolve();
       const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
@@ -6158,7 +6371,7 @@ describe('VolcanoAuth', () => {
               Promise.resolve({
                 access_token: refreshedToken,
                 refresh_token: 'rotated-refresh-token-b',
-                user: { id: 'user-b' },
+                user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
                 expires_in: 3600,
               }),
           };
@@ -6177,7 +6390,7 @@ describe('VolcanoAuth', () => {
       instanceA._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'replacement-refresh-token',
-        user: { id: 'replacement-user' },
+        user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       resolveGate.resolve();
       const [resultA, resultB] = await Promise.all([invokeA, invokeB]);
@@ -6416,7 +6629,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'restored-user' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'restored-user', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await newVolcano.initialize();
@@ -6532,7 +6748,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.updateUser({ password: 'newpass123' });
@@ -6546,7 +6765,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.updateUser({ metadata: { name: 'Test' } });
@@ -6560,7 +6782,10 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ user: { id: 'user-123' } }),
+        json: () =>
+          Promise.resolve({
+            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+          }),
       });
 
       const result = await volcano.auth.updateUser({

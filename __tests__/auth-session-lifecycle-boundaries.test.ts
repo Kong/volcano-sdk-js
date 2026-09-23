@@ -14,7 +14,8 @@ import {
 const session = {
   access_token: 'access',
   refresh_token: 'refresh',
-  user: { id: 'user-1' },
+  expires_in: 3600,
+  user: { id: 'user-1', email: 'user@example.com', status: 'active' } as const,
 };
 
 type RequestResult = Awaited<ReturnType<AuthLifecycleHost['_anonFetch']>>;
@@ -33,7 +34,7 @@ function fixture(refreshToken: string | null = 'refresh'): {
   };
   const host: AuthLifecycleHost = {
     refreshToken,
-    currentUser: { id: 'user-1' },
+    currentUser: session.user,
     _oauthExchangeError: null,
     _oauthExchangePromise: null,
     _completeOAuthExchange: jest.fn(() => Promise.resolve()),

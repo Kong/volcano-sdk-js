@@ -13,7 +13,7 @@ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const session = {
   access_token: 'access',
   refresh_token: 'refresh',
-  user: { id: 'user-1' },
+  user: { id: 'user-1', email: 'user@example.com', status: 'active' },
 };
 
 function setWindow(location: unknown): void {

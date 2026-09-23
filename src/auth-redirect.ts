@@ -177,7 +177,7 @@ async function exchangeOAuthCode(
   if (expectedGeneration !== host._sessionGeneration) {
     return false;
   }
-  if (!result.ok) {
+  if (result.ok !== true) {
     host._oauthExchangeError = exchangeFailure(result.error);
     return false;
   }

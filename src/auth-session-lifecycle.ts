@@ -1,8 +1,12 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
-import { optionalField } from './auth-response.ts';
 import { AuthSessionOperations } from './auth-session.ts';
-import type { CompleteSessionFields } from './auth-validation.ts';
+import {
+  assertAuthTokenResponse,
+  type AuthTokenFields,
+  type CompleteSessionFields,
+} from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
+import type { Session, User } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
 interface RequestBase {
@@ -23,14 +27,14 @@ interface FailedRequest extends RequestBase {
 type RequestResult = SuccessfulRequest | FailedRequest;
 
 export interface SuccessfulRefresh extends SuccessfulRequest {
-  data: CompleteSessionFields;
+  data: CompleteSessionFields & AuthTokenFields;
 }
 
 export type FailedRefresh = FailedRequest;
 
 export type RefreshResult = SuccessfulRefresh | FailedRefresh;
 export interface SignOutResult {
-  error: unknown;
+  error: Error | null;
 }
 
 export interface AuthContext {
@@ -43,8 +47,8 @@ export interface AuthContext {
 
 export interface AuthLifecycleHost {
   readonly refreshToken: string | null;
-  readonly currentUser: unknown;
-  _oauthExchangeError: unknown;
+  readonly currentUser: User | null;
+  _oauthExchangeError: Error | null;
   _oauthExchangePromise: Promise<boolean> | null;
   _completeOAuthExchange(): Promise<void>;
   _captureAuthContext(): AuthContext;
@@ -127,7 +131,7 @@ function assertUsablePreceding(preceding: PrecedingRefresh, verified: boolean): 
 function finishSignOut(
   host: AuthLifecycleHost,
   context: AuthContext,
-  error: unknown,
+  error: Error | null,
 ): SignOutResult {
   const hasSessionId = extractSessionIdFromToken(context.accessToken) !== null;
   const cleared = hasSessionId
@@ -154,7 +158,11 @@ export async function signOutCaptured(
   } catch (reason) {
     error = normalizedError(reason, 'Session revocation failed');
   }
-  return finishSignOut(host, context, error);
+  return finishSignOut(
+    host,
+    context,
+    error === null ? null : normalizedError(error, 'Sign out failed'),
+  );
 }
 
 function removeSession(host: AuthLifecycleHost, path: string, credential: string | null) {
@@ -206,8 +214,8 @@ export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshRe
 }
 
 interface RefreshResponse {
-  session: { access_token: string; refresh_token: string; expires_in: unknown } | null;
-  error: unknown;
+  session: Session | null;
+  error: Error | null;
 }
 
 export async function refreshSessionForContext(
@@ -226,7 +234,7 @@ export async function refreshSessionForContext(
   try {
     validateRefreshSource(context);
   } catch (error) {
-    return { session: null, error };
+    return { session: null, error: normalizedError(error, 'Refresh failed') };
   }
   return performSessionRefresh(host, context);
 }
@@ -261,15 +269,15 @@ function validateSuccessfulRefresh(
   context: AuthContext,
   userId: string | null | undefined,
 ): asserts result is SuccessfulRefresh {
+  assertAuthTokenResponse(result.data);
   validateSessionContinuation(result.data, context, userId);
 }
 
-function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string | null | undefined {
+function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string | null {
   if (!host._isAuthContextCurrent(context)) {
     return context.userId;
   }
-  const id = optionalField(host.currentUser, 'id');
-  return typeof id === 'string' ? id : null;
+  return host.currentUser?.id ?? null;
 }
 
 async function refreshResult(
@@ -302,7 +310,7 @@ function settledRefresh(
     session: {
       access_token: result.data.access_token,
       refresh_token: result.data.refresh_token,
-      expires_in: Reflect.get(result.data, 'expires_in'),
+      expires_in: result.data.expires_in,
     },
     error: null,
   };

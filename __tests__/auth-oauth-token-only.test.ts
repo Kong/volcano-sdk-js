@@ -18,6 +18,7 @@ function jsonResponse(body: unknown): Response {
 }
 
 test('OAuth callback accepts cookie-backed token responses without a refresh token', async () => {
+  const user = { id: 'cookie-user', email: 'cookie@example.com', status: 'active' } as const;
   const storage = (initial: Record<string, string>) => {
     const items = new Map(Object.entries(initial));
     return {
@@ -59,21 +60,21 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
         access_token: 'cookie-session-access',
         token_type: 'bearer',
         expires_in: 3600,
-        user: { id: 'cookie-user' },
+        user,
       }),
     )
-    .mockResolvedValueOnce(jsonResponse({ user: { id: 'cookie-user' } }));
+    .mockResolvedValueOnce(jsonResponse({ user }));
 
   const client = new VolcanoAuth({ apiUrl: 'https://api.example.com', anonKey: 'ak-test' });
   const initialized = await client.initialize();
   const current = await client.auth.getSession();
 
   expect(initialized.error).toBeNull();
-  expect(initialized.user?.id).toBe('cookie-user');
+  expect(initialized.user).toEqual(user);
   expect(current.data.session).toEqual({
     access_token: 'cookie-session-access',
     refresh_token: null,
-    user: { id: 'cookie-user' },
+    user,
   });
   expect(localStorage.getItem('volcano_refresh_token')).toBeNull();
   expect(localStorage.getItem('volcano_access_token')).toBe('cookie-session-access');
