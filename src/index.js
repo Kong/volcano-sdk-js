@@ -33,9 +33,11 @@ import {
   stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { cloneJsonValue } from './json-clone.ts';
 import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
+import { isBrowser } from './next/request.ts';
 import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
@@ -150,22 +152,6 @@ const GENERATED_TRANSPORT = {
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Detect if we're running in a browser/client-side environment.
- */
-function isBrowser() {
-  return typeof window !== 'undefined' && window.document !== undefined;
-}
-
-function cloneJsonValue(value) {
-  if (typeof globalThis.structuredClone === 'function') {
-    return globalThis.structuredClone(value);
-  }
-
-  const serializedValue = JSON.stringify(value);
-  return JSON.parse(serializedValue);
-}
 
 function authSessionChangedResult() {
   const error = new AuthSessionChangedError();
@@ -3394,7 +3380,8 @@ async function loadRealtime() {
 // at runtime. See VOL-505.
 const VolcanoClient = VolcanoAuth;
 
-export { isBrowser, loadRealtime, QueryBuilder, StorageFileApi, VolcanoAuth, VolcanoClient };
+export { loadRealtime, QueryBuilder, StorageFileApi, VolcanoAuth, VolcanoClient };
+export { isBrowser } from './next/request.ts';
 export default VolcanoAuth;
 
 export { databaseConnectionString } from './database-connection-string.ts';
