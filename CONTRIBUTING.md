@@ -41,7 +41,7 @@ server-backed SDK integration tests.
 
 - `src/index.js` contains the main SDK client.
 - `src/realtime.js` contains the realtime WebSocket client.
-- `src/next/middleware.js` contains Next.js middleware helpers.
+- `src/next/middleware.ts` contains Next.js middleware helpers.
 - `src/*.d.ts` and `src/next/*.d.ts` contain checked-in TypeScript
   declarations.
 - `openapi/openapi.yaml` is the vendored public API contract.

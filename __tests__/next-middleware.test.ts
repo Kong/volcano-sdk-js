@@ -5,7 +5,7 @@ import {
   type ServerClientConfig,
   type User,
   withAuth,
-} from '../src/next/middleware.js';
+} from '../src/next/middleware.ts';
 
 const config: ServerClientConfig = {
   apiUrl: 'https://api.test.com',
@@ -51,6 +51,7 @@ describe('Next.js middleware helpers', () => {
   test.each([
     ['server message', Response.json({ error: 'denied' }, { status: 401 }), 'denied'],
     ['fallback message', Response.json({}, { status: 403 }), 'Auth failed: 403'],
+    ['non-object body', Response.json(null, { status: 401 }), 'Auth failed: 401'],
     ['malformed body', new Response('not json', { status: 502 }), 'Auth failed: 502'],
   ])('getUser reports %s on HTTP errors', async (_case, response, message) => {
     jest.mocked(globalThis.fetch).mockResolvedValueOnce(response);
@@ -70,6 +71,18 @@ describe('Next.js middleware helpers', () => {
     });
   });
 
+  test.each([
+    ['non-object body', null],
+    ['invalid metadata', { user: { ...user('user-123'), user_metadata: 'invalid' } }],
+  ])('getUser rejects %s in a successful response', async (_case, payload) => {
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json(payload));
+
+    await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
+      user: null,
+      error: null,
+    });
+  });
+
   test('getUser reports transport failures', async () => {
     const failure = new Error('offline');
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
@@ -77,6 +90,18 @@ describe('Next.js middleware helpers', () => {
     await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
       user: null,
       error: failure,
+    });
+  });
+
+  test.each([
+    ['record without a name', { message: 'offline' }],
+    ['string', 'offline'],
+  ])('getUser normalizes a rejected %s to an Error', async (_case, failure) => {
+    jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
+
+    await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
+      user: null,
+      error: new Error('offline'),
     });
   });
 
@@ -114,6 +139,7 @@ describe('Next.js middleware helpers', () => {
   test.each([
     ['server message', Response.json({ error: 'expired' }, { status: 401 }), 'expired'],
     ['fallback message', Response.json({}, { status: 429 }), 'Refresh failed: 429'],
+    ['non-object body', Response.json(null, { status: 401 }), 'Refresh failed: 401'],
     ['malformed body', new Response('not json', { status: 502 }), 'Refresh failed: 502'],
   ])('refreshToken reports %s on HTTP errors', async (_case, response, message) => {
     jest.mocked(globalThis.fetch).mockResolvedValueOnce(response);
@@ -133,6 +159,20 @@ describe('Next.js middleware helpers', () => {
     expect(result.accessToken).toBeNull();
     expect(result.refreshToken).toBeNull();
     expect(result.error).toMatchObject({ name: 'SyntaxError' });
+  });
+
+  test.each([
+    ['non-object body', null],
+    ['missing access token', { refresh_token: 'next-refresh' }],
+    ['missing refresh token', { access_token: 'next-access' }],
+  ])('refreshToken rejects %s in a successful response', async (_case, payload) => {
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json(payload));
+
+    await expect(createServerClient(config).refreshToken('current-refresh')).resolves.toEqual({
+      accessToken: null,
+      refreshToken: null,
+      error: new TypeError('Invalid refresh response'),
+    });
   });
 
   test('refreshToken reports transport failures', async () => {

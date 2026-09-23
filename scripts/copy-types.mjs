@@ -22,8 +22,8 @@ const declarationFiles = [
   ['src/realtime.d.ts', 'dist/realtime.esm.d.mts', toEsmDeclaration],
   ['src/durable.d.ts', 'dist/durable.d.ts'],
   ['src/durable.d.ts', 'dist/durable.esm.d.mts', toEsmDeclaration],
-  ['src/next/middleware.d.ts', 'dist/next/middleware.d.ts'],
-  ['src/next/middleware.d.ts', 'dist/next/middleware.esm.d.mts', toEsmDeclaration],
+  ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.d.ts', toCjsDeclaration],
+  ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.esm.d.mts', toEsmDeclaration],
 ];
 
 for (const [source, target, transform] of declarationFiles) {
@@ -34,6 +34,10 @@ for (const [source, target, transform] of declarationFiles) {
 
 await rm('dist/typescript', { recursive: true, force: true });
 
+function toCjsDeclaration(declaration) {
+  return declaration.replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2$3');
+}
+
 function toEsmDeclaration(declaration) {
   return declaration
     .replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)(['"])/g, replaceRelativeSpecifier)
@@ -41,6 +45,9 @@ function toEsmDeclaration(declaration) {
 }
 
 function replaceRelativeSpecifier(_match, prefix, specifier, suffix) {
+  if (specifier.endsWith('.js') || specifier.endsWith('.ts')) {
+    return `${prefix}${specifier.slice(0, -3)}.esm.mjs${suffix}`;
+  }
   if (extname(specifier)) {
     return `${prefix}${specifier}${suffix}`;
   }

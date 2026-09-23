@@ -3,12 +3,7 @@ const base = require('./jest.config.js');
 module.exports = {
   ...base,
   collectCoverage: true,
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    'src/next/middleware.js',
-    '!src/**/*.d.ts',
-    '!src/generated/**',
-  ],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/generated/**'],
   coverageThreshold: {
     global: { branches: 100, functions: 100, lines: 100, statements: 100 },
   },
