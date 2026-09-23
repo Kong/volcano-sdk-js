@@ -1070,98 +1070,9 @@ export interface ProjectLocks {
   ): Promise<ProjectLockResult<T>>;
 }
 
-export class VolcanoAuth {
-  constructor(config: VolcanoAuthConfig);
 
-  /** Authentication methods */
-  auth: Auth;
-
-  /** Function invocation methods */
-  functions: Functions;
-
-  /** Durable execution methods */
-  durable: Durable;
-
-  /** Project log methods */
-  logs: Logs;
-
-  /** Storage methods */
-  storage: Storage;
-
-  /** Service-role-only project lease methods */
-  locks: ProjectLocks;
-
-  /** Set current database name for query builder (required before querying) */
-  database(databaseName: string): VolcanoAuth;
-
-  /** Start a query on a table */
-  from<T = Record<string, JsonValue>>(table: string): QueryBuilder<T>;
-
-  /** Insert data into a table */
-  insert<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): MutationBuilder<T>;
-
-  /** Update data in a table */
-  update<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): MutationBuilder<T>;
-
-  /** Delete data from a table */
-  delete<T = Record<string, JsonValue>>(table: string): MutationBuilder<T>;
-
-  /** Initialize SDK and restore session from localStorage */
-  initialize(): Promise<UserResponse>;
-}
-
-export { VolcanoAuth as VolcanoClient };
-
-export default VolcanoAuth;
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Detect if we're running in a browser/client-side environment.
- * Useful for SSR-safe code.
- *
- * @example
- * ```typescript
- * import { isBrowser } from '@volcano.dev/sdk';
- *
- * if (isBrowser()) {
- *   // Safe to use window, document, localStorage, etc.
- * }
- * ```
- */
-export function isBrowser(): boolean;
-
-/**
- * Realtime module types for lazy loading
- */
 export interface RealtimeModule {
   VolcanoRealtime: typeof import('./realtime').VolcanoRealtime;
   RealtimeChannel: typeof import('./realtime').RealtimeChannel;
 }
 
-/**
- * Lazy-load the realtime module.
- * Prefer direct import: import { VolcanoRealtime } from '@volcano.dev/sdk/realtime'
- *
- * @example
- * ```typescript
- * import { loadRealtime } from '@volcano.dev/sdk';
- *
- * const { VolcanoRealtime } = await loadRealtime();
- * const realtime = new VolcanoRealtime({ ... });
- * ```
- */
-export function loadRealtime(): Promise<RealtimeModule>;
-
-export {
-  databaseConnectionString,
-  type DatabaseConnectionStringOptions,
-} from './database-connection-string';

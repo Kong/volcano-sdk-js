@@ -1,6 +1,5 @@
 import { AuthSessionOperations } from './auth-session.ts';
 import { validateOAuthSession } from './auth-validation.ts';
-import type { User } from './index.js';
 
 const accessTokenKey = 'volcano_access_token';
 const refreshTokenKey = 'volcano_refresh_token';
@@ -11,7 +10,7 @@ export interface RedirectHost {
   _sessionOperations: AuthSessionOperations<unknown, unknown>;
   accessToken: string | null;
   refreshToken: string | null;
-  currentUser: User | null;
+  currentUser: unknown;
   _hasSessionInUrl(): boolean;
   _takeAuthState(): string | null;
   _takeAuthRedirectURL(): string | null;
@@ -28,7 +27,7 @@ export interface OAuthRedirectHost extends RedirectHost {
   _anonFetch(
     path: string,
     options: { method: 'POST'; body: string },
-  ): Promise<{ ok: boolean; data: unknown; error: unknown }>;
+  ): Promise<{ ok?: boolean; data: unknown; error: unknown }>;
   _setSession(data: unknown, expectedGeneration: number): boolean;
 }
 

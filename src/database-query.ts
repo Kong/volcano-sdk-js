@@ -184,3 +184,6 @@ function queryCount(count: unknown, rowCount: number): number {
 }
 
 Object.assign(QueryBuilder.prototype, FilterMixin);
+
+type FilterMethods = typeof FilterMixin;
+export interface QueryBuilder extends FilterMethods {}

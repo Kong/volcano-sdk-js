@@ -15,7 +15,7 @@ export interface AuthHttpHost {
   _completeOAuthExchange(): Promise<void>;
   _captureAuthContext(): AuthContext;
   _isAuthContextCurrent(context: AuthContext): boolean;
-  _refreshSessionForContext(context: AuthContext): Promise<{ error: Error | null }>;
+  _refreshSessionForContext(context: AuthContext): Promise<{ error: unknown }>;
 }
 
 type Deferred<Value> = Value | (() => Value);

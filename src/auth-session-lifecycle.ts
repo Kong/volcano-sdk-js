@@ -1,4 +1,5 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
+import { optionalField } from './auth-response.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import type { CompleteSessionFields } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
@@ -42,7 +43,7 @@ export interface AuthContext {
 
 export interface AuthLifecycleHost {
   readonly refreshToken: string | null;
-  readonly currentUser: { id: string } | null;
+  readonly currentUser: unknown;
   _oauthExchangeError: unknown;
   _oauthExchangePromise: Promise<boolean> | null;
   _completeOAuthExchange(): Promise<void>;
@@ -264,7 +265,11 @@ function validateSuccessfulRefresh(
 }
 
 function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string | null | undefined {
-  return host._isAuthContextCurrent(context) ? host.currentUser?.id : context.userId;
+  if (!host._isAuthContextCurrent(context)) {
+    return context.userId;
+  }
+  const id = optionalField(host.currentUser, 'id');
+  return typeof id === 'string' ? id : null;
 }
 
 async function refreshResult(

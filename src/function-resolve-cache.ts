@@ -10,6 +10,48 @@ export interface FunctionResolveState {
   lastPruneAtMs: number;
 }
 
+export interface CachedFunctionResolution {
+  functionId: string | null;
+  invokeUrl?: unknown;
+  error: string | null;
+  errorMetadata?: Record<string, unknown>;
+  expiresAt: number;
+}
+
+export function cachedFunctionResolution(value: unknown): CachedFunctionResolution | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  if (!('expiresAt' in value) || typeof value.expiresAt !== 'number') {
+    return null;
+  }
+  if (!('functionId' in value) || !validCacheId(value.functionId)) {
+    return null;
+  }
+  if (!('error' in value) || !validCacheError(value.error)) {
+    return null;
+  }
+  const metadata = 'errorMetadata' in value ? value.errorMetadata : undefined;
+  if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
+    return null;
+  }
+  return {
+    expiresAt: value.expiresAt,
+    functionId: value.functionId,
+    error: value.error,
+    ...('invokeUrl' in value ? { invokeUrl: value.invokeUrl } : {}),
+    ...(metadata === undefined ? {} : { errorMetadata: Object.fromEntries(Object.entries(metadata)) }),
+  };
+}
+
+function validCacheId(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function validCacheError(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
 declare global {
   // The V1 key shares resolution across SDK copies in one JavaScript realm.
   var __VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__: FunctionResolveState | undefined;

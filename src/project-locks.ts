@@ -9,15 +9,10 @@ import type {
   ProjectLocks,
   ProjectLockState,
 } from './index.js';
+import type { RequestResult } from './auth-request.ts';
 import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
-
-interface LockResponse {
-  ok: boolean;
-  data: unknown;
-  error: ProjectLockError | null;
-}
 
 export interface LockClient {
   readonly accessToken: string | null;
@@ -39,7 +34,7 @@ export interface LockClient {
       body?: string;
       signal?: AbortSignal;
     },
-  ): Promise<LockResponse>;
+  ): Promise<RequestResult>;
 }
 
 const CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);

@@ -89,8 +89,9 @@ import { DurableFacade } from './durable-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { invokeFunction as invokeFunctionWithClient } from './function-invoke.ts';
-import { resolveFunctionByHttp } from './function-resolution.ts';
+import { isResolutionOutcome, resolveFunctionByHttp } from './function-resolution.ts';
 import {
+  cachedFunctionResolution,
   clearFunctionResolveCache,
   clearSharedFunctionResolveStateForTests,
   functionResolveCacheKey,
@@ -109,10 +110,23 @@ import {
   startDurableExecutionFromApplication,
   stopDurableExecution,
   uploadStorageObject,
-} from './generated-runtime/client.js';
+} from './generated/client.ts';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
 import { StorageFileApi } from './storage-file.ts';
+import type { AuthContext, RefreshResult, SignOutResult } from './auth-session-lifecycle.ts';
+import type { FunctionResolveState } from './function-resolve-cache.ts';
+import type {
+  Auth,
+  Durable,
+  Functions,
+  Logs,
+  ProjectLocks,
+  Storage,
+  VolcanoAuthConfig,
+} from './sdk-public-types.ts';
+
+export type * from './sdk-public-types.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -180,7 +194,34 @@ const GENERATED_TRANSPORT = {
 // ============================================================================
 
 class VolcanoAuth {
-  constructor(config) {
+  readonly apiUrl: string;
+  readonly anonKey: string;
+  readonly timeout: number;
+  _currentDatabaseName: string | null;
+  currentUser: unknown;
+  _sessionGeneration: number;
+  _urlSessionConsumed: boolean;
+  _pendingUrlAuthNotify: boolean;
+  _oauthExchangePromise: Promise<boolean> | null;
+  _sessionOperations: AuthSessionOperations<RefreshResult, SignOutResult>;
+  _oauthExchangeError: Error | null;
+  _authCallbacks: ((user: unknown) => void)[];
+  _functionResolveState: FunctionResolveState;
+  _transport: typeof GENERATED_TRANSPORT;
+  _durableFacade: DurableFacade;
+  accessToken: string | null;
+  refreshToken: string | null;
+  auth: Auth;
+  functions: Functions;
+  durable: Durable;
+  logs: Logs;
+  storage: Storage;
+  locks: ProjectLocks;
+
+  constructor(config: VolcanoAuthConfig & {
+    timeout?: number;
+    transportFactory?: (client: VolcanoAuth) => typeof GENERATED_TRANSPORT;
+  }) {
     if (!config.anonKey) {
       throw new Error('anonKey is required. Get your anon key from project settings.');
     }
@@ -317,7 +358,7 @@ class VolcanoAuth {
   // Logs Methods
   // ========================================================================
 
-  async _postProjectLogRequest(projectId, endpoint, request) {
+  async _postProjectLogRequest(projectId: string, endpoint: string, request: unknown) {
     if (typeof projectId !== 'string' || projectId.trim() === '') {
       return { data: null, error: new Error('projectId must be a non-empty string') };
     }
@@ -337,11 +378,11 @@ class VolcanoAuth {
     return { data: result.data, error: null };
   }
 
-  searchLogs(projectId, request) {
+  searchLogs(projectId: string, request: import("./sdk-public-types.ts").LogSearchRequest) {
     return this._postProjectLogRequest(projectId, 'search', request);
   }
 
-  getLogActivity(projectId, request) {
+  getLogActivity(projectId: string, request: import("./sdk-public-types.ts").LogActivityRequest) {
     return this._postProjectLogRequest(projectId, 'activity', request);
   }
 
@@ -354,7 +395,7 @@ class VolcanoAuth {
    * @param {string} bucketName - The name of the bucket
    * @returns {StorageFileApi} - Storage file API for the bucket
    */
-  storageBucket(bucketName) {
+  storageBucket(bucketName: string) {
     return new StorageFileApi(this, bucketName);
   }
 
@@ -366,20 +407,24 @@ class VolcanoAuth {
    * Make an authenticated request with access token
    * @private
    */
-  async _authFetch(path, options = {}) {
+  async _authFetch(path: string | (() => string), options: RequestInit | (() => RequestInit) = {}) {
     const { result } = await this._authFetchWithContext(path, options);
     return result;
   }
 
-  async _authFetchWithContext(path, options = {}) {
+  async _authFetchWithContext(path: string | (() => string), options: RequestInit | (() => RequestInit) = {}) {
     return authFetchWithContext(this, path, options);
   }
 
-  async _authFetchUrl(url, fetchOptions = {}) {
+  async _authFetchUrl(url: string, fetchOptions: RequestInit = {}) {
     return authFetchUrl(this, url, fetchOptions);
   }
 
-  _generatedOptions(volcanoAuthorization, headers, responseType) {
+  _generatedOptions(
+    volcanoAuthorization: 'anon' | 'session',
+    headers?: Record<string, string>,
+    responseType?: 'blob',
+  ) {
     return {
       volcanoAuthorization,
       volcanoClient: this,
@@ -388,7 +433,7 @@ class VolcanoAuth {
     };
   }
 
-  async _generatedFetch(path, options, authorization) {
+  async _generatedFetch(path: string, options: RequestInit, authorization: "anon" | "session") {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
       return fetchWithTimeout(
@@ -407,23 +452,28 @@ class VolcanoAuth {
     return fetchWithAuthRetry(this, url, options);
   }
 
-  _getFunctionInvokeUrl(functionIdentifier, resolvedInvokeUrl) {
+  _getFunctionInvokeUrl(functionIdentifier: unknown, resolvedInvokeUrl: unknown) {
     return functionInvokeUrl(this.apiUrl, functionIdentifier, resolvedInvokeUrl);
   }
 
-  _functionResolveCacheKey(functionName, token, useAnonKey) {
+  _functionResolveCacheKey(functionName: string, token: string, useAnonKey: boolean) {
     return functionResolveCacheKey(this.apiUrl, functionName, token, useAnonKey);
   }
 
-  _clearFunctionResolveCache(functionName, token, useAnonKey) {
+  _clearFunctionResolveCache(functionName: string, token: string, useAnonKey: boolean) {
     const cacheKey = this._functionResolveCacheKey(functionName, token, useAnonKey);
     clearFunctionResolveCache(this._functionResolveState, cacheKey);
   }
 
   async _resolveFunctionIdByName(
-    functionName,
-    { authContext, token, useAnonKey, allowRefresh = true },
-  ) {
+    functionName: string,
+    {
+      authContext,
+      token,
+      useAnonKey,
+      allowRefresh = true,
+    }: { authContext: AuthContext; token: string | null; useAnonKey: boolean; allowRefresh?: boolean },
+  ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
       throw new Error(
@@ -435,17 +485,21 @@ class VolcanoAuth {
       throw new AuthSessionChangedError();
     }
 
+    if (token === null) {
+      throw new Error('No credential available to resolve function');
+    }
     const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
-    const cached = this._functionResolveState.cache.get(cacheKey);
+    const rawCached = this._functionResolveState.cache.get(cacheKey);
+    const cached = cachedFunctionResolution(rawCached);
     if (cached && cached.expiresAt > now) {
       if (cached.error) {
         throw Object.assign(new Error(cached.error), { status: 404 }, cached.errorMetadata);
       }
       return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
     }
-    if (cached) {
+    if (rawCached !== undefined) {
       this._functionResolveState.cache.delete(cacheKey);
     }
 
@@ -471,6 +525,10 @@ class VolcanoAuth {
       }
       if (!this._isAuthContextCurrent(authContext)) {
         throw new AuthSessionChangedError();
+      }
+
+      if (!isResolutionOutcome(outcome)) {
+        throw new Error('Invalid in-flight function resolution');
       }
 
       if (outcome.error) {
@@ -512,7 +570,7 @@ class VolcanoAuth {
    * Make a public request with anon key
    * @private
    */
-  async _anonFetch(path, options = {}) {
+  async _anonFetch(path: string, options: RequestInit = {}) {
     return anonFetch(this, path, options);
   }
 
@@ -520,24 +578,24 @@ class VolcanoAuth {
   // Query Builder Methods
   // ========================================================================
 
-  from(table) {
+  from(table: string) {
     return new QueryBuilder(this, table, this._currentDatabaseName);
   }
 
-  database(databaseName) {
+  database(databaseName: string) {
     this._currentDatabaseName = databaseName;
     return this;
   }
 
-  insert(table, values) {
+  insert(table: string, values: Record<string, unknown>) {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
   }
 
-  update(table, values) {
+  update(table: string, values: Record<string, unknown>) {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
   }
 
-  delete(table) {
+  delete(table: string) {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'delete', null);
   }
 
@@ -545,11 +603,11 @@ class VolcanoAuth {
   // Authentication Methods
   // ========================================================================
 
-  async signUp(options) {
+  async signUp(options: Parameters<typeof signUpAccount>[1]) {
     return signUpAccount(this, options);
   }
 
-  async signIn(options) {
+  async signIn(options: Parameters<typeof signInAccount>[1]) {
     return signInAccount(this, options);
   }
 
@@ -557,7 +615,7 @@ class VolcanoAuth {
     return getAccountSession(this);
   }
 
-  setSession(session) {
+  setSession(session: Parameters<typeof adoptAccountSession>[1]) {
     return adoptAccountSession(this, session);
   }
 
@@ -565,11 +623,11 @@ class VolcanoAuth {
     return signOut(this);
   }
 
-  async _signOutCaptured(context, refreshing) {
+  async _signOutCaptured(context: Parameters<typeof signOutCaptured>[1], refreshing: Parameters<typeof signOutCaptured>[2]) {
     return signOutCaptured(this, context, refreshing);
   }
 
-  async _revokeAccessSession(context, sessionId, preceding) {
+  async _revokeAccessSession(context: Parameters<typeof revokeAccessSession>[1], sessionId: string, preceding: Parameters<typeof revokeAccessSession>[3]) {
     return revokeAccessSession(this, context, sessionId, preceding);
   }
 
@@ -577,7 +635,7 @@ class VolcanoAuth {
     return getAccountUser(this);
   }
 
-  async updateUser(options) {
+  async updateUser(options: Parameters<typeof updateAccountUser>[1]) {
     return updateAccountUser(this, options);
   }
 
@@ -585,15 +643,15 @@ class VolcanoAuth {
     return refreshSession(this);
   }
 
-  async _refreshSessionForContext(context) {
+  async _refreshSessionForContext(context: AuthContext) {
     return refreshSessionForContext(this, context);
   }
 
-  async _fetchSessionRefresh(context) {
+  async _fetchSessionRefresh(context: AuthContext) {
     return fetchSessionRefresh(this, context);
   }
 
-  async _performSessionRefresh(context) {
+  async _performSessionRefresh(context: AuthContext) {
     return performSessionRefresh(this, context);
   }
 
@@ -602,7 +660,7 @@ class VolcanoAuth {
    * @param {Function} callback - Called with user object (or null) on auth state change
    * @returns {Function} Unsubscribe function
    */
-  onAuthStateChange(callback) {
+  onAuthStateChange(callback: Parameters<typeof subscribeToAuthState>[1]) {
     return subscribeToAuthState(this, callback);
   }
 
@@ -610,15 +668,15 @@ class VolcanoAuth {
   // Anonymous User Methods
   // ========================================================================
 
-  async signInAnonymously(metadata = {}) {
+  async signInAnonymously(metadata: Record<string, unknown> = {}) {
     return signInAnonymousAccount(this, metadata);
   }
 
-  async signUpAnonymous(metadata = {}) {
+  async signUpAnonymous(metadata: Record<string, unknown> = {}) {
     return signUpAnonymousAccount(this, metadata);
   }
 
-  async convertAnonymous(options) {
+  async convertAnonymous(options: Parameters<typeof convertAnonymousAccount>[1]) {
     return convertAnonymousAccount(this, options);
   }
 
@@ -626,11 +684,11 @@ class VolcanoAuth {
   // Email Confirmation Methods
   // ========================================================================
 
-  async confirmEmail(token) {
+  async confirmEmail(token: string) {
     return confirmAccountEmail(this, token);
   }
 
-  async resendConfirmation(email) {
+  async resendConfirmation(email: string) {
     return resendAccountConfirmation(this, email);
   }
 
@@ -638,15 +696,15 @@ class VolcanoAuth {
   // Password Recovery Methods
   // ========================================================================
 
-  async forgotPassword(email) {
+  async forgotPassword(email: string) {
     return forgotAccountPassword(this, email);
   }
 
-  async resetPasswordForEmail(email) {
+  async resetPasswordForEmail(email: string) {
     return resetAccountPasswordForEmail(this, email);
   }
 
-  async resetPassword(options) {
+  async resetPassword(options: Parameters<typeof resetAccountPassword>[1]) {
     return resetAccountPassword(this, options);
   }
 
@@ -654,11 +712,11 @@ class VolcanoAuth {
   // Email Change Methods
   // ========================================================================
 
-  async requestEmailChange(newEmail) {
+  async requestEmailChange(newEmail: string) {
     return requestAccountEmailChange(this, newEmail);
   }
 
-  async confirmEmailChange(emailChangeToken) {
+  async confirmEmailChange(emailChangeToken: string) {
     return confirmAccountEmailChange(this, emailChangeToken);
   }
 
@@ -670,23 +728,23 @@ class VolcanoAuth {
   // OAuth / SSO Authentication
   // ========================================================================
 
-  signInWithOAuth(provider, options = {}) {
+  signInWithOAuth(provider: Parameters<typeof beginOAuth>[1], options: Parameters<typeof beginOAuth>[2] = {}) {
     return beginOAuth(this, provider, options);
   }
 
-  _resolveOAuthRedirectTarget(redirectTo) {
+  _resolveOAuthRedirectTarget(redirectTo: string | undefined) {
     return resolveOAuthRedirectTarget(redirectTo);
   }
 
-  getHostedAuthUrl(options = {}) {
+  getHostedAuthUrl(options: Parameters<typeof createHostedAuthUrl>[1] = {}) {
     return createHostedAuthUrl(this, options);
   }
 
-  signInWithHostedAuth(options = {}) {
+  signInWithHostedAuth(options: Parameters<typeof beginHostedAuth>[1] = {}) {
     return beginHostedAuth(this, options);
   }
 
-  _resolveProjectIdForHostedAuth(explicitProjectId) {
+  _resolveProjectIdForHostedAuth(explicitProjectId: string | undefined) {
     return resolveProjectIdForHostedAuth(this, explicitProjectId);
   }
 
@@ -703,11 +761,11 @@ class VolcanoAuth {
     return signInWithProvider(this, 'apple');
   }
 
-  async linkOAuthProvider(provider) {
+  async linkOAuthProvider(provider: string) {
     return linkAccountProvider(this, provider);
   }
 
-  async unlinkOAuthProvider(provider) {
+  async unlinkOAuthProvider(provider: string) {
     return unlinkAccountProvider(this, provider);
   }
 
@@ -715,15 +773,15 @@ class VolcanoAuth {
     return getAccountLinkedProviders(this);
   }
 
-  async refreshOAuthToken(provider) {
+  async refreshOAuthToken(provider: string) {
     return refreshAccountProviderToken(this, provider);
   }
 
-  async getOAuthProviderToken(provider) {
+  async getOAuthProviderToken(provider: string) {
     return getAccountProviderToken(this, provider);
   }
 
-  async callOAuthAPI(provider, params) {
+  async callOAuthAPI(provider: string, params: Parameters<typeof callProviderAPI>[2]) {
     return callProviderAPI(this, provider, params);
   }
 
@@ -731,11 +789,11 @@ class VolcanoAuth {
   // Session Management (User's sessions)
   // ========================================================================
 
-  async getSessions(options = {}) {
+  async getSessions(options: Parameters<typeof getAccountSessions>[1] = {}) {
     return getAccountSessions(this, options);
   }
 
-  async deleteSession(sessionId) {
+  async deleteSession(sessionId: string) {
     return deleteAccountSession(this, sessionId);
   }
 
@@ -747,7 +805,7 @@ class VolcanoAuth {
   // Function Invocation
   // ========================================================================
 
-  async invokeFunction(functionName, payload = {}) {
+  async invokeFunction(functionName: string, payload: unknown = {}) {
     return invokeFunctionWithClient(this, functionName, payload);
   }
 
@@ -755,19 +813,19 @@ class VolcanoAuth {
   // Durable Executions
   // ========================================================================
 
-  startDurableExecution(functionName, input = {}, options = {}) {
+  startDurableExecution(functionName: string, input: unknown = {}, options: { executionName?: string } = {}) {
     return this._durableFacade.start(functionName, input, options);
   }
 
-  getDurableExecution(projectId, functionName, executionId) {
+  getDurableExecution(projectId: string, functionName: string, executionId: string) {
     return this._durableFacade.get(projectId, functionName, executionId);
   }
 
-  listDurableExecutions(projectId, functionName, options = {}) {
+  listDurableExecutions(projectId: string, functionName: string, options: Parameters<DurableFacade["list"]>[2] = {}) {
     return this._durableFacade.list(projectId, functionName, options);
   }
 
-  stopDurableExecution(projectId, functionName, executionId) {
+  stopDurableExecution(projectId: string, functionName: string, executionId: string) {
     return this._durableFacade.stop(projectId, functionName, executionId);
   }
 
@@ -779,31 +837,31 @@ class VolcanoAuth {
     return captureAuthContext(this);
   }
 
-  _adoptSessionInMemory(session) {
+  _adoptSessionInMemory(session: Parameters<typeof adoptSessionInMemory>[1]) {
     adoptSessionInMemory(this, session);
   }
 
-  _isAuthContextCurrent(context) {
+  _isAuthContextCurrent(context: AuthContext) {
     return isAuthContextCurrent(this, context);
   }
 
-  _setSession(data, expectedGeneration = this._sessionGeneration) {
+  _setSession(data: Parameters<typeof setSession>[1], expectedGeneration = this._sessionGeneration) {
     return setSession(this, data, expectedGeneration);
   }
 
-  _setRefreshedSession(data, context) {
+  _setRefreshedSession(data: Parameters<typeof setRefreshedSession>[1], context: AuthContext) {
     return setRefreshedSession(this, data, context);
   }
 
-  _clearSession(context) {
+  _clearSession(context: AuthContext) {
     return clearSession(this, context);
   }
 
-  _clearSessionAtGeneration(generation) {
+  _clearSessionAtGeneration(generation: number) {
     return clearSessionAtGeneration(this, generation);
   }
 
-  _notifyAuthCallbacks(user) {
+  _notifyAuthCallbacks(user: unknown) {
     notifyAuthCallbacks(this, user);
   }
 
@@ -823,11 +881,11 @@ class VolcanoAuth {
     return completeOAuthExchange(this);
   }
 
-  _stripOAuthQueryFromUrl(callbackURL) {
+  _stripOAuthQueryFromUrl(callbackURL: URL) {
     stripOAuthQueryFromUrl(callbackURL);
   }
 
-  _removeOAuthResponseParams(callbackURL, clearHash = true) {
+  _removeOAuthResponseParams(callbackURL: URL, clearHash = true) {
     removeOAuthResponseParams(callbackURL, clearHash);
   }
 
@@ -852,7 +910,7 @@ class VolcanoAuth {
     return consumeSessionFromUrl(this);
   }
 
-  _replaceSessionFromUrl(accessToken, refreshToken) {
+  _replaceSessionFromUrl(accessToken: string, refreshToken: string | null) {
     replaceSessionFromUrl(this, accessToken, refreshToken);
   }
 
@@ -861,7 +919,7 @@ class VolcanoAuth {
    * in history, referrers, or bookmarks. Only strips when the fragment is
    * exclusively the hand-off params, to avoid clobbering app hash routing.
    */
-  _stripAuthHashFromUrl(params) {
+  _stripAuthHashFromUrl(params: URLSearchParams) {
     stripAuthHashFromUrl(params);
   }
 
@@ -879,7 +937,7 @@ class VolcanoAuth {
 
   // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
   // survives the navigation away to the hosted page and back to this origin.
-  _storeAuthState(nonce, redirectURL = '') {
+  _storeAuthState(nonce: string, redirectURL = '') {
     storeAuthState(nonce, redirectURL);
   }
 
@@ -904,15 +962,15 @@ class VolcanoAuth {
   // Storage Helpers (Browser/Node.js compatible)
   // ========================================================================
 
-  _getStorageItem(key) {
+  _getStorageItem(key: string) {
     return getStorageItem(key);
   }
 
-  _setStorageItem(key, value) {
+  _setStorageItem(key: string, value: string) {
     setStorageItem(key, value);
   }
 
-  _removeStorageItem(key) {
+  _removeStorageItem(key: string) {
     removeStorageItem(key);
   }
 
@@ -964,7 +1022,7 @@ class VolcanoAuth {
   /**
    * @internal Test-only helper for forcing resolver cache limits.
    */
-  static __setFunctionResolveCacheMaxEntriesForTests(maxEntries) {
+  static __setFunctionResolveCacheMaxEntriesForTests(maxEntries: number) {
     const nextMax = Number(maxEntries);
     if (!Number.isInteger(nextMax) || nextMax < 1) {
       throw new Error('maxEntries must be a positive integer');

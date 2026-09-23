@@ -9,7 +9,7 @@ interface ResolutionError extends Error {
 }
 
 interface ResolveResponse {
-  ok: boolean;
+  ok?: boolean;
   status: number | null;
   data: unknown;
   error: ResolutionError | null;
@@ -28,6 +28,20 @@ export interface ResolutionOutcome {
   invokeUrl?: unknown;
   error: Error | null;
   status: number | null;
+}
+
+export function isResolutionOutcome(value: unknown): value is ResolutionOutcome {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  return (
+    'functionId' in value &&
+    (typeof value.functionId === 'string' || value.functionId === null) &&
+    'error' in value &&
+    (value.error instanceof Error || value.error === null) &&
+    'status' in value &&
+    (typeof value.status === 'number' || value.status === null)
+  );
 }
 
 export async function resolveFunctionByHttp(

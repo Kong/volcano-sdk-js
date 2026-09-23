@@ -8,7 +8,7 @@ interface DurableResult {
   error: Error | null;
 }
 interface DurableOptions {
-  status?: string;
+  status?: import('./generated/model/durableExecutionStatus.ts').DurableExecutionStatus;
   page?: number;
   limit?: number;
 }

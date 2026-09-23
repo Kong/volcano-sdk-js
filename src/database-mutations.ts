@@ -132,3 +132,6 @@ function responseField(result: unknown, field: string): unknown {
 }
 
 Object.assign(MutationBuilder.prototype, FilterMixin);
+
+type FilterMethods = typeof FilterMixin;
+export interface MutationBuilder extends FilterMethods {}
