@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment @stryker-mutator/jest-runner/jest-env/node */
 import { expect, test } from '@jest/globals';
 import { VolcanoSystemError } from '../src/errors.ts';
 import {

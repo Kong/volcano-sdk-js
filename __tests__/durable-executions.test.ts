@@ -201,6 +201,22 @@ describe('durable.get / durable.list / durable.stop', () => {
     expect(transport.stopDurableExecution).not.toHaveBeenCalled();
   });
 
+  test('refuses an owner-scoped call when the stored token is empty', async () => {
+    const getDurableExecution = jest.fn<TransportOperation>();
+    const options = {
+      apiUrl: 'https://api.test.com',
+      anonKey: 'ak-durable',
+      transportFactory: () => ({ getDurableExecution }),
+    };
+    const volcano = new VolcanoClient(options);
+    expect(Reflect.set(volcano, 'accessToken', '')).toBe(true);
+
+    await expect(volcano.durable.get('proj-1', 'orders', 'exec-1')).resolves.toMatchObject({
+      error: { message: 'No active session' },
+    });
+    expect(getDurableExecution).not.toHaveBeenCalled();
+  });
+
   // A refusal is not an exception: a caller polling an execution has to be able
   // to tell a deleted function (404) from a credential that may not read it.
   test('surfaces a platform refusal with its status', async () => {
@@ -230,6 +246,33 @@ describe('durable.get / durable.list / durable.stop', () => {
     expect(data).toBeNull();
     expect(status).toBeNull();
     expect(error?.message).toBe('Failed to stop durable execution');
+  });
+
+  test('reports a foreign list failure with the operation name', async () => {
+    const { volcano } = clientWithTransport({
+      listDurableExecutions: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => rejectWithForeignValue(null)),
+    });
+
+    await expect(volcano.durable.list('proj-1', 'orders')).resolves.toMatchObject({
+      data: null,
+      status: null,
+      error: { message: 'Failed to list durable executions' },
+    });
+  });
+
+  test('a null rejection preserves its cause and has no status', async () => {
+    const { volcano } = clientWithTransport({
+      getDurableExecution: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => rejectWithForeignValue(null)),
+    });
+
+    const result = await volcano.durable.get('proj-1', 'orders', 'exec-1');
+    expect(result.status).toBeNull();
+    expect(result.error?.message).toBe('Failed to read durable execution');
+    expect(result.error?.cause).toBeNull();
   });
 
   test('keeps malformed transport responses inside the durable result envelope', async () => {

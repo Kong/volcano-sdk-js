@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, expect, test } from '@jest/globals';
 import {
   clearSharedFunctionResolveStateForTests,
+  functionResolveCacheKey,
   getSharedFunctionResolveState,
   pruneFunctionResolveCache,
 } from '../src/function-resolve-cache.ts';
+
+test('anonymous cache keys include every credential and function scope', () => {
+  const key = functionResolveCacheKey('https://api.test', 'orders', 'token-a', true);
+  expect(key).not.toBe('');
+  expect(functionResolveCacheKey('https://api.test', 'orders', 'token-b', true)).not.toBe(key);
+  expect(functionResolveCacheKey('https://api.test', 'invoices', 'token-a', true)).not.toBe(key);
+  expect(functionResolveCacheKey('https://other.test', 'orders', 'token-a', true)).not.toBe(key);
+});
 
 beforeEach(() => {
   globalThis.__VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__ = undefined;

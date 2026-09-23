@@ -107,7 +107,10 @@ function validatedPayload(data: unknown): {
   invokeUrl: unknown;
   ttlSeconds: number;
 } {
-  const record = isRecord(data) ? data : {};
+  if (!isRecord(data)) {
+    throw new Error('Resolve response missing valid function_id');
+  }
+  const record = data;
   return {
     functionId: resolvedId(record),
     invokeUrl: record['invoke_url'],
