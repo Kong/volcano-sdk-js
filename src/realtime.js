@@ -45,6 +45,13 @@
  */
 
 import { loadCentrifuge } from './realtime-centrifuge.ts';
+import {
+  activateChannelSubscription,
+  disposeChannel,
+  resetChannelForIdentityChange,
+  subscribeChannel,
+  unsubscribeChannel,
+} from './realtime-channel-lifecycle.ts';
 import { channelFetchConfig, globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
 import {
   attachConnectionHandlers,
@@ -55,8 +62,6 @@ import {
 import { serverEventRoute } from './realtime-event-route.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 import { loadWebSocket } from './realtime-websocket.ts';
-
-const SUBSCRIPTION_READY_TIMEOUT_MS = 10_000;
 
 /**
  * VolcanoRealtime - Main realtime client
@@ -518,191 +523,23 @@ class RealtimeChannel {
    * Subscribe to the channel and resolve once it is ready
    */
   async subscribe() {
-    if (this._subscription) {
-      await this._activateSubscription();
-      return;
-    }
-
-    const client = this._realtime.getClient();
-    if (!client) {
-      throw new Error('Not connected to realtime server');
-    }
-
-    this._subscription = client.newSubscription(this._name, {
-      joinLeave: this._type === 'presence',
-    });
-
-    const subscription = this._subscription;
-    this._eventHandlers.state = ({ newState }) => {
-      // Centrifuge emits recovery publications before ready() continuations run.
-      if (this._subscription === subscription && newState === 'subscribed') {
-        this._paused = false;
-      }
-    };
-    subscription.on('state', this._eventHandlers.state);
-
-    // Set up message handler (store reference for cleanup)
-    this._eventHandlers.publication = (ctx) => {
-      if (this._paused) {
-        return;
-      }
-      const event = ctx.data?.event || 'message';
-      const callbacks = this._callbacks.get(event) || [];
-      callbacks.forEach((cb) => {
-        cb(ctx.data, ctx);
-      });
-
-      // Also trigger wildcard listeners
-      const wildcardCallbacks = this._callbacks.get('*') || [];
-      wildcardCallbacks.forEach((cb) => {
-        cb(ctx.data, ctx);
-      });
-    };
-    this._subscription.on('publication', this._eventHandlers.publication);
-
-    // Set up presence handlers for presence channels
-    if (this._type === 'presence') {
-      this._eventHandlers.presence = (ctx) => {
-        if (this._paused) {
-          return;
-        }
-        this._updatePresenceState(ctx);
-        this._triggerPresenceSync();
-      };
-      this._subscription.on('presence', this._eventHandlers.presence);
-
-      this._eventHandlers.join = (ctx) => {
-        if (this._paused) {
-          return;
-        }
-        this._presenceState[ctx.info.client] = ctx.info;
-        this._triggerPresenceSync();
-        this._triggerEvent('join', ctx.info);
-      };
-      this._subscription.on('join', this._eventHandlers.join);
-
-      this._eventHandlers.leave = (ctx) => {
-        if (this._paused) {
-          return;
-        }
-        delete this._presenceState[ctx.info.client];
-        this._triggerPresenceSync();
-        this._triggerEvent('leave', ctx.info);
-      };
-      this._subscription.on('leave', this._eventHandlers.leave);
-
-      // After subscribing, immediately fetch current presence for late joiners
-      // For server-side subscriptions, use client.presence() not subscription.presence()
-      this._eventHandlers.subscribed = async () => {
-        if (this._paused) {
-          return;
-        }
-        const lifecycleVersion = this._lifecycleVersion;
-        // Small delay to ensure subscription is fully active
-        this._presenceTimeoutId = setTimeout(async () => {
-          this._presenceTimeoutId = null;
-          try {
-            const client = this._realtime.getClient();
-            if (client && this._subscription) {
-              // Use client-level presence() for server-side subscriptions
-              const presence = await client.presence(this._name);
-
-              // Centrifuge returns presence data in `clients` field
-              if (presence?.clients && lifecycleVersion === this._lifecycleVersion) {
-                this._presenceState = {};
-                for (const [clientId, info] of Object.entries(presence.clients)) {
-                  this._presenceState[clientId] = info;
-                }
-                this._triggerPresenceSync();
-              }
-            }
-          } catch {
-            // Ignore errors - presence might not be available yet
-          }
-        }, 150);
-      };
-      this._subscription.on('subscribed', this._eventHandlers.subscribed);
-    }
-
-    await this._activateSubscription();
+    await subscribeChannel(this);
   }
 
   async _activateSubscription() {
-    const subscription = this._subscription;
-    const lifecycleVersion = this._lifecycleVersion;
-    try {
-      subscription.subscribe();
-      await subscription.ready(SUBSCRIPTION_READY_TIMEOUT_MS);
-      if (this._subscription !== subscription || this._lifecycleVersion !== lifecycleVersion) {
-        throw new Error('Subscription changed before becoming ready');
-      }
-      this._paused = false;
-    } catch (error) {
-      if (this._subscription === subscription && this._lifecycleVersion === lifecycleVersion) {
-        this.unsubscribe();
-      }
-      throw error;
-    }
+    await activateChannelSubscription(this, this._subscription);
   }
 
-  /**
-   * Pause delivery while retaining event handlers
-   */
   unsubscribe() {
-    this._paused = true;
-    this._lifecycleVersion += 1;
-    // Cancel pending presence fetch timeout
-    if (this._presenceTimeoutId) {
-      clearTimeout(this._presenceTimeoutId);
-      this._presenceTimeoutId = null;
-    }
-
-    // Clear all pending fetch timers to prevent memory leaks
-    if (this._pendingFetches) {
-      for (const batch of this._pendingFetches.values()) {
-        if (batch.timer) {
-          clearTimeout(batch.timer);
-        }
-        // Reject any pending promises
-        for (const { reject } of batch.ids.values()) {
-          reject(new Error('Channel unsubscribed'));
-        }
-      }
-      this._pendingFetches.clear();
-    }
-
-    this._subscription?.unsubscribe();
-    this._presenceState = {};
+    unsubscribeChannel(this);
   }
 
   _dispose() {
-    this._resetForIdentityChange();
-    this._callbacks.clear();
+    disposeChannel(this);
   }
 
   _resetForIdentityChange() {
-    this.unsubscribe();
-    if (this._subscription) {
-      for (const [event, handler] of Object.entries(this._eventHandlers)) {
-        try {
-          this._subscription.off(event, handler);
-        } catch {
-          // Ignore errors if listener already removed
-        }
-      }
-      this._eventHandlers = {};
-
-      // Also remove from Centrifuge client registry to allow re-subscription
-      const client = this._realtime.getClient();
-      if (client) {
-        try {
-          client.removeSubscription(this._subscription);
-        } catch {
-          // Ignore errors if subscription already removed
-        }
-      }
-      this._subscription = null;
-    }
+    resetChannelForIdentityChange(this);
   }
 
   /**
