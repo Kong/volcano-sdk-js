@@ -67,7 +67,7 @@
     "dev": "rollup -c -w",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "check:unused": "knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted",
+    "check:unused": "knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries",
     "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "pnpm build && eslint . --fix && pnpm format",
     "test": "pnpm build && jest",

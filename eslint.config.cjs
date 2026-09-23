@@ -24,7 +24,6 @@ const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
 const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/package-*.ts'];
-const integrationTestFiles = ['__tests__/integration/**/*.js'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
 const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
@@ -238,14 +237,6 @@ module.exports = [
       'promise/catch-or-return': 'off',
       'promise/no-callback-in-promise': 'off',
       'promise/param-names': 'off',
-    },
-  },
-  {
-    files: integrationTestFiles,
-    rules: {
-      // dotenv and pg are runtime-only deps of the hosting-owned integration
-      // harness, not the SDK package, so they aren't resolvable here.
-      'import-x/no-unresolved': ['error', { commonjs: true, ignore: ['^dotenv$', '^pg$'] }],
     },
   },
   {
