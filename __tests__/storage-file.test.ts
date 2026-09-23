@@ -78,6 +78,19 @@ test('authentication preserves a pending OAuth error', async () => {
   });
 });
 
+test('authentication returns the original OAuth Error with its metadata', async () => {
+  const given = fixture(null);
+  const exchangeError = Object.assign(new Error('invalid authorization code'), {
+    status: 400,
+    code: 'invalid_grant',
+    retryAfter: 2,
+  });
+  Object.assign(given.host, { _oauthExchangeError: exchangeError });
+  const result = await given.api._checkAuth();
+  expect(result?.error).toBe(exchangeError);
+  expect(result?.error).toMatchObject({ status: 400, code: 'invalid_grant', retryAfter: 2 });
+});
+
 test('authenticated storage requests add the current bearer token', async () => {
   const given = fixture();
   given.fetch.mockResolvedValue(Response.json({ ok: true }));

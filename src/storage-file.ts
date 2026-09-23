@@ -34,7 +34,7 @@ interface StorageAuthContext {
 export interface StorageAuthHost extends AuthRetryClient<StorageAuthContext> {
   readonly apiUrl: string;
   readonly anonKey: string;
-  readonly _oauthExchangeError: string | null;
+  readonly _oauthExchangeError: Error | string | null;
   readonly _transport: {
     uploadStorageObject(
       bucketName: string,
@@ -219,11 +219,11 @@ export class StorageFileApi {
   async _checkAuth(): Promise<StorageResult | null> {
     await this.volcanoAuth._completeOAuthExchange();
     if (!Boolean(this.volcanoAuth.accessToken)) {
+      const exchangeError = this.volcanoAuth._oauthExchangeError;
       return errorResult(
-        legacyStringDefault(
-          this.volcanoAuth._oauthExchangeError,
-          'No active session. Please sign in first.',
-        ),
+        exchangeError instanceof Error
+          ? exchangeError
+          : legacyStringDefault(exchangeError, 'No active session. Please sign in first.'),
       );
     }
     return null;
