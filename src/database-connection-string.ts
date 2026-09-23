@@ -95,8 +95,6 @@ function connectionParameters(rawQuery: string): string[] {
     const name = separator === -1 ? parameter : parameter.slice(0, separator);
     return decodeURIComponent(name) !== 'application_name';
   });
-  while (parameters.at(-1) === '') {
-    parameters.pop();
-  }
-  return parameters;
+  const lastNonEmpty = parameters.map((parameter) => parameter !== '').lastIndexOf(true);
+  return parameters.slice(0, lastNonEmpty + 1);
 }
