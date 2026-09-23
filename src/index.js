@@ -39,6 +39,7 @@ import { validateLease, validateLockKey, validateLockOptions } from './lock-vali
 import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
+import { buildStorageUrl, encodeStoragePath, publicStoragePathError } from './storage-paths.ts';
 import {
   decodeBase64Url,
   extractRequiredProjectIdFromToken,
@@ -2930,7 +2931,7 @@ class StorageFileApi {
    * @private
    */
   _buildUrl(path) {
-    return `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/${this._encodePath(path)}`;
+    return buildStorageUrl(this.volcanoAuth.apiUrl, this.bucketName, this._encodePath(path));
   }
 
   /**
@@ -2938,10 +2939,7 @@ class StorageFileApi {
    * @private
    */
   _encodePath(path) {
-    return path
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
+    return encodeStoragePath(path);
   }
 
   /**
@@ -2949,13 +2947,7 @@ class StorageFileApi {
    * @private
    */
   _publicPathError(path) {
-    if (typeof path !== 'string' || path.length === 0) {
-      return 'Storage path must be a non-empty string';
-    }
-    if (path.split('/').some((segment) => segment === '.' || segment === '..')) {
-      return 'Public URL paths cannot contain dot segments';
-    }
-    return null;
+    return publicStoragePathError(path);
   }
 
   /**
