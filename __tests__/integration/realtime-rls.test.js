@@ -24,7 +24,7 @@ try {
 }
 
 const { VolcanoAuth } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 const { randomUUID } = require('node:crypto');
 
 const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';

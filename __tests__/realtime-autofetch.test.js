@@ -5,7 +5,7 @@
  * in Phase 3 of the realtime scalability implementation.
  */
 
-const { VolcanoRealtime } = require('../src/realtime.js');
+const { VolcanoRealtime } = require('../src/realtime.ts');
 
 // Mock volcano client for database queries
 const createMockVolcanoClient = (mockData = []) => {

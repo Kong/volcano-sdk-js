@@ -1,7 +1,7 @@
 const { randomBytes } = require('node:crypto');
 
 const { VolcanoClient } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 
 const TERMINAL_DURABLE_STATUSES = ['succeeded', 'failed', 'timed_out', 'stopped', 'unknown'];
 

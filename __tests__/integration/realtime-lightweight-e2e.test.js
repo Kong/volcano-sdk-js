@@ -8,7 +8,7 @@
  * Run with: source .env && npm run test:integration -- --testPathPatterns="realtime-lightweight"
  */
 
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 
 // Mock volcano client for auto-fetch testing without full integration
 const createMockVolcanoClient = (mockData = {}) => {
