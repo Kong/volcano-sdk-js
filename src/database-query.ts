@@ -1,7 +1,9 @@
 import { errorResult } from './api-errors.ts';
-import { type DatabaseFilter, FilterMixin } from './database-filters.ts';
+import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
+import { getQueryDatabaseSelectUrl } from './generated/client.ts';
+import { volcanoFetch, type VolcanoRequestInit } from './generated/volcano-fetch.ts';
 
-interface SelectRequest {
+export interface SelectRequest {
   table: string;
   select?: string[];
   filters?: DatabaseFilter[];
@@ -14,7 +16,7 @@ interface QueryTransport {
   queryDatabaseSelect(
     databaseName: string,
     request: SelectRequest,
-    options: unknown,
+    options: VolcanoRequestInit,
   ): Promise<{ data: unknown }>;
 }
 
@@ -23,7 +25,25 @@ export interface QueryClient {
   readonly _oauthExchangeError: Error | string | null;
   readonly _transport: QueryTransport;
   _completeOAuthExchange(): Promise<unknown>;
-  _generatedOptions(mode: 'session'): unknown;
+  _generatedOptions(mode: 'session'): VolcanoRequestInit;
+}
+
+/** Preserve the SDK's Date and nullable-array filter wire behavior beyond the OpenAPI generator's narrower filter type. */
+export async function queryDatabaseSelectTransport(
+  databaseName: string,
+  request: SelectRequest,
+  options: VolcanoRequestInit,
+): Promise<{ data: unknown }> {
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return volcanoFetch<{ data: unknown }>(getQueryDatabaseSelectUrl(databaseName), {
+    ...options,
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+  });
 }
 
 export interface SelectResult {
@@ -33,8 +53,7 @@ export interface SelectResult {
 }
 
 /** Builds a SELECT request without trusting the generated transport's parsed body. */
-export class QueryBuilder {
-  readonly filters: DatabaseFilter[] = [];
+export class QueryBuilder extends FilterBuilder {
   readonly orderClauses: { column: string; ascending: boolean }[] = [];
   selectColumns: string[] = [];
   limitValue: number | null = null;
@@ -44,7 +63,9 @@ export class QueryBuilder {
     private readonly client: QueryClient,
     readonly table: string,
     readonly databaseName: string | null,
-  ) {}
+  ) {
+    super();
+  }
 
   select(columns: string | string[]): this {
     if (columns === '*') {
@@ -182,8 +203,3 @@ function responseCount(value: object): unknown {
 function queryCount(count: unknown, rowCount: number): number {
   return typeof count === 'number' && count !== 0 ? count : rowCount;
 }
-
-Object.assign(QueryBuilder.prototype, FilterMixin);
-
-type FilterMethods = typeof FilterMixin;
-export interface QueryBuilder extends FilterMethods {}

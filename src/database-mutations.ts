@@ -1,6 +1,6 @@
 import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
-import { type DatabaseFilter, FilterMixin } from './database-filters.ts';
+import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
 import { safeJsonParse } from './response-json.ts';
 
 type Operation = 'insert' | 'update' | 'delete';
@@ -19,8 +19,7 @@ export interface MutationResult {
 }
 
 /** Builds a database mutation while retaining its session-scoped retry behavior. */
-export class MutationBuilder {
-  readonly filters: DatabaseFilter[] = [];
+export class MutationBuilder extends FilterBuilder {
 
   constructor(
     private readonly client: MutationClient,
@@ -28,7 +27,9 @@ export class MutationBuilder {
     readonly databaseName: string | null,
     readonly operation: Operation,
     readonly values: Record<string, unknown> | null,
-  ) {}
+  ) {
+    super();
+  }
 
   async execute(): Promise<MutationResult> {
     await this.client._completeOAuthExchange();
@@ -130,8 +131,3 @@ function responseField(result: unknown, field: string): unknown {
   const value: unknown = Reflect.get(result, field);
   return value;
 }
-
-Object.assign(MutationBuilder.prototype, FilterMixin);
-
-type FilterMethods = typeof FilterMixin;
-export interface MutationBuilder extends FilterMethods {}

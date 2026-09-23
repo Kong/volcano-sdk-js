@@ -87,7 +87,7 @@ import {
   getSessions as getAccountSessions,
 } from './auth-user-sessions.ts';
 import { MutationBuilder } from './database-mutations.ts';
-import { QueryBuilder } from './database-query.ts';
+import { QueryBuilder, queryDatabaseSelectTransport } from './database-query.ts';
 import { DurableFacade } from './durable-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
@@ -113,7 +113,6 @@ import {
   downloadStorageObject,
   getDurableExecution,
   listDurableExecutions,
-  queryDatabaseSelect,
   releaseProjectLock,
   startDurableExecutionFromApplication,
   stopDurableExecution,
@@ -188,7 +187,7 @@ const GENERATED_TRANSPORT = {
   downloadStorageObject,
   getDurableExecution,
   listDurableExecutions,
-  queryDatabaseSelect,
+  queryDatabaseSelect: queryDatabaseSelectTransport,
   releaseProjectLock,
   startDurableExecutionFromApplication,
   stopDurableExecution,
