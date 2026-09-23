@@ -57,8 +57,17 @@ test('passes only configured retry options to the engine', () => {
   expect(toRetryStrategy({}, engine)).toEqual({ config: {} });
 });
 
-test('rejects invalid top-level retry options', () => {
-  expect(() => toRetryStrategy(3, unexpectedEngine)).toThrow(TypeError);
-  expect(() => toRetryStrategy(true, unexpectedEngine)).toThrow(TypeError);
-  expect(() => toRetryStrategy('yes', unexpectedEngine)).toThrow(TypeError);
+test.each([3, true, 'yes'])('explains invalid top-level retry option %p', (retry) => {
+  expect(() => toRetryStrategy(retry, unexpectedEngine)).toThrow(
+    new TypeError('retry must be false, a function, or an options object'),
+  );
 });
+
+test.each(['initialDelay', 'maxDelay'] as const)(
+  'names the invalid %s duration before calling the engine',
+  (field) => {
+    expect(() => toRetryStrategy({ [field]: '400ms' }, unexpectedEngine)).toThrow(
+      `${field} must be a duration in whole seconds`,
+    );
+  },
+);
