@@ -1,4 +1,4 @@
-const { ContractWorld } = require('./world.js');
+import { ContractWorld } from './world.ts';
 
 describe('contract world cleanup', () => {
   test('reports lock release error envelopes as cleanup failures', async () => {
@@ -6,9 +6,24 @@ describe('contract world cleanup', () => {
       api_url: 'https://api.test.com',
       anon_key: 'ak-contract',
       service_key: 'sk-contract',
+      platform_token: 'platform-token',
+      project_id: 'project',
+      user_id: 'user',
+      user_email: 'user@example.com',
+      user_password: 'password',
+      storage_path: 'object',
+      realtime_channel: 'channel',
+      lock_key: 'lock',
+      function_name: 'function',
+      durable_function_name: 'durable',
+      database_name: 'database',
+      realtime_table_name: 'records',
+      bucket_name: 'bucket',
+      function_id: 'function-id',
+      logs_access_token: 'logs-token',
     });
     const releaseError = Object.assign(new Error('lock release failed'), { status: 503 });
-    world.serviceClient.locks.release = async () => ({ error: releaseError });
+    world.serviceClient.locks.release = () => Promise.resolve({ error: releaseError });
     world.registerLockCleanup('contract-lock', {
       key: 'contract-lock',
       token: '00000000-0000-4000-8000-000000000001',

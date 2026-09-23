@@ -1,24 +1,33 @@
-const { verifyBroadcastPause } = require('./contract/broadcast-pause.js');
+import { type BroadcastMessage, verifyBroadcastPause } from './contract/broadcast-pause.ts';
 
-function createWorld(leak) {
-  let handler;
+function createWorld(leak: boolean) {
+  let handler: ((message: unknown) => void) | null = null;
   let paused = false;
   return {
     realtimeMessage: { event: 'message', value: 'contract' },
     subscriber: {
-      on: jest.fn((_event, callback) => {
+      on: jest.fn((_event: 'message', callback: (message: unknown) => void) => {
         handler = callback;
       }),
-      unsubscribe: jest.fn(async () => {
+      unsubscribe: jest.fn(() => {
         paused = true;
+        return Promise.resolve();
       }),
-      subscribe: jest.fn(async () => {
+      subscribe: jest.fn(() => {
         paused = false;
+        return Promise.resolve();
       }),
     },
     publisher: {
-      send: jest.fn(async (message) => {
-        if (leak || !paused) handler(message);
+      send: jest.fn((message: BroadcastMessage) => {
+        if (leak || !paused) {
+          const receive = handler;
+          if (receive === null) {
+            throw new Error('Subscriber was not registered');
+          }
+          receive(message);
+        }
+        return Promise.resolve();
       }),
     },
   };
@@ -37,8 +46,8 @@ describe('broadcast pause acceptance checks', () => {
   });
 
   test('rejects a publication delivered while paused', async () => {
-    const result = verifyBroadcastPause(createWorld(true)).catch((error) => error);
+    const result = verifyBroadcastPause(createWorld(true));
     await jest.runAllTimersAsync();
-    await expect(result).resolves.toBeInstanceOf(Error);
+    await expect(result).rejects.toBeInstanceOf(Error);
   });
 });

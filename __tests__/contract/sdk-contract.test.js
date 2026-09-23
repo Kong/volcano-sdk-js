@@ -10,11 +10,11 @@ const {
   recordOutcome,
   requireSuccessfulOutcome,
   TERMINAL_DURABLE_STATUSES,
-} = require('./world.js');
-const { verifyBroadcastPause } = require('./broadcast-pause.js');
-const { LogContract } = require('./logs.js');
-const { verifyPresenceMembership } = require('./presence-membership.js');
-const { verifyPostgresChanges } = require('./postgres-changes.js');
+} = require('./world.ts');
+const { verifyBroadcastPause } = require('./broadcast-pause.ts');
+const { LogContract } = require('./logs.ts');
+const { verifyPresenceMembership } = require('./presence-membership.ts');
+const { verifyPostgresChanges } = require('./postgres-changes.ts');
 
 function absoluteEnvironmentPath(name) {
   const value = process.env[name];

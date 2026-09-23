@@ -1,7 +1,15 @@
-const { recordOutcome, requireSuccessfulOutcome } = require('./contract/world.js');
+import { type DiagnosticWorld, recordOutcome, requireSuccessfulOutcome } from './contract/world.ts';
+
+function failureOf(world: DiagnosticWorld) {
+  const failure = world.lastFailure;
+  if (failure === null || failure === undefined) {
+    throw new Error('Expected contract failure');
+  }
+  return failure;
+}
 
 test('failed contract operations expose status and redact fixture credentials', () => {
-  const world = {
+  const world: DiagnosticWorld = {
     fixture: { service_key: 'fixture-secret-key', user_password: 'fixture-password' },
     client: { accessToken: 'refreshed-secret-token' },
   };
@@ -19,6 +27,9 @@ test('failed contract operations expose status and redact fixture credentials', 
     failure = caught;
   }
   expect(failure).toBeInstanceOf(Error);
+  if (!(failure instanceof Error)) {
+    throw new Error('Expected an error');
+  }
   expect(failure.message).not.toMatch(
     /fixture-secret-key|fixture-password|refreshed-secret-token|body-secret/,
   );
@@ -26,7 +37,7 @@ test('failed contract operations expose status and redact fixture credentials', 
 });
 
 test('successful contract operations clear the previous diagnostic', () => {
-  const world = { fixture: {} };
+  const world: DiagnosticWorld = { fixture: {} };
   recordOutcome(world, null, Object.assign(new Error('old failure'), { status: 500 }));
   recordOutcome(world, { value: 'success' }, null);
   expect(requireSuccessfulOutcome(world)).toEqual({ value: 'success' });
@@ -34,7 +45,7 @@ test('successful contract operations clear the previous diagnostic', () => {
 });
 
 test('diagnostics redact URLs and bearer tokens without serializing error metadata', () => {
-  const world = { fixture: { api_url: 'https://api.test/' } };
+  const world: DiagnosticWorld = { fixture: { api_url: 'https://api.test/' } };
   const error = Object.assign(
     new Error('Denied https://api.test/?token=url-secret Bearer header-secret'),
     {
@@ -56,17 +67,17 @@ test('diagnostics redact URLs and bearer tokens without serializing error metada
 });
 
 test('diagnostics redact WebSocket endpoints including query credentials', () => {
-  const world = { fixture: {} };
+  const world: DiagnosticWorld = { fixture: {} };
   recordOutcome(
     world,
     null,
     new Error('Failed ws://local.test/?token=secret-one wss://live.test/?token=secret-two'),
   );
-  expect(world.lastFailure.message).toBe('Failed [URL] [URL]');
+  expect(failureOf(world).message).toBe('Failed [URL] [URL]');
 });
 
 test('diagnostics redact nested fixture strings and their encoded forms', () => {
-  const world = {
+  const world: DiagnosticWorld = {
     fixture: {
       fixture_row: { name: 'private fixture value' },
       mutation_rows: [{ value: 'private mutation value' }],
@@ -77,11 +88,13 @@ test('diagnostics redact nested fixture strings and their encoded forms', () => 
     null,
     new Error('Rejected private fixture value private%20mutation%20value'),
   );
-  expect(world.lastFailure.message).toBe('Rejected [redacted] [redacted]');
+  expect(failureOf(world).message).toBe('Rejected [redacted] [redacted]');
 });
 
 test('diagnostics redact equivalent form and percent encodings', () => {
-  const world = { fixture: { storage_path: 'private value/part', user_password: 'secret+plus' } };
+  const world: DiagnosticWorld = {
+    fixture: { storage_path: 'private value/part', user_password: 'secret+plus' },
+  };
   recordOutcome(
     world,
     null,
@@ -89,46 +102,46 @@ test('diagnostics redact equivalent form and percent encodings', () => {
       'Rejected private+value%2fpart private%20value%2Fpart %70rivate+value%2fpart secret+plus secret%2bplus',
     ),
   );
-  expect(world.lastFailure.message).toBe(
+  expect(failureOf(world).message).toBe(
     'Rejected [redacted] [redacted] [redacted] [redacted] [redacted]',
   );
 });
 
 test('diagnostics preserve encoded URL boundaries when decoding whitespace', () => {
-  const world = { fixture: {} };
+  const world: DiagnosticWorld = { fixture: {} };
   recordOutcome(
     world,
     null,
     new Error('Denied https%3A%2F%2Fapi.test%2F%3Fnote%3Dhello%20world%26token%3Durl-secret'),
   );
-  expect(world.lastFailure.message).toBe('Denied [URL]');
+  expect(failureOf(world).message).toBe('Denied [URL]');
 });
 
 test('diagnostics normalize literal percent credentials and repeatedly encoded URLs', () => {
-  const world = { fixture: { user_password: 'secret%2Fpath' } };
+  const world: DiagnosticWorld = { fixture: { user_password: 'secret%2Fpath' } };
   const encodedURL = encodeURIComponent(
     encodeURIComponent('https://api.test/?note=hello world&token=url-secret'),
   );
   recordOutcome(world, null, new Error(`Denied secret%252Fpath secret%2Fpath ${encodedURL}`));
-  expect(world.lastFailure.message).toBe('Denied [redacted] [redacted] [URL]');
+  expect(failureOf(world).message).toBe('Denied [redacted] [redacted] [URL]');
 });
 
 test('diagnostics redact valid encoded credentials beside malformed bytes', () => {
-  const world = { fixture: { user_password: 'secret' } };
+  const world: DiagnosticWorld = { fixture: { user_password: 'secret' } };
   recordOutcome(world, null, new Error('Denied %73%65%63%72%65%74%FF'));
-  expect(world.lastFailure.message).toBe('Denied [redacted]\uFFFD');
+  expect(failureOf(world).message).toBe('Denied [redacted]\uFFFD');
 });
 
 test('diagnostics omit oversized input and excessive encoding depth', () => {
-  const world = { fixture: {} };
+  const world: DiagnosticWorld = { fixture: {} };
   recordOutcome(world, null, new Error('x'.repeat(32_768)));
-  expect(world.lastFailure.message).toBe('[diagnostic omitted: oversized input]');
+  expect(failureOf(world).message).toBe('[diagnostic omitted: oversized input]');
   recordOutcome(world, null, new Error(`Denied %${'25'.repeat(32)}41`));
-  expect(world.lastFailure.message).toBe('Denied [redacted]');
+  expect(failureOf(world).message).toBe('Denied [redacted]');
 });
 
 test('diagnostics redact session snapshots after client credentials are cleared', () => {
-  const world = {
+  const world: DiagnosticWorld = {
     fixture: {},
     client: { accessToken: null, refreshToken: null },
     previousSession: { access_token: 'previous-access', refresh_token: 'previous-refresh' },
@@ -142,7 +155,7 @@ test('diagnostics redact session snapshots after client credentials are cleared'
       'Rejected previous-access previous-refresh refreshed-access refreshed-refresh signed-out-access signed-out-refresh',
     ),
   );
-  expect(world.lastFailure.message).toBe(
+  expect(failureOf(world).message).toBe(
     'Rejected [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]',
   );
 });
