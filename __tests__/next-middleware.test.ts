@@ -86,6 +86,8 @@ describe('Next.js middleware helpers', () => {
 
   test.each([
     ['non-object body', null],
+    ['non-object user', { user: null }],
+    ['string user', { user: 'invalid' }],
     ['missing id', { user: { email: 'test@example.com', status: 'active' } }],
     ['missing email', { user: { id: 'user-123', status: 'active' } }],
     ['missing required status', { user: { id: 'user-123', email: 'test@example.com' } }],
