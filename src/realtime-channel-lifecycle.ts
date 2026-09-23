@@ -1,3 +1,5 @@
+import { normalizePresenceInfo, property, record } from './realtime-values.ts';
+
 type EventHandler = (context: unknown) => void | Promise<void>;
 
 export interface ChannelSubscription {
@@ -6,10 +8,14 @@ export interface ChannelSubscription {
   subscribe(): void;
   unsubscribe(): void;
   ready(timeout: number): Promise<void>;
+  setData?(data: Record<string, unknown>): void;
 }
 
 export interface ChannelClient {
-  newSubscription(name: string, options: { joinLeave: boolean }): ChannelSubscription;
+  newSubscription(
+    name: string,
+    options: { joinLeave: boolean; data?: Record<string, unknown> },
+  ): ChannelSubscription;
   removeSubscription(subscription: ChannelSubscription): void;
   presence(name: string): Promise<unknown>;
 }
@@ -23,6 +29,12 @@ export interface ChannelLifecycleState {
   _realtime: { getClient(): ChannelClient | null };
   _name: string;
   _type: string;
+  _databaseName?: string | null;
+  _myPresenceState?: Record<string, unknown> | undefined;
+  _presenceStateVersion?: number;
+  _presenceAcknowledgedVersion?: number;
+  _presenceResubscribePromise?: Promise<void> | null;
+  _activationPromise?: Promise<void> | null;
   _subscription: ChannelSubscription | null;
   _lifecycleVersion: number;
   _paused: boolean;
@@ -35,19 +47,9 @@ export interface ChannelLifecycleState {
   _triggerPresenceSync(): void;
   _triggerEvent(event: string, data: unknown): void;
   _activateSubscription(): Promise<void>;
+  _awaitActivation?(): Promise<void>;
   _resetForIdentityChange(): void;
   unsubscribe(): void;
-}
-
-function property(value: unknown, key: string): unknown {
-  if (typeof value !== 'object' || value === null) {
-    return undefined;
-  }
-  return Reflect.get(value, key);
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function subscribeEvent(
@@ -102,9 +104,10 @@ function bindJoin(state: ChannelLifecycleState, subscription: ChannelSubscriptio
     if (typeof client !== 'string') {
       return;
     }
-    state._presenceState[client] = info;
+    const normalized = normalizePresenceInfo(info);
+    state._presenceState[client] = normalized;
     state._triggerPresenceSync();
-    state._triggerEvent('join', info);
+    state._triggerEvent('join', normalized);
   });
 }
 
@@ -119,8 +122,9 @@ function bindLeave(state: ChannelLifecycleState, subscription: ChannelSubscripti
       return;
     }
     Reflect.deleteProperty(state._presenceState, client);
+    const normalized = normalizePresenceInfo(info);
     state._triggerPresenceSync();
-    state._triggerEvent('leave', info);
+    state._triggerEvent('leave', normalized);
   });
 }
 
@@ -133,7 +137,9 @@ function applyPresenceSnapshot(
   if (!record(clients) || version !== state._lifecycleVersion) {
     return;
   }
-  state._presenceState = { ...clients };
+  state._presenceState = Object.fromEntries(
+    Object.entries(clients).map(([id, info]) => [id, normalizePresenceInfo(info)]),
+  );
   state._triggerPresenceSync();
 }
 
@@ -188,6 +194,7 @@ export async function activateChannelSubscription(
   subscription: ChannelSubscription,
 ): Promise<void> {
   const version = state._lifecycleVersion;
+  const presenceStateVersion = state._presenceStateVersion;
   let ready = false;
   try {
     subscription.subscribe();
@@ -196,11 +203,18 @@ export async function activateChannelSubscription(
       throw new Error('Subscription changed before becoming ready');
     }
     state._paused = false;
+    acknowledgePresence(state, presenceStateVersion);
     ready = true;
   } finally {
     if (!ready && isCurrentSubscription(state, subscription, version)) {
       state.unsubscribe();
     }
+  }
+}
+
+function acknowledgePresence(state: ChannelLifecycleState, version: number | undefined): void {
+  if (state._type === 'presence' && version !== undefined) {
+    state._presenceAcknowledgedVersion = version;
   }
 }
 
@@ -212,26 +226,62 @@ function isCurrentSubscription(
   return state._subscription === subscription && state._lifecycleVersion === version;
 }
 
-export async function subscribeChannel(state: ChannelLifecycleState): Promise<void> {
+function activateState(state: ChannelLifecycleState): Promise<void> {
+  return state._awaitActivation?.() ?? state._activateSubscription();
+}
+
+function subscriptionOptions(state: ChannelLifecycleState): {
+  joinLeave: boolean;
+  data?: Record<string, unknown>;
+} {
+  const data = subscriptionData(state);
+  const joinLeave = state._type === 'presence';
+  return data === undefined ? { joinLeave } : { joinLeave, data };
+}
+
+function subscriptionData(state: ChannelLifecycleState): Record<string, unknown> | undefined {
+  if (state._type === 'presence') {
+    return state._myPresenceState;
+  }
+  if (state._type === 'postgres') {
+    return postgresSubscriptionData(state._databaseName);
+  }
+  return undefined;
+}
+
+function postgresSubscriptionData(
+  name: string | null | undefined,
+): Record<string, unknown> | undefined {
+  return typeof name === 'string' && name !== '' ? { database_name: name } : undefined;
+}
+
+export function subscribeChannel(state: ChannelLifecycleState): Promise<void> {
   if (state._subscription !== null) {
-    await state._activateSubscription();
-    return;
+    return activateState(state);
   }
   const client = state._realtime.getClient();
   if (client === null) {
-    throw new Error('Not connected to realtime server');
+    return Promise.reject(new Error('Not connected to realtime server'));
   }
-  const subscription = client.newSubscription(state._name, {
-    joinLeave: state._type === 'presence',
-  });
+  const subscription = client.newSubscription(state._name, subscriptionOptions(state));
   state._subscription = subscription;
   bindSubscriptionEvents(state, subscription);
-  await state._activateSubscription();
+  return activateState(state);
 }
 
 export function unsubscribeChannel(state: ChannelLifecycleState): void {
+  if (state._presenceResubscribePromise !== undefined) {
+    state._presenceResubscribePromise = null;
+  }
+  pauseChannelSubscription(state);
+}
+
+export function pauseChannelSubscription(state: ChannelLifecycleState): void {
   state._paused = true;
   state._lifecycleVersion += 1;
+  if (state._activationPromise !== undefined) {
+    state._activationPromise = null;
+  }
   if (state._presenceTimeoutId !== null) {
     clearTimeout(state._presenceTimeoutId);
     state._presenceTimeoutId = null;

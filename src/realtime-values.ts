@@ -20,6 +20,35 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function clonePresenceValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => clonePresenceValue(item));
+  }
+  if (record(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, clonePresenceValue(item)]),
+    );
+  }
+  return value;
+}
+
+function clonePresenceState(state: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(state).map(([key, item]) => [key, clonePresenceValue(item)]),
+  );
+}
+
+function normalizePresenceInfo(info: unknown): unknown {
+  if (!record(info)) {
+    return info;
+  }
+  const normalized = clonePresenceState(info);
+  if (normalized['data'] === undefined && normalized['chanInfo'] !== undefined) {
+    normalized['data'] = clonePresenceValue(normalized['chanInfo']);
+  }
+  return normalized;
+}
+
 function isChangeType(value: unknown): value is LightweightNotification['type'] {
   return value === 'INSERT' || value === 'UPDATE' || value === 'DELETE';
 }
@@ -178,6 +207,7 @@ function matchesPostgresChange(
 }
 
 export {
+  clonePresenceState,
   connectContext,
   disconnectContext,
   errorContext,
@@ -189,6 +219,7 @@ export {
   isPresenceState,
   isPublicationContext,
   matchesPostgresChange,
+  normalizePresenceInfo,
   optionalDatabaseName,
   optionalRecord,
   optionalString,

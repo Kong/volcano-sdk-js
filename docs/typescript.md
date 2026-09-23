@@ -286,7 +286,7 @@ interface RealtimeConfig {
 interface ChannelOptions {
   type?: 'broadcast' | 'presence' | 'postgres';
   /** Database selector used in the Postgres channel identity and subscription data. */
-  databaseName?: string;
+  databaseName?: string | null;
   autoFetch?: boolean;
   fetchBatchWindowMs?: number;
   fetchMaxBatchSize?: number;

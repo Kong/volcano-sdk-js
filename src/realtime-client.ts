@@ -30,6 +30,7 @@ import {
   connectContext,
   disconnectContext,
   errorContext,
+  normalizePresenceInfo,
   optionalDatabaseName,
   property,
   record,
@@ -53,6 +54,79 @@ export function isTransportClient(value: unknown): value is TransportClient {
     'removeSubscription',
     'presence',
   ].every((method) => typeof Reflect.get(value, method) === 'function');
+}
+
+function currentDatabaseName(client: unknown): string | null {
+  const name = property(client, '_currentDatabaseName');
+  return typeof name === 'string' && name !== '' ? name : null;
+}
+
+function channelDatabaseName(
+  type: ChannelType,
+  optionName: string | null | undefined,
+  configuredName: string | null,
+  client: unknown,
+): string | null {
+  return type === 'postgres' ? (optionName ?? configuredName ?? currentDatabaseName(client)) : null;
+}
+
+function removedChannelDatabaseName(
+  type: ChannelType,
+  selectedName: string | null | undefined,
+  fallback: string | null,
+): string | null {
+  if (type !== 'postgres') {
+    return null;
+  }
+  return selectedName === undefined ? fallback : selectedName;
+}
+
+function serviceRecipientChannel(sdkChannel: string, token: string | undefined): string | null {
+  if (token?.startsWith('sk-') !== true) {
+    return null;
+  }
+  if (!/^postgres:(?:[^:]+:){2,3}service:[^:]+$/.test(sdkChannel)) {
+    return null;
+  }
+  return sdkChannel.split(':').slice(0, -2).join(':');
+}
+
+function userRecipientChannel(
+  route: NonNullable<ReturnType<typeof serverEventRoute>>,
+  identity: RecoveryIdentity,
+): string | null {
+  if (identity.kind !== 'user' || route.sdkChannel.split(':').at(-1) !== identity.subject) {
+    return null;
+  }
+  return route.postgresBaseChannel;
+}
+
+function recipientChannel(
+  route: NonNullable<ReturnType<typeof serverEventRoute>>,
+  token: string | undefined,
+  identity: RecoveryIdentity,
+): string | null {
+  return serviceRecipientChannel(route.sdkChannel, token) ?? userRecipientChannel(route, identity);
+}
+
+function routedChannel(
+  channels: Map<string, RealtimeChannel>,
+  route: NonNullable<ReturnType<typeof serverEventRoute>>,
+): RealtimeChannel | undefined {
+  const exact = channels.get(route.sdkChannel);
+  if (exact !== undefined || route.postgresBaseChannel === null) {
+    return exact;
+  }
+  return channels.get(route.postgresBaseChannel);
+}
+
+function removeOptions(
+  typeOrOptions: ChannelType | Pick<ChannelOptions, 'type' | 'databaseName'>,
+  databaseName: string | null | undefined,
+): { type: ChannelType | undefined; databaseName: string | null | undefined } {
+  return typeof typeOrOptions === 'string'
+    ? { type: typeOrOptions, databaseName }
+    : { type: typeOrOptions.type, databaseName: typeOrOptions.databaseName };
 }
 
 /**
@@ -109,7 +183,7 @@ class VolcanoRealtime {
    * @param {string} config.accessToken - Access token (user JWT) or service role key (sk-...)
    * @param {Function} [config.getToken] - Function to get/refresh token
    * @param {Object} [config.volcanoClient] - VolcanoAuth client for auto-fetching lightweight notifications
-   * @param {string} [config.databaseName] - Database name for auto-fetch queries
+   * @param {string} [config.databaseName] - Database name for auto-fetch queries and postgres subscriptions
    * @param {Object} [config.fetchConfig] - Configuration for auto-fetch behavior
    * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage
    */
@@ -318,20 +392,30 @@ class VolcanoRealtime {
    * @param {string} name - Channel name
    * @param {Object} [options] - Channel options
    * @param {string} [options.type='broadcast'] - Channel type: 'broadcast', 'presence', 'postgres'
+   * @param {string} [options.databaseName] - Database name for postgres subscriptions and auto-fetch
    * @param {boolean} [options.autoFetch=true] - Enable auto-fetch for lightweight notifications
    * @param {number} [options.fetchBatchWindowMs] - Batch window for fetch requests
    * @param {number} [options.fetchMaxBatchSize] - Max batch size for fetch requests
    */
   channel(name: string, options: ChannelOptions = {}): RealtimeChannel {
     const type = options.type ?? 'broadcast';
-    const fullName = this._formatChannelName(name, type);
+    const databaseName = channelDatabaseName(
+      type,
+      options.databaseName,
+      this._databaseName,
+      this._volcanoClient,
+    );
+    const fullName = this._formatChannelName(name, type, databaseName);
 
     const existing = this._channels.get(fullName);
     if (existing !== undefined) {
       return existing;
     }
 
-    const channel = new RealtimeChannel(this, fullName, type, options);
+    const channel = new RealtimeChannel(this, fullName, type, {
+      ...options,
+      ...(type === 'postgres' ? { databaseName } : {}),
+    });
     this._channels.set(fullName, channel);
     return channel;
   }
@@ -344,7 +428,10 @@ class VolcanoRealtime {
    * the authenticated connection. Clients never need to know about project IDs.
    */
   /** @internal */
-  _formatChannelName(name: string, type: ChannelType): string {
+  _formatChannelName(name: string, type: ChannelType, databaseName: string | null = null): string {
+    if (type === 'postgres' && databaseName !== null && databaseName !== '') {
+      return `${type}:${databaseName}:${name}`;
+    }
     return `${type}:${name}`;
   }
 
@@ -361,26 +448,15 @@ class VolcanoRealtime {
       return;
     }
 
-    // Find the SDK channel and deliver the message
-    let channel = this._channels.get(route.sdkChannel);
-
-    // Postgres changes are delivered on a per-user channel for RLS isolation:
-    // projectId:postgres:schema:table:userID. onPostgresChanges takes schema and
-    // table as separate single-identifier args, so a postgres channel is always
-    // exactly postgres:schema:table and the per-user form is exactly 5 segments.
-    // Match the base channel the client subscribed to by dropping the trailing
-    // userID; otherwise the publication is silently dropped and onPostgresChanges
-    // never fires. Requiring exactly 5 segments avoids over-matching anything
-    // that isn't this well-defined per-user format.
-    if (channel === undefined) {
-      if (route.postgresBaseChannel !== null) {
-        channel = this._channels.get(route.postgresBaseChannel);
-      }
+    // A recipient publication can have the exact name of another scoped
+    // channel. Resolve the current credential's recipient suffix first.
+    const recipient = recipientChannel(route, this.accessToken, this._recoveryIdentity);
+    if (recipient !== null) {
+      this._channels.get(recipient)?._handlePublication(ctx);
+      return;
     }
 
-    if (channel !== undefined) {
-      channel._handlePublication(ctx);
-    }
+    routedChannel(this._channels, route)?._handlePublication(ctx);
   }
 
   /** @internal */
@@ -405,10 +481,10 @@ class VolcanoRealtime {
     const info = property(ctx, 'info');
     const client = property(info, 'client');
     if (typeof client === 'string') {
-      channel._presenceState[client] = info;
+      channel._presenceState[client] = normalizePresenceInfo(info);
     }
     channel._triggerPresenceSync();
-    channel._triggerEvent('join', info);
+    channel._triggerEvent('join', normalizePresenceInfo(info));
   }
 
   /**
@@ -426,7 +502,7 @@ class VolcanoRealtime {
       Reflect.deleteProperty(channel._presenceState, client);
     }
     channel._triggerPresenceSync();
-    channel._triggerEvent('leave', info);
+    channel._triggerEvent('leave', normalizePresenceInfo(info));
   }
 
   /**
@@ -440,7 +516,9 @@ class VolcanoRealtime {
     }
     const presence = property(property(ctx, 'data'), 'presence');
     if (record(presence)) {
-      channel._presenceState = { ...presence };
+      channel._presenceState = Object.fromEntries(
+        Object.entries(presence).map(([id, info]) => [id, normalizePresenceInfo(info)]),
+      );
       channel._triggerPresenceSync();
     }
   }
@@ -485,10 +563,25 @@ class VolcanoRealtime {
   /**
    * Remove a specific channel
    * @param {string} name - Channel name
-   * @param {string} [type='broadcast'] - Channel type
+   * @param {string|Object} [typeOrOptions='broadcast'] - Channel type or channel options
+   * @param {string} [databaseName] - Database selector for postgres channels
    */
-  removeChannel(name: string, type: ChannelType = 'broadcast'): void {
-    const fullName = this._formatChannelName(name, type);
+  removeChannel(
+    name: string,
+    typeOrOptions: ChannelType | Pick<ChannelOptions, 'type' | 'databaseName'> = 'broadcast',
+    databaseName?: string | null,
+  ): void {
+    const options = removeOptions(typeOrOptions, databaseName);
+    const type = options.type ?? 'broadcast';
+    const fullName = this._formatChannelName(
+      name,
+      type,
+      removedChannelDatabaseName(
+        type,
+        options.databaseName,
+        this._databaseName ?? currentDatabaseName(this._volcanoClient),
+      ),
+    );
     const channel = this._channels.get(fullName);
     if (channel !== undefined) {
       channel._dispose();

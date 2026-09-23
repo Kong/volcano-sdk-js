@@ -27,6 +27,7 @@ describe('realtime channel facade', () => {
       subscribe: jest.fn(),
       unsubscribe: jest.fn(),
       ready: jest.fn(() => Promise.resolve()),
+      setData: jest.fn(),
     };
     await channel.send({ text: 'hello' });
     expect(publish).toHaveBeenCalledWith({ text: 'hello' });

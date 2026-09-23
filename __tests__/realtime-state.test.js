@@ -1,4 +1,4 @@
-const { VolcanoRealtime } = require('../src/realtime.js');
+const { VolcanoRealtime } = require('../src/realtime.ts');
 const userToken = `header.${Buffer.from(
   JSON.stringify({ project_id: 'project', sub: 'user' }),
 ).toString('base64url')}.signature`;
@@ -88,7 +88,12 @@ describe('realtime server state contract', () => {
       expect.objectContaining({ data: { database_name: 'db-b' } }),
     ]);
 
-    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+    const change = {
+      type: 'INSERT',
+      schema: 'public',
+      table: 'items',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
     realtime._handleServerPublication({
       channel: 'project:postgres:db-a:public:items:user-a',
       data: change,
@@ -120,7 +125,13 @@ describe('realtime server state contract', () => {
     const channel = realtime.channel('public:items', options);
     const onDelete = jest.fn();
     channel.onPostgresChanges('DELETE', 'public', 'items', onDelete);
-    const change = { type: 'DELETE', schema: 'public', table: 'items', id: 'row-1' };
+    const change = {
+      type: 'DELETE',
+      schema: 'public',
+      table: 'items',
+      id: 'row-1',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
 
     realtime._handleServerPublication({ channel: serverChannel, data: change });
 
@@ -132,7 +143,12 @@ describe('realtime server state contract', () => {
     const channel = realtime.channel('public:service', { type: 'postgres' });
     const onInsert = jest.fn();
     channel.onPostgresChanges('INSERT', 'public', 'service', onInsert);
-    const change = { type: 'INSERT', schema: 'public', table: 'service' };
+    const change = {
+      type: 'INSERT',
+      schema: 'public',
+      table: 'service',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
 
     realtime._handleServerPublication({
       channel: 'project:postgres:public:service:user-uuid',
@@ -156,7 +172,12 @@ describe('realtime server state contract', () => {
     const onScoped = jest.fn();
     legacy.on('*', onLegacy);
     scoped.on('*', onScoped);
-    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+    const change = {
+      type: 'INSERT',
+      schema: 'public',
+      table: 'items',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
 
     realtime._handleServerPublication({
       channel: 'project:postgres:public:items:user-id',
@@ -165,7 +186,12 @@ describe('realtime server state contract', () => {
     expect(onLegacy).toHaveBeenCalledWith(change, expect.anything());
     expect(onScoped).not.toHaveBeenCalled();
 
-    const scopedChange = { type: 'INSERT', schema: 'items', table: 'user-id' };
+    const scopedChange = {
+      type: 'INSERT',
+      schema: 'items',
+      table: 'user-id',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
     realtime._handleServerPublication({
       channel: 'project:postgres:public:items:user-id:user-id',
       data: scopedChange,
@@ -199,8 +225,18 @@ describe('realtime server state contract', () => {
       scoped.onPostgresChanges('DELETE', 'items', 'service', onScoped);
       await legacy.subscribe();
       await scoped.subscribe();
-      const legacyChange = { type: 'DELETE', schema: 'public', table: 'items' };
-      const scopedChange = { type: 'DELETE', schema: 'items', table: 'service' };
+      const legacyChange = {
+        type: 'DELETE',
+        schema: 'public',
+        table: 'items',
+        timestamp: '2026-09-23T00:00:00Z',
+      };
+      const scopedChange = {
+        type: 'DELETE',
+        schema: 'items',
+        table: 'service',
+        timestamp: '2026-09-23T00:00:00Z',
+      };
 
       const legacyPublication = {
         channel: `project:postgres:public:items:${suffix}`,
@@ -235,7 +271,12 @@ describe('realtime server state contract', () => {
     realtime._adoptAccessToken('sk-project-key');
     await legacy.subscribe();
     await scoped.subscribe();
-    const legacyChange = { type: 'DELETE', schema: 'public', table: 'items' };
+    const legacyChange = {
+      type: 'DELETE',
+      schema: 'public',
+      table: 'items',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
     realtime._handleServerPublication({
       channel: 'project:postgres:public:items:service:key-id',
       data: legacyChange,
@@ -246,7 +287,12 @@ describe('realtime server state contract', () => {
     realtime._adoptAccessToken(userToken);
     await legacy.subscribe();
     await scoped.subscribe();
-    const scopedChange = { type: 'DELETE', schema: 'items', table: 'service' };
+    const scopedChange = {
+      type: 'DELETE',
+      schema: 'items',
+      table: 'service',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
     realtime._handleServerPublication({
       channel: 'project:postgres:public:items:service:user-uuid',
       data: scopedChange,
@@ -259,7 +305,12 @@ describe('realtime server state contract', () => {
     const channel = realtime.channel('public:items', { type: 'postgres' });
     const onDelete = jest.fn();
     channel.onPostgresChanges('DELETE', 'public', 'items', onDelete);
-    const change = { type: 'DELETE', schema: 'public', table: 'items' };
+    const change = {
+      type: 'DELETE',
+      schema: 'public',
+      table: 'items',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
 
     realtime._handleServerPublication({
       channel: 'project:postgres:extra:public:items:service:key-id',
@@ -312,7 +363,12 @@ describe('realtime server state contract', () => {
       'postgres:public:items',
       expect.not.objectContaining({ data: expect.anything() }),
     );
-    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+    const change = {
+      type: 'INSERT',
+      schema: 'public',
+      table: 'items',
+      timestamp: '2026-09-23T00:00:00Z',
+    };
     realtime._handleServerPublication({
       channel: 'project:postgres:public:items:user-a',
       data: change,
@@ -540,8 +596,7 @@ describe('realtime server state contract', () => {
     expect(secondResolved).toBe(false);
 
     firstReady.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sent).toEqual([{ status: 'away' }, { status: 'busy' }]);
     expect(secondResolved).toBe(false);
 
@@ -582,8 +637,7 @@ describe('realtime server state contract', () => {
     expect(tracked).toBe(false);
 
     firstReady.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(subscribed).toBe(false);
     expect(tracked).toBe(false);
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);

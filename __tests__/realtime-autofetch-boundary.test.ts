@@ -9,12 +9,7 @@ import {
 import type { PendingRow } from '../src/realtime-internal-types.ts';
 
 function fetchFrom(client: unknown, name: string | null = null, schema = 'public'): unknown {
-  return runBatchQuery(
-    { getVolcanoClient: () => client, getDatabaseName: () => name },
-    schema,
-    'tasks',
-    ['1', '2'],
-  );
+  return runBatchQuery(client, name, schema, 'tasks', ['1', '2']);
 }
 
 describe('auto-fetch database boundary', () => {
@@ -70,7 +65,7 @@ describe('auto-fetch database boundary', () => {
     expect(fetchFrom(client)).toEqual({ data: [] });
     expect(tables).toEqual(['tasks']);
     expect(
-      fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }),
+      fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }, 'chosen'),
     ).toEqual({ data: [] });
   });
 
