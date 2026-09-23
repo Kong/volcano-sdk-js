@@ -195,6 +195,18 @@ const GENERATED_TRANSPORT = {
   uploadStorageObject,
 };
 
+type DurableTransportMethod =
+  | 'startDurableExecutionFromApplication'
+  | 'getDurableExecution'
+  | 'listDurableExecutions'
+  | 'stopDurableExecution';
+
+type RuntimeTransport = {
+  [K in keyof typeof GENERATED_TRANSPORT]: K extends DurableTransportMethod
+    ? (...args: Parameters<(typeof GENERATED_TRANSPORT)[K]>) => Promise<unknown>
+    : (typeof GENERATED_TRANSPORT)[K];
+};
+
 function requireAnonKey(anonKey: unknown): asserts anonKey is string {
   if (typeof anonKey !== 'string' || anonKey === '') {
     throw new Error('anonKey is required. Get your anon key from project settings.');
@@ -239,7 +251,7 @@ class VolcanoAuth {
   _oauthExchangeError: Error | null;
   _authCallbacks: ((user: unknown) => void)[];
   _functionResolveState: FunctionResolveState;
-  _transport: typeof GENERATED_TRANSPORT;
+  _transport: RuntimeTransport;
   _durableFacade: DurableFacade;
   accessToken: string | null;
   refreshToken: string | null;
@@ -253,7 +265,7 @@ class VolcanoAuth {
   constructor(
     config: VolcanoAuthConfig & {
       timeout?: number;
-      transportFactory?: (client: VolcanoAuth) => typeof GENERATED_TRANSPORT;
+      transportFactory?: (client: VolcanoAuth) => Partial<RuntimeTransport>;
     },
   ) {
     requireAnonKey(config.anonKey);
@@ -280,7 +292,7 @@ class VolcanoAuth {
     this._oauthExchangeError = null;
     this._authCallbacks = [];
     this._functionResolveState = getSharedFunctionResolveState();
-    this._transport = (config.transportFactory ?? (() => GENERATED_TRANSPORT))(this);
+    this._transport = { ...GENERATED_TRANSPORT, ...config.transportFactory?.(this) };
     this._durableFacade = new DurableFacade(this);
     this.accessToken = null;
     this.refreshToken = null;
