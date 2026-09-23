@@ -32,6 +32,17 @@ test('accepts complete and sparse durable responses', () => {
   expect(isDurablePage({ ...page, data: [] })).toBe(true);
 });
 
+test.each(['pending', 'running', 'succeeded', 'failed', 'timed_out', 'stopped', 'unknown'])(
+  'accepts the documented durable status %s',
+  (status) => {
+    expect(isDurableExecution({ ...execution, status })).toBe(true);
+  },
+);
+
+test('rejects an array even when it carries every execution field', () => {
+  expect(isDurableExecution(Object.assign([], execution))).toBe(false);
+});
+
 test.each([
   null,
   [],

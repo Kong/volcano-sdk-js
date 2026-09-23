@@ -28,6 +28,13 @@ test('accepts the required wire user shape without optional timestamps', () => {
   expect(validateOAuthSession({ access_token: 'access', user })).toBeNull();
 });
 
+test.each(['active', 'banned', 'deleted'] as const)(
+  'accepts the documented user status %s',
+  (status) => {
+    expect(validateAuthUser({ ...user, status })).toBeNull();
+  },
+);
+
 test.each([
   [null, 'Auth user must be an object'],
   [[], 'Auth user must be an object'],
@@ -74,6 +81,12 @@ test('checks optional booleans, nullable strings, and JSON metadata', () => {
   expect(validateAuthUser({ ...user, app_metadata: { invalid: Number.NaN } })).toEqual(
     new TypeError('Auth user app_metadata must be JSON metadata'),
   );
+  expect(validateAuthUser({ ...user, app_metadata: { valid: 'yes', invalid: Infinity } })).toEqual(
+    new TypeError('Auth user app_metadata must be JSON metadata'),
+  );
+  expect(validateAuthUser({ ...user, user_metadata: ['valid', new Date()] })).toEqual(
+    new TypeError('Auth user user_metadata must be JSON metadata'),
+  );
   expect(validateAuthUser({ ...user, user_metadata: { invalid: new Date() } })).toEqual(
     new TypeError('Auth user user_metadata must be JSON metadata'),
   );
@@ -100,6 +113,7 @@ test.each([
   [{ ...token, refresh_token: null }, 'Auth refresh_token must be a non-empty string'],
   [{ ...token, expires_in: '3600' }, 'Auth expires_in must be an integer'],
   [{ ...token, expires_in: 1.5 }, 'Auth expires_in must be an integer'],
+  [{ ...token, expires_in: Number.NaN }, 'Auth expires_in must be an integer'],
   [{ ...token, user: { id: 'user-1' } }, 'Auth user email must be a string'],
 ])('rejects malformed token responses: %p', (candidate, message) => {
   expect(() => {

@@ -5,12 +5,39 @@ import {
   resolveFunctionByHttp,
 } from '../src/function-resolution.ts';
 import {
+  cachedFunctionResolution,
   clearSharedFunctionResolveStateForTests,
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
 
 beforeEach(() => {
   clearSharedFunctionResolveStateForTests();
+});
+
+test('accepts only complete, correctly shaped shared cache entries', () => {
+  const entry = { expiresAt: 123, functionId: 'fn-1', error: null };
+  expect(cachedFunctionResolution(entry)).toEqual(entry);
+  expect(cachedFunctionResolution({ ...entry, invokeUrl: 'https://example.test/invoke' })).toEqual({
+    ...entry,
+    invokeUrl: 'https://example.test/invoke',
+  });
+  expect(cachedFunctionResolution({ ...entry, errorMetadata: { status: 404 } })).toEqual({
+    ...entry,
+    errorMetadata: { status: 404 },
+  });
+  for (const invalid of [
+    null,
+    [],
+    {},
+    { ...entry, expiresAt: '123' },
+    { ...entry, functionId: 3 },
+    { ...entry, error: 3 },
+    { ...entry, errorMetadata: [] },
+    { ...entry, errorMetadata: null },
+    Object.assign([], entry),
+  ]) {
+    expect(cachedFunctionResolution(invalid)).toBeNull();
+  }
 });
 
 test('accepts only complete shared in-flight resolution outcomes', () => {

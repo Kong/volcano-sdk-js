@@ -165,7 +165,7 @@ export class ProjectLocksApi implements ProjectLocks {
       method: 'DELETE',
       headers: { 'X-Volcano-Request-Id': lockId(options.requestId) },
     });
-    return { error: result.ok === true ? null : result.error };
+    return { error: result.error };
   }
 
   async withLock<T>(
