@@ -40,13 +40,11 @@ import { ProjectLocksApi } from './project-locks.ts';
 import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
-import { buildStorageUrl, encodeStoragePath, publicStoragePathError } from './storage-paths.ts';
+import { buildStorageUrl, encodeStoragePath } from './storage-paths.ts';
+import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
-import {
-  decodeBase64Url,
-  extractRequiredProjectIdFromToken,
-  extractSessionIdFromToken,
-} from './token-claims.ts';
+import { storageRequest } from './storage-transport.ts';
+import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './token-claims.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -2619,41 +2617,16 @@ class StorageFileApi {
   }
 
   /**
-   * Return a validation error for a path used in a public URL
-   * @private
-   */
-  _publicPathError(path) {
-    return publicStoragePathError(path);
-  }
-
-  /**
    * Make an authenticated storage request
    * @private
    */
   async _storageRequest(url, options = {}) {
-    try {
-      const response = await fetchWithAuthRetry(this.volcanoAuth, url, options);
-
-      // For blob responses (downloads), handle separately
-      if (options.responseType === 'blob') {
-        if (!response.ok) {
-          const errorData = await safeJsonParse(response);
-          return { data: null, error: apiRequestError(response, errorData) };
-        }
-        const blob = await response.blob();
-        return { data: blob, error: null };
-      }
-
-      const data = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return { data: null, error: apiRequestError(response, data) };
-      }
-
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error: error instanceof Error ? error : new Error('Request failed') };
-    }
+    return storageRequest(
+      (requestUrl, requestOptions) =>
+        fetchWithAuthRetry(this.volcanoAuth, requestUrl, requestOptions),
+      url,
+      options,
+    );
   }
 
   /**
@@ -2838,32 +2811,12 @@ class StorageFileApi {
    * Get the public URL for a file (only works for files with is_public=true)
    */
   getPublicUrl(path) {
-    const pathError = this._publicPathError(path);
-    if (pathError) {
-      return errorResult(pathError);
-    }
-
-    try {
-      const parts = this.volcanoAuth.anonKey.split('.');
-      if (parts.length !== 3) {
-        return errorResult('Invalid anon key format');
-      }
-
-      const payload = JSON.parse(decodeBase64Url(parts[1]));
-      const projectId = payload.project_id;
-
-      if (!projectId) {
-        return errorResult('Project ID not found in anon key');
-      }
-
-      const encodedPath = this._encodePath(path);
-      const publicUrl = `${this.volcanoAuth.apiUrl}/public/${projectId}/${encodeURIComponent(this.bucketName)}/${encodedPath}`;
-      return { data: { publicUrl }, error: null };
-    } catch (error) {
-      return errorResult(
-        `Failed to parse anon key: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
+    return storagePublicUrl(
+      this.volcanoAuth.apiUrl,
+      this.bucketName,
+      this.volcanoAuth.anonKey,
+      path,
+    );
   }
 
   /**
