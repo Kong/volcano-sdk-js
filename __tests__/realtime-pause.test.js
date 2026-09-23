@@ -1,4 +1,4 @@
-const { VolcanoRealtime } = require('../src/realtime.js');
+const { VolcanoRealtime } = require('../src/realtime.ts');
 
 function createRealtime() {
   const realtime = new VolcanoRealtime({

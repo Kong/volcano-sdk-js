@@ -304,11 +304,15 @@ interface DisconnectContext {
 }
 
 interface ErrorContext {
-  error?: Error;
+  error?: unknown;
   message?: string;
   code?: number;
 }
 ```
+
+`message` and `code` are validated fields from the connection event. `error` is
+the original transport value, which may be a plain object rather than an
+`Error`; narrow it before reading transport-specific fields.
 
 ### Postgres Changes
 

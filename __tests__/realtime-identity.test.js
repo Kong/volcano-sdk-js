@@ -1,4 +1,4 @@
-const { VolcanoRealtime } = require('../src/realtime.js');
+const { VolcanoRealtime } = require('../src/realtime.ts');
 
 function token(projectId, subject, expires = 1) {
   const payload = Buffer.from(

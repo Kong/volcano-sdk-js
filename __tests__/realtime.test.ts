@@ -8,7 +8,11 @@
 // Since centrifuge is a peer dependency, we test only the parts
 // that don't require actual centrifuge client
 
-const { VolcanoRealtime, RealtimeChannel } = require('../src/realtime.js');
+import { RealtimeChannel, VolcanoRealtime } from '../src/realtime.ts';
+
+function makeRealtime(): VolcanoRealtime {
+  return new VolcanoRealtime({ apiUrl: 'https://api.example.com', anonKey: 'project123.secret' });
+}
 
 describe('VolcanoRealtime', () => {
   beforeEach(() => {
@@ -17,21 +21,15 @@ describe('VolcanoRealtime', () => {
 
   describe('constructor', () => {
     test('throws error if apiUrl is missing', () => {
-      expect(
-        () =>
-          new VolcanoRealtime({
-            anonKey: 'project123.secret',
-          }),
-      ).toThrow('apiUrl is required');
+      expect(() => {
+        Reflect.construct(VolcanoRealtime, [{ anonKey: 'project123.secret' }]);
+      }).toThrow('apiUrl is required');
     });
 
     test('throws error if anonKey is missing', () => {
-      expect(
-        () =>
-          new VolcanoRealtime({
-            apiUrl: 'https://api.example.com',
-          }),
-      ).toThrow('anonKey is required');
+      expect(() => {
+        Reflect.construct(VolcanoRealtime, [{ apiUrl: 'https://api.example.com' }]);
+      }).toThrow('anonKey is required');
     });
 
     test('creates client with valid config', () => {
@@ -141,14 +139,11 @@ describe('VolcanoRealtime', () => {
   });
 
   describe('_handleServerPublication (per-user postgres routing, VOL-522)', () => {
-    const mk = () =>
-      new VolcanoRealtime({ apiUrl: 'https://api.example.com', anonKey: 'project123.secret' });
-
     test('routes a per-user postgres channel to the base channel', () => {
-      const realtime = mk();
+      const realtime = makeRealtime();
       const channel = realtime.channel('public:messages', { type: 'postgres' });
-      let delivered = null;
-      channel._handlePublication = (ctx) => {
+      let delivered: unknown = null;
+      channel._handlePublication = (ctx: unknown) => {
         delivered = ctx;
       };
       // Server delivers RLS-scoped changes on projectId:postgres:schema:table:userID
@@ -161,10 +156,10 @@ describe('VolcanoRealtime', () => {
     });
 
     test('still routes a base (non-user) postgres channel', () => {
-      const realtime = mk();
+      const realtime = makeRealtime();
       const channel = realtime.channel('public:messages', { type: 'postgres' });
-      let delivered = null;
-      channel._handlePublication = (ctx) => {
+      let delivered: unknown = null;
+      channel._handlePublication = (ctx: unknown) => {
         delivered = ctx;
       };
       realtime._handleServerPublication({
@@ -175,10 +170,10 @@ describe('VolcanoRealtime', () => {
     });
 
     test('does not route an unrelated postgres table to a different channel', () => {
-      const realtime = mk();
+      const realtime = makeRealtime();
       const channel = realtime.channel('public:messages', { type: 'postgres' });
-      let delivered = null;
-      channel._handlePublication = (ctx) => {
+      let delivered: unknown = null;
+      channel._handlePublication = (ctx: unknown) => {
         delivered = ctx;
       };
       realtime._handleServerPublication({
@@ -190,10 +185,10 @@ describe('VolcanoRealtime', () => {
     });
 
     test('only the exact 5-segment per-user form triggers the fallback (no over-match)', () => {
-      const realtime = mk();
+      const realtime = makeRealtime();
       const channel = realtime.channel('public:messages', { type: 'postgres' });
-      let delivered = null;
-      channel._handlePublication = (ctx) => {
+      let delivered: unknown = null;
+      channel._handlePublication = (ctx: unknown) => {
         delivered = ctx;
       };
       // A 6-segment channel is not the well-defined per-user format; it must not
@@ -272,7 +267,7 @@ describe('VolcanoRealtime', () => {
 });
 
 describe('RealtimeChannel', () => {
-  let realtime;
+  let realtime: VolcanoRealtime;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -298,7 +293,8 @@ describe('RealtimeChannel', () => {
       const callback = jest.fn();
       channel.on('message', callback);
 
-      expect(channel._callbacks.get('message')).toContain(callback);
+      channel._deliverPayload({ event: 'message' }, { data: { event: 'message' } });
+      expect(callback).toHaveBeenCalledWith({ event: 'message' }, { data: { event: 'message' } });
     });
 
     test('returns unsubscribe function', () => {
@@ -318,7 +314,8 @@ describe('RealtimeChannel', () => {
       const callback = jest.fn();
       channel.on('*', callback);
 
-      expect(channel._callbacks.get('*')).toContain(callback);
+      channel._deliverPayload({ event: 'message' }, { data: { event: 'message' } });
+      expect(callback).toHaveBeenCalledWith({ event: 'message' }, { data: { event: 'message' } });
     });
   });
 

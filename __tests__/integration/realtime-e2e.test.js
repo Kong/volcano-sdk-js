@@ -24,7 +24,7 @@ try {
 }
 
 const { VolcanoAuth } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.js');
+const { VolcanoRealtime } = require('../../src/realtime.ts');
 const WebSocket = require('ws');
 
 // Configuration from environment

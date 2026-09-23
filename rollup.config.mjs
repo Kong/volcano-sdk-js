@@ -55,7 +55,7 @@ export default [
   },
   // Realtime module bundle
   {
-    input: 'src/realtime.js',
+    input: 'src/realtime.ts',
     plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [

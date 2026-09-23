@@ -328,7 +328,7 @@ async function authErrorMetadata() {
 }
 void authErrorMetadata;
 
-import type { PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.js';
+import type { PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.ts';
 declare const presenceChannel: RealtimeChannel;
 function presenceIdentity(state: PresenceState) {
   for (const info of Object.values(state)) {
@@ -343,7 +343,7 @@ function presenceIdentity(state: PresenceState) {
 presenceChannel.onPresenceSync(presenceIdentity);
 presenceIdentity(presenceChannel.getPresenceState());
 
-import type { PostgresChange } from '../../src/realtime.js';
+import type { PostgresChange } from '../../src/realtime.ts';
 declare const postgresChange: PostgresChange;
 const primaryKey: string | number | undefined = postgresChange.id;
 const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
