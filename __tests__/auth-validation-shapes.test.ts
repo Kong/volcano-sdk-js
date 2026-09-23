@@ -87,6 +87,15 @@ test('checks optional booleans, nullable strings, and JSON metadata', () => {
   expect(validateAuthUser({ ...user, user_metadata: ['valid', new Date()] })).toEqual(
     new TypeError('Auth user user_metadata must be JSON metadata'),
   );
+  expect(validateAuthUser({ ...user, user_metadata: { list: ['valid', new Date()] } })).toEqual(
+    new TypeError('Auth user user_metadata must be JSON metadata'),
+  );
+  expect(
+    validateAuthUser({ ...user, user_metadata: { nested: { valid: 'yes', invalid: Infinity } } }),
+  ).toEqual(new TypeError('Auth user user_metadata must be JSON metadata'));
+  expect(validateAuthUser({ ...user, user_metadata: null })).toEqual(
+    new TypeError('Auth user user_metadata must be JSON metadata'),
+  );
   expect(validateAuthUser({ ...user, user_metadata: { invalid: new Date() } })).toEqual(
     new TypeError('Auth user user_metadata must be JSON metadata'),
   );

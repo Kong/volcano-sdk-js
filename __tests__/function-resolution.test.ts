@@ -16,7 +16,7 @@ beforeEach(() => {
 
 test('accepts only complete, correctly shaped shared cache entries', () => {
   const entry = { expiresAt: 123, functionId: 'fn-1', error: null };
-  expect(cachedFunctionResolution(entry)).toEqual(entry);
+  expect(cachedFunctionResolution(entry)).toStrictEqual(entry);
   expect(cachedFunctionResolution({ ...entry, invokeUrl: 'https://example.test/invoke' })).toEqual({
     ...entry,
     invokeUrl: 'https://example.test/invoke',

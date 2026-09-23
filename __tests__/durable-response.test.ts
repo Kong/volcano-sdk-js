@@ -43,6 +43,17 @@ test('rejects an array even when it carries every execution field', () => {
   expect(isDurableExecution(Object.assign([], execution))).toBe(false);
 });
 
+test('rejects a callable object even when it carries every execution field', () => {
+  const callable = Object.assign((value: unknown) => value, {
+    id: execution.id,
+    function_id: execution.function_id,
+    status: execution.status,
+    region: execution.region,
+    created_at: execution.created_at,
+  });
+  expect(isDurableExecution(callable)).toBe(false);
+});
+
 test.each([
   null,
   [],

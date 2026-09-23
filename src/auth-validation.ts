@@ -50,7 +50,7 @@ function isJsonScalar(value: unknown): value is string | number | boolean | null
     value === null ||
     typeof value === 'string' ||
     typeof value === 'boolean' ||
-    (typeof value === 'number' && Number.isFinite(value))
+    Number.isFinite(value)
   );
 }
 
@@ -153,7 +153,7 @@ function assertOptionalRefreshToken(data: Record<string, unknown>): void {
 }
 
 function assertExpiresIn(data: Record<string, unknown>): void {
-  if (typeof data['expires_in'] !== 'number' || !Number.isInteger(data['expires_in'])) {
+  if (!Number.isInteger(data['expires_in'])) {
     throw new TypeError('Auth expires_in must be an integer');
   }
 }
