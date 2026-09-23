@@ -1,5 +1,5 @@
 const { VolcanoAuth, AuthSessionChangedError } = require('../src');
-const { sessionToken } = require('./session-fixtures');
+const { sessionToken } = require('./session-fixtures.ts');
 
 const SESSION = '00000000-0000-4000-8000-000000000010';
 const OTHER = '00000000-0000-4000-8000-000000000011';

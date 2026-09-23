@@ -1,4 +1,4 @@
-const { sessionToken } = require('./session-fixtures.js');
+const { sessionToken } = require('./session-fixtures.ts');
 const { AuthRefreshDiscardedError, VolcanoAuth } = require('../src/index.js');
 
 function createDeferred() {
