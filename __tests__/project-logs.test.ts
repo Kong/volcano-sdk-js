@@ -41,6 +41,13 @@ test('accepts optional log fields omitted and all documented resource kinds', ()
   }
 });
 
+test.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
+  'accepts the documented %s log level',
+  (level) => {
+    expect(logSearchResult({ ...search, data: [{ ...event, level }] }).error).toBeNull();
+  },
+);
+
 test.each([
   null,
   {},
@@ -52,6 +59,9 @@ test.each([
   { ...search, data: [{ ...event, timestamp: null }] },
   { ...search, data: [{ ...event, body: { invalid: undefined } }] },
   { ...search, data: [{ ...event, body: [Symbol('invalid')] }] },
+  { ...search, data: [{ ...event, body: ['valid', Symbol('invalid')] }] },
+  { ...search, data: [{ ...event, body: { valid: 'yes', invalid: Symbol('invalid') } }] },
+  { ...search, data: [event, { ...event, id: null }] },
   { ...search, data: [{ ...event, resource: null }] },
   { ...search, data: [{ ...event, resource: { type: 'other', id: 'fn-1' } }] },
   { ...search, data: [{ ...event, resource: { type: 'function', id: null } }] },
@@ -62,7 +72,10 @@ test.each([
   { ...search, data: [{ ...event, deployment: { id: 'deployment-1', stage: 1 } }] },
   { ...search, data: [{ ...event, invocation_id: 1 }] },
 ])('rejects malformed search response %#', (value) => {
-  expect(logSearchResult(value)).toMatchObject({ data: null, error: expect.any(TypeError) });
+  expect(logSearchResult(value)).toEqual({
+    data: null,
+    error: new TypeError('Invalid log search response'),
+  });
 });
 
 test.each([
@@ -75,8 +88,16 @@ test.each([
   { ...activity, data: [{ ...bucket, total: null }] },
   { ...activity, data: [{ ...bucket, counts: null }] },
   { ...activity, data: [{ ...bucket, counts: { ...bucket.counts, levels: { warn: '1' } } }] },
+  {
+    ...activity,
+    data: [{ ...bucket, counts: { ...bucket.counts, levels: { warn: 1, error: '1' } } }],
+  },
   { ...activity, data: [{ ...bucket, counts: { ...bucket.counts, regions: null } }] },
   { ...activity, data: [{ ...bucket, counts: { ...bucket.counts, resource_ids: null } }] },
+  { ...activity, data: [bucket, { ...bucket, total: null }] },
 ])('rejects malformed activity response %#', (value) => {
-  expect(logActivityResult(value)).toMatchObject({ data: null, error: expect.any(TypeError) });
+  expect(logActivityResult(value)).toEqual({
+    data: null,
+    error: new TypeError('Invalid log activity response'),
+  });
 });

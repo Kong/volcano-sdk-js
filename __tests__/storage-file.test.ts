@@ -395,10 +395,53 @@ test.each(['move', 'copy'] as const)(
     expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/${operation}`);
     expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ from: 'source.bin', to: 'destination.bin' }),
     });
   },
 );
+
+test.each([
+  {
+    operation: 'move',
+    run: (api: StorageFileApi) => api.move('source.bin', 'destination.bin'),
+    error: 'Invalid storage move response',
+  },
+  {
+    operation: 'copy',
+    run: (api: StorageFileApi) => api.copy('source.bin', 'destination.bin'),
+    error: 'Invalid storage copy response',
+  },
+  {
+    operation: 'visibility',
+    run: (api: StorageFileApi) => api.updateVisibility('file.bin', true),
+    error: 'Invalid storage visibility response',
+  },
+  {
+    operation: 'upload session creation',
+    run: (api: StorageFileApi) => api.createUploadSession('file.bin', { totalSize: 4 }),
+    error: 'Invalid upload session creation response',
+  },
+  {
+    operation: 'upload part',
+    run: (api: StorageFileApi) => api.uploadPart('file.bin', 'session-1', 1, new Blob()),
+    error: 'Invalid upload part response',
+  },
+  {
+    operation: 'completed upload',
+    run: (api: StorageFileApi) => api.completeUploadSession('file.bin', 'session-1'),
+    error: 'Invalid completed upload response',
+  },
+  {
+    operation: 'upload session status',
+    run: (api: StorageFileApi) => api.getUploadSession('file.bin', 'session-1'),
+    error: 'Invalid upload session status response',
+  },
+])('$operation reports malformed successful responses', async ({ run, error }) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({}));
+  await expect(run(given.api)).resolves.toMatchObject({ data: null, error: new TypeError(error) });
+});
 
 test.each(['move', 'copy'] as const)(
   '%s does not request storage without a session',
@@ -429,6 +472,7 @@ test('updates visibility through the storage route', async () => {
   expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/file.bin/visibility`);
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'PATCH',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ is_public: true }),
   });
 });
@@ -474,6 +518,7 @@ test('creates an upload session with the legacy body defaults', async () => {
   });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'POST',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       filename: '',
       content_type: 'application/octet-stream',
@@ -520,6 +565,7 @@ test('uploads a binary part with ownership and part-number headers', async () =>
     method: 'PUT',
     body: part,
     headers: expect.objectContaining({
+      'Content-Type': 'application/octet-stream',
       'X-Upload-Session': 'session-1',
       'X-Part-Number': '2',
     }),
@@ -537,6 +583,7 @@ test('completes an upload session with its owner header', async () => {
     method: 'POST',
     body: '{}',
     headers: expect.objectContaining({
+      'Content-Type': 'application/json',
       'X-Upload-Session': 'session-1',
       'X-Upload-Complete': 'true',
     }),
