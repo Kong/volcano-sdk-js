@@ -1,4 +1,5 @@
 const js = require('@eslint/js');
+const { createTypeScriptImportResolver } = require('eslint-import-resolver-typescript');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const prettierConfig = require('eslint-config-prettier/flat');
 const importX = require('eslint-plugin-import-x');
@@ -45,7 +46,7 @@ const strictFiles = [
   ...exampleConfigFiles,
   ...exampleFiles,
 ];
-const lintedFiles = [...jsFiles, ...declarationFiles];
+const lintedFiles = [...jsFiles, ...declarationFiles, ...typescriptFiles];
 
 const asArray = (config) => (Array.isArray(config) ? config : [config]);
 const scopeConfig = (config, files) => asArray(config).map((item) => ({ ...item, files }));
@@ -95,11 +96,10 @@ module.exports = [
       },
     },
     settings: {
-      'import-x/resolver': {
-        node: {
-          extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'],
-        },
-      },
+      'import-x/resolver-next': [
+        createTypeScriptImportResolver({ project: './tsconfig.json' }),
+        importPlugin.createNodeResolver({ extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'] }),
+      ],
     },
   },
   {

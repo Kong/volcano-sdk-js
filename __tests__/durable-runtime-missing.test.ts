@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { durable, DurableRuntimeMissingError } from '../src/durable.js';
+import { durable, DurableRuntimeMissingError } from '../src/durable.ts';
 
 // A durable handler running where durable execution does not exist — a function
 // that was not deployed as durable, a browser, a local script — cannot load the

@@ -1,15 +1,15 @@
 import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
-import { importDurableRuntime } from './durable-runtime-loader.js';
 
 interface DurableEngine {
-  withDurableExecution(
-    handler: (input: unknown, context: unknown) => unknown,
-  ): (event: unknown, functionContext: unknown) => Promise<unknown>;
+  withDurableExecution<Handler extends (input: never, context: unknown) => Promise<unknown>>(
+    handler: Handler,
+  ): (event: unknown, functionContext: unknown) => Promise<Awaited<ReturnType<Handler>>>;
   StepSemantics: { AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY' };
   createRetryStrategy(config: Record<string, unknown>): unknown;
   createWaitStrategy(config: Record<string, unknown>): unknown;
 }
 
+// Volcano installs this optional peer only in deployed durable functions.
 let enginePromise: Promise<DurableEngine> | undefined;
 
 export function loadEngine(): Promise<DurableEngine> {
@@ -20,7 +20,7 @@ export function loadEngine(): Promise<DurableEngine> {
 async function resolveEngine(): Promise<DurableEngine> {
   let loaded: unknown;
   try {
-    loaded = await importDurableRuntime();
+    loaded = await import('@aws/durable-execution-sdk-js');
   } catch (cause: unknown) {
     throw new DurableRuntimeMissingError(cause);
   }

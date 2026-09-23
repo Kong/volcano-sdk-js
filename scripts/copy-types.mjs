@@ -22,8 +22,18 @@ const declarationFiles = [
   ['src/realtime.d.ts', 'dist/realtime.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/durable-types.d.ts', 'dist/durable-types.d.ts', toCjsDeclaration],
   ['dist/typescript/durable-types.d.ts', 'dist/durable-types.esm.d.mts', toEsmDeclaration],
-  ['src/durable.d.ts', 'dist/durable.d.ts'],
-  ['src/durable.d.ts', 'dist/durable.esm.d.mts', toEsmDeclaration],
+  [
+    'dist/typescript/durable-runtime-error.d.ts',
+    'dist/durable-runtime-error.d.ts',
+    toCjsDeclaration,
+  ],
+  [
+    'dist/typescript/durable-runtime-error.d.ts',
+    'dist/durable-runtime-error.esm.d.mts',
+    toEsmDeclaration,
+  ],
+  ['dist/typescript/durable.d.ts', 'dist/durable.d.ts', toCjsDeclaration],
+  ['dist/typescript/durable.d.ts', 'dist/durable.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.d.ts', toCjsDeclaration],
   ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.esm.d.mts', toEsmDeclaration],
 ];

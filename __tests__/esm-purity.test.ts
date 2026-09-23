@@ -23,7 +23,7 @@ import * as ts from 'typescript';
 //     rollup/plugin/config change that injects impurity without touching a
 //     source file — the residual gap a source-only scan leaves).
 const ROOT = join(__dirname, '..');
-const SOURCES = ['src/index.js', 'src/realtime.js', 'src/durable.js', 'src/next/middleware.ts'];
+const SOURCES = ['src/index.js', 'src/realtime.js', 'src/durable.ts', 'src/next/middleware.ts'];
 const ESM_BUILDS = [
   'dist/index.esm.mjs',
   'dist/realtime.esm.mjs',

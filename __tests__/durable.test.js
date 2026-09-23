@@ -133,7 +133,7 @@ jest.mock(
   { virtual: true },
 );
 
-const { durable } = require('../src/durable.js');
+const { durable } = require('../src/durable.ts');
 
 const run = async (handler, input = {}) => {
   const result = await durable(handler)({ input }, {});

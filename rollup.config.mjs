@@ -90,7 +90,7 @@ export default [
   // is imported lazily at runtime: it is an optional peer dependency only a
   // durable function installs.
   {
-    input: 'src/durable.js',
+    input: 'src/durable.ts',
     plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['@aws/durable-execution-sdk-js'],
     output: [
