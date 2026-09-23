@@ -1,12 +1,24 @@
-const { VolcanoAuth, AuthSessionChangedError } = require('../src/index.js');
+/** @jest-environment ./__tests__/node-environment.cjs */
+import { describe, expect, it, jest } from '@jest/globals';
+import { AuthSessionChangedError, VolcanoAuth } from '../src/index.js';
+import {
+  deferred,
+  fetchBody,
+  fetchCall,
+  fetchPath,
+  fetchUrl,
+  jsonField,
+  reply,
+  resultError,
+  signal,
+} from './auth-concurrency-fixtures.ts';
 
-function token(sessionId, renewed = false) {
+const fetchMock = jest.mocked(globalThis.fetch);
+
+function token(sessionId: string, renewed = false): string {
   return `header.${Buffer.from(JSON.stringify({ session_id: sessionId, renewed })).toString('base64url')}.signature`;
 }
-function reply(status, data = {}) {
-  return { ok: status >= 200 && status < 300, status, json: async () => data };
-}
-function refresh(sessionId = '00000000-0000-4000-8000-000000000001', userId = 'user-a') {
+function refresh(sessionId = '00000000-0000-4000-8000-000000000001', userId = 'user-a'): Response {
   return reply(200, {
     access_token: token(sessionId, true),
     refresh_token: 'rotated',
@@ -24,10 +36,6 @@ function client() {
 }
 
 describe('server session continuity', () => {
-  beforeEach(() => {
-    global.fetch = jest.fn();
-  });
-
   it.each([
     ['user-a', false],
     ['user-b', false],
@@ -36,17 +44,17 @@ describe('server session continuity', () => {
   ])('rejects a different session for %s, profile validated: %s', async (userId, profileFirst) => {
     const current = client();
     if (profileFirst) {
-      global.fetch.mockResolvedValueOnce(
+      fetchMock.mockResolvedValueOnce(
         reply(200, { user: { id: 'user-a', email: 'fixture@example.com', status: 'active' } }),
       );
       await current.auth.getUser();
     }
-    global.fetch
+    fetchMock
       .mockResolvedValueOnce(reply(401, { error: 'expired' }))
       .mockResolvedValueOnce(refresh('00000000-0000-4000-8000-000000000002', userId));
     const outcome = await current.database('main').insert('items', { name: 'example' }).execute();
     expect(outcome.error).toBeTruthy();
-    expect(global.fetch).toHaveBeenCalledTimes(profileFirst ? 3 : 2);
+    expect(fetchMock).toHaveBeenCalledTimes(profileFirst ? 3 : 2);
     expect(current.accessToken).toBe(token('00000000-0000-4000-8000-000000000001'));
   });
 
@@ -57,30 +65,31 @@ describe('server session continuity', () => {
       refreshToken: 'refresh',
     });
     const outcome = await current.auth.refreshSession();
-    expect(outcome.error.message).toContain('session identifier');
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(outcome.error?.message).toContain('session identifier');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
     'renews expired access for revocation, replacement: %s',
     async (replace) => {
       const current = client();
-      global.fetch
+      fetchMock
         .mockResolvedValueOnce(reply(401, { error: 'expired' }))
         .mockImplementationOnce(async () => {
-          if (replace)
+          if (replace) {
             await current.auth.setSession({
               access_token: 'replacement',
               refresh_token: 'replacement-refresh',
               user: { id: 'other', email: 'fixture@example.com', status: 'active' },
             });
+          }
           return refresh();
         })
         .mockResolvedValueOnce(reply(204));
       const result = await current.auth.signOut();
       expect(result.error?.constructor ?? null).toBe(replace ? AuthSessionChangedError : null);
-      expect(global.fetch).toHaveBeenCalledTimes(3);
-      expect(global.fetch.mock.calls[2]).toEqual([
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[2]).toEqual([
         'https://api.test/auth/user/sessions/00000000-0000-4000-8000-000000000001',
         expect.objectContaining({
           method: 'DELETE',
@@ -95,62 +104,53 @@ describe('server session continuity', () => {
 
   it('clears a refresh of the revoked session lineage', async () => {
     const current = client();
-    global.fetch
+    fetchMock
       .mockImplementationOnce(async () => {
         await current.auth.refreshSession();
         return reply(204);
       })
       .mockResolvedValueOnce(refresh());
-    expect((await current.auth.signOut()).error).toBeNull();
+    expect(await resultError(current.auth.signOut())).toBeNull();
     expect(current.accessToken).toBeNull();
   });
 
   it('never revokes another session while recovering expired access', async () => {
     const current = client();
-    global.fetch
+    fetchMock
       .mockResolvedValueOnce(reply(401, { error: 'expired' }))
       .mockResolvedValueOnce(refresh('00000000-0000-4000-8000-000000000002'));
     const result = await current.auth.signOut();
-    expect(result.error.message).toContain('different server session');
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result.error?.message).toContain('different server session');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(current.accessToken).toBeNull();
   });
   it.each([false, true])(
     'shares a rotating refresh with sign-out, refresh finishes first: %s',
     async (finishFirst) => {
       const current = client();
-      let resolveDelete;
-      let resolveRefresh;
-      const firstDelete = new Promise((resolve) => {
-        resolveDelete = resolve;
-      });
-      const refreshResult = new Promise((resolve) => {
-        resolveRefresh = resolve;
-      });
-      let deleteStarted;
-      const started = new Promise((resolve) => {
-        deleteStarted = resolve;
-      });
-      global.fetch
+      const firstDelete = deferred<Response>();
+      const refreshResult = deferred<Response>();
+      const started = signal();
+      fetchMock
         .mockImplementationOnce(() => {
-          deleteStarted();
-          return firstDelete;
+          started.resolve();
+          return firstDelete.promise;
         })
-        .mockReturnValueOnce(refreshResult)
+        .mockReturnValueOnce(refreshResult.promise)
         .mockResolvedValueOnce(reply(204));
       const signingOut = current.auth.signOut();
-      await started;
+      await started.promise;
       const refreshing = current.auth.refreshSession();
       if (finishFirst) {
-        resolveRefresh(refresh());
+        refreshResult.resolve(refresh());
         await refreshing;
       }
-      resolveDelete(reply(401, { error: 'expired' }));
+      firstDelete.resolve(reply(401, { error: 'expired' }));
       await Promise.resolve();
-      resolveRefresh(refresh());
+      refreshResult.resolve(refresh());
       await refreshing;
-      expect((await signingOut).error).toBeNull();
-      expect(global.fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+      expect(await resultError(signingOut)).toBeNull();
+      expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual([
         '/auth/user/sessions/00000000-0000-4000-8000-000000000001',
         '/auth/refresh',
         '/auth/user/sessions/00000000-0000-4000-8000-000000000001',
@@ -166,36 +166,29 @@ describe('server session continuity', () => {
       accessToken: token('../invalid'),
       refreshToken: 'refresh',
     });
-    global.fetch.mockResolvedValueOnce(reply(204));
-    expect((await current.auth.signOut()).error).toBeNull();
-    expect(global.fetch.mock.calls[0][0]).toBe('https://api.test/auth/logout');
+    fetchMock.mockResolvedValueOnce(reply(204));
+    expect(await resultError(current.auth.signOut())).toBeNull();
+    expect(fetchCall(0)[0]).toBe('https://api.test/auth/logout');
   });
   it('shares the old refresh while a replacement session also refreshes', async () => {
     const current = client();
-    let resolveOldRefresh, resolveNewRefresh, oldStarted, newStarted;
-    const oldRequested = new Promise((resolve) => {
-      oldStarted = resolve;
-    });
-    const newRequested = new Promise((resolve) => {
-      newStarted = resolve;
-    });
-    const oldRefresh = new Promise((resolve) => {
-      resolveOldRefresh = resolve;
-    });
-    const newRefresh = new Promise((resolve) => {
-      resolveNewRefresh = resolve;
-    });
-    global.fetch.mockImplementation((url, options) => {
-      if (url.endsWith('/auth/logout')) return Promise.resolve(reply(204));
-      if (JSON.parse(options.body).refresh_token === 'refresh') {
-        oldStarted();
-        return oldRefresh;
+    const oldRequested = signal();
+    const newRequested = signal();
+    const oldRefresh = deferred<Response>();
+    const newRefresh = deferred<Response>();
+    fetchMock.mockImplementation((url, options) => {
+      if (fetchUrl(url).endsWith('/auth/logout')) {
+        return Promise.resolve(reply(204));
       }
-      newStarted();
-      return newRefresh;
+      if (jsonField(options, 'refresh_token') === 'refresh') {
+        oldRequested.resolve();
+        return oldRefresh.promise;
+      }
+      newRequested.resolve();
+      return newRefresh.promise;
     });
     const refreshingOld = current.auth.refreshSession();
-    await oldRequested;
+    await oldRequested.promise;
     const signingOut = current.auth.signOut();
     await Promise.resolve();
     await current.auth.setSession({
@@ -204,15 +197,15 @@ describe('server session continuity', () => {
       user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
     });
     const refreshingNew = current.auth.refreshSession();
-    await newRequested;
-    resolveOldRefresh(refresh());
+    await newRequested.promise;
+    oldRefresh.resolve(refresh());
     await refreshingOld;
-    expect((await signingOut).error).toBeInstanceOf(AuthSessionChangedError);
-    resolveNewRefresh(refresh('00000000-0000-4000-8000-000000000002', 'user-b'));
-    expect((await refreshingNew).error).toBeNull();
-    expect(global.fetch).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(global.fetch.mock.calls[2][1].body)).toEqual({ refresh_token: 'rotated' });
-    expect(current.currentUser.id).toBe('user-b');
+    expect(await resultError(signingOut)).toBeInstanceOf(AuthSessionChangedError);
+    newRefresh.resolve(refresh('00000000-0000-4000-8000-000000000002', 'user-b'));
+    expect(await resultError(refreshingNew)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetchBody(2))).toEqual({ refresh_token: 'rotated' });
+    expect(current.currentUser?.id).toBe('user-b');
   });
 });
 
@@ -220,22 +213,22 @@ it.each([false, true])(
   'does not trust a supplied profile without a session ID, enriched: %s',
   async (enriched) => {
     const current = client();
-    global.fetch = jest.fn().mockResolvedValue(refresh());
+    fetchMock.mockResolvedValue(refresh());
     await current.auth.setSession({
       access_token: 'opaque',
       refresh_token: 'foreign-refresh',
       user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
     });
     if (enriched) {
-      global.fetch.mockResolvedValueOnce(
+      fetchMock.mockResolvedValueOnce(
         reply(200, { user: { id: 'user-a', email: 'fixture@example.com', status: 'active' } }),
       );
       await current.auth.getUser();
-      global.fetch.mockClear();
+      fetchMock.mockClear();
     }
     const outcome = await current.auth.refreshSession();
     expect(outcome.error?.message).toContain('session identifier');
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(current.accessToken).toBe('opaque');
   },
 );

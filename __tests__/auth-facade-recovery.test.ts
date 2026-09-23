@@ -1,13 +1,13 @@
-const { VolcanoAuth, AuthSessionChangedError } = require('../src');
-const { sessionToken } = require('./session-fixtures.ts');
+/** @jest-environment ./__tests__/node-environment.cjs */
+import { describe, expect, it, jest } from '@jest/globals';
+import { AuthSessionChangedError, VolcanoAuth } from '../src/index.js';
+import { fetchCall, fetchUrl, jsonField, reply, resultError } from './auth-concurrency-fixtures.ts';
+import { sessionToken } from './session-fixtures.ts';
+
+const fetchMock = jest.mocked(globalThis.fetch);
 
 const SESSION = '00000000-0000-4000-8000-000000000010';
 const OTHER = '00000000-0000-4000-8000-000000000011';
-const reply = (status, data = {}) => ({
-  ok: status >= 200 && status < 300,
-  status,
-  json: async () => data,
-});
 const renewed = () =>
   reply(200, {
     access_token: sessionToken(SESSION, true),
@@ -19,8 +19,13 @@ const replacement = {
   access_token: sessionToken(OTHER),
   refresh_token: 'other-refresh',
   user: { id: 'other', email: 'other@example.com', status: 'active' },
-};
-const cases = [
+} as const;
+const cases: readonly [
+  string,
+  (client: VolcanoAuth) => Promise<{ error: unknown }>,
+  number,
+  unknown,
+][] = [
   ['request email', (c) => c.auth.requestEmailChange('new@example.com'), 200, {}],
   ['cancel email', (c) => c.auth.cancelEmailChange(), 200, {}],
   [
@@ -72,93 +77,97 @@ function client() {
   });
 }
 
-beforeEach(() => {
-  global.fetch = jest.fn();
-});
-
 describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
   it.each(['json', 'empty', 'html'])(
     'replays the captured request after %s401',
     async (rejection) => {
       const denied = reply(401, { error: 'expired' });
-      if (rejection !== 'json')
-        denied.json = async () => {
-          throw new SyntaxError(rejection);
-        };
-      global.fetch
+      if (rejection !== 'json') {
+        jest.spyOn(denied, 'json').mockRejectedValue(new SyntaxError(rejection));
+      }
+      fetchMock
         .mockResolvedValueOnce(denied)
         .mockResolvedValueOnce(renewed())
         .mockResolvedValueOnce(reply(status, body));
       const current = client();
-      expect((await invoke(current)).error).toBeNull();
-      const requests = global.fetch.mock.calls;
-      expect(requests.map(([, options]) => options.headers.Authorization)).toEqual([
+      expect(await resultError(invoke(current))).toBeNull();
+      expect(
+        fetchMock.mock.calls.map(([, options]) =>
+          new Headers(options?.headers).get('Authorization'),
+        ),
+      ).toEqual([
         `Bearer ${sessionToken(SESSION)}`,
         'Bearer anon',
         `Bearer ${sessionToken(SESSION, true)}`,
       ]);
-      expect(requests[0][0]).toBe(requests[2][0]);
-      expect(requests[0][1].body).toBe(requests[2][1].body);
+      expect(fetchCall(0)[0]).toBe(fetchCall(2)[0]);
+      expect(fetchCall(0)[1]?.body).toBe(fetchCall(2)[1]?.body);
     },
   );
 
   it('bounds repeated401 to one refresh', async () => {
-    global.fetch
+    fetchMock
       .mockResolvedValueOnce(reply(401))
       .mockResolvedValueOnce(renewed())
       .mockResolvedValueOnce(reply(401));
-    expect((await invoke(client())).error).toBeTruthy();
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(await resultError(invoke(client()))).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it.each(['transport', '503'])('does not retry %s failures', async (failure) => {
-    if (failure === 'transport') global.fetch.mockRejectedValue(new Error('response lost'));
-    else global.fetch.mockResolvedValue(reply(503));
-    expect((await invoke(client())).error).toBeTruthy();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    if (failure === 'transport') {
+      fetchMock.mockRejectedValue(new Error('response lost'));
+    } else {
+      fetchMock.mockResolvedValue(reply(503));
+    }
+    expect(await resultError(invoke(client()))).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('preserves explicit replacement during the request', async () => {
     const current = client();
-    global.fetch.mockImplementation(async () => {
+    fetchMock.mockImplementation(async () => {
       await current.auth.setSession(replacement);
       return reply(401);
     });
-    expect((await invoke(current)).error).toMatchObject({ status: 409 });
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(await resultError(invoke(current))).toMatchObject({ status: 409 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(current.accessToken).toBe(replacement.access_token);
   });
 
   it('captures ownership before yielding to a replacement session', async () => {
     const current = client();
-    global.fetch.mockResolvedValue(reply(status, body));
+    fetchMock.mockResolvedValue(reply(status, body));
     const request = invoke(current);
     await current.auth.setSession(replacement);
-    expect((await request).error).toBeInstanceOf(AuthSessionChangedError);
-    for (const [, options] of global.fetch.mock.calls) {
-      expect(options.headers.Authorization).toBe(`Bearer ${sessionToken(SESSION)}`);
+    expect(await resultError(request)).toBeInstanceOf(AuthSessionChangedError);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(new Headers(options?.headers).get('Authorization')).toBe(
+        `Bearer ${sessionToken(SESSION)}`,
+      );
     }
   });
 });
 
 it('captures ownership before serializing a provider API body', async () => {
   const current = client();
-  global.fetch.mockResolvedValue(reply(200, { data: {} }));
-  const body = {
-    toJSON() {
+  fetchMock.mockResolvedValue(reply(200, { data: {} }));
+  const body: Record<string, string> = {};
+  Object.defineProperty(body, 'toJSON', {
+    value() {
       void current.auth.setSession(replacement);
       return { name: 'original' };
     },
-  };
+  });
   const result = await current.auth.callOAuthAPI('github', { endpoint: '/user', body });
   expect(result.error).toBeInstanceOf(AuthSessionChangedError);
-  expect(global.fetch).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
-describe.each(['updateUser', 'convertAnonymous'])('%s profile ownership', (method) => {
+describe.each(['updateUser', 'convertAnonymous'] as const)('%s profile ownership', (method) => {
   it.each(['getter', 'toJSON'])('captures ownership before a profile %s', async (boundary) => {
     const current = client();
-    global.fetch.mockResolvedValue(reply(200, { user: { id: 'other' } }));
+    fetchMock.mockResolvedValue(reply(200, { user: { id: 'other' } }));
     const replaceSession = () => {
       void current.auth.setSession(replacement);
       return { name: 'original' };
@@ -166,82 +175,121 @@ describe.each(['updateUser', 'convertAnonymous'])('%s profile ownership', (metho
     const options =
       boundary === 'getter'
         ? {
+            email: 'replacement@example.com',
+            password: 'synthetic',
             get metadata() {
               return replaceSession();
             },
           }
-        : { metadata: { toJSON: replaceSession } };
+        : {
+            email: 'replacement@example.com',
+            password: 'synthetic',
+            metadata: Object.defineProperty({}, 'toJSON', { value: replaceSession }),
+          };
     const result = await current.auth[method](options);
     expect(result.error).toBeInstanceOf(AuthSessionChangedError);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
 it('captures ownership before serializing email confirmation', async () => {
   const current = client();
-  global.fetch.mockResolvedValue(reply(200, { user: { id: 'other' } }));
-  const token = {
+  fetchMock.mockResolvedValue(reply(200, { user: { id: 'other' } }));
+  const token = Object.assign('confirmation', {
     toJSON() {
       void current.auth.setSession(replacement);
       return 'confirmation';
     },
-  };
+  });
   const result = await current.auth.confirmEmailChange(token);
   expect(result.error).toBeInstanceOf(AuthSessionChangedError);
-  expect(global.fetch).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it('captures ownership after an OAuth exchange settles without another auth call', async () => {
-  window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
-  window.sessionStorage.setItem(
-    'volcano_auth_redirect_url',
-    `${window.location.origin}/auth/callback`,
-  );
-  window.history.replaceState(null, '', '/auth/callback?code=one-time&state=oauth-nonce');
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const storage = (initial: Record<string, string>) => {
+    const items = new Map(Object.entries(initial));
+    return {
+      getItem: (key: string): string | null => items.get(key) ?? null,
+      setItem(key: string, value: string): void {
+        items.set(key, value);
+      },
+      removeItem(key: string): void {
+        items.delete(key);
+      },
+    };
+  };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      document: {},
+      location: {
+        href: 'https://app.example.com/auth/callback?code=one-time&state=oauth-nonce',
+        origin: 'https://app.example.com',
+        hash: '',
+        pathname: '/auth/callback',
+        search: '?code=one-time&state=oauth-nonce',
+      },
+      history: { state: null, replaceState: jest.fn() },
+      localStorage: storage({}),
+      sessionStorage: storage({
+        volcano_auth_state: 'oauth-nonce',
+        volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
+      }),
+    },
+  });
   try {
-    global.fetch.mockResolvedValueOnce(renewed()).mockResolvedValue(reply(200));
+    fetchMock.mockResolvedValueOnce(renewed()).mockResolvedValue(reply(200));
     const current = new VolcanoAuth({ apiUrl: 'https://api.test', anonKey: 'anon' });
     // Await the constructor exchange itself without asking an auth API to drain it.
     await current._oauthExchangePromise;
     const request = current.auth.requestEmailChange('original@example.com');
     await current.auth.setSession(replacement);
-    expect((await request).error).toBeInstanceOf(AuthSessionChangedError);
-    for (const [, options] of global.fetch.mock.calls.slice(1)) {
-      expect(options.headers.Authorization).toBe(`Bearer ${sessionToken(SESSION, true)}`);
+    expect(await resultError(request)).toBeInstanceOf(AuthSessionChangedError);
+    for (const [, options] of fetchMock.mock.calls.slice(1)) {
+      expect(new Headers(options?.headers).get('Authorization')).toBe(
+        `Bearer ${sessionToken(SESSION, true)}`,
+      );
     }
   } finally {
-    window.history.replaceState(null, '', '/');
-    window.sessionStorage.clear();
+    if (originalWindow === undefined) {
+      Reflect.deleteProperty(globalThis, 'window');
+    } else {
+      Object.defineProperty(globalThis, 'window', originalWindow);
+    }
   }
 });
 
 it('replays a provider API body snapshot after refresh', async () => {
   const current = client();
   const body = { names: ['original'] };
-  global.fetch
-    .mockImplementationOnce(async () => {
+  fetchMock
+    .mockImplementationOnce(() => {
       body.names.push('changed');
-      return reply(401);
+      return Promise.resolve(reply(401));
     })
     .mockResolvedValueOnce(renewed())
     .mockResolvedValueOnce(reply(200, { data: {} }));
-  expect((await current.auth.callOAuthAPI('github', { endpoint: '/user', body })).error).toBeNull();
-  expect(JSON.parse(global.fetch.mock.calls[2][1].body).body).toEqual({ names: ['original'] });
+  expect(
+    await resultError(current.auth.callOAuthAPI('github', { endpoint: '/user', body })),
+  ).toBeNull();
+  expect(jsonField(fetchCall(2)[1], 'body')).toEqual({ names: ['original'] });
 });
 
 it('clears the current session after refreshing an authenticated deletion', async () => {
   const current = client();
-  global.fetch
+  fetchMock
     .mockResolvedValueOnce(reply(401))
     .mockResolvedValueOnce(renewed())
     .mockResolvedValueOnce(reply(204));
-  expect((await current.auth.deleteSession(SESSION)).error).toBeNull();
+  expect(await resultError(current.auth.deleteSession(SESSION))).toBeNull();
   expect(current.accessToken).toBeNull();
 });
 
 it('captures ownership before reading session-list options', async () => {
   const current = client();
-  global.fetch.mockResolvedValue(reply(200, { sessions: [] }));
+  fetchMock.mockResolvedValue(reply(200, { sessions: [] }));
   const options = {
     get page() {
       void current.auth.setSession(replacement);
@@ -250,25 +298,29 @@ it('captures ownership before reading session-list options', async () => {
   };
   const result = await current.auth.getSessions(options);
   expect(result.error).toBeInstanceOf(AuthSessionChangedError);
-  expect(global.fetch).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it.each(['sign out', 'rejected refresh'])(
   'rejects another-session deletion after local clearing by %s',
   async (clearing) => {
     const current = client();
-    let clearingResult;
-    global.fetch.mockImplementation(async (url) => {
-      if (url.endsWith('/auth/refresh')) return reply(401, { error: 'expired refresh' });
-      if (url.endsWith(OTHER)) {
+    let clearingResult: { error: { status?: number } | null } | undefined;
+    fetchMock.mockImplementation(async (url) => {
+      if (fetchUrl(url).endsWith('/auth/refresh')) {
+        return reply(401, { error: 'expired refresh' });
+      }
+      if (fetchUrl(url).endsWith(OTHER)) {
         clearingResult = await (clearing === 'sign out'
           ? current.auth.signOut()
           : current.auth.refreshSession());
       }
       return reply(204);
     });
-    expect((await current.auth.deleteSession(OTHER)).error).toBeInstanceOf(AuthSessionChangedError);
-    expect(clearingResult.error?.status ?? null).toBe(clearing === 'sign out' ? null : 401);
+    expect(await resultError(current.auth.deleteSession(OTHER))).toBeInstanceOf(
+      AuthSessionChangedError,
+    );
+    expect(clearingResult?.error?.status ?? null).toBe(clearing === 'sign out' ? null : 401);
     expect(current.accessToken).toBeNull();
   },
 );
