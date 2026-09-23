@@ -41,6 +41,7 @@ import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
 import { buildStorageUrl, encodeStoragePath, publicStoragePathError } from './storage-paths.ts';
+import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
 import {
   decodeBase64Url,
   extractRequiredProjectIdFromToken,
@@ -90,7 +91,6 @@ import {
 
 const DEFAULT_API_URL = 'https://api.volcano.dev';
 const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
-const DEFAULT_UPLOAD_PART_SIZE = 25 * 1024 * 1024; // 25MB
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
@@ -2968,70 +2968,8 @@ class StorageFileApi {
     return { error: result.error };
   }
 
-  /**
-   * Upload a large file using resumable upload with automatic chunking
-   */
-  async uploadResumable(path, fileBody, options = {}) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    const totalSize = fileBody.size;
-    const contentType =
-      options.contentType ||
-      (fileBody instanceof File ? fileBody.type : 'application/octet-stream') ||
-      'application/octet-stream';
-    const partSize = options.partSize || DEFAULT_UPLOAD_PART_SIZE;
-    const onProgress = options.onProgress;
-
-    try {
-      const { data: session, error: sessionError } = await this.createUploadSession(path, {
-        totalSize,
-        contentType,
-        partSize,
-      });
-
-      if (sessionError) {
-        return { data: null, error: sessionError };
-      }
-
-      const sessionId = session.session_id;
-      const totalParts = session.total_parts;
-      const actualPartSize = session.part_size;
-
-      let uploaded = 0;
-      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const start = (partNumber - 1) * actualPartSize;
-        const end = Math.min(start + actualPartSize, totalSize);
-        const partData = fileBody.slice(start, end);
-
-        const { error: partError } = await this.uploadPart(path, sessionId, partNumber, partData);
-
-        if (partError) {
-          const { error: abortError } = await this.abortUploadSession(path, sessionId);
-          if (abortError) {
-            console.warn(
-              `[Storage] Failed to abort upload session ${sessionId}:`,
-              abortError.message,
-            );
-          }
-          return { data: null, error: partError };
-        }
-
-        uploaded = end;
-        if (onProgress) {
-          onProgress(uploaded, totalSize);
-        }
-      }
-
-      return this.completeUploadSession(path, sessionId);
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error('Resumable upload failed'),
-      };
-    }
+  uploadResumable(path, fileBody, options = {}) {
+    return runResumableUpload(this, path, fileBody, options);
   }
 }
 
