@@ -131,6 +131,14 @@ describe('databaseConnectionString', () => {
     );
   });
 
+  it('drops all trailing separators while preserving interior empty query fields', () => {
+    expect(
+      databaseConnectionString('postgresql://host/db?sslmode=require&&connect_timeout=10&&'),
+    ).toBe(
+      'postgresql://host/db?sslmode=require&&connect_timeout=10&application_name=volcano_full_access',
+    );
+  });
+
   it('does not treat an at sign in a query value as user-info', () => {
     expect(databaseConnectionString('postgresql://host/db?options=foo@bar')).toBe(
       'postgresql://host/db?options=foo@bar&application_name=volcano_full_access',
