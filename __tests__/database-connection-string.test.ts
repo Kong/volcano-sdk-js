@@ -69,6 +69,9 @@ describe('databaseConnectionString', () => {
     expect(() => invokeUntyped(null)).toThrow(/required/);
     expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
     expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('prefix-postgres://host/db')).toThrow(
+      /not a valid connection URL/,
+    );
   });
 
   it('preserves unrelated query parameters (e.g. connect_timeout, channel_binding)', () => {
@@ -101,6 +104,15 @@ describe('databaseConnectionString', () => {
     );
   });
 
+  it('finds the query after user-info when the URI has no database path', () => {
+    expect(databaseConnectionString('postgres://u:pa?ss@host')).toBe(
+      'postgres://u:pa?ss@host?application_name=volcano_full_access',
+    );
+    expect(databaseConnectionString('postgres://u:password?@host')).toBe(
+      'postgres://u:password?@host?application_name=volcano_full_access',
+    );
+  });
+
   it('accepts a multi-host IPv6 Postgres URI', () => {
     expect(databaseConnectionString('postgresql://[::1],[::2]/db')).toBe(
       'postgresql://[::1],[::2]/db?application_name=volcano_full_access',
@@ -113,6 +125,12 @@ describe('databaseConnectionString', () => {
     );
   });
 
+  it('replaces a bare application_name parameter without changing other bare parameters', () => {
+    expect(databaseConnectionString('postgresql://host/db?connect_timeout&application_name')).toBe(
+      'postgresql://host/db?connect_timeout&application_name=volcano_full_access',
+    );
+  });
+
   it('does not treat an at sign in a query value as user-info', () => {
     expect(databaseConnectionString('postgresql://host/db?options=foo@bar')).toBe(
       'postgresql://host/db?options=foo@bar&application_name=volcano_full_access',
@@ -121,6 +139,9 @@ describe('databaseConnectionString', () => {
 
   it('rejects malformed percent encoding', () => {
     expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(
+      /not a valid connection URL/,
+    );
+    expect(() => databaseConnectionString('postgresql:///app?options=%a')).toThrow(
       /not a valid connection URL/,
     );
   });
