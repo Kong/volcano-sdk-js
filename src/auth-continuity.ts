@@ -1,4 +1,4 @@
-import { assertCompleteSession } from './auth-validation.ts';
+import { assertCompleteSession, type CompleteSessionFields } from './auth-validation.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
 export interface RefreshContext {
@@ -22,7 +22,7 @@ export function validateSessionContinuation(
   data: unknown,
   context: Pick<RefreshContext, 'accessToken'>,
   userId: unknown,
-): void {
+): asserts data is CompleteSessionFields {
   assertCompleteSession(data);
   const expected = extractSessionIdFromToken(context.accessToken);
   if (
