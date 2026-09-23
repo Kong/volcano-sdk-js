@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { fetchWithTimeout } from '../src/fetch-lifecycle.ts';
 

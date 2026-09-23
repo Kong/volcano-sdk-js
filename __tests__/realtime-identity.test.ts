@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { recoveryIdentity, sameRecoveryIdentity } from '../src/realtime-identity.ts';
 

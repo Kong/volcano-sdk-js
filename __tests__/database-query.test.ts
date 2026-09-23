@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { QueryBuilder, type QueryClient, queryError } from '../src/database-query.ts';
 

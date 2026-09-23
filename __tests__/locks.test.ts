@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.js';
 import { LeaseClock } from '../src/lock-session.ts';

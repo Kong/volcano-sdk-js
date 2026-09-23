@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoClient } from '../src/index.js';

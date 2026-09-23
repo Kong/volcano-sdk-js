@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { authSignin, downloadStorageObject } from '../src/generated/client.ts';
 

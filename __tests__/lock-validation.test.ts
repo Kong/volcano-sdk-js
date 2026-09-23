@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { validateLease, validateLockKey, validateLockOptions } from '../src/lock-validation.ts';
 

@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoClient } from '../src/index.js';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';

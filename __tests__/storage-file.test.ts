@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { type StorageAuthHost, StorageFileApi } from '../src/storage-file.ts';
 

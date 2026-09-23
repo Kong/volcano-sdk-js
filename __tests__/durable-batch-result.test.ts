@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { batchResult, type EngineBatch } from '../src/durable-batch-result.ts';
 

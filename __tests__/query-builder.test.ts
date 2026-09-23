@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, VolcanoAuth } from '../src/index.js';
 import { sessionToken } from './session-fixtures.ts';

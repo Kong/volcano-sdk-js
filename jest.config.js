@@ -15,6 +15,7 @@ module.exports = {
     '<rootDir>/__tests__/contract/',
     '<rootDir>/__tests__/integration/',
   ],
+  modulePathIgnorePatterns: ['<rootDir>/.stryker-tmp/'],
   collectCoverageFrom: ['src/**/*.{js,ts}', '!src/**/*.d.ts'],
   coverageThreshold: {
     'src/realtime-channel-name.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },

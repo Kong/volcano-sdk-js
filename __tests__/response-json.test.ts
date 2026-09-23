@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { assert, asyncProperty, jsonValue } from 'fast-check';
 import { safeJsonParse } from '../src/response-json.ts';

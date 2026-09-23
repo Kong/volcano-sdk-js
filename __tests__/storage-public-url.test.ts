@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { storagePublicUrl } from '../src/storage-public-url.ts';
 import * as tokenClaims from '../src/token-claims.ts';

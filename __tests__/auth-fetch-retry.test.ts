@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { fetchWithAuthRetry } from '../src/auth-fetch-retry.ts';
 import { AuthRefreshDiscardedError } from '../src/errors.ts';
