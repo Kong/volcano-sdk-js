@@ -1,7 +1,11 @@
-const { createHash } = require('node:crypto');
-const { readFileSync, readdirSync } = require('node:fs');
-const path = require('node:path');
-const { loadFeatures } = require('jest-cucumber');
+/// <reference types="jest" />
+
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { expect, test } from '@jest/globals';
+import { loadFeatures } from 'jest-cucumber';
+import { observedMembership } from './contract/observed-membership.ts';
 
 test('parses every canonical feature through the installed Cucumber dependencies', () => {
   const directory = path.join(__dirname, '../features/contract');
@@ -47,8 +51,6 @@ test('vendors the canonical presence membership feature', () => {
     'b4429f6e3df60a6a98be4daf1d8517e2cd7cee651f9eb6463a1090ab49a102b5',
   );
 });
-
-const { observedMembership } = require('./contract/presence-membership.js');
 
 test.each([
   [[['first'], ['first', 'second'], ['first']], true],

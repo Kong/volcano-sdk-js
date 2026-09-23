@@ -1,3 +1,5 @@
+const { observedMembership } = require('./observed-membership.ts');
+
 class PresenceObserver {
   constructor(channel, userId) {
     this.channel = channel;
@@ -44,16 +46,6 @@ class PresenceObserver {
   }
 }
 
-function observedMembership(snapshots, initial, joined) {
-  const expected = [initial, joined, initial].map(JSON.stringify);
-  let index = 0;
-  for (const state of snapshots) {
-    if (JSON.stringify(state) === expected[index]) index++;
-    if (index === expected.length) return true;
-  }
-  return false;
-}
-
 async function verifyPresenceMembership(world) {
   const [first, second] = world.realtimeClients.map((client) =>
     client.channel(world.realtimeChannel, { type: 'presence' }),
@@ -78,4 +70,4 @@ async function verifyPresenceMembership(world) {
   }
 }
 
-module.exports = { verifyPresenceMembership, observedMembership };
+module.exports = { verifyPresenceMembership };
