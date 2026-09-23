@@ -2090,14 +2090,18 @@ class VolcanoAuth {
 
     this._oauthExchangeError = null;
     this.accessToken = data.access_token;
-    this.refreshToken = data.refresh_token;
+    this.refreshToken = data.refresh_token ?? null;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
     this._sessionOperations = new AuthSessionOperations(data);
     this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    if (this.refreshToken) {
+      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    } else {
+      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    }
 
     this._notifyAuthCallbacks(this.currentUser);
     return true;
@@ -2171,7 +2175,7 @@ class VolcanoAuth {
     return hasOAuthCallbackInUrl(this._peekAuthRedirectURL(), Boolean(this._peekAuthState()));
   }
 
-  async _consumeOAuthCodeFromUrl() {
+  _consumeOAuthCodeFromUrl() {
     return consumeOAuthCodeFromUrl(this);
   }
 

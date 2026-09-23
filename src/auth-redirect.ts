@@ -1,5 +1,5 @@
 import { AuthSessionOperations } from './auth-session.ts';
-import { validateCompleteSession } from './auth-validation.ts';
+import { validateOAuthSession } from './auth-validation.ts';
 import type { User } from './index.js';
 
 const accessTokenKey = 'volcano_access_token';
@@ -182,7 +182,7 @@ async function exchangeOAuthCode(
     host._oauthExchangeError = exchangeFailure(result.error);
     return false;
   }
-  const validationError = validateCompleteSession(result.data);
+  const validationError = validateOAuthSession(result.data);
   if (validationError !== null) {
     host._oauthExchangeError = validationError;
     return false;

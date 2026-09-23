@@ -90,8 +90,8 @@ console.log('Signed in as', user.email);
 
 After successful sign-in, the SDK automatically:
 
-1. Stores the access token and refresh token in localStorage (browser) or memory (server)
-2. Sets up automatic token refresh before expiration
+1. Stores the access token and any returned refresh token in localStorage (browser) or memory (server)
+2. Refreshes the access token when a refresh token is available
 3. Makes the user available via `volcano.auth.user()`
 
 Profile operations (`getUser`, `updateUser`, `convertAnonymous`, and `confirmEmailChange`) refresh a rejected access token once when the session has a usable refresh token, then replay the original request values.
@@ -396,6 +396,8 @@ These methods redirect the user to the provider's login page. After successful a
 ### Handle OAuth Callback
 
 The SDK requests the platform's authorization-code callback mode. After the OAuth redirect, the user returns with a short-lived, single-use `code` and the flow's `state` nonce. The SDK validates the nonce, removes both values from the URL, and exchanges the code for a session before `initialize()`, `getUser()`, or another authenticated operation proceeds. In this mode, access and refresh tokens are never placed in the OAuth callback URL. Platform deployments retain the established session-fragment response for older clients that do not request authorization-code mode.
+
+When the exchange uses an eligible HttpOnly cookie session, its response can omit the refresh token. The SDK keeps the access token, clears any stale stored refresh token, and reports `refresh_token: null` from `getSession()`.
 
 By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override:
 
