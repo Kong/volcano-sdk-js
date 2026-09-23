@@ -22,6 +22,12 @@ cjs.channel('room').on('message', receive);
 esm.channel('room').on('message', receive);
 void cjsChannel.subscribe();
 void esmChannel.subscribe();
+const cjsAuth: NonNullable<ConstructorParameters<typeof CjsRealtime>[0]['volcanoClient']> | null =
+  cjs.getVolcanoClient();
+const esmAuth: NonNullable<ConstructorParameters<typeof EsmRealtime>[0]['volcanoClient']> | null =
+  esm.getVolcanoClient();
+void cjsAuth;
+void esmAuth;
 
 // @ts-expect-error Subscription state is not part of the public CJS API.
 export type LeakedSubscription = CjsChannel['_subscription'];

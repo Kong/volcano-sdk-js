@@ -96,7 +96,7 @@ class VolcanoRealtime {
   /** @internal */
   _onError: ((context: ErrorContext) => void)[] = [];
   /** @internal */
-  _volcanoClient: RealtimeConfig['volcanoClient'] | null;
+  _volcanoClient: NonNullable<RealtimeConfig['volcanoClient']> | null;
   /** @internal */
   readonly _fetchConfig: ActiveFetchConfig;
   /** @internal */
@@ -141,7 +141,7 @@ class VolcanoRealtime {
    * Get the configured VolcanoAuth client
    * @returns {Object|null} The VolcanoAuth client or null
    */
-  getVolcanoClient(): RealtimeConfig['volcanoClient'] | null {
+  getVolcanoClient(): NonNullable<RealtimeConfig['volcanoClient']> | null {
     return this._volcanoClient;
   }
 
