@@ -1,3 +1,12 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { durable } from '../src/durable.ts';
+import type { EngineBatch } from '../src/durable-batch-result.ts';
+import type {
+  DurableContext,
+  DurableHandler,
+  DurableLog,
+  DurableStepScope,
+} from '../src/durable-types.ts';
 // The durable runtime is an optional peer dependency, so these tests stand a
 // recording double in its place and assert on what the facade hands it. That is the contract worth pinning here: the
 // translation from the Volcano authoring surface to the engine's own — argument
@@ -6,7 +15,68 @@
 // A durable function written against this module is exercised for real by the
 // hosting cloud E2E suite, which deploys one and runs an execution.
 
-const engineCalls = [];
+interface EngineCall {
+  op: string;
+  name?: unknown;
+  config?: Record<string, unknown>;
+  duration?: unknown;
+  items?: unknown[];
+  branches?: unknown[];
+}
+
+interface EngineBatchItem {
+  index: number;
+  status: 'SUCCEEDED' | 'FAILED' | 'STARTED';
+  result?: unknown;
+  error?: unknown;
+}
+
+interface EngineScope {
+  logger: DurableLog;
+  attempt: number;
+}
+
+type EngineBranch =
+  | ((context: RecordingContext) => Promise<unknown>)
+  | { name: unknown; func: (context: RecordingContext) => Promise<unknown> };
+
+interface RecordingContext {
+  logger: DurableLog;
+  configureLogger: ReturnType<typeof jest.fn<(config: unknown) => void>>;
+  step(
+    name: unknown,
+    fn: (scope: EngineScope) => Promise<unknown>,
+    config: Record<string, unknown>,
+  ): Promise<unknown>;
+  wait(name: unknown, duration?: unknown): Promise<void>;
+  runInChildContext(
+    name: unknown,
+    fn: (context: RecordingContext) => Promise<unknown>,
+  ): Promise<unknown>;
+  waitForCondition(
+    name: unknown,
+    checkFn: (state: unknown, scope: EngineScope) => Promise<unknown>,
+    config: { initialState: unknown },
+  ): Promise<unknown>;
+  map(
+    name: unknown,
+    items: unknown[],
+    mapFn: (
+      context: RecordingContext,
+      item: unknown,
+      index: number,
+      items: unknown[],
+    ) => Promise<unknown>,
+    config: Record<string, unknown>,
+  ): Promise<EngineBatch<unknown>>;
+  parallel(
+    name: unknown,
+    branches: EngineBranch[],
+    config: Record<string, unknown>,
+  ): Promise<EngineBatch<unknown>>;
+}
+
+const engineCalls: EngineCall[] = [];
 
 const fakeStepSemantics = {
   AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY',
@@ -17,21 +87,21 @@ const fakeStepSemantics = {
 // facade flattens.
 // The engine settles every item and reports failures in the batch rather than
 // rejecting, so the double does the same: a branch that throws is a failed item.
-const fakeBatchItem = (settled, index) =>
+const fakeBatchItem = (settled: PromiseSettledResult<unknown>, index: number): EngineBatchItem =>
   settled.status === 'fulfilled'
     ? { index, status: 'SUCCEEDED', result: settled.value }
     : { index, status: 'FAILED', error: settled.reason };
 
-const fakeBatch = (items, completionReason = 'ALL_COMPLETED') => ({
+const fakeBatch = (items: EngineBatchItem[], completionReason = 'ALL_COMPLETED') => ({
   all: items,
   getResults: () => items.filter((item) => item.status === 'SUCCEEDED').map((item) => item.result),
-  getErrors: () => items.filter((item) => item.error).map((item) => item.error),
+  getErrors: () => items.filter((item) => item.error !== undefined).map((item) => item.error),
   successCount: items.filter((item) => item.status === 'SUCCEEDED').length,
   failureCount: items.filter((item) => item.status === 'FAILED').length,
   startedCount: items.filter((item) => item.status === 'STARTED').length,
   totalCount: items.length,
   completionReason,
-  throwIfError: () => {
+  throwIfError() {
     engineCalls.push({ op: 'throwIfError' });
   },
 });
@@ -39,22 +109,22 @@ const fakeBatch = (items, completionReason = 'ALL_COMPLETED') => ({
 // A batch the test hands back verbatim, for the shapes the double cannot reach
 // by running mappers: an early completion with items still in flight, and the
 // same batch as the engine rebuilds it on a replay.
-let stagedBatch = null;
-const stageBatch = (batch) => {
+let stagedBatch: EngineBatch<unknown> | null = null;
+const stageBatch = (batch: EngineBatch<unknown>): void => {
   stagedBatch = batch;
 };
-const takeStagedBatch = () => {
+const takeStagedBatch = (): EngineBatch<unknown> | null => {
   const batch = stagedBatch;
   stagedBatch = null;
   return batch;
 };
 
-let lastContext = null;
+const lastContext: { value?: RecordingContext } = {};
 
-const fakeContext = () => {
-  const context = {
+const fakeContext = (): RecordingContext => {
+  const context: RecordingContext = {
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
-    configureLogger: jest.fn(),
+    configureLogger: jest.fn<(config: unknown) => void>(),
 
     step(name, fn, config) {
       engineCalls.push({ op: 'step', name, config });
@@ -79,12 +149,12 @@ const fakeContext = () => {
     map(name, items, mapFn, config) {
       engineCalls.push({ op: 'map', name, items, config });
       const staged = takeStagedBatch();
-      if (staged) {
+      if (staged !== null) {
         return Promise.resolve(staged);
       }
       return Promise.allSettled(
         items.map((item, index) => mapFn(context, item, index, items)),
-      ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
+      ).then((settled) => fakeBatch(settled.map((item, index) => fakeBatchItem(item, index))));
     },
 
     parallel(name, branches, config) {
@@ -93,10 +163,10 @@ const fakeContext = () => {
         branches.map((branch) =>
           typeof branch === 'function' ? branch(context) : branch.func(context),
         ),
-      ).then((settled) => fakeBatch(settled.map(fakeBatchItem)));
+      ).then((settled) => fakeBatch(settled.map((item, index) => fakeBatchItem(item, index))));
     },
   };
-  lastContext = context;
+  lastContext.value = context;
   return context;
 };
 
@@ -105,7 +175,10 @@ const fakeContext = () => {
 // back to it — and an absent delay is then read for a unit it does not have,
 // which throws on the first failure. The double holds the facade to that: a
 // config carrying a key the caller never set fails here.
-const engineStrategyConfig = (op, config) => {
+const engineStrategyConfig = (
+  op: string,
+  config: Record<string, unknown>,
+): Record<string, unknown> => {
   const unset = Object.keys(config).filter((key) => config[key] === undefined);
   if (unset.length > 0) {
     throw new TypeError(`${op} was given undefined ${unset.join(', ')}, which clobbers a default`);
@@ -113,34 +186,92 @@ const engineStrategyConfig = (op, config) => {
   return config;
 };
 
+const neverRetry = (): { shouldRetry: false } => ({ shouldRetry: false });
+const neverContinue = (): { shouldContinue: false } => ({ shouldContinue: false });
+
 jest.mock(
   '@aws/durable-execution-sdk-js',
   () => ({
-    withDurableExecution: (handler) => (event) => handler(event.input, fakeContext()),
+    withDurableExecution:
+      (handler: (input: unknown, context: unknown) => Promise<unknown>) =>
+      (event: { input: unknown }) =>
+        handler(event.input, fakeContext()),
     StepSemantics: fakeStepSemantics,
-    createRetryStrategy: (config) => {
+    createRetryStrategy(config: Record<string, unknown>) {
       engineCalls.push({
         op: 'createRetryStrategy',
         config: engineStrategyConfig('retry', config),
       });
-      return () => ({ shouldRetry: false });
+      return neverRetry;
     },
-    createWaitStrategy: (config) => {
+    createWaitStrategy(config: Record<string, unknown>) {
       engineCalls.push({ op: 'createWaitStrategy', config: engineStrategyConfig('wait', config) });
-      return () => ({ shouldContinue: false });
+      return neverContinue;
     },
   }),
   { virtual: true },
 );
 
-const { durable } = require('../src/durable.ts');
+async function run<Input = Record<string, never>, Result = unknown>(
+  handler: DurableHandler<Input, Result>,
+  input?: Input,
+): Promise<Result> {
+  const completion: { result?: { value: Result } } = {};
+  await durable(async (value: Input, context: DurableContext) => {
+    const result = await handler(value, context);
+    completion.result = { value: result };
+    return result;
+  })({ input: input ?? {} }, {});
+  if (completion.result === undefined) {
+    throw new Error('Durable handler did not complete');
+  }
+  return completion.result.value;
+}
 
-const run = async (handler, input = {}) => {
-  const result = await durable(handler)({ input }, {});
+const callsOf = (op: string): EngineCall[] => engineCalls.filter((call) => call.op === op);
+
+function firstCall(op: string): EngineCall {
+  const call = callsOf(op)[0];
+  if (call === undefined) {
+    throw new Error(`Missing ${op} engine call`);
+  }
+  return call;
+}
+
+function configOf(op: string): Record<string, unknown> {
+  const config = firstCall(op).config;
+  if (config === undefined) {
+    throw new Error(`Missing ${op} engine config`);
+  }
+  return config;
+}
+
+function required<Value>(value: Value | null | undefined, name: string): Value {
+  if (value === null || value === undefined) {
+    throw new Error(`Missing ${name}`);
+  }
+  return value;
+}
+
+function invoke(value: unknown, args: unknown[]): unknown {
+  if (typeof value !== 'function') {
+    throw new TypeError('Expected engine callback');
+  }
+  const result: unknown = Reflect.apply(value, undefined, args);
   return result;
-};
+}
 
-const callsOf = (op) => engineCalls.filter((call) => call.op === op);
+const retryOnce = (): { shouldRetry: true; delay: { seconds: 1 } } => ({
+  shouldRetry: true,
+  delay: { seconds: 1 },
+});
+
+const shipped = (batch: EngineBatch<unknown>) => {
+  stageBatch(batch);
+  return run((_input, ctx) =>
+    ctx.map('ship', ['a', 'b', 'c'], (item) => Promise.resolve(item), { minSucceeded: 2 }),
+  );
+};
 
 beforeEach(() => {
   engineCalls.length = 0;
@@ -150,9 +281,9 @@ beforeEach(() => {
 describe('durable()', () => {
   it('calls the handler with the execution input and a durable context', async () => {
     const result = await run(
-      async (input, ctx) => {
+      (input, ctx) => {
         expect(typeof ctx.step).toBe('function');
-        return { got: input.order_id };
+        return Promise.resolve({ got: input.order_id });
       },
       { order_id: 4417 },
     );
@@ -161,54 +292,58 @@ describe('durable()', () => {
   });
 
   it('refuses anything but a function', () => {
-    expect(() => durable('index.handler')).toThrow(/requires a handler function/);
+    expect(() => {
+      const result: unknown = Reflect.apply(durable, undefined, ['index.handler']);
+      return result;
+    }).toThrow(/requires a handler function/);
   });
 });
 
 describe('ctx.step', () => {
   it('runs the function and returns its result', async () => {
-    const result = await run((_input, ctx) => ctx.step('charge', async () => 'charged'));
+    const result = await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('charged')));
 
     expect(result).toBe('charged');
-    expect(callsOf('step')[0].name).toBe('charge');
+    expect(firstCall('step').name).toBe('charge');
   });
 
   it('hands the step its attempt number and a logger, not a durable context', async () => {
-    let scope;
+    const captured: { value?: DurableStepScope } = {};
     await run((_input, ctx) =>
-      ctx.step('charge', async (stepScope) => {
-        scope = stepScope;
-        return null;
+      ctx.step('charge', (stepScope) => {
+        captured.value = stepScope;
+        return Promise.resolve(null);
       }),
     );
 
+    const scope = required(captured.value, 'step scope');
     expect(scope.attempt).toBe(2);
     expect(typeof scope.log.info).toBe('function');
-    expect(scope.step).toBeUndefined();
+    expect(Reflect.get(scope, 'step')).toBeUndefined();
   });
 
   it('takes an unnamed step', async () => {
-    await run((_input, ctx) => ctx.step(async () => 'ok'));
+    await run((_input, ctx) => ctx.step(() => Promise.resolve('ok')));
 
-    expect(callsOf('step')[0].name).toBeUndefined();
+    expect(firstCall('step').name).toBeUndefined();
   });
 
   it('turns retry: false into a strategy that never retries', async () => {
-    await run((_input, ctx) => ctx.step('charge', async () => 'ok', { retry: false }));
+    await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('ok'), { retry: false }));
 
-    const { config } = callsOf('step')[0];
-    expect(config.retryStrategy(new Error('boom'), 1)).toEqual({ shouldRetry: false });
+    const config = configOf('step');
+    expect(invoke(config['retryStrategy'], [new Error('boom'), 1])).toEqual({ shouldRetry: false });
     expect(callsOf('createRetryStrategy')).toHaveLength(0);
   });
 
   it('converts retry options, durations included', async () => {
     await run((_input, ctx) =>
-      ctx.step('charge', async () => 'ok', {
+      ctx.step('charge', () => Promise.resolve('ok'), {
         retry: { attempts: 5, initialDelay: '2s', maxDelay: '1m30s', backoffRate: 3 },
       }),
     );
 
-    expect(callsOf('createRetryStrategy')[0].config).toStrictEqual({
+    expect(configOf('createRetryStrategy')).toStrictEqual({
       maxAttempts: 5,
       initialDelay: { seconds: 2 },
       maxDelay: { minutes: 1, seconds: 30 },
@@ -222,44 +357,54 @@ describe('ctx.step', () => {
   // duration that was not there.
   it('sends only the retry options the caller set', async () => {
     await run((_input, ctx) =>
-      ctx.step('charge', async () => 'ok', { retry: { attempts: 5, initialDelay: '2s' } }),
+      ctx.step('charge', () => Promise.resolve('ok'), {
+        retry: { attempts: 5, initialDelay: '2s' },
+      }),
     );
 
-    expect(callsOf('createRetryStrategy')[0].config).toStrictEqual({
+    expect(configOf('createRetryStrategy')).toStrictEqual({
       maxAttempts: 5,
       initialDelay: { seconds: 2 },
     });
   });
 
   it('passes a retry function through untouched', async () => {
-    const retry = () => ({ shouldRetry: true, delay: { seconds: 1 } });
-    await run((_input, ctx) => ctx.step('charge', async () => 'ok', { retry }));
+    await run((_input, ctx) =>
+      ctx.step('charge', () => Promise.resolve('ok'), { retry: retryOnce }),
+    );
 
-    expect(callsOf('step')[0].config.retryStrategy).toBe(retry);
+    expect(configOf('step')['retryStrategy']).toBe(retryOnce);
   });
 
   it('maps atMostOnce onto the engine semantics', async () => {
-    await run((_input, ctx) => ctx.step('charge', async () => 'ok', { atMostOnce: true }));
+    await run((_input, ctx) =>
+      ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: true }),
+    );
 
-    expect(callsOf('step')[0].config.semantics).toBe(fakeStepSemantics.AtMostOncePerRetry);
+    expect(configOf('step')['semantics']).toBe(fakeStepSemantics.AtMostOncePerRetry);
   });
 
   it('leaves the semantics alone for atMostOnce: false', async () => {
-    await run((_input, ctx) => ctx.step('charge', async () => 'ok', { atMostOnce: false }));
+    await run((_input, ctx) =>
+      ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: false }),
+    );
 
-    expect(callsOf('step')[0].config).toStrictEqual({});
+    expect(configOf('step')).toStrictEqual({});
   });
 
   it('leaves retry and semantics unset when neither is asked for', async () => {
-    await run((_input, ctx) => ctx.step('charge', async () => 'ok'));
+    await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('ok')));
 
-    expect(callsOf('step')[0].config).toEqual({});
+    expect(configOf('step')).toEqual({});
   });
 
   it('refuses a step with nothing to run', async () => {
-    await expect(run((_input, ctx) => ctx.step('charge'))).rejects.toThrow(
-      /ctx\.step\(\) requires a function to run/,
-    );
+    await expect(
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.step.bind(ctx), undefined, ['charge']);
+        return Promise.resolve(result);
+      }),
+    ).rejects.toThrow(/ctx\.step\(\) requires a function to run/);
   });
 });
 
@@ -274,21 +419,24 @@ describe('ctx.wait', () => {
   ])('accepts %p as a duration', async (given, expected) => {
     await run((_input, ctx) => ctx.wait('pause', given));
 
-    expect(callsOf('wait')[0].duration).toEqual(expected);
+    expect(firstCall('wait').duration).toEqual(expected);
   });
 
   it('takes an unnamed wait', async () => {
     await run((_input, ctx) => ctx.wait('90s'));
 
-    const call = callsOf('wait')[0];
+    const call = firstCall('wait');
     expect(call.name).toEqual({ minutes: 1, seconds: 30 });
     expect(call.duration).toBeUndefined();
   });
 
   it('refuses a duration where the name belongs', async () => {
-    await expect(run((_input, ctx) => ctx.wait(30, '5m'))).rejects.toThrow(
-      /ctx\.wait\(\) takes a name and a duration, or a duration alone/,
-    );
+    await expect(
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.wait.bind(ctx), undefined, [30, '5m']);
+        return Promise.resolve(result);
+      }),
+    ).rejects.toThrow(/ctx\.wait\(\) takes a name and a duration, or a duration alone/);
   });
 
   it('refuses a duration object that holds no duration', async () => {
@@ -331,9 +479,15 @@ describe('ctx.wait', () => {
   // The object form went to the engine unread, so a plausible-looking key was a
   // duration of nothing.
   it('refuses a duration object it does not understand', async () => {
-    await expect(run((_input, ctx) => ctx.wait('pause', { milliseconds: 500 }))).rejects.toThrow(
-      /takes days, hours, minutes, seconds \(got milliseconds\)/,
-    );
+    await expect(
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.wait.bind(ctx), undefined, [
+          'pause',
+          { milliseconds: 500 },
+        ]);
+        return Promise.resolve(result);
+      }),
+    ).rejects.toThrow(/takes days, hours, minutes, seconds \(got milliseconds\)/);
   });
 
   it('refuses a duration object with a fractional part', async () => {
@@ -367,7 +521,7 @@ describe('ctx.wait bounds', () => {
   it('takes the shortest wait the platform accepts', async () => {
     await run((_input, ctx) => ctx.wait('cool-off', '1s'));
 
-    expect(callsOf('wait')[0].duration).toEqual({ seconds: 1 });
+    expect(firstCall('wait').duration).toEqual({ seconds: 1 });
   });
 });
 
@@ -376,28 +530,28 @@ describe('ctx.child', () => {
     const result = await run((_input, ctx) =>
       ctx.child('pipeline', async (childCtx) => {
         await childCtx.wait('settle', '10s');
-        return childCtx.step('finish', async () => 'done');
+        return childCtx.step('finish', () => Promise.resolve('done'));
       }),
     );
 
     expect(result).toBe('done');
-    expect(callsOf('child')[0].name).toBe('pipeline');
-    expect(callsOf('wait')[0].duration).toEqual({ seconds: 10 });
-    expect(callsOf('step')[0].name).toBe('finish');
+    expect(firstCall('child').name).toBe('pipeline');
+    expect(firstCall('wait').duration).toEqual({ seconds: 10 });
+    expect(firstCall('step').name).toBe('finish');
   });
 
   it('takes an unnamed child', async () => {
-    const result = await run((_input, ctx) => ctx.child(async () => 'done'));
+    const result = await run((_input, ctx) => ctx.child(() => Promise.resolve('done')));
 
     expect(result).toBe('done');
-    expect(callsOf('child')[0].name).toBeUndefined();
+    expect(firstCall('child').name).toBeUndefined();
   });
 });
 
 describe('ctx.waitUntil', () => {
   it('inverts until into the engine polling predicate', async () => {
     await run((_input, ctx) =>
-      ctx.waitUntil('approval', async (state) => ({ ...state, approved: true }), {
+      ctx.waitUntil('approval', (state) => Promise.resolve({ ...state, approved: true }), {
         initialState: { approved: false },
         until: (state) => state.approved,
         interval: '15s',
@@ -406,28 +560,26 @@ describe('ctx.waitUntil', () => {
       }),
     );
 
-    const { config } = callsOf('waitForCondition')[0];
-    expect(config.initialState).toEqual({ approved: false });
+    const config = configOf('waitForCondition');
+    expect(config['initialState']).toEqual({ approved: false });
 
-    const strategy = callsOf('createWaitStrategy')[0].config;
-    expect(strategy.shouldContinuePolling({ approved: false })).toBe(true);
-    expect(strategy.shouldContinuePolling({ approved: true })).toBe(false);
-    expect(strategy.initialDelay).toEqual({ seconds: 15 });
-    expect(strategy.maxDelay).toEqual({ minutes: 5, seconds: 0 });
-    expect(strategy.maxAttempts).toBe(40);
+    const strategy = configOf('createWaitStrategy');
+    expect(invoke(strategy['shouldContinuePolling'], [{ approved: false }])).toBe(true);
+    expect(invoke(strategy['shouldContinuePolling'], [{ approved: true }])).toBe(false);
+    expect(strategy['initialDelay']).toEqual({ seconds: 15 });
+    expect(strategy['maxDelay']).toEqual({ minutes: 5, seconds: 0 });
+    expect(strategy['maxAttempts']).toBe(40);
   });
 
   it('sends only the polling options the caller set', async () => {
     await run((_input, ctx) =>
-      ctx.waitUntil('approval', async (state) => state, {
+      ctx.waitUntil('approval', (state) => Promise.resolve(state), {
         initialState: { approved: false },
         until: (state) => state.approved,
       }),
     );
 
-    expect(Object.keys(callsOf('createWaitStrategy')[0].config)).toStrictEqual([
-      'shouldContinuePolling',
-    ]);
+    expect(Object.keys(configOf('createWaitStrategy'))).toStrictEqual(['shouldContinuePolling']);
   });
 
   // The engine's wait strategy has no deadline: it bounds a condition by how
@@ -435,31 +587,39 @@ describe('ctx.waitUntil', () => {
   // nothing reads, and a wait meant to give up after an hour polled on.
   it('refuses a timeout it cannot enforce', async () => {
     await expect(
-      run((_input, ctx) =>
-        ctx.waitUntil('approval', async (state) => state, {
-          initialState: {},
-          until: () => true,
-          timeout: '1h',
-        }),
-      ),
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.waitUntil.bind(ctx), undefined, [
+          'approval',
+          (state: unknown) => Promise.resolve(state),
+          { initialState: {}, until: () => true, timeout: '1h' },
+        ]);
+        return Promise.resolve(result);
+      }),
     ).rejects.toThrow(/has no `timeout`: bound the wait with `maxAttempts`/);
   });
 
   it('returns the state the check produced', async () => {
     const result = await run((_input, ctx) =>
-      ctx.waitUntil(async (state) => ({ checks: state.checks + 1 }), {
+      ctx.waitUntil((state) => Promise.resolve({ checks: state.checks + 1 }), {
         initialState: { checks: 0 },
         until: (state) => state.checks > 0,
       }),
     );
 
     expect(result).toEqual({ checks: 1 });
-    expect(callsOf('waitForCondition')[0].name).toBeUndefined();
+    expect(firstCall('waitForCondition').name).toBeUndefined();
   });
 
   it('requires an until predicate', async () => {
     await expect(
-      run((_input, ctx) => ctx.waitUntil('approval', async (state) => state, { interval: '5s' })),
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.waitUntil.bind(ctx), undefined, [
+          'approval',
+          (state: unknown) => Promise.resolve(state),
+          { interval: '5s' },
+        ]);
+        return Promise.resolve(result);
+      }),
     ).rejects.toThrow(/requires an `until` predicate/);
   });
 
@@ -468,31 +628,36 @@ describe('ctx.waitUntil', () => {
   // left the caller reading that message.
   it('requires an initialState, in terms of the option it is given as', async () => {
     await expect(
-      run((_input, ctx) =>
-        ctx.waitUntil('approval', async (state) => state, { until: (state) => !!state }),
-      ),
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.waitUntil.bind(ctx), undefined, [
+          'approval',
+          (state: unknown) => Promise.resolve(state),
+          { until: Boolean },
+        ]);
+        return Promise.resolve(result);
+      }),
     ).rejects.toThrow(/requires an `initialState` in its options/);
   });
 
   it('takes a falsy initialState as a state, not as an omission', async () => {
     await run((_input, ctx) =>
-      ctx.waitUntil('approval', async () => 1, {
+      ctx.waitUntil('approval', () => Promise.resolve(1), {
         initialState: 0,
         until: (state) => state > 0,
       }),
     );
 
-    expect(callsOf('waitForCondition')[0].config.initialState).toBe(0);
+    expect(configOf('waitForCondition')['initialState']).toBe(0);
   });
 });
 
 describe('ctx.map', () => {
   it('hands the item first and the context second, and flattens the batch', async () => {
-    const seen = [];
+    const seen: { item: string; index: number; isContext: boolean }[] = [];
     const result = await run((_input, ctx) =>
-      ctx.map('ship', ['a', 'b'], async (item, itemCtx, index) => {
+      ctx.map('ship', ['a', 'b'], (item, itemCtx, index) => {
         seen.push({ item, index, isContext: typeof itemCtx.step === 'function' });
-        return item.toUpperCase();
+        return Promise.resolve(item.toUpperCase());
       }),
     );
 
@@ -516,35 +681,44 @@ describe('ctx.map', () => {
 
   it('translates the batch options', async () => {
     await run((_input, ctx) =>
-      ctx.map('ship', [1], async (item) => item, { concurrency: 4, minSucceeded: 1 }),
+      ctx.map('ship', [1], (item) => Promise.resolve(item), { concurrency: 4, minSucceeded: 1 }),
     );
 
-    expect(callsOf('map')[0].config).toEqual({
+    expect(configOf('map')).toEqual({
       maxConcurrency: 4,
       completionConfig: { minSuccessful: 1 },
     });
   });
 
   it('takes an unnamed map', async () => {
-    await run((_input, ctx) => ctx.map([1, 2], async (item) => item * 2));
+    await run((_input, ctx) => ctx.map([1, 2], (item) => Promise.resolve(item * 2)));
 
-    const call = callsOf('map')[0];
+    const call = firstCall('map');
     expect(call.name).toBeUndefined();
     expect(call.items).toEqual([1, 2]);
   });
 
   it('refuses items that are not an array', async () => {
-    await expect(run((_input, ctx) => ctx.map('ship', 'a,b', async (i) => i))).rejects.toThrow(
-      /requires an array of items/,
-    );
+    await expect(
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.map.bind(ctx), undefined, [
+          'ship',
+          'a,b',
+          (item: unknown) => Promise.resolve(item),
+        ]);
+        return Promise.resolve(result);
+      }),
+    ).rejects.toThrow(/requires an array of items/);
   });
 
   it('reports a failed item instead of rejecting', async () => {
     const failure = new Error('cannot ship b');
     const result = await run((_input, ctx) =>
-      ctx.map('ship', ['a', 'b'], async (item) => {
-        if (item === 'b') throw failure;
-        return item.toUpperCase();
+      ctx.map('ship', ['a', 'b'], (item) => {
+        if (item === 'b') {
+          return Promise.reject(failure);
+        }
+        return Promise.resolve(item.toUpperCase());
       }),
     );
 
@@ -569,7 +743,9 @@ describe('ctx.map', () => {
   });
 
   it('delegates throwIfFailed to the batch', async () => {
-    const result = await run((_input, ctx) => ctx.map('ship', [1], async (item) => item));
+    const result = await run((_input, ctx) =>
+      ctx.map('ship', [1], (item) => Promise.resolve(item)),
+    );
     result.throwIfFailed();
 
     expect(callsOf('throwIfError')).toHaveLength(1);
@@ -582,13 +758,6 @@ describe('ctx.map', () => {
   // replay, which is the one thing durable execution is supposed to rule out.
   // So the result a handler is given has to be the same both times.
   it('gives the same result live and on the replay of an early completion', async () => {
-    const shipped = (batch) => {
-      stageBatch(batch);
-      return run((_input, ctx) =>
-        ctx.map('ship', ['a', 'b', 'c'], async (item) => item, { minSucceeded: 2 }),
-      );
-    };
-
     // Live: two finished, the third was still going when the batch completed.
     const live = await shipped(
       fakeBatch(
@@ -627,7 +796,10 @@ describe('ctx.map', () => {
   it('keeps a failure readable through JSON', async () => {
     // The engine's shape: an Error subclass carrying its own classification.
     class ChildContextError extends Error {
-      constructor(message) {
+      errorType: string;
+      errorData: string;
+
+      constructor(message: string) {
         super(message);
         this.name = 'ChildContextError';
         this.errorType = 'ChildContextError';
@@ -638,23 +810,29 @@ describe('ctx.map', () => {
     stageBatch(
       fakeBatch([{ index: 0, status: 'FAILED', error: new ChildContextError('cannot ship a') }]),
     );
-    const result = await run((_input, ctx) => ctx.map('ship', ['a'], async (item) => item));
+    const result = await run((_input, ctx) =>
+      ctx.map('ship', ['a'], (item) => Promise.resolve(item)),
+    );
 
-    const serialized = JSON.parse(JSON.stringify(result));
-    expect(serialized.items[0].error).toEqual({
+    const encoded = JSON.stringify(result);
+    const serialized: unknown = JSON.parse(encoded);
+    const expectedError = {
       name: 'ChildContextError',
       message: 'cannot ship a',
       type: 'ChildContextError',
       data: '{"code":"card_declined"}',
-    });
-    expect(serialized.errors).toEqual([serialized.items[0].error]);
+    };
+    expect(serialized).toHaveProperty('items.0.error', expectedError);
+    expect(serialized).toHaveProperty('errors.0', expectedError);
   });
 
   // Throwing is not reporting: a handler that wants to propagate the failure
   // gets the engine's own error, stack and all.
   it('still throws the engine error from throwIfFailed', async () => {
     stageBatch(fakeBatch([{ index: 0, status: 'FAILED', error: new Error('cannot ship a') }]));
-    const result = await run((_input, ctx) => ctx.map('ship', ['a'], async (item) => item));
+    const result = await run((_input, ctx) =>
+      ctx.map('ship', ['a'], (item) => Promise.resolve(item)),
+    );
 
     result.throwIfFailed();
     expect(callsOf('throwIfError')).toHaveLength(1);
@@ -665,8 +843,8 @@ describe('ctx.parallel', () => {
   it('runs plain branch functions with a durable context', async () => {
     const result = await run((_input, ctx) =>
       ctx.parallel('fanout', [
-        (branchCtx) => branchCtx.step('left', async () => 'l'),
-        (branchCtx) => branchCtx.step('right', async () => 'r'),
+        (branchCtx) => branchCtx.step('left', () => Promise.resolve('l')),
+        (branchCtx) => branchCtx.step('right', () => Promise.resolve('r')),
       ]),
     );
 
@@ -676,31 +854,46 @@ describe('ctx.parallel', () => {
 
   it('keeps a named branch name and adapts it to the engine shape', async () => {
     await run((_input, ctx) =>
-      ctx.parallel('fanout', [{ name: 'charge', run: async () => 'ok' }], { concurrency: 2 }),
+      ctx.parallel('fanout', [{ name: 'charge', run: () => Promise.resolve('ok') }], {
+        concurrency: 2,
+      }),
     );
 
-    const call = callsOf('parallel')[0];
-    expect(call.branches[0].name).toBe('charge');
-    expect(typeof call.branches[0].func).toBe('function');
+    const call = firstCall('parallel');
+    expect(call.branches).toEqual([
+      expect.objectContaining({ name: 'charge', func: expect.any(Function) }),
+    ]);
     expect(call.config).toEqual({ maxConcurrency: 2 });
   });
 
   it('takes an unnamed parallel', async () => {
-    await run((_input, ctx) => ctx.parallel([async () => 'ok']));
+    await run((_input, ctx) => ctx.parallel([() => Promise.resolve('ok')]));
 
-    expect(callsOf('parallel')[0].name).toBeUndefined();
+    expect(firstCall('parallel').name).toBeUndefined();
   });
 
   it('refuses a branch that is neither a function nor { name, run }', async () => {
     await expect(
-      run((_input, ctx) => ctx.parallel('fanout', [{ name: 'charge' }])),
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, [
+          'fanout',
+          [{ name: 'charge' }],
+        ]);
+        return Promise.resolve(result);
+      }),
     ).rejects.toThrow(/a parallel branch is a function, or \{ name, run \}/);
   });
 
   it('refuses branches that are not an array', async () => {
-    await expect(run((_input, ctx) => ctx.parallel('fanout', 'left'))).rejects.toThrow(
-      /requires an array of branches/,
-    );
+    await expect(
+      run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, [
+          'fanout',
+          'left',
+        ]);
+        return Promise.resolve(result);
+      }),
+    ).rejects.toThrow(/requires an array of branches/);
   });
 });
 
@@ -708,35 +901,36 @@ describe('logging', () => {
   // ctx.log is the operation's logger rather than the process's, which is what
   // suppresses a replayed line from being written twice.
   it('exposes the operation logger as ctx.log', async () => {
-    let log;
-    await run(async (_input, ctx) => {
-      log = ctx.log;
+    const captured: { value?: DurableLog } = {};
+    await run((_input, ctx) => {
+      captured.value = ctx.log;
       ctx.log.info('started', { order: 1 });
-      return null;
+      return Promise.resolve(null);
     });
 
-    expect(log.info).toHaveBeenCalledWith('started', { order: 1 });
+    const log = required(captured.value, 'operation logger');
+    expect(Reflect.get(log, 'info')).toHaveBeenCalledWith('started', { order: 1 });
     expect(log).not.toBe(console);
   });
 
   it('installs a custom logger before the handler runs', async () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    let configuredBeforeHandler;
+    const captured: { calls?: unknown } = {};
 
     await durable(
       async (_input, ctx) => {
-        configuredBeforeHandler = lastContext.configureLogger.mock.calls;
-        return ctx.step('charge', async () => 'ok');
+        captured.calls = required(lastContext.value, 'engine context').configureLogger.mock.calls;
+        return ctx.step('charge', () => Promise.resolve('ok'));
       },
       { logger },
     )({ input: {} }, {});
 
-    expect(configuredBeforeHandler).toEqual([[{ customLogger: logger }]]);
+    expect(captured.calls).toEqual([[{ customLogger: logger }]]);
   });
 
   it('leaves the logger alone when the handler brings none', async () => {
-    await run(async () => null);
+    await run(() => Promise.resolve(null));
 
-    expect(lastContext.configureLogger).not.toHaveBeenCalled();
+    expect(required(lastContext.value, 'engine context').configureLogger).not.toHaveBeenCalled();
   });
 });
