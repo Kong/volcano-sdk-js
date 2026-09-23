@@ -4405,7 +4405,7 @@ describe('VolcanoAuth', () => {
           {
             id: 'log-1',
             timestamp: '2024-01-01T00:00:01.000Z',
-            message: 'build failed',
+            body: 'build failed',
             resource: { type: 'function', id: 'fn-1' },
           },
         ],

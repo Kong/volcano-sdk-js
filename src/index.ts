@@ -120,6 +120,7 @@ import {
 } from './generated/client.ts';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
+import { logActivityResult, logSearchResult } from './project-logs.ts';
 import type {
   Auth,
   Durable,
@@ -408,18 +409,22 @@ class VolcanoAuth {
     return { data: result.data, error: null };
   }
 
-  searchLogs(
+  async searchLogs(
     projectId: string,
     request: import('./sdk-public-types.ts').LogSearchRequest,
-  ): ReturnType<VolcanoAuth['_postProjectLogRequest']> {
-    return this._postProjectLogRequest(projectId, 'search', request);
+  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogSearchResponse>> {
+    const result = await this._postProjectLogRequest(projectId, 'search', request);
+    return result.error === null ? logSearchResult(result.data) : { data: null, error: result.error };
   }
 
-  getLogActivity(
+  async getLogActivity(
     projectId: string,
     request: import('./sdk-public-types.ts').LogActivityRequest,
-  ): ReturnType<VolcanoAuth['_postProjectLogRequest']> {
-    return this._postProjectLogRequest(projectId, 'activity', request);
+  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogActivityResponse>> {
+    const result = await this._postProjectLogRequest(projectId, 'activity', request);
+    return result.error === null
+      ? logActivityResult(result.data)
+      : { data: null, error: result.error };
   }
 
   // ========================================================================
