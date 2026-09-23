@@ -40,11 +40,24 @@ import { ProjectLocksApi } from './project-locks.ts';
 import { parseResponseBody } from './response-body.ts';
 import { getHeaderValue, responseHeadersToObject } from './response-headers.ts';
 import { safeJsonParse } from './response-json.ts';
+import {
+  listStorageObjects,
+  removeStorageObjects,
+  transferStorageObject,
+  updateStorageVisibility,
+} from './storage-operations.ts';
 import { buildStorageUrl, encodeStoragePath } from './storage-paths.ts';
 import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
-import { storageRequest } from './storage-transport.ts';
 import { downloadStorageFile, uploadStorageFile } from './storage-transfers.ts';
+import { storageRequest } from './storage-transport.ts';
+import {
+  abortStorageUploadSession,
+  completeStorageUploadSession,
+  createStorageUploadSession,
+  getStorageUploadSession,
+  uploadStoragePart,
+} from './storage-upload-sessions.ts';
 import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './token-claims.ts';
 
 /**
@@ -2648,119 +2661,28 @@ class StorageFileApi {
    * List files in the bucket
    */
   async list(prefix = '', options = {}) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return { ...authError, nextCursor: null };
-    }
-
-    const params = new URLSearchParams();
-    if (prefix) {
-      params.set('prefix', prefix);
-    }
-    if (options.limit) {
-      params.set('limit', String(options.limit));
-    }
-    if (options.cursor) {
-      params.set('cursor', options.cursor);
-    }
-
-    const queryString = params.toString();
-    const url = `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}${queryString ? `?${queryString}` : ''}`;
-
-    const result = await this._storageRequest(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (result.error) {
-      return { data: null, error: result.error, nextCursor: null };
-    }
-
-    return {
-      data: result.data.objects || [],
-      error: null,
-      nextCursor: result.data.next_cursor || null,
-    };
+    return listStorageObjects(this, prefix, options);
   }
 
   /**
    * Delete one or more files from the bucket
    */
   async remove(paths) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    const pathList = Array.isArray(paths) ? paths : [paths];
-    const errors = [];
-    const deleted = [];
-
-    for (const path of pathList) {
-      const result = await this._storageRequest(this._buildUrl(path), {
-        method: 'DELETE',
-      });
-
-      if (result.error) {
-        errors.push({ path, error: result.error });
-      } else {
-        deleted.push(path);
-      }
-    }
-
-    if (errors.length > 0) {
-      const firstError = errors[0].error;
-      const error = new Error(
-        `Failed to delete ${errors.length} file(s): ${errors.map((e) => e.path).join(', ')}`,
-      );
-      error.failures = errors;
-      for (const field of ['status', 'code', 'retryAfter']) {
-        if (firstError[field] !== undefined) {
-          error[field] = firstError[field];
-        }
-      }
-      return { data: { deleted }, error };
-    }
-
-    return { data: { deleted }, error: null };
+    return removeStorageObjects(this, paths);
   }
 
   /**
    * Move/rename a file within the bucket
    */
   async move(fromPath, toPath) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
-    );
+    return transferStorageObject(this, 'move', fromPath, toPath);
   }
 
   /**
    * Copy a file within the bucket
    */
   async copy(fromPath, toPath) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
-    );
+    return transferStorageObject(this, 'copy', fromPath, toPath);
   }
 
   /**
@@ -2779,16 +2701,7 @@ class StorageFileApi {
    * Update the visibility (public/private) of a file
    */
   async updateVisibility(path, isPublic) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(`${this._buildUrl(path)}/visibility`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_public: isPublic }),
-    });
+    return updateStorageVisibility(this, path, isPublic);
   }
 
   // ========================================================================
@@ -2796,85 +2709,23 @@ class StorageFileApi {
   // ========================================================================
 
   async createUploadSession(path, options) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    if (!options || !options.totalSize) {
-      return errorResult('totalSize is required');
-    }
-
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filename: path.split('/').pop() || path,
-        content_type: options.contentType || 'application/octet-stream',
-        total_size: options.totalSize,
-        part_size: options.partSize,
-      }),
-    });
+    return createStorageUploadSession(this, path, options);
   }
 
   async uploadPart(path, sessionId, partNumber, partData) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Upload-Session': sessionId,
-        'X-Part-Number': String(partNumber),
-      },
-      body: partData,
-    });
+    return uploadStoragePart(this, path, sessionId, partNumber, partData);
   }
 
   async completeUploadSession(path, sessionId) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Upload-Session': sessionId,
-        'X-Upload-Complete': 'true',
-      },
-      body: JSON.stringify({}),
-    });
+    return completeStorageUploadSession(this, path, sessionId);
   }
 
   async getUploadSession(path, sessionId) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'GET',
-      headers: { 'X-Upload-Session': sessionId },
-    });
+    return getStorageUploadSession(this, path, sessionId);
   }
 
   async abortUploadSession(path, sessionId) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return { error: authError.error };
-    }
-
-    const result = await this._storageRequest(this._buildUrl(path), {
-      method: 'DELETE',
-      headers: { 'X-Upload-Session': sessionId },
-    });
-
-    return { error: result.error };
+    return abortStorageUploadSession(this, path, sessionId);
   }
 
   uploadResumable(path, fileBody, options = {}) {
