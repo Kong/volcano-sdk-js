@@ -3,7 +3,7 @@
   "workspaces": {
     ".": {
       "entry": [
-        "src/index.js!",
+        "src/index.ts!",
         "src/realtime.ts!",
         "src/durable.ts!",
         "src/next/middleware.ts!",

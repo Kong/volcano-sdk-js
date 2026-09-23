@@ -189,6 +189,32 @@ const GENERATED_TRANSPORT = {
   uploadStorageObject,
 };
 
+function requireAnonKey(anonKey: unknown): asserts anonKey is string {
+  if (typeof anonKey !== 'string' || anonKey === '') {
+    throw new Error('anonKey is required. Get your anon key from project settings.');
+  }
+  if (anonKey.startsWith('sk-') && isBrowser()) {
+    throw new Error(
+      '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
+        'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
+        'Use an anon key (ak-*) for browser/client-side applications. ' +
+        'Service keys should only be used in secure server-side environments. ' +
+        'See: https://docs.volcano.hosting/security/keys',
+    );
+  }
+}
+
+function configApiUrl(config: VolcanoAuthConfig): string {
+  const url = config.apiUrl === '' ? DEFAULT_API_URL : (config.apiUrl ?? DEFAULT_API_URL);
+  return url.replace(/\/$/, '');
+}
+
+function configTimeout(value: number | undefined): number {
+  return typeof value === 'number' && value !== 0 && !Number.isNaN(value)
+    ? value
+    : DEFAULT_TIMEOUT_MS;
+}
+
 // ============================================================================
 // VolcanoAuth Class
 // ============================================================================
@@ -218,28 +244,16 @@ class VolcanoAuth {
   storage: Storage;
   locks: ProjectLocks;
 
-  constructor(config: VolcanoAuthConfig & {
-    timeout?: number;
-    transportFactory?: (client: VolcanoAuth) => typeof GENERATED_TRANSPORT;
-  }) {
-    if (!config.anonKey) {
-      throw new Error('anonKey is required. Get your anon key from project settings.');
-    }
-
-    // SECURITY: Throw hard error if service key is used client-side
-    if (config.anonKey.startsWith('sk-') && isBrowser()) {
-      throw new Error(
-        '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
-          'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
-          'Use an anon key (ak-*) for browser/client-side applications. ' +
-          'Service keys should only be used in secure server-side environments. ' +
-          'See: https://docs.volcano.hosting/security/keys',
-      );
-    }
-
-    this.apiUrl = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, ''); // Remove trailing slash
+  constructor(
+    config: VolcanoAuthConfig & {
+      timeout?: number;
+      transportFactory?: (client: VolcanoAuth) => typeof GENERATED_TRANSPORT;
+    },
+  ) {
+    requireAnonKey(config.anonKey);
+    this.apiUrl = configApiUrl(config);
     this.anonKey = config.anonKey;
-    this.timeout = config.timeout || DEFAULT_TIMEOUT_MS;
+    this.timeout = configTimeout(config.timeout);
     this._currentDatabaseName = null;
     this.currentUser = null;
     this._sessionGeneration = 0;
@@ -260,28 +274,12 @@ class VolcanoAuth {
     this._oauthExchangeError = null;
     this._authCallbacks = [];
     this._functionResolveState = getSharedFunctionResolveState();
-    this._transport = (config.transportFactory || (() => GENERATED_TRANSPORT))(this);
+    this._transport = (config.transportFactory ?? (() => GENERATED_TRANSPORT))(this);
     this._durableFacade = new DurableFacade(this);
-
-    // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
-    if (config.accessToken) {
-      this.accessToken = config.accessToken;
-      this.refreshToken = config.refreshToken || null;
-    } else {
-      // Client-side use: Restore from localStorage if available
-      this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
-      this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-      // Adopt a managed hosted-auth redirect session from the URL fragment if
-      // present, so the client is authenticated at construction time — exactly
-      // like a signIn() result or a localStorage-restored session. A fresh
-      // redirect token takes precedence over any stale stored session.
-      this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
-    }
-    if (!config.accessToken && this._hasOAuthCallbackInUrl()) {
-      this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
-      // Clear a settled exchange even if no auth method has awaited it yet.
-      this._completeOAuthExchange();
-    }
+    this.accessToken = null;
+    this.refreshToken = null;
+    this._initializeCredentials(config);
+    this._beginOAuthCallback(config);
 
     // Sub-objects for organization
     this.auth = {
@@ -354,6 +352,29 @@ class VolcanoAuth {
     this.locks = new ProjectLocksApi(this);
   }
 
+  private _initializeCredentials(config: VolcanoAuthConfig): void {
+    if (typeof config.accessToken === 'string' && config.accessToken !== '') {
+      this.accessToken = config.accessToken;
+      this.refreshToken = config.refreshToken === '' ? null : (config.refreshToken ?? null);
+      return;
+    }
+    this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
+    this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
+  }
+
+  private _beginOAuthCallback(config: VolcanoAuthConfig): void {
+    if (typeof config.accessToken === 'string' && config.accessToken !== '') {
+      return;
+    }
+    if (!this._hasOAuthCallbackInUrl()) {
+      return;
+    }
+    this._oauthExchangePromise = this._consumeOAuthCodeFromUrl();
+    // Completion owns errors and clears the pending promise even before another auth call.
+    void this._completeOAuthExchange();
+  }
+
   // ========================================================================
   // Logs Methods
   // ========================================================================
@@ -378,11 +399,11 @@ class VolcanoAuth {
     return { data: result.data, error: null };
   }
 
-  searchLogs(projectId: string, request: import("./sdk-public-types.ts").LogSearchRequest) {
+  searchLogs(projectId: string, request: import('./sdk-public-types.ts').LogSearchRequest) {
     return this._postProjectLogRequest(projectId, 'search', request);
   }
 
-  getLogActivity(projectId: string, request: import("./sdk-public-types.ts").LogActivityRequest) {
+  getLogActivity(projectId: string, request: import('./sdk-public-types.ts').LogActivityRequest) {
     return this._postProjectLogRequest(projectId, 'activity', request);
   }
 
@@ -412,11 +433,17 @@ class VolcanoAuth {
     return result;
   }
 
-  async _authFetchWithContext(path: string | (() => string), options: RequestInit | (() => RequestInit) = {}) {
+  async _authFetchWithContext(
+    path: string | (() => string),
+    options: RequestInit | (() => RequestInit) = {},
+  ): ReturnType<typeof authFetchWithContext> {
     return authFetchWithContext(this, path, options);
   }
 
-  async _authFetchUrl(url: string, fetchOptions: RequestInit = {}) {
+  async _authFetchUrl(
+    url: string,
+    fetchOptions: RequestInit = {},
+  ): ReturnType<typeof authFetchUrl> {
     return authFetchUrl(this, url, fetchOptions);
   }
 
@@ -433,7 +460,7 @@ class VolcanoAuth {
     };
   }
 
-  async _generatedFetch(path: string, options: RequestInit, authorization: "anon" | "session") {
+  async _generatedFetch(path: string, options: RequestInit, authorization: 'anon' | 'session') {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
       return fetchWithTimeout(
@@ -452,11 +479,18 @@ class VolcanoAuth {
     return fetchWithAuthRetry(this, url, options);
   }
 
-  _getFunctionInvokeUrl(functionIdentifier: unknown, resolvedInvokeUrl: unknown) {
+  _getFunctionInvokeUrl(
+    functionIdentifier: unknown,
+    resolvedInvokeUrl: unknown,
+  ): ReturnType<typeof functionInvokeUrl> {
     return functionInvokeUrl(this.apiUrl, functionIdentifier, resolvedInvokeUrl);
   }
 
-  _functionResolveCacheKey(functionName: string, token: string, useAnonKey: boolean) {
+  _functionResolveCacheKey(
+    functionName: string,
+    token: string,
+    useAnonKey: boolean,
+  ): ReturnType<typeof functionResolveCacheKey> {
     return functionResolveCacheKey(this.apiUrl, functionName, token, useAnonKey);
   }
 
@@ -472,7 +506,12 @@ class VolcanoAuth {
       token,
       useAnonKey,
       allowRefresh = true,
-    }: { authContext: AuthContext; token: string | null; useAnonKey: boolean; allowRefresh?: boolean },
+    }: {
+      authContext: AuthContext;
+      token: string | null;
+      useAnonKey: boolean;
+      allowRefresh?: boolean;
+    },
   ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (!hostLabel) {
@@ -570,7 +609,7 @@ class VolcanoAuth {
    * Make a public request with anon key
    * @private
    */
-  async _anonFetch(path: string, options: RequestInit = {}) {
+  async _anonFetch(path: string, options: RequestInit = {}): ReturnType<typeof anonFetch> {
     return anonFetch(this, path, options);
   }
 
@@ -603,55 +642,68 @@ class VolcanoAuth {
   // Authentication Methods
   // ========================================================================
 
-  async signUp(options: Parameters<typeof signUpAccount>[1]) {
+  async signUp(options: Parameters<typeof signUpAccount>[1]): ReturnType<typeof signUpAccount> {
     return signUpAccount(this, options);
   }
 
-  async signIn(options: Parameters<typeof signInAccount>[1]) {
+  async signIn(options: Parameters<typeof signInAccount>[1]): ReturnType<typeof signInAccount> {
     return signInAccount(this, options);
   }
 
-  getSession() {
+  getSession(): ReturnType<typeof getAccountSession> {
     return getAccountSession(this);
   }
 
-  setSession(session: Parameters<typeof adoptAccountSession>[1]) {
+  setSession(
+    session: Parameters<typeof adoptAccountSession>[1],
+  ): ReturnType<typeof adoptAccountSession> {
     return adoptAccountSession(this, session);
   }
 
-  async signOut() {
+  async signOut(): ReturnType<typeof signOut> {
     return signOut(this);
   }
 
-  async _signOutCaptured(context: Parameters<typeof signOutCaptured>[1], refreshing: Parameters<typeof signOutCaptured>[2]) {
+  async _signOutCaptured(
+    context: Parameters<typeof signOutCaptured>[1],
+    refreshing: Parameters<typeof signOutCaptured>[2],
+  ): ReturnType<typeof signOutCaptured> {
     return signOutCaptured(this, context, refreshing);
   }
 
-  async _revokeAccessSession(context: Parameters<typeof revokeAccessSession>[1], sessionId: string, preceding: Parameters<typeof revokeAccessSession>[3]) {
+  async _revokeAccessSession(
+    context: Parameters<typeof revokeAccessSession>[1],
+    sessionId: string,
+    preceding: Parameters<typeof revokeAccessSession>[3],
+  ): ReturnType<typeof revokeAccessSession> {
     return revokeAccessSession(this, context, sessionId, preceding);
   }
 
-  async getUser() {
+  async getUser(): ReturnType<typeof getAccountUser> {
     return getAccountUser(this);
   }
 
-  async updateUser(options: Parameters<typeof updateAccountUser>[1]) {
+  async updateUser(
+    options: Parameters<typeof updateAccountUser>[1],
+  ): ReturnType<typeof updateAccountUser> {
     return updateAccountUser(this, options);
   }
 
-  async refreshSession() {
+  async refreshSession(): ReturnType<typeof refreshSession> {
     return refreshSession(this);
   }
 
-  async _refreshSessionForContext(context: AuthContext) {
+  async _refreshSessionForContext(
+    context: AuthContext,
+  ): ReturnType<typeof refreshSessionForContext> {
     return refreshSessionForContext(this, context);
   }
 
-  async _fetchSessionRefresh(context: AuthContext) {
+  async _fetchSessionRefresh(context: AuthContext): ReturnType<typeof fetchSessionRefresh> {
     return fetchSessionRefresh(this, context);
   }
 
-  async _performSessionRefresh(context: AuthContext) {
+  async _performSessionRefresh(context: AuthContext): ReturnType<typeof performSessionRefresh> {
     return performSessionRefresh(this, context);
   }
 
@@ -660,7 +712,9 @@ class VolcanoAuth {
    * @param {Function} callback - Called with user object (or null) on auth state change
    * @returns {Function} Unsubscribe function
    */
-  onAuthStateChange(callback: Parameters<typeof subscribeToAuthState>[1]) {
+  onAuthStateChange(
+    callback: Parameters<typeof subscribeToAuthState>[1],
+  ): ReturnType<typeof subscribeToAuthState> {
     return subscribeToAuthState(this, callback);
   }
 
@@ -668,15 +722,21 @@ class VolcanoAuth {
   // Anonymous User Methods
   // ========================================================================
 
-  async signInAnonymously(metadata: Record<string, unknown> = {}) {
+  async signInAnonymously(
+    metadata: Record<string, unknown> = {},
+  ): ReturnType<typeof signInAnonymousAccount> {
     return signInAnonymousAccount(this, metadata);
   }
 
-  async signUpAnonymous(metadata: Record<string, unknown> = {}) {
+  async signUpAnonymous(
+    metadata: Record<string, unknown> = {},
+  ): ReturnType<typeof signUpAnonymousAccount> {
     return signUpAnonymousAccount(this, metadata);
   }
 
-  async convertAnonymous(options: Parameters<typeof convertAnonymousAccount>[1]) {
+  async convertAnonymous(
+    options: Parameters<typeof convertAnonymousAccount>[1],
+  ): ReturnType<typeof convertAnonymousAccount> {
     return convertAnonymousAccount(this, options);
   }
 
@@ -684,11 +744,11 @@ class VolcanoAuth {
   // Email Confirmation Methods
   // ========================================================================
 
-  async confirmEmail(token: string) {
+  async confirmEmail(token: string): ReturnType<typeof confirmAccountEmail> {
     return confirmAccountEmail(this, token);
   }
 
-  async resendConfirmation(email: string) {
+  async resendConfirmation(email: string): ReturnType<typeof resendAccountConfirmation> {
     return resendAccountConfirmation(this, email);
   }
 
@@ -696,15 +756,17 @@ class VolcanoAuth {
   // Password Recovery Methods
   // ========================================================================
 
-  async forgotPassword(email: string) {
+  async forgotPassword(email: string): ReturnType<typeof forgotAccountPassword> {
     return forgotAccountPassword(this, email);
   }
 
-  async resetPasswordForEmail(email: string) {
+  async resetPasswordForEmail(email: string): ReturnType<typeof resetAccountPasswordForEmail> {
     return resetAccountPasswordForEmail(this, email);
   }
 
-  async resetPassword(options: Parameters<typeof resetAccountPassword>[1]) {
+  async resetPassword(
+    options: Parameters<typeof resetAccountPassword>[1],
+  ): ReturnType<typeof resetAccountPassword> {
     return resetAccountPassword(this, options);
   }
 
@@ -712,15 +774,15 @@ class VolcanoAuth {
   // Email Change Methods
   // ========================================================================
 
-  async requestEmailChange(newEmail: string) {
+  async requestEmailChange(newEmail: string): ReturnType<typeof requestAccountEmailChange> {
     return requestAccountEmailChange(this, newEmail);
   }
 
-  async confirmEmailChange(emailChangeToken: string) {
+  async confirmEmailChange(emailChangeToken: string): ReturnType<typeof confirmAccountEmailChange> {
     return confirmAccountEmailChange(this, emailChangeToken);
   }
 
-  async cancelEmailChange() {
+  async cancelEmailChange(): ReturnType<typeof cancelAccountEmailChange> {
     return cancelAccountEmailChange(this);
   }
 
@@ -728,60 +790,74 @@ class VolcanoAuth {
   // OAuth / SSO Authentication
   // ========================================================================
 
-  signInWithOAuth(provider: Parameters<typeof beginOAuth>[1], options: Parameters<typeof beginOAuth>[2] = {}) {
+  signInWithOAuth(
+    provider: Parameters<typeof beginOAuth>[1],
+    options: Parameters<typeof beginOAuth>[2] = {},
+  ): ReturnType<typeof beginOAuth> {
     return beginOAuth(this, provider, options);
   }
 
-  _resolveOAuthRedirectTarget(redirectTo: string | undefined) {
+  _resolveOAuthRedirectTarget(
+    redirectTo: string | undefined,
+  ): ReturnType<typeof resolveOAuthRedirectTarget> {
     return resolveOAuthRedirectTarget(redirectTo);
   }
 
-  getHostedAuthUrl(options: Parameters<typeof createHostedAuthUrl>[1] = {}) {
+  getHostedAuthUrl(
+    options: Parameters<typeof createHostedAuthUrl>[1] = {},
+  ): ReturnType<typeof createHostedAuthUrl> {
     return createHostedAuthUrl(this, options);
   }
 
-  signInWithHostedAuth(options: Parameters<typeof beginHostedAuth>[1] = {}) {
+  signInWithHostedAuth(
+    options: Parameters<typeof beginHostedAuth>[1] = {},
+  ): ReturnType<typeof beginHostedAuth> {
     return beginHostedAuth(this, options);
   }
 
-  _resolveProjectIdForHostedAuth(explicitProjectId: string | undefined) {
+  _resolveProjectIdForHostedAuth(
+    explicitProjectId: string | undefined,
+  ): ReturnType<typeof resolveProjectIdForHostedAuth> {
     return resolveProjectIdForHostedAuth(this, explicitProjectId);
   }
 
-  signInWithGoogle() {
+  signInWithGoogle(): ReturnType<typeof signInWithProvider> {
     return signInWithProvider(this, 'google');
   }
-  signInWithGitHub() {
+  signInWithGitHub(): ReturnType<typeof signInWithProvider> {
     return signInWithProvider(this, 'github');
   }
-  signInWithMicrosoft() {
+  signInWithMicrosoft(): ReturnType<typeof signInWithProvider> {
     return signInWithProvider(this, 'microsoft');
   }
-  signInWithApple() {
+  signInWithApple(): ReturnType<typeof signInWithProvider> {
     return signInWithProvider(this, 'apple');
   }
 
-  async linkOAuthProvider(provider: string) {
+  async linkOAuthProvider(provider: string): ReturnType<typeof linkAccountProvider> {
     return linkAccountProvider(this, provider);
   }
 
-  async unlinkOAuthProvider(provider: string) {
+  async unlinkOAuthProvider(provider: string): ReturnType<typeof unlinkAccountProvider> {
     return unlinkAccountProvider(this, provider);
   }
 
-  async getLinkedOAuthProviders() {
+  async getLinkedOAuthProviders(): ReturnType<typeof getAccountLinkedProviders> {
     return getAccountLinkedProviders(this);
   }
 
-  async refreshOAuthToken(provider: string) {
+  async refreshOAuthToken(provider: string): ReturnType<typeof refreshAccountProviderToken> {
     return refreshAccountProviderToken(this, provider);
   }
 
-  async getOAuthProviderToken(provider: string) {
+  async getOAuthProviderToken(provider: string): ReturnType<typeof getAccountProviderToken> {
     return getAccountProviderToken(this, provider);
   }
 
-  async callOAuthAPI(provider: string, params: Parameters<typeof callProviderAPI>[2]) {
+  async callOAuthAPI(
+    provider: string,
+    params: Parameters<typeof callProviderAPI>[2],
+  ): ReturnType<typeof callProviderAPI> {
     return callProviderAPI(this, provider, params);
   }
 
@@ -789,15 +865,17 @@ class VolcanoAuth {
   // Session Management (User's sessions)
   // ========================================================================
 
-  async getSessions(options: Parameters<typeof getAccountSessions>[1] = {}) {
+  async getSessions(
+    options: Parameters<typeof getAccountSessions>[1] = {},
+  ): ReturnType<typeof getAccountSessions> {
     return getAccountSessions(this, options);
   }
 
-  async deleteSession(sessionId: string) {
+  async deleteSession(sessionId: string): ReturnType<typeof deleteAccountSession> {
     return deleteAccountSession(this, sessionId);
   }
 
-  async deleteAllOtherSessions() {
+  async deleteAllOtherSessions(): ReturnType<typeof deleteAccountOtherSessions> {
     return deleteAccountOtherSessions(this);
   }
 
@@ -805,7 +883,10 @@ class VolcanoAuth {
   // Function Invocation
   // ========================================================================
 
-  async invokeFunction(functionName: string, payload: unknown = {}) {
+  async invokeFunction(
+    functionName: string,
+    payload: unknown = {},
+  ): ReturnType<typeof invokeFunctionWithClient> {
     return invokeFunctionWithClient(this, functionName, payload);
   }
 
@@ -813,7 +894,11 @@ class VolcanoAuth {
   // Durable Executions
   // ========================================================================
 
-  startDurableExecution(functionName: string, input: unknown = {}, options: { executionName?: string } = {}) {
+  startDurableExecution(
+    functionName: string,
+    input: unknown = {},
+    options: { executionName?: string } = {},
+  ) {
     return this._durableFacade.start(functionName, input, options);
   }
 
@@ -821,7 +906,11 @@ class VolcanoAuth {
     return this._durableFacade.get(projectId, functionName, executionId);
   }
 
-  listDurableExecutions(projectId: string, functionName: string, options: Parameters<DurableFacade["list"]>[2] = {}) {
+  listDurableExecutions(
+    projectId: string,
+    functionName: string,
+    options: Parameters<DurableFacade['list']>[2] = {},
+  ) {
     return this._durableFacade.list(projectId, functionName, options);
   }
 
@@ -833,7 +922,7 @@ class VolcanoAuth {
   // Session Management (Internal)
   // ========================================================================
 
-  _captureAuthContext() {
+  _captureAuthContext(): ReturnType<typeof captureAuthContext> {
     return captureAuthContext(this);
   }
 
@@ -841,23 +930,29 @@ class VolcanoAuth {
     adoptSessionInMemory(this, session);
   }
 
-  _isAuthContextCurrent(context: AuthContext) {
+  _isAuthContextCurrent(context: AuthContext): ReturnType<typeof isAuthContextCurrent> {
     return isAuthContextCurrent(this, context);
   }
 
-  _setSession(data: Parameters<typeof setSession>[1], expectedGeneration = this._sessionGeneration) {
+  _setSession(
+    data: Parameters<typeof setSession>[1],
+    expectedGeneration = this._sessionGeneration,
+  ): ReturnType<typeof setSession> {
     return setSession(this, data, expectedGeneration);
   }
 
-  _setRefreshedSession(data: Parameters<typeof setRefreshedSession>[1], context: AuthContext) {
+  _setRefreshedSession(
+    data: Parameters<typeof setRefreshedSession>[1],
+    context: AuthContext,
+  ): ReturnType<typeof setRefreshedSession> {
     return setRefreshedSession(this, data, context);
   }
 
-  _clearSession(context: AuthContext) {
+  _clearSession(context: AuthContext): ReturnType<typeof clearSession> {
     return clearSession(this, context);
   }
 
-  _clearSessionAtGeneration(generation: number) {
+  _clearSessionAtGeneration(generation: number): ReturnType<typeof clearSessionAtGeneration> {
     return clearSessionAtGeneration(this, generation);
   }
 
@@ -869,15 +964,15 @@ class VolcanoAuth {
   // Managed Auth Redirect (hosted login/signup hand-off)
   // ========================================================================
 
-  _hasOAuthCallbackInUrl() {
+  _hasOAuthCallbackInUrl(): ReturnType<typeof hasOAuthCallbackInUrl> {
     return hasOAuthCallbackInUrl(this._peekAuthRedirectURL(), Boolean(this._peekAuthState()));
   }
 
-  _consumeOAuthCodeFromUrl() {
+  _consumeOAuthCodeFromUrl(): ReturnType<typeof consumeOAuthCodeFromUrl> {
     return consumeOAuthCodeFromUrl(this);
   }
 
-  _completeOAuthExchange() {
+  _completeOAuthExchange(): ReturnType<typeof completeOAuthExchange> {
     return completeOAuthExchange(this);
   }
 
@@ -894,7 +989,7 @@ class VolcanoAuth {
    * session hand-off (i.e. an access_token from a hosted login/signup redirect).
    * Cheap peek that does not mutate state.
    */
-  _hasSessionInUrl() {
+  _hasSessionInUrl(): ReturnType<typeof hasSessionInUrl> {
     return hasSessionInUrl();
   }
 
@@ -906,7 +1001,7 @@ class VolcanoAuth {
    * When present, the tokens are stored like any other session and removed from
    * the URL. Returns true if a session was adopted. Browser-only and idempotent.
    */
-  _consumeSessionFromUrl() {
+  _consumeSessionFromUrl(): ReturnType<typeof consumeSessionFromUrl> {
     return consumeSessionFromUrl(this);
   }
 
@@ -931,7 +1026,7 @@ class VolcanoAuth {
   // This is a CSRF defense, so it must be cryptographically random — we require
   // Web Crypto (browsers and Node >= 20 provide it) rather than fall back to a
   // predictable PRNG.
-  _generateAuthStateNonce() {
+  _generateAuthStateNonce(): ReturnType<typeof generateAuthStateNonce> {
     return generateAuthStateNonce();
   }
 
@@ -942,19 +1037,19 @@ class VolcanoAuth {
   }
 
   // Read and clear the stored nonce (one-time use).
-  _takeAuthState() {
+  _takeAuthState(): ReturnType<typeof takeAuthState> {
     return takeAuthState();
   }
 
-  _peekAuthState() {
+  _peekAuthState(): ReturnType<typeof peekAuthState> {
     return peekAuthState();
   }
 
-  _takeAuthRedirectURL() {
+  _takeAuthRedirectURL(): ReturnType<typeof takeAuthRedirectUrl> {
     return takeAuthRedirectUrl();
   }
 
-  _peekAuthRedirectURL() {
+  _peekAuthRedirectURL(): ReturnType<typeof peekAuthRedirectUrl> {
     return peekAuthRedirectUrl();
   }
 
@@ -962,7 +1057,7 @@ class VolcanoAuth {
   // Storage Helpers (Browser/Node.js compatible)
   // ========================================================================
 
-  _getStorageItem(key: string) {
+  _getStorageItem(key: string): ReturnType<typeof getStorageItem> {
     return getStorageItem(key);
   }
 
@@ -1070,9 +1165,7 @@ async function loadRealtime() {
 // the export object of any CJS bundle that inlines the SDK
 // (e.g. esbuild --bundle --format=cjs), producing "handler is not a function"
 // at runtime. See VOL-505.
-const VolcanoClient = VolcanoAuth;
-
-export { loadRealtime, VolcanoAuth, VolcanoClient };
+export { loadRealtime, VolcanoAuth, VolcanoAuth as VolcanoClient };
 export { QueryBuilder } from './database-query.ts';
 export { isBrowser } from './next/request.ts';
 export { StorageFileApi } from './storage-file.ts';

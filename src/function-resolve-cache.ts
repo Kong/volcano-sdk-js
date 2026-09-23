@@ -40,7 +40,9 @@ export function cachedFunctionResolution(value: unknown): CachedFunctionResoluti
     functionId: value.functionId,
     error: value.error,
     ...('invokeUrl' in value ? { invokeUrl: value.invokeUrl } : {}),
-    ...(metadata === undefined ? {} : { errorMetadata: Object.fromEntries(Object.entries(metadata)) }),
+    ...(metadata === undefined
+      ? {}
+      : { errorMetadata: Object.fromEntries(Object.entries(metadata)) }),
   };
 }
 
