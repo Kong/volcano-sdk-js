@@ -1,7 +1,11 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { assert, property, string } from 'fast-check';
-import { sanitizeFunctionIdentifierForHost, validInvokeUrl } from '../src/function-url.ts';
+import {
+  functionInvokeUrl,
+  sanitizeFunctionIdentifierForHost,
+  validInvokeUrl,
+} from '../src/function-url.ts';
 import { propertyOptions } from './support/property-options.ts';
 
 test.each([
@@ -58,6 +62,12 @@ test('allows HTTP only when the configured API is also HTTP', () => {
   );
   expect(validInvokeUrl('http://localhost:8081/invoke', 'https://api.example.com')).toBeNull();
   expect(validInvokeUrl('http://localhost:8081/invoke', 'invalid API URL')).toBeNull();
+});
+
+test('rejects an invalid resolved function identifier before building a URL', () => {
+  expect(() => functionInvokeUrl('https://api.example.com', 'Upper', null)).toThrow(
+    'functionId must be DNS-safe',
+  );
 });
 
 test('arbitrary invocation query values cannot downgrade an HTTPS API credential', () => {

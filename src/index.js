@@ -44,6 +44,7 @@ import {
   VolcanoSystemError,
 } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
+import { resolveFunctionByHttp } from './function-resolution.ts';
 import {
   clearFunctionResolveCache,
   clearSharedFunctionResolveStateForTests,
@@ -119,7 +120,6 @@ const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
-const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 // Present only once the platform has dispatched to the function. Its absence on
 // a 404 is what says the id we cached no longer names anything, as opposed to
 // the function itself answering 404.
@@ -528,66 +528,9 @@ class VolcanoAuth {
     let pending = this._functionResolveState.inFlight.get(cacheKey);
     const ownsPending = !pending;
     if (!pending) {
-      const resolvePath = `/functions/resolve?name=${encodeURIComponent(hostLabel)}`;
-      pending = (async () => {
-        // Share only the credentialed HTTP result. Session validation and 401
-        // refresh belong to each caller so one client's auth lifecycle cannot
-        // determine another client's result.
-        const result = await this._anonFetch(resolvePath, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!result.ok) {
-          if (result.status === 404) {
-            this._functionResolveState.cache.set(cacheKey, {
-              functionId: null,
-              // Keep the string shape readable by older bundles sharing the V1 cache.
-              error: result.error?.message || 'function not found',
-              errorMetadata: {
-                status: result.status,
-                code: result.error?.code,
-                retryAfter: result.error?.retryAfter,
-              },
-              expiresAt: Date.now() + DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS * 1000,
-            });
-            pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-          }
-          return {
-            functionId: null,
-            error: result.error || new Error('Failed to resolve function'),
-            status: result.status,
-          };
-        }
-
-        const resolvedId = sanitizeFunctionIdentifierForHost(
-          result.data && result.data.function_id,
-        );
-        if (!resolvedId) {
-          throw new Error('Resolve response missing valid function_id');
-        }
-
-        const ttlRaw = Number(result.data && result.data.cache_ttl_seconds);
-        if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
-          throw new Error('Resolve response missing valid cache_ttl_seconds');
-        }
-        const ttlSeconds = ttlRaw;
-
-        const resolvedInvokeUrl = result.data && result.data.invoke_url;
-
-        this._functionResolveState.cache.set(cacheKey, {
-          functionId: resolvedId,
-          invokeUrl: resolvedInvokeUrl,
-          error: null,
-          expiresAt: Date.now() + ttlSeconds * 1000,
-        });
-        pruneFunctionResolveCache(this._functionResolveState, Date.now(), true);
-        return {
-          functionId: resolvedId,
-          invokeUrl: resolvedInvokeUrl,
-          error: null,
-          status: result.status,
-        };
-      })();
+      // Share only the credentialed HTTP result. Session validation and 401
+      // refresh belong to each caller, not the shared request.
+      pending = resolveFunctionByHttp(this, hostLabel, token, cacheKey);
 
       this._functionResolveState.inFlight.set(cacheKey, pending);
     }
