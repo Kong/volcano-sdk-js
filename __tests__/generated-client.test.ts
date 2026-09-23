@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import type { operations } from '../src/generated/openapi.d.ts';
 import { VolcanoAuth, VolcanoClient } from '../src/index.js';

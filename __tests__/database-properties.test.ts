@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { assert, property, string } from 'fast-check';
 import { databaseConnectionString } from '../src/database-connection-string.ts';

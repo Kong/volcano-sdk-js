@@ -65,6 +65,7 @@ module.exports = [
       'coverage/**',
       'dist/**',
       'node_modules/**',
+      '.stryker-tmp/**',
       'src/generated/**',
       'src/generated-runtime/**',
       'examples/nextjs-notes-app/.next/**',

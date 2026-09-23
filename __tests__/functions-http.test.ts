@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @jest-environment ./__tests__/node-environment.cjs
  *
  * Function invocation over the real HTTP stack.
  *

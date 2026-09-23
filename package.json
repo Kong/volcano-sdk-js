@@ -81,9 +81,11 @@
     "test:quickstart": "pnpm test:package && pnpm test:types:package && node scripts/test-package-quickstart.mjs reports/volcano-sdk.tgz",
     "test:types:package": "tsc --noEmit -p tsconfig.consumer.json",
     "audit": "node scripts/audit-dependencies.mjs",
-    "quality": "pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart",
+    "quality": "pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart && pnpm mutation:pr",
     "test:tooling": "node --test scripts/*.test.mjs",
-    "test:typed-runtime": "pnpm build && jest --config jest.typed.config.cjs"
+    "test:typed-runtime": "pnpm build && jest --config jest.typed.config.cjs",
+    "mutation:pr": "node scripts/run-mutation.mjs",
+    "mutation:audit": "stryker run stryker.audit.config.cjs && node scripts/check-mutation-report.mjs --audit"
   },
   "keywords": [
     "volcano",
@@ -137,6 +139,8 @@
     "@eslint/js": "^10.0.1",
     "@jest/globals": "30.3.0",
     "@rollup/plugin-typescript": "^12.3.0",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/jest-runner": "9.6.1",
     "@types/jest": "30.0.0",
     "@types/node": "20.19.43",
     "@types/ws": "8.18.1",

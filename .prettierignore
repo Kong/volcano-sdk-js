@@ -10,3 +10,5 @@ examples/nextjs-notes-app/node_modules
 *.tgz
 yarn.lock
 examples/nextjs-notes-app/yarn.lock
+
+.stryker-tmp/

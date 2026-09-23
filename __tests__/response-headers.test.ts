@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { array, assert, constantFrom, property, stringMatching, tuple } from 'fast-check';
 import { getHeaderValue, responseHeadersToObject } from '../src/response-headers.ts';

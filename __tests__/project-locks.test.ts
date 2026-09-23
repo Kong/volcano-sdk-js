@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import type { ProjectLockLease } from '../src/index.js';
 import { type LockClient, ProjectLocksApi } from '../src/project-locks.ts';
