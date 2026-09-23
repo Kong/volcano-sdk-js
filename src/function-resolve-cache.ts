@@ -137,12 +137,8 @@ function removeExpiredEntries(state: FunctionResolveState, nowMs: number): [stri
 }
 
 function removeOverflowEntries(state: FunctionResolveState, retained: [string, number][]): void {
-  if (retained.length <= state.maxEntries) {
-    return;
-  }
-
   retained.sort((a, b) => a[1] - b[1]);
-  const overflowCount = retained.length - state.maxEntries;
+  const overflowCount = Math.max(0, retained.length - state.maxEntries);
   for (const [key] of retained.slice(0, overflowCount)) {
     state.cache.delete(key);
   }
