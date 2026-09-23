@@ -45,6 +45,11 @@ test('deletion-only changes at EOF still select surviving source', () => {
   }
 });
 
+test('excludes the declaration-only public type module from runtime mutation shards', () => {
+  const diff = '+++ b/src/sdk-public-types.ts\n@@ -1,0 +1,1 @@';
+  assert.deepEqual(changedRuntimePatterns(diff), []);
+});
+
 test('includes committed, working, and newly added runtime code alongside critical modules', () => {
   const committed = '+++ b/src/database-query.ts\n@@ -3,1 +3,2 @@';
   const working = '+++ b/src/response-body.ts\n@@ -9,1 +9,1 @@';

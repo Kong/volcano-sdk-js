@@ -15,6 +15,8 @@ function handwrittenRuntime(path) {
   return (
     /^src\/.+\.(?:js|ts)$/.test(path) &&
     !path.endsWith('.d.ts') &&
+    // This module contains only public type declarations; Stryker emits no mutants for it.
+    path !== 'src/sdk-public-types.ts' &&
     !path.startsWith('src/generated/') &&
     !path.startsWith('src/generated-runtime/')
   );
