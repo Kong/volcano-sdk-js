@@ -66,6 +66,15 @@ describe('function resolution response boundary', () => {
     expect(client._functionResolveState.cache.has('orders-key')).toBe(false);
   });
 
+  test('rejects a missing successful response with a stable boundary error', async () => {
+    const client = clientWithResponse({ ok: true, status: 200, data: undefined, error: null });
+
+    await expect(resolveFunctionByHttp(client, 'orders', 'token', 'orders-key')).rejects.toThrow(
+      'Resolve response missing valid function_id',
+    );
+    expect(client._functionResolveState.cache.size).toBe(0);
+  });
+
   test('rejects a zero lifetime before caching a successful resolution', async () => {
     const client = clientWithResponse({
       ok: true,
