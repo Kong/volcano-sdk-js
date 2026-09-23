@@ -45,7 +45,10 @@ function stringField(data: unknown, key: string): string | undefined {
 
 function retryAfterSeconds(response: HeaderResponse): number | undefined {
   const header = getHeaderValue(response, 'retry-after');
-  const seconds = Number.parseInt(typeof header === 'string' ? header : '', 10);
+  if (typeof header !== 'string') {
+    return undefined;
+  }
+  const seconds = Number.parseInt(header, 10);
   return Number.isFinite(seconds) ? seconds : undefined;
 }
 
