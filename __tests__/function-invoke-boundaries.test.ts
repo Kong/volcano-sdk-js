@@ -219,6 +219,48 @@ test('a rejected platform 401 retries at most once', async () => {
   expect(refresh).toHaveBeenCalledTimes(1);
 });
 
+test('a refreshed credential must still be available before the second request', async () => {
+  const fixture = hostFixture();
+  const fetch = jest
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response(null, { status: 401 }));
+  fixture.host._refreshSessionForContext = () => {
+    fixture.setToken(null);
+    return Promise.resolve({ error: null });
+  };
+
+  const result = await invokeFunction(fixture.host, 'orders');
+  expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test('sign-out beginning during refresh blocks the second request', async () => {
+  const { host, context } = hostFixture();
+  const fetch = jest
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response(null, { status: 401 }));
+  host._refreshSessionForContext = () => {
+    context.operations.signingOut = Promise.resolve({ error: null });
+    return Promise.resolve({ error: null });
+  };
+
+  const result = await invokeFunction(host, 'orders');
+  expect(result.error).toBeInstanceOf(AuthSessionChangedError);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test('second-request transport rejection stays a system error', async () => {
+  const { host } = hostFixture();
+  const fetch = jest
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(new Response(null, { status: 401 }))
+    .mockImplementationOnce(() => rejectWithForeignValue('retry unavailable'));
+
+  const result = await invokeFunction(host, 'orders');
+  expect(result.error).toBeInstanceOf(VolcanoSystemError);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('a rejected refresh preserves the platform response only for its own cleared session', async () => {
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   const cases = [

@@ -215,6 +215,20 @@ class FunctionInvocation {
     context: AuthContext,
     accessToken: string,
   ): Promise<FunctionInvocationResult> {
+    const { response, dispatched } = await this.request(url, accessToken);
+    if (response.status === 401 && allowRefresh && !dispatched) {
+      const retry = await this.refreshAndRetry(url, context);
+      if (retry !== null) {
+        return retry;
+      }
+    }
+    return await functionInvokeResult(response, dispatched);
+  }
+
+  private async request(
+    url: string,
+    accessToken: string,
+  ): Promise<{ response: Response; dispatched: boolean }> {
     const response = await fetchWithTimeout(
       url,
       {
@@ -229,13 +243,7 @@ class FunctionInvocation {
     );
     const dispatched = functionWasDispatched(response);
     this.dispatched = dispatched;
-    if (response.status === 401 && allowRefresh && !dispatched) {
-      const retry = await this.refreshAndRetry(url, context);
-      if (retry !== null) {
-        return retry;
-      }
-    }
-    return await functionInvokeResult(response, dispatched);
+    return { response, dispatched };
   }
 
   private async refreshAndRetry(
@@ -251,10 +259,26 @@ class FunctionInvocation {
         const error = new AuthRefreshDiscardedError();
         return failed(error, error.status);
       }
-      return this.invokeOnce(url, false, context, this.host.accessToken);
+      return this.retryWithFreshCredential(url, context);
     }
     this.captureRefreshClear(context);
     return null;
+  }
+
+  private async retryWithFreshCredential(
+    url: string,
+    context: AuthContext,
+  ): Promise<FunctionInvocationResult> {
+    const token = this.host.accessToken;
+    if (!hasToken(token) || context.operations.pendingSignOut() !== null) {
+      return authSessionChangedResult();
+    }
+    try {
+      const { response, dispatched } = await this.request(url, token);
+      return await functionInvokeResult(response, dispatched);
+    } catch (reason) {
+      return this.transportFailure(reason);
+    }
   }
 
   private captureRefreshClear(context: AuthContext): void {
