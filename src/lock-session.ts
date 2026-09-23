@@ -1,7 +1,7 @@
 import type { ProjectLockLease, ProjectLocks } from './index.js';
 import { LeaseClock, type LockRequestStart, lockRequestStart } from './lock-clock.ts';
 
-export { LeaseClock, lockRequestStart } from './lock-clock.ts';
+export { lockRequestStart } from './lock-clock.ts';
 
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const RENEWAL_REQUEST_BUDGET_MS = 1000;

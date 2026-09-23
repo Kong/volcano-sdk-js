@@ -124,5 +124,3 @@ export function NotesList() {
     </div>
   );
 }
-
-export default NotesList;

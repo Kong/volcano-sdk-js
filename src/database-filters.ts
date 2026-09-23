@@ -1,13 +1,13 @@
 /** Values accepted by the database filter builders. */
 export type FilterValue = string | number | boolean | null | Date;
 
-export type DatabaseFilter =
+type DatabaseFilter =
   | { column: string; operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'; value: FilterValue }
   | { column: string; operator: 'like' | 'ilike'; value: string }
   | { column: string; operator: 'is'; value: null | boolean }
   | { column: string; operator: 'in'; value: FilterValue[] };
 
-export interface FilterTarget {
+interface FilterTarget {
   filters: DatabaseFilter[];
 }
 

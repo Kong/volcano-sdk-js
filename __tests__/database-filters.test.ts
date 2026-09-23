@@ -1,17 +1,12 @@
 /** @jest-environment node */
 import { expect, test } from '@jest/globals';
 import fc from 'fast-check';
-import {
-  type DatabaseFilter,
-  FilterMixin,
-  type FilterTarget,
-  type FilterValue,
-} from '../src/database-filters.ts';
+import { FilterMixin, type FilterValue } from '../src/database-filters.ts';
 
-type Builder = FilterTarget & typeof FilterMixin & { table: string };
+type Builder = ThisParameterType<typeof FilterMixin.eq> & typeof FilterMixin & { table: string };
 
 function builder(): Builder {
-  const filters: DatabaseFilter[] = [];
+  const filters: Builder['filters'] = [];
   return Object.assign({ filters, table: 'messages' }, FilterMixin);
 }
 
