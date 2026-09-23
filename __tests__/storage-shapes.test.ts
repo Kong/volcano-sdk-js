@@ -48,12 +48,28 @@ test.each([
   { ...storageObject(), is_public: 'true' },
   { ...storageObject(), owner_id: 12 },
   { ...storageObject(), etag: 12 },
+  { ...storageObject(), created_at: false },
   { ...storageObject(), updated_at: false },
+  { ...storageObject(), public_url: 12 },
   { ...storageObject(), metadata: [] },
   { ...storageObject(), metadata: { bad: Number.NaN } },
   { ...storageObject(), metadata: { bad: () => 'value' } },
   { ...storageObject(), metadata: { bad: new Date() } },
+  { ...storageObject(), metadata: { nested: ['valid', new Date()] } },
+  { ...storageObject(), metadata: { nested: { valid: 'yes', bad: Number.NaN } } },
 ])('rejects malformed storage object: %p', (value) => {
+  expect(isStorageObject(value)).toBe(false);
+});
+
+test('rejects a callable object with a record prototype and storage fields', () => {
+  const value = Object.assign((entry: unknown) => entry, {
+    id: 'obj-1',
+    bucket_id: 'bucket-1',
+    mime_type: 'application/octet-stream',
+    size: 1,
+    is_public: false,
+  });
+  Object.setPrototypeOf(value, Object.prototype);
   expect(isStorageObject(value)).toBe(false);
 });
 
@@ -82,7 +98,13 @@ test.each([
   [isCompletedUpload, { object: { name: 'incomplete' } }],
   [isUploadSessionStatus, { ...uploadStatus(), status: 'unknown' }],
   [isUploadSessionStatus, { ...uploadStatus(), total_size: -1 }],
+  [isUploadSessionStatus, { ...uploadStatus(), session_id: null }],
+  [isUploadSessionStatus, { ...uploadStatus(), path: null }],
+  [isUploadSessionStatus, { ...uploadStatus(), content_type: null }],
+  [isUploadSessionStatus, { ...uploadStatus(), expires_at: null }],
+  [isUploadSessionStatus, { ...uploadStatus(), created_at: null }],
   [isUploadSessionStatus, { ...uploadStatus(), parts: [{}] }],
+  [isUploadSessionStatus, { ...uploadStatus(), parts: [uploadPart(), {}] }],
 ] as const)('rejects a malformed upload wire response', (guard, value) => {
   expect(guard(value)).toBe(false);
 });

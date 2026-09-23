@@ -16,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return Number.isInteger(value) && Number(value) >= 0;
 }
 
 function hasStringFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
@@ -25,10 +25,6 @@ function hasStringFields(value: Record<string, unknown>, fields: readonly string
 
 function hasIntegerFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
   return fields.every((field) => isInteger(value[field]));
-}
-
-function hasBooleanFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
-  return fields.every((field) => typeof value[field] === 'boolean');
 }
 
 function hasOptionalStringFields(
@@ -42,7 +38,7 @@ function isJsonScalar(value: unknown): value is string | number | boolean | null
   if (value === null || typeof value === 'string' || typeof value === 'boolean') {
     return true;
   }
-  return typeof value === 'number' && Number.isFinite(value);
+  return Number.isFinite(value);
 }
 
 function isJsonValue(value: unknown): value is JsonValue {
@@ -74,7 +70,7 @@ function hasStorageObjectCore(value: Record<string, unknown>): boolean {
   return (
     hasStringFields(value, ['id', 'bucket_id', 'name', 'mime_type']) &&
     hasIntegerFields(value, ['size']) &&
-    hasBooleanFields(value, ['is_public'])
+    typeof value['is_public'] === 'boolean'
   );
 }
 
