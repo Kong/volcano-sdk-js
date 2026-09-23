@@ -3633,13 +3633,14 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ providers: ['google', 'github'] }),
+        json: () =>
+          Promise.resolve({ providers: [{ provider: 'google' }, { provider: 'github' }] }),
       });
 
       const { providers, error } = await volcano.auth.getLinkedOAuthProviders();
 
       expect(error).toBeNull();
-      expect(providers).toEqual(['google', 'github']);
+      expect(providers).toEqual([{ provider: 'google' }, { provider: 'github' }]);
     });
 
     it('should return empty array when no providers linked', async () => {
@@ -3733,7 +3734,8 @@ describe('VolcanoAuth', () => {
 
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ message: 'Provider linked', redirect_url: 'https://...' }),
+        json: () =>
+          Promise.resolve({ message: 'Provider linked', authorization_url: 'https://...' }),
       });
 
       const { data, error } = await volcano.auth.linkOAuthProvider('github');
@@ -4233,7 +4235,9 @@ describe('VolcanoAuth', () => {
             sessions: [
               {
                 id: 'session-1',
+                user_id: 'user-123',
                 provider: 'email',
+                expires_at: '2026-09-24T00:00:00Z',
                 user_agent: 'Mozilla/5.0...',
                 ip_address: '192.168.1.1',
                 is_active: true,
@@ -4241,7 +4245,9 @@ describe('VolcanoAuth', () => {
               },
               {
                 id: 'session-2',
+                user_id: 'user-123',
                 provider: 'google',
+                expires_at: '2026-09-24T00:00:00Z',
                 user_agent: 'Chrome Mobile...',
                 ip_address: '10.0.0.50',
                 is_active: true,
@@ -4274,7 +4280,16 @@ describe('VolcanoAuth', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            sessions: [{ id: 'session-3', provider: 'email' }],
+            sessions: [
+              {
+                id: 'session-3',
+                user_id: 'user-123',
+                provider: 'email',
+                expires_at: '2026-09-24T00:00:00Z',
+                is_active: true,
+                is_current: false,
+              },
+            ],
             total: 25,
             page: 2,
             limit: 10,
@@ -6688,7 +6703,7 @@ describe('VolcanoAuth', () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       global.fetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ redirect_url: 'https://example.com' }),
+        json: () => Promise.resolve({ authorization_url: 'https://example.com' }),
       });
       // 'unknown-provider' has valid format, backend will validate if supported
       const result = await volcano.auth.linkOAuthProvider('unknown-provider');
