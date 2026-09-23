@@ -70,3 +70,58 @@ export function mutationPatterns(committedDiff, workingDiff, untrackedPaths) {
   }
   return [...patterns];
 }
+
+export function shardMutationPatterns(patterns, shardIndex, shardCount) {
+  if (
+    !Number.isInteger(shardIndex) ||
+    !Number.isInteger(shardCount) ||
+    shardCount < 1 ||
+    shardIndex < 0 ||
+    shardIndex >= shardCount
+  ) {
+    throw new Error('Invalid mutation shard index or count');
+  }
+
+  const groups = new Map();
+  for (const pattern of patterns) {
+    const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
+    if (!match) {
+      throw new Error(`Invalid mutation pattern: ${pattern}`);
+    }
+    const [, path, first, last] = match;
+    const source = readFileSync(path, 'utf8');
+    const lineCount =
+      source.length === 0 ? 0 : source.split('\n').length - Number(source.endsWith('\n'));
+    const start = first === undefined ? 1 : Number(first);
+    const end = last === undefined ? lineCount : Number(last);
+    if (start < 1 || end < start || end > lineCount) {
+      throw new Error(`Invalid mutation range: ${pattern}`);
+    }
+    const group = groups.get(path) ?? { path, patterns: [], lines: new Set() };
+    group.patterns.push(pattern);
+    for (let line = start; line <= end; line += 1) {
+      group.lines.add(line);
+    }
+    groups.set(path, group);
+  }
+
+  const shards = Array.from({ length: shardCount }, () => ({ patterns: [], weight: 0 }));
+  const ordered = [...groups.values()].sort(
+    (left, right) => right.lines.size - left.lines.size || left.path.localeCompare(right.path),
+  );
+  for (const group of ordered) {
+    let target = shards[0];
+    for (const shard of shards.slice(1)) {
+      if (shard.weight < target.weight) {
+        target = shard;
+      }
+    }
+    target.patterns.push(...group.patterns);
+    target.weight += group.lines.size;
+  }
+  const selected = shards[shardIndex].patterns;
+  if (selected.length === 0) {
+    throw new Error(`Mutation shard ${shardIndex}/${shardCount} selected no source`);
+  }
+  return selected;
+}

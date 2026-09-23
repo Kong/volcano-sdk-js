@@ -71,6 +71,17 @@ describe('durable.start', () => {
     );
   });
 
+  test('an empty stored token does not select the session credential', async () => {
+    const { volcano, transport } = clientWithTransport();
+    expect(Reflect.set(volcano, 'accessToken', '')).toBe(true);
+
+    await volcano.durable.start('order-pipeline');
+
+    expect(transport.startDurableExecutionFromApplication.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ volcanoAuthorization: 'anon' }),
+    );
+  });
+
   test('sends the execution name as the idempotency header, and no header without one', async () => {
     const { volcano, transport } = clientWithTransport();
 
@@ -109,6 +120,20 @@ describe('durable.start', () => {
     const { error } = await volcano.durable.start('order-pipeline', {}, { executionName: '  ' });
 
     expect(error?.message).toContain('executionName must be a non-empty string');
+    expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
+  });
+
+  test('refuses a non-string execution name from an untyped caller', async () => {
+    const { volcano, transport } = clientWithTransport();
+    const result: unknown = Reflect.apply(volcano.durable.start.bind(volcano.durable), undefined, [
+      'order-pipeline',
+      {},
+      { executionName: 42 },
+    ]);
+
+    await expect(result).resolves.toMatchObject({
+      error: { message: 'executionName must be a non-empty string when provided' },
+    });
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
 

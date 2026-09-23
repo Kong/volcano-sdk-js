@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { changedRuntimePatterns, criticalRuntime, mutationPatterns } from './mutation-scope.mjs';
+import {
+  changedRuntimePatterns,
+  criticalRuntime,
+  mutationPatterns,
+  shardMutationPatterns,
+} from './mutation-scope.mjs';
 
 test('selects changed handwritten runtime lines from a PR diff', () => {
   const diff = [
@@ -62,5 +67,39 @@ test('a new handwritten runtime file cannot fall outside the PR mutation scope',
     assert.ok(mutationPatterns('', '', [path]).includes(path));
   } finally {
     unlinkSync(path);
+  }
+});
+
+test('mutation shards keep every file and its overlapping ranges together', () => {
+  const paths = Array.from(
+    { length: 4 },
+    (_, index) => `src/mutation-shard-fixture-${String(process.pid)}-${String(index)}.ts`,
+  );
+  for (const [index, path] of paths.entries()) {
+    writeFileSync(
+      path,
+      `${Array.from({ length: 20 + index * 10 }, (_, line) => `export const v${String(line)} = ${String(line)};`).join('\n')}\n`,
+    );
+  }
+  try {
+    const patterns = [paths[0], `${paths[0]}:15-19`, ...paths.slice(1)];
+    const owner = new Map();
+    const seen = [];
+    for (let shard = 0; shard < 4; shard += 1) {
+      for (const pattern of shardMutationPatterns(patterns, shard, 4)) {
+        const path = pattern.split(':')[0];
+        assert.ok(!owner.has(path) || owner.get(path) === shard);
+        owner.set(path, shard);
+        seen.push(pattern);
+      }
+    }
+    assert.deepEqual(seen.sort(), patterns.sort());
+    assert.equal(owner.size, paths.length);
+    assert.throws(() => shardMutationPatterns(patterns, 4, 4), /Invalid mutation shard/);
+    assert.throws(() => shardMutationPatterns([paths[0]], 3, 4), /selected no source/);
+  } finally {
+    for (const path of paths) {
+      unlinkSync(path);
+    }
   }
 });
