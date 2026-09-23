@@ -20,6 +20,8 @@ const declarationFiles = [
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.esm.d.mts', toEsmDeclaration],
   ['src/realtime.d.ts', 'dist/realtime.d.ts'],
   ['src/realtime.d.ts', 'dist/realtime.esm.d.mts', toEsmDeclaration],
+  ['dist/typescript/durable-types.d.ts', 'dist/durable-types.d.ts', toCjsDeclaration],
+  ['dist/typescript/durable-types.d.ts', 'dist/durable-types.esm.d.mts', toEsmDeclaration],
   ['src/durable.d.ts', 'dist/durable.d.ts'],
   ['src/durable.d.ts', 'dist/durable.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.d.ts', toCjsDeclaration],
