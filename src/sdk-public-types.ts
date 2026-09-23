@@ -150,7 +150,7 @@ export interface MessageResponse {
 export interface EmailChangeResponse {
   message: string | null;
   newEmail: string | null;
-  emailChangeToken?: string;
+  emailChangeToken?: string | undefined;
   error: AuthError | null;
 }
 

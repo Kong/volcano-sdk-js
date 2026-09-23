@@ -130,6 +130,7 @@ import type {
   Logs,
   ProjectLocks,
   Storage,
+  User,
   VolcanoAuthConfig,
 } from './sdk-public-types.ts';
 import { StorageFileApi } from './storage-file.ts';
@@ -244,14 +245,14 @@ class VolcanoAuth {
   readonly anonKey: string;
   readonly timeout: number;
   _currentDatabaseName: string | null;
-  currentUser: unknown;
+  currentUser: User | null;
   _sessionGeneration: number;
   _urlSessionConsumed: boolean;
   _pendingUrlAuthNotify: boolean;
   _oauthExchangePromise: Promise<boolean> | null;
   _sessionOperations: AuthSessionOperations<RefreshResult, SignOutResult>;
   _oauthExchangeError: Error | null;
-  _authCallbacks: ((user: unknown) => void)[];
+  _authCallbacks: ((user: User | null) => void)[];
   _functionResolveState: FunctionResolveState;
   _transport: RuntimeTransport;
   _durableFacade: DurableFacade;
@@ -1063,7 +1064,7 @@ class VolcanoAuth {
     return clearSessionAtGeneration(this, generation);
   }
 
-  _notifyAuthCallbacks(user: unknown): void {
+  _notifyAuthCallbacks(user: User | null): void {
     notifyAuthCallbacks(this, user);
   }
 
@@ -1196,7 +1197,7 @@ class VolcanoAuth {
     );
   }
 
-  async initialize(): Promise<{ user: unknown; error: Error | null }> {
+  async initialize(): Promise<{ user: User | null; error: Error | null }> {
     if (!this._hasInitialSession()) {
       return { user: null, error: null };
     }
