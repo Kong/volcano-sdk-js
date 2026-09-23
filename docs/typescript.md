@@ -175,6 +175,10 @@ interface QueryBuilder<T> {
   limit(count: number): QueryBuilder<T>;
   offset(count: number): QueryBuilder<T>;
   execute(): Promise<QueryResult<T>>;
+  then<TResult1 = QueryResult<T>, TResult2 = never>(
+    resolve?: ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
 }
 
 interface QueryResult<T> {
@@ -183,6 +187,10 @@ interface QueryResult<T> {
   count?: number;
 }
 ```
+
+Query and mutation builders are thenable: `await volcano.from<Post>('posts').select('*')`
+and `await volcano.insert<Post>('posts', values)` infer `QueryResult<Post>`. Calling
+`.execute()` explicitly returns the same result type.
 
 ## Storage Types
 

@@ -1,22 +1,74 @@
-const { VolcanoAuth } = require('../src/index.js');
-const { LeaseClock } = require('../src/lock-session.ts');
+/** @jest-environment node */
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { VolcanoAuth } from '../src/index.js';
+import { LeaseClock } from '../src/lock-session.ts';
 
-function response(status, body, headers = {}) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    headers: {
-      get: (name) => headers[name.toLowerCase()] ?? null,
-    },
-  };
+function response(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return status === 204
+    ? new Response(null, { status, headers })
+    : Response.json(body, { status, headers });
+}
+
+let fetchMock: jest.MockedFunction<typeof fetch>;
+
+function fetchCall(index: number): { input: RequestInfo | URL; init: RequestInit } {
+  const call = fetchMock.mock.calls[index];
+  if (call?.[1] === undefined) {
+    throw new TypeError(`Expected fetch call ${String(index)}`);
+  }
+  return { input: call[0], init: call[1] };
+}
+
+function headerAt(index: number, name: string): string | null {
+  return new Headers(fetchCall(index).init.headers).get(name);
+}
+
+function methodAt(index: number): string | undefined {
+  return fetchCall(index).init.method;
+}
+
+function textBodyAt(index: number): string {
+  const body = fetchCall(index).init.body;
+  if (typeof body !== 'string') {
+    throw new TypeError(`Expected text body in fetch call ${String(index)}`);
+  }
+  return body;
+}
+
+function signalAt(index: number): AbortSignal {
+  const signal = fetchCall(index).init.signal;
+  if (!(signal instanceof AbortSignal)) {
+    throw new TypeError(`Expected AbortSignal in fetch call ${String(index)}`);
+  }
+  return signal;
+}
+
+function methodsSeen(): (string | undefined)[] {
+  return fetchMock.mock.calls.map((_call, index) => methodAt(index));
+}
+
+function countMethod(method: string): number {
+  return methodsSeen().filter((seen) => seen === method).length;
+}
+
+function complete<T>(resolve: ((value: T) => void) | undefined, value: T): void {
+  if (resolve === undefined) {
+    throw new Error('Expected a pending operation');
+  }
+  resolve(value);
+}
+
+function abortReason(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error ? reason : new Error('Request aborted', { cause: reason });
 }
 
 describe('project locks', () => {
-  let volcano;
+  let volcano: VolcanoAuth;
 
   beforeEach(() => {
-    global.fetch = jest.fn();
+    fetchMock = jest.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
     volcano = new VolcanoAuth({
       apiUrl: 'https://api.test.com',
       anonKey: 'ak-project',
@@ -30,7 +82,7 @@ describe('project locks', () => {
   });
 
   test('acquires, renews, and releases with the ownership token', async () => {
-    fetch
+    fetchMock
       .mockResolvedValueOnce(
         response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 4 }),
       )
@@ -54,6 +106,9 @@ describe('project locks', () => {
       },
       error: null,
     });
+    if (acquired.lease === null) {
+      throw new Error('Expected an acquired lease');
+    }
 
     const renewed = await volcano.locks.renew('leader', acquired.lease, {
       ttl: 10,
@@ -62,18 +117,17 @@ describe('project locks', () => {
     expect(renewed.error).toBeNull();
     expect(renewed.lease.expiresAt).toBe('2026-07-20T12:00:20Z');
     expect(renewed.lease.fencingToken).toBe(4);
-    expect(
-      (
-        await volcano.locks.release('leader', acquired.lease, {
-          requestId: '10000000-0000-4000-8000-000000000003',
-        })
-      ).error,
-    ).toBeNull();
+    const released = await volcano.locks.release('leader', acquired.lease, {
+      requestId: '10000000-0000-4000-8000-000000000003',
+    });
+    expect(released.error).toBeNull();
 
-    expect(fetch.mock.calls[0][1].headers['X-Volcano-Lock-Token']).toBe(acquired.lease.token);
-    expect(fetch.mock.calls[1][1].method).toBe('PATCH');
-    expect(fetch.mock.calls[2][1].method).toBe('DELETE');
-    const requestIDs = fetch.mock.calls.map((call) => call[1].headers['X-Volcano-Request-Id']);
+    expect(headerAt(0, 'X-Volcano-Lock-Token')).toBe(acquired.lease.token);
+    expect(methodAt(1)).toBe('PATCH');
+    expect(methodAt(2)).toBe('DELETE');
+    const requestIDs = fetchMock.mock.calls.map((_call, index) =>
+      headerAt(index, 'X-Volcano-Request-Id'),
+    );
     expect(requestIDs).toEqual([
       '10000000-0000-4000-8000-000000000001',
       '10000000-0000-4000-8000-000000000002',
@@ -82,34 +136,34 @@ describe('project locks', () => {
   });
 
   test('keeps the original credential when an ambiguous acquire is retried', async () => {
-    fetch
-      .mockImplementationOnce(async () => {
-        volcano.accessToken = 'sk-replacement';
-        throw new Error('response lost');
+    fetchMock
+      .mockImplementationOnce(() => {
+        Reflect.set(volcano, 'accessToken', 'sk-replacement');
+        return Promise.reject(new Error('response lost'));
       })
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }));
 
     const result = await volcano.locks.acquire('leader', { ttl: 30 });
 
     expect(result.acquired).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls.map((call) => call[1].headers.Authorization)).toEqual([
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map((_call, index) => headerAt(index, 'Authorization'))).toEqual([
       'Bearer sk-service-role',
       'Bearer sk-service-role',
     ]);
-    expect(fetch.mock.calls[0][1].body).toBe(fetch.mock.calls[1][1].body);
+    expect(textBodyAt(0)).toBe(textBodyAt(1));
   });
 
   test.each([400, 401, 403, 409, 429, 500])('does not retry acquire status %s', async (status) => {
-    volcano.refreshToken = 'must-not-refresh';
-    fetch.mockResolvedValue(response(status, { error: 'rejected', code: 'lock_failure' }));
+    Reflect.set(volcano, 'refreshToken', 'must-not-refresh');
+    fetchMock.mockResolvedValue(response(status, { error: 'rejected', code: 'lock_failure' }));
     const result = await volcano.locks.acquire('leader', { ttl: 30 });
-    expect(result.error.status).toBe(status);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.error?.status).toBe(status);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('maps lock contention to acquired false without an error', async () => {
-    fetch.mockResolvedValue(response(409, { error: 'Lock is held', code: 'lock_held' }));
+    fetchMock.mockResolvedValue(response(409, { error: 'Lock is held', code: 'lock_held' }));
 
     const result = await volcano.locks.acquire('leader', {
       ttl: 10,
@@ -117,13 +171,13 @@ describe('project locks', () => {
     });
 
     expect(result).toEqual({ acquired: false, lease: null, error: null });
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   // A lapsed lease of our own is still just an unavailable lock, so an election
   // loop must see it as "not leader" rather than as a failed request.
   test('maps a lapsed own lease to acquired false without an error', async () => {
-    fetch.mockResolvedValue(
+    fetchMock.mockResolvedValue(
       response(409, { error: 'Lock ownership lost', code: 'lock_ownership_lost' }),
     );
 
@@ -133,11 +187,11 @@ describe('project locks', () => {
     });
 
     expect(result).toEqual({ acquired: false, lease: null, error: null });
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('accepts the 90 day maximum TTL', async () => {
-    fetch.mockResolvedValue(response(201, { expires_at: '2026-10-18T12:00:00Z' }));
+    fetchMock.mockResolvedValue(response(201, { expires_at: '2026-10-18T12:00:00Z' }));
 
     const result = await volcano.locks.acquire('long-running-leader', {
       ttl: 7_776_000,
@@ -145,11 +199,11 @@ describe('project locks', () => {
     });
 
     expect(result.acquired).toBe(true);
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ ttl_seconds: 7_776_000 });
+    expect(JSON.parse(textBodyAt(0))).toEqual({ ttl_seconds: 7_776_000 });
   });
 
   test('exposes lock rate-limit recovery metadata', async () => {
-    fetch.mockResolvedValue(
+    fetchMock.mockResolvedValue(
       response(
         429,
         { error: 'lock request limit exceeded', code: 'lock_rate_limited' },
@@ -170,7 +224,7 @@ describe('project locks', () => {
   });
 
   test('retries an ambiguous acquire with the same token', async () => {
-    fetch
+    fetchMock
       .mockRejectedValueOnce(new Error('connection reset'))
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }));
 
@@ -180,39 +234,35 @@ describe('project locks', () => {
     });
 
     expect(result.acquired).toBe(true);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[0][1].headers['X-Volcano-Lock-Token']).toBe(
-      fetch.mock.calls[1][1].headers['X-Volcano-Lock-Token'],
-    );
-    expect(fetch.mock.calls[0][1].headers['X-Volcano-Request-Id']).toBe(
-      fetch.mock.calls[1][1].headers['X-Volcano-Request-Id'],
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(headerAt(0, 'X-Volcano-Lock-Token')).toBe(headerAt(1, 'X-Volcano-Lock-Token'));
+    expect(headerAt(0, 'X-Volcano-Request-Id')).toBe(headerAt(1, 'X-Volcano-Request-Id'));
   });
 
   test('withLock releases after callback success and failure', async () => {
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000004');
-    fetch
+    fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }))
       .mockResolvedValueOnce(response(204, {}))
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }))
       .mockResolvedValueOnce(response(204, {}));
 
-    const success = await volcano.locks.withLock('leader', { ttl: 10 }, async () => 42);
+    const success = await volcano.locks.withLock('leader', { ttl: 10 }, () => Promise.resolve(42));
     expect(success).toEqual({ acquired: true, data: 42, error: null });
 
     const failure = new Error('callback failed');
-    const failed = await volcano.locks.withLock('leader', { ttl: 10 }, async () => {
-      throw failure;
-    });
+    const failed = await volcano.locks.withLock('leader', { ttl: 10 }, () =>
+      Promise.reject(failure),
+    );
     expect(failed.error).toBe(failure);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'DELETE')).toHaveLength(2);
+    expect(methodsSeen().filter((method) => method === 'DELETE')).toHaveLength(2);
   });
 
   test('withLock aborts the callback after renewal loses ownership', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000005');
-    fetch
+    fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:05Z' }))
       .mockResolvedValueOnce(
         response(409, {
@@ -224,7 +274,13 @@ describe('project locks', () => {
 
     const pending = volcano.locks.withLock('leader', { ttl: 5 }, ({ signal }) => {
       return new Promise((resolve) => {
-        signal.addEventListener('abort', () => resolve('stopped'), { once: true });
+        signal.addEventListener(
+          'abort',
+          () => {
+            resolve('stopped');
+          },
+          { once: true },
+        );
       });
     });
     await jest.advanceTimersByTimeAsync(1900);
@@ -233,52 +289,56 @@ describe('project locks', () => {
     expect(result.acquired).toBe(true);
     expect(result.data).toBe('stopped');
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.error.message).toBe('Lock ownership lost');
-    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
+    expect(result.error?.message).toBe('Lock ownership lost');
+    expect(methodsSeen()).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
   test('withLock renews a slow acquisition before running the callback', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000c');
-    fetch
+    fetchMock
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(() => {
+              resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' }));
+            }, 4000);
           }),
       )
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:00:09Z' }))
       .mockResolvedValueOnce(response(204, {}));
-    const methodsSeenByCallback = [];
+    const methodsSeenByCallback: (string | undefined)[] = [];
 
-    const pending = volcano.locks.withLock('leader', { ttl: 5 }, async () => {
-      methodsSeenByCallback.push(...fetch.mock.calls.map((call) => call[1].method));
-      return 'completed';
+    const pending = volcano.locks.withLock('leader', { ttl: 5 }, () => {
+      methodsSeenByCallback.push(...methodsSeen());
+      return Promise.resolve('completed');
     });
     await jest.advanceTimersByTimeAsync(4000);
     const result = await pending;
 
     expect(methodsSeenByCallback).toEqual(['POST', 'PATCH']);
     expect(result).toEqual({ acquired: true, data: 'completed', error: null });
-    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
+    expect(methodsSeen()).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
   test('withLock cancels a preparatory renewal when the acquired lease expires', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000d');
-    let finishRenewal;
-    fetch
+    let finishRenewal: ((value: Response) => void) | undefined;
+    fetchMock
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(() => {
+              resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' }));
+            }, 4000);
           }),
       )
       .mockImplementationOnce(
         () =>
-          new Promise((resolve) => {
+          new Promise<Response>((resolve) => {
             finishRenewal = resolve;
           }),
       )
@@ -287,52 +347,73 @@ describe('project locks', () => {
 
     const pending = volcano.locks.withLock('leader', { ttl: 5 }, callback);
     await jest.advanceTimersByTimeAsync(5000);
-    const renewalSignalWasAborted = fetch.mock.calls[1][1].signal.aborted;
-    finishRenewal(response(200, { expires_at: '2026-07-20T12:00:10Z' }));
+    const renewalSignalWasAborted = signalAt(1).aborted;
+    complete(finishRenewal, response(200, { expires_at: '2026-07-20T12:00:10Z' }));
     const result = await pending;
 
     expect(renewalSignalWasAborted).toBe(true);
     expect(callback).not.toHaveBeenCalled();
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.error.message).toBe('lock lease expired before renewal completed');
+    expect(result.error?.message).toBe('lock lease expired before renewal completed');
   });
 
   test('withLock keeps preparatory cancellation active while reading the renewal body', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000f');
-    let finishBody;
-    fetch
+    let finishBody: ((value: unknown) => void) | undefined;
+    fetchMock
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(() => {
+              resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' }));
+            }, 4000);
           }),
       )
-      .mockImplementationOnce(async () => ({
-        ...response(200, {}),
-        json: () =>
-          new Promise((resolve) => {
-            finishBody = resolve;
-          }),
-      }))
+      .mockImplementationOnce(() => {
+        const delayed = response(200, {});
+        jest.spyOn(delayed, 'json').mockImplementation(
+          () =>
+            new Promise<unknown>((resolve) => {
+              finishBody = resolve;
+            }),
+        );
+        return Promise.resolve(delayed);
+      })
       .mockResolvedValueOnce(response(204, {}));
     const callback = jest.fn();
 
     const pending = volcano.locks.withLock('leader', { ttl: 5 }, callback);
     await jest.advanceTimersByTimeAsync(5000);
-    const renewalSignalWasAborted = fetch.mock.calls[1][1].signal.aborted;
-    finishBody({ expires_at: '2026-07-20T12:00:10Z' });
+    const renewalSignalWasAborted = signalAt(1).aborted;
+    complete(finishBody, { expires_at: '2026-07-20T12:00:10Z' });
     const result = await pending;
 
     expect(renewalSignalWasAborted).toBe(true);
     expect(callback).not.toHaveBeenCalled();
-    expect(result.error.message).toBe('lock lease expired before renewal completed');
+    expect(result.error?.message).toBe('lock lease expired before renewal completed');
   });
 
   test('renew propagates caller cancellation to the request', async () => {
     const controller = new AbortController();
-    fetch.mockImplementationOnce(() => new Promise(() => {}));
+    fetchMock.mockImplementationOnce(
+      (_url, options) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!(signal instanceof AbortSignal)) {
+            reject(new TypeError('Expected renewal cancellation signal'));
+            return;
+          }
+          signal.addEventListener(
+            'abort',
+            () => {
+              reject(abortReason(signal));
+            },
+            { once: true },
+          );
+        }),
+    );
     const lease = {
       key: 'leader',
       token: '00000000-0000-4000-8000-00000000000e',
@@ -340,29 +421,41 @@ describe('project locks', () => {
       fencingToken: 1,
     };
 
-    void volcano.locks.renew('leader', lease, { ttl: 5, signal: controller.signal });
+    const pending = volcano.locks.renew('leader', lease, { ttl: 5, signal: controller.signal });
     await Promise.resolve();
     controller.abort();
 
-    expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(signalAt(0).aborted).toBe(true);
+    await expect(pending).resolves.toMatchObject({ error: expect.any(Error) });
   });
 
   test('renew reports caller cancellation while reading the response body', async () => {
     const controller = new AbortController();
     const cancellation = new Error('renewal cancelled');
-    fetch.mockImplementationOnce(async (_url, options) => ({
-      ...response(200, {}),
-      json: () =>
-        new Promise((_resolve, reject) => {
-          if (options.signal.aborted) {
-            reject(options.signal.reason);
-            return;
-          }
-          options.signal.addEventListener('abort', () => reject(options.signal.reason), {
-            once: true,
-          });
-        }),
-    }));
+    fetchMock.mockImplementationOnce((_url, options) => {
+      const signal = options?.signal;
+      if (!(signal instanceof AbortSignal)) {
+        throw new TypeError('Expected renewal cancellation signal');
+      }
+      const delayed = response(200, {});
+      jest.spyOn(delayed, 'json').mockImplementation(
+        () =>
+          new Promise<unknown>((_resolve, reject) => {
+            if (signal.aborted) {
+              reject(abortReason(signal));
+              return;
+            }
+            signal.addEventListener(
+              'abort',
+              () => {
+                reject(abortReason(signal));
+              },
+              { once: true },
+            );
+          }),
+      );
+      return Promise.resolve(delayed);
+    });
     const lease = {
       key: 'leader',
       token: '00000000-0000-4000-8000-000000000010',
@@ -387,23 +480,23 @@ describe('project locks', () => {
       new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
-    fetch
+    fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T11:59:00Z' }))
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:01:00Z' }))
       .mockResolvedValueOnce(response(204, {}));
 
-    let finish;
+    let finish: ((value: string) => void) | undefined;
     const pending = volcano.locks.withLock('leader', { ttl: 60 }, () => {
-      return new Promise((resolve) => {
+      return new Promise<string>((resolve) => {
         finish = resolve;
       });
     });
 
     await jest.advanceTimersByTimeAsync(19_999);
-    const earlyRenewals = fetch.mock.calls.filter((call) => call[1].method === 'PATCH').length;
+    const earlyRenewals = countMethod('PATCH');
     await jest.advanceTimersByTimeAsync(1);
-    const onTimeRenewals = fetch.mock.calls.filter((call) => call[1].method === 'PATCH').length;
-    finish('completed');
+    const onTimeRenewals = countMethod('PATCH');
+    complete(finish, 'completed');
     const result = await pending;
 
     expect(earlyRenewals).toBe(0);
@@ -419,12 +512,12 @@ describe('project locks', () => {
       new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
-    let finishRenewal;
-    fetch
+    let finishRenewal: ((value: Response) => void) | undefined;
+    fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:05Z' }))
       .mockImplementationOnce(
         () =>
-          new Promise((resolve) => {
+          new Promise<Response>((resolve) => {
             finishRenewal = resolve;
           }),
       )
@@ -434,8 +527,16 @@ describe('project locks', () => {
     const pending = volcano.locks
       .withLock('leader', { ttl: 5 }, ({ signal }) => {
         return new Promise((resolve) => {
-          signal.addEventListener('abort', () => resolve('aborted'), { once: true });
-          setTimeout(() => resolve('not aborted'), 6000);
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve('aborted');
+            },
+            { once: true },
+          );
+          setTimeout(() => {
+            resolve('not aborted');
+          }, 6000);
         });
       })
       .then((result) => {
@@ -445,14 +546,14 @@ describe('project locks', () => {
 
     await jest.advanceTimersByTimeAsync(6000);
     const settledBeforeRenewal = settled;
-    finishRenewal(response(200, { expires_at: '2026-07-20T12:00:11Z' }));
+    complete(finishRenewal, response(200, { expires_at: '2026-07-20T12:00:11Z' }));
     const result = await pending;
 
     expect(settledBeforeRenewal).toBe(true);
     expect(result.data).toBe('aborted');
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.error.message).toBe('lock lease expired before renewal completed');
-    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
+    expect(result.error?.message).toBe('lock lease expired before renewal completed');
+    expect(methodsSeen()).toEqual(['POST', 'PATCH', 'DELETE']);
   });
 
   test('withLock caps long JavaScript timers at one day', async () => {
@@ -463,7 +564,7 @@ describe('project locks', () => {
       new DataView(values.buffer, values.byteOffset, values.byteLength).setUint32(0, 0x8000_0000);
       return values;
     });
-    fetch
+    fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-10-18T12:00:00Z' }))
       .mockResolvedValueOnce(
         response(409, {
@@ -482,23 +583,23 @@ describe('project locks', () => {
         }),
     );
     await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000 - 1);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(0);
+    expect(methodsSeen().filter((method) => method === 'PATCH')).toHaveLength(0);
     await jest.advanceTimersByTimeAsync(1);
     const result = await pending;
 
     expect(result.error).toBeInstanceOf(Error);
-    expect(fetch.mock.calls.filter((call) => call[1].method === 'PATCH')).toHaveLength(1);
+    expect(methodsSeen().filter((method) => method === 'PATCH')).toHaveLength(1);
   });
 
   test('preserves the absolute acquisition deadline across renewals', () => {
-    jest.spyOn(global.performance, 'now').mockReturnValue(0);
-    jest.spyOn(Date, 'now').mockReturnValue(0);
+    const performanceNow = jest.spyOn(global.performance, 'now').mockReturnValue(0);
+    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(0);
     const ttl = 7_776_000;
     const clock = new LeaseClock(ttl, { monotonic: 0, wall: 0 });
     const nearLimit = ttl * 1000 - 1000;
 
-    performance.now.mockReturnValue(nearLimit);
-    Date.now.mockReturnValue(nearLimit);
+    performanceNow.mockReturnValue(nearLimit);
+    dateNow.mockReturnValue(nearLimit);
     clock.reset({ monotonic: nearLimit, wall: nearLimit });
 
     expect(clock.remaining()).toBe(1000);
@@ -507,7 +608,7 @@ describe('project locks', () => {
   // A renewal must not move the fencing token, or the guarded resource would
   // start rejecting writes from the holder that still owns the lease.
   test('keeps the fencing token when a renewal omits it', async () => {
-    fetch
+    fetchMock
       .mockResolvedValueOnce(
         response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 11 }),
       )
@@ -517,13 +618,16 @@ describe('project locks', () => {
       ttl: 10,
       token: '00000000-0000-4000-8000-00000000000a',
     });
+    if (acquired.lease === null) {
+      throw new Error('Expected an acquired lease');
+    }
     const renewed = await volcano.locks.renew('leader', acquired.lease, { ttl: 10 });
 
     expect(renewed.lease.fencingToken).toBe(11);
   });
 
   test('reads lock state and force releases a stuck lock', async () => {
-    fetch
+    fetchMock
       .mockResolvedValueOnce(
         response(200, {
           held: true,
@@ -545,18 +649,17 @@ describe('project locks', () => {
     const free = await volcano.locks.get('leader');
     expect(free.state).toEqual({ held: false, expiresAt: null, fencingToken: null });
 
-    expect((await volcano.locks.forceRelease('leader')).error).toBeNull();
-    expect(fetch.mock.calls.map((call) => call[1].method)).toEqual(['GET', 'GET', 'DELETE']);
-    expect(fetch.mock.calls[0][0]).toContain('/locks/leader');
-    expect(fetch.mock.calls[0][0]).not.toContain('/lease');
-    expect(fetch.mock.calls[0][1].headers['X-Volcano-Request-Id']).toBe(
-      '20000000-0000-4000-8000-000000000001',
-    );
-    expect(fetch.mock.calls[0][1].headers['X-Volcano-Lock-Token']).toBeUndefined();
+    const released = await volcano.locks.forceRelease('leader');
+    expect(released.error).toBeNull();
+    expect(methodsSeen()).toEqual(['GET', 'GET', 'DELETE']);
+    expect(fetchCall(0).input).toContain('/locks/leader');
+    expect(fetchCall(0).input).not.toContain('/lease');
+    expect(headerAt(0, 'X-Volcano-Request-Id')).toBe('20000000-0000-4000-8000-000000000001');
+    expect(headerAt(0, 'X-Volcano-Lock-Token')).toBeNull();
   });
 
   test('surfaces errors from the read and force release routes', async () => {
-    fetch
+    fetchMock
       .mockResolvedValueOnce(
         response(
           429,
@@ -580,11 +683,14 @@ describe('project locks', () => {
     await expect(volcano.locks.acquire('../leader', { ttl: 10 })).rejects.toThrow('lock key');
     await expect(volcano.locks.acquire('leader', { ttl: 4 })).rejects.toThrow('ttl');
     await expect(volcano.locks.acquire('leader', { ttl: 7_776_001 })).rejects.toThrow('ttl');
-    await expect(volcano.locks.release('leader', { key: 'other', token: 'token' })).rejects.toThrow(
-      'lease must belong',
+    const invalidRelease: unknown = Reflect.apply(
+      volcano.locks.release.bind(volcano.locks),
+      undefined,
+      ['leader', { key: 'other', token: 'token' }],
     );
+    await expect(invalidRelease).rejects.toThrow('lease must belong');
     await expect(volcano.locks.get('../leader')).rejects.toThrow('lock key');
     await expect(volcano.locks.forceRelease('../leader')).rejects.toThrow('lock key');
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

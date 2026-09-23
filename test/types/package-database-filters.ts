@@ -2,8 +2,9 @@ import type {
   FilterValue as EsmFilterValue,
   MutationBuilder as EsmMutationBuilder,
   QueryBuilder as EsmQueryBuilder,
+  QueryResult as EsmQueryResult,
 } from '../../dist/index.esm.mjs';
-import type { FilterValue, MutationBuilder, QueryBuilder } from '../../dist/index.js';
+import type { FilterValue, MutationBuilder, QueryBuilder, QueryResult } from '../../dist/index.js';
 
 const values: FilterValue[] = ['text', 1, false, null, new Date()];
 const esmValues: EsmFilterValue[] = values;
@@ -16,6 +17,17 @@ query.in('value', values).eq('created_at', new Date()).is('deleted_at', null);
 mutation.in('value', values).like('name', 'prefix%');
 esmQuery.in('value', esmValues).eq('created_at', new Date()).is('deleted_at', null);
 esmMutation.in('value', esmValues).ilike('name', 'prefix%');
+
+const cjsQueryResult: Promise<QueryResult> = Promise.resolve(query);
+const cjsMutationResult: Promise<QueryResult> = Promise.resolve(mutation);
+const esmQueryResult: Promise<EsmQueryResult> = Promise.resolve(esmQuery);
+const esmMutationResult: Promise<EsmQueryResult> = Promise.resolve(esmMutation);
+export const thenableResults = [
+  cjsQueryResult,
+  cjsMutationResult,
+  esmQueryResult,
+  esmMutationResult,
+];
 
 // @ts-expect-error Filter values exclude arbitrary objects.
 query.eq('value', {});

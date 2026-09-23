@@ -937,6 +937,11 @@ export interface QueryBuilder<T = Record<string, JsonValue>> {
   offset(count: number): QueryBuilder<T>;
   /** Execute query and return results */
   execute(): Promise<QueryResult<T>>;
+  /** Await the builder directly as a query result. */
+  then<TResult1 = QueryResult<T>, TResult2 = never>(
+    resolve?: ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
 }
 
 export interface MutationBuilder<T = Record<string, JsonValue>> {
@@ -962,6 +967,11 @@ export interface MutationBuilder<T = Record<string, JsonValue>> {
   in(column: string, values: FilterValue[]): MutationBuilder<T>;
   /** Execute mutation and return results */
   execute(): Promise<QueryResult<T>>;
+  /** Await the builder directly as a mutation result. */
+  then<TResult1 = QueryResult<T>, TResult2 = never>(
+    resolve?: ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
 }
 
 /** @deprecated Use MutationBuilder instead */
