@@ -100,6 +100,25 @@ describe('auto-fetch database boundary', () => {
     ).toEqual({ data: [] });
   });
 
+  test('uses an unqualified table when the schema is empty', () => {
+    const tables: string[] = [];
+    const client = {
+      from(table: string) {
+        tables.push(table);
+        return { select: () => ({ in: () => ({ data: [] }) }) };
+      },
+    };
+    expect(fetchFrom(client, null, '')).toEqual({ data: [] });
+    expect(tables).toEqual(['tasks']);
+  });
+
+  test('rejects a callable value that happens to expose query methods', () => {
+    const client = Object.assign(() => {}, {
+      from: () => ({ select: () => ({ in: () => ({ data: [] }) }) }),
+    });
+    expect(() => fetchFrom(client)).toThrow('volcanoClient.from not available');
+  });
+
   test('rejects clients with incomplete query capabilities', () => {
     expect(() => fetchFrom(null)).toThrow('volcanoClient.from not available');
     expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
