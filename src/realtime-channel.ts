@@ -168,7 +168,7 @@ class RealtimeChannel {
 
     // If no volcanoClient or auto-fetch disabled, deliver lightweight as-is
     const volcanoClient = this._realtime.getVolcanoClient();
-    if (volcanoClient === null || volcanoClient === undefined || !this._fetchConfig.enabled) {
+    if (volcanoClient === null || !this._fetchConfig.enabled) {
       this._deliverPayload(data, ctx);
       return;
     }
