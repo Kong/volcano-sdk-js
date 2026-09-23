@@ -207,6 +207,61 @@ describe('realtime server state contract', () => {
     expect(onScoped).toHaveBeenCalledTimes(1);
   });
 
+  test('does not treat a malformed service recipient suffix as a scoped publication', () => {
+    const { realtime } = createRealtime({ accessToken: 'sk-project-key' });
+    const broadcast = realtime.channel('postgres:public:items');
+    const scoped = realtime.channel('items:service', {
+      type: 'postgres',
+      databaseName: 'public',
+    });
+    const onBroadcast = jest.fn();
+    const onScoped = jest.fn();
+    broadcast.on('*', onBroadcast);
+    scoped.on('*', onScoped);
+
+    realtime._handleServerPublication({
+      channel: 'project:broadcast:postgres:public:items:service:key-id',
+      data: { type: 'DELETE' },
+    });
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:service:key-id:extra',
+      data: { type: 'DELETE' },
+    });
+
+    expect(onBroadcast).not.toHaveBeenCalled();
+    expect(onScoped).not.toHaveBeenCalled();
+  });
+
+  function expectExactScopedRecipient(accessToken) {
+    const { realtime } = createRealtime({ accessToken });
+    const legacy = realtime.channel('public:items', { type: 'postgres' });
+    const scoped = realtime.channel('items:other', {
+      type: 'postgres',
+      databaseName: 'public',
+    });
+    const onLegacy = jest.fn();
+    const onScoped = jest.fn();
+    legacy.on('*', onLegacy);
+    scoped.on('*', onScoped);
+    const publication = {
+      channel: 'project:postgres:public:items:other',
+      data: { type: 'INSERT', schema: 'items', table: 'other' },
+    };
+
+    realtime._handleServerPublication(publication);
+
+    expect(onLegacy).not.toHaveBeenCalled();
+    expect(onScoped).toHaveBeenCalledWith(publication.data, expect.anything());
+  }
+
+  test('keeps an exact scoped channel for a service key with another suffix', () => {
+    expectExactScopedRecipient('sk-project-key');
+  });
+
+  test('keeps an exact scoped channel for a user token with another suffix', () => {
+    expectExactScopedRecipient(userToken);
+  });
+
   test.each([
     ['service key', 'sk-project-key', 'service:key-id'],
     ['user token', userToken, 'user-uuid'],
@@ -393,6 +448,8 @@ describe('realtime server state contract', () => {
     realtime.removeChannel('public:items', { type: 'postgres', databaseName: null });
     expect(realtime._channels.has(legacy.name)).toBe(false);
     expect(realtime._channels.has(scoped.name)).toBe(true);
+    realtime.removeChannel('public:items', 'postgres');
+    expect(realtime._channels.has(scoped.name)).toBe(false);
   });
 
   test('keeps auto-fetch bound to the selector captured when the channel was created', async () => {
@@ -435,6 +492,13 @@ describe('realtime server state contract', () => {
     expect(client.newSubscription).toHaveBeenCalledWith(
       'postgres:db-a:public:items',
       expect.objectContaining({ data: { database_name: 'db-a' } }),
+    );
+  });
+
+  test.each(['', 7])('ignores an unusable bound-client database selector %s', (name) => {
+    const { realtime } = createRealtime({ volcanoClient: { _currentDatabaseName: name } });
+    expect(realtime.channel('public:items', { type: 'postgres' }).name).toBe(
+      'postgres:public:items',
     );
   });
 
@@ -500,12 +564,27 @@ describe('realtime server state contract', () => {
     const channel = realtime.channel('lobby', { type: 'presence' });
     await channel.subscribe();
 
-    const state = { status: 'working', task: 'build' };
+    const state = { status: 'working', task: 'build', steps: [{ label: 'compile' }] };
     await channel.track(state);
 
     expect(subscriptions[0].setData).toHaveBeenCalledWith(state);
     state.status = 'changed-after-track';
-    expect(subscriptions[0].setData.mock.calls[0][0]).toEqual({ status: 'working', task: 'build' });
+    state.steps[0].label = 'changed-after-track';
+    expect(subscriptions[0].setData.mock.calls[0][0]).toEqual({
+      status: 'working',
+      task: 'build',
+      steps: [{ label: 'compile' }],
+    });
+  });
+
+  test('rejects malformed tracked state and does not send it after identity reset', async () => {
+    const { realtime, subscriptions } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    await expect(channel.track(null)).rejects.toThrow('Presence state must be a JSON object');
+    channel._resetForIdentityChange();
+    channel._updateTrackedSubscriptionData();
+    expect(subscriptions[0].setData).not.toHaveBeenCalled();
   });
 
   test('includes tracked state in the initial presence subscription', async () => {

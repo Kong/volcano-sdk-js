@@ -62,22 +62,17 @@ function currentDatabaseName(client: unknown): string | null {
 }
 
 function channelDatabaseName(
-  type: ChannelType,
   optionName: string | null | undefined,
   configuredName: string | null,
   client: unknown,
 ): string | null {
-  return type === 'postgres' ? (optionName ?? configuredName ?? currentDatabaseName(client)) : null;
+  return optionName ?? configuredName ?? currentDatabaseName(client);
 }
 
 function removedChannelDatabaseName(
-  type: ChannelType,
   selectedName: string | null | undefined,
   fallback: string | null,
 ): string | null {
-  if (type !== 'postgres') {
-    return null;
-  }
   return selectedName === undefined ? fallback : selectedName;
 }
 
@@ -95,7 +90,7 @@ function userRecipientChannel(
   route: NonNullable<ReturnType<typeof serverEventRoute>>,
   identity: RecoveryIdentity,
 ): string | null {
-  if (identity.kind !== 'user' || route.sdkChannel.split(':').at(-1) !== identity.subject) {
+  if (route.sdkChannel.split(':').at(-1) !== property(identity, 'subject')) {
     return null;
   }
   return route.postgresBaseChannel;
@@ -400,7 +395,6 @@ class VolcanoRealtime {
   channel(name: string, options: ChannelOptions = {}): RealtimeChannel {
     const type = options.type ?? 'broadcast';
     const databaseName = channelDatabaseName(
-      type,
       options.databaseName,
       this._databaseName,
       this._volcanoClient,
@@ -428,7 +422,7 @@ class VolcanoRealtime {
    * the authenticated connection. Clients never need to know about project IDs.
    */
   /** @internal */
-  _formatChannelName(name: string, type: ChannelType, databaseName: string | null = null): string {
+  _formatChannelName(name: string, type: ChannelType, databaseName: string | null): string {
     if (type === 'postgres' && databaseName !== null && databaseName !== '') {
       return `${type}:${databaseName}:${name}`;
     }
@@ -577,7 +571,6 @@ class VolcanoRealtime {
       name,
       type,
       removedChannelDatabaseName(
-        type,
         options.databaseName,
         this._databaseName ?? currentDatabaseName(this._volcanoClient),
       ),
