@@ -121,6 +121,7 @@ describe('auto-fetch database boundary', () => {
 
   test('rejects clients with incomplete query capabilities', () => {
     expect(() => fetchFrom(null)).toThrow('volcanoClient must be an object');
+    expect(() => fetchFrom({}, 'db')).toThrow('volcanoClient.from not available');
     expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
       'volcanoClient.database not available',
     );
