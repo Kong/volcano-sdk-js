@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
+import type { VolcanoRequestInit } from '../src/generated/volcano-fetch.ts';
 import { type VolcanoAuthConfig, VolcanoClient } from '../src/index.js';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
@@ -14,7 +15,7 @@ const execution = {
 type StartOperation = (
   functionName: string,
   input: unknown,
-  options: { headers?: Record<string, string> },
+  options?: VolcanoRequestInit,
 ) => Promise<{ data: typeof execution; status: number }>;
 
 interface StartTransport {
@@ -92,7 +93,7 @@ describe('durable.start', () => {
 
     await volcano.durable.start('order-pipeline');
     expect(
-      transport.startDurableExecutionFromApplication.mock.calls[1]?.[2].headers,
+      transport.startDurableExecutionFromApplication.mock.calls[1]?.[2]?.headers,
     ).toBeUndefined();
   });
 
