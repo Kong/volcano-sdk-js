@@ -126,11 +126,11 @@ export async function signIn(
       error: error instanceof Error ? error : new Error('Sign in failed'),
     };
   }
-  if (!host._setSession(response.data, expectedGeneration)) {
-    return { user: null, session: null, error: new AuthSessionChangedError() };
-  }
   if (response.data === undefined) {
     throw new TypeError('Sign in returned no session');
+  }
+  if (!host._setSession(response.data, expectedGeneration)) {
+    return { user: null, session: null, error: new AuthSessionChangedError() };
   }
   return {
     user: response.data.user,
@@ -147,7 +147,7 @@ export function getSession(host: AuthAccountHost): Promise<CurrentSessionResult>
   if (host.accessToken === null || host.accessToken === '') {
     return Promise.resolve({ data: { session: null }, error: null });
   }
-  const user = host.currentUser === null ? null : cloneJsonValue(host.currentUser);
+  const user = cloneJsonValue(host.currentUser);
   return Promise.resolve({
     data: {
       session: {

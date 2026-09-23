@@ -100,6 +100,38 @@ test('refresh completion cannot retry after the captured session changes', async
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
+test('missing access tokens refuse a request before evaluating deferred inputs', async () => {
+  const fetch = jest.spyOn(globalThis, 'fetch');
+  const host = fixture();
+  host._captureAuthContext = () => ({ ...context, accessToken: '' });
+  const path = jest.fn(() => '/auth/user');
+  const options = jest.fn(() => ({ method: 'GET' }));
+
+  const response = await authFetchWithContext(host, path, options);
+
+  expect(response.result.error).toEqual(new Error('No active session'));
+  expect(path).not.toHaveBeenCalled();
+  expect(options).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test('an empty refresh token never retries a 401', async () => {
+  const fetch = jest
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{"error":"expired"}', { status: 401 }));
+  const host = fixture();
+  host._captureAuthContext = () => ({ ...context, refreshToken: '' });
+  const refresh = jest.fn<AuthHttpHost['_refreshSessionForContext']>();
+  host._refreshSessionForContext = refresh;
+
+  const response = await authFetchUrl(host, `${host.apiUrl}/auth/user`);
+
+  expect(response.status).toBe(401);
+  expect(response.error).toEqual(expect.objectContaining({ message: 'Session expired' }));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
 test('non-Error transport failures use a stable error in either auth mode', async () => {
   const fetch = jest.spyOn(globalThis, 'fetch').mockRejectedValue('socket closed');
   const host = fixture();

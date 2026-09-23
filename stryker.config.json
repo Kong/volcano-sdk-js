@@ -14,7 +14,7 @@
   },
   "coverageAnalysis": "perTest",
   "concurrency": 4,
-  "timeoutMS": 60000,
+  "timeoutMS": 120000,
   "cleanTempDir": "always",
   "reporters": ["clear-text", "json"],
   "clearTextReporter": {

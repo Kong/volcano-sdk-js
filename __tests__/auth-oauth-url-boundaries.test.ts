@@ -78,6 +78,7 @@ test('OAuth preserves application query parameters and binds the nonce', () => {
   expect(navigate).toHaveBeenCalledWith(url.toString());
   expect(stored).toHaveBeenCalledWith('nonce-1', 'https://app.example.test/callback?keep=one');
   expect(redirect.searchParams.get('keep')).toBe('one');
+  expect(redirect.search).toBe('?keep=one&vh_state=nonce-1');
   expect(redirect.searchParams.get('vh_state')).toBe('nonce-1');
   expect(url.searchParams.get('client_state')).toBe('nonce-1');
 });
@@ -117,6 +118,33 @@ test('navigation still propagates an error without a string message', () => {
   expect(received).toBe(failure);
 });
 
+test('navigation prefers an Error message over a custom string representation', () => {
+  const failure = new Error('Not implemented: navigation');
+  failure.toString = () => 'opaque error';
+  browser(() => {
+    throw failure;
+  });
+  const { host } = fixture();
+
+  expect(signInWithHostedAuth(host, {})).toBe(
+    'https://api.example.test/projects/project-1/auth/hosted',
+  );
+});
+
+test('navigation falls back to the Error string when its message is not a string', () => {
+  const failure = new Error('navigation blocked');
+  Object.defineProperty(failure, 'message', { value: undefined });
+  failure.toString = () => 'Not implemented: navigation';
+  browser(() => {
+    throw failure;
+  });
+  const { host } = fixture();
+
+  expect(signInWithHostedAuth(host, {})).toBe(
+    'https://api.example.test/projects/project-1/auth/hosted',
+  );
+});
+
 test('hosted auth includes an action only when requested and returns its URL', () => {
   const navigate = jest.fn<(url: string) => void>(() => {
     throw new Error('Not implemented: navigation');
@@ -126,9 +154,11 @@ test('hosted auth includes an action only when requested and returns its URL', (
 
   const withAction = new URL(getHostedAuthUrl(host, { action: 'signup' }));
   const withoutAction = new URL(getHostedAuthUrl(host, {}));
+  const withEmptyAction = new URL(getHostedAuthUrl(host, { action: '' }));
 
   expect(withAction.searchParams.get('action')).toBe('signup');
   expect(withoutAction.searchParams.has('action')).toBe(false);
+  expect(withEmptyAction.searchParams.has('action')).toBe(false);
   expect(withAction.searchParams.get('state')).toBe('nonce-1');
   expect(stored).toHaveBeenCalledWith('nonce-1');
   expect(signInWithHostedAuth(host, {})).toBe(host.getHostedAuthUrl());
@@ -139,7 +169,26 @@ test('hosted auth uses an explicit project ID and rejects an opaque key without 
   const { host } = fixture();
 
   expect(resolveProjectIdForHostedAuth(host, '  explicit-project  ')).toBe('explicit-project');
+  expect(() => resolveProjectIdForHostedAuth(host, '  ')).toThrow(
+    'Unable to determine project id for hosted auth',
+  );
   expect(() => resolveProjectIdForHostedAuth(host, null)).toThrow(
     'Unable to determine project id for hosted auth',
+  );
+});
+
+test('OAuth redirect defaults on blank input and adds one nonce parameter', () => {
+  browser(() => {
+    throw new Error('Not implemented: navigation');
+  });
+  const { host, stored } = fixture();
+
+  const url = new URL(signInWithOAuth(host, 'github', { redirectTo: '  ' }));
+  const redirect = new URL(url.searchParams.get('redirect_url') ?? '');
+
+  expect(stored).toHaveBeenCalledWith('nonce-1', 'https://app.example.test/callback');
+  expect(redirect.search).toBe('?vh_state=nonce-1');
+  expect(resolveOAuthRedirectTarget('  https://app.example.test/other  ')).toBe(
+    'https://app.example.test/other',
   );
 });

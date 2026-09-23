@@ -49,7 +49,7 @@ function oauthRedirect(host: AuthOAuthUrlHost, redirectTo: unknown, nonce: strin
   host._storeAuthState(nonce, redirectURL);
   // Keep the legacy nonce parameter until every server accepts client_state.
   const transport = new URL(redirectURL);
-  const separator = transport.search === '' ? '?' : '&';
+  const separator = transport.search === '' ? '' : '&';
   transport.search = `${transport.search}${separator}vh_state=${encodeURIComponent(nonce)}`;
   return transport.toString();
 }
