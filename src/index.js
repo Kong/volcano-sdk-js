@@ -8,6 +8,7 @@ import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { FilterMixin } from './database-filters.ts';
+import { MutationBuilder } from './database-mutations.ts';
 import { durablePathSegments } from './durable-paths.ts';
 import {
   AuthRefreshDiscardedError,
@@ -2818,75 +2819,6 @@ class QueryBuilder {
 }
 
 Object.assign(QueryBuilder.prototype, FilterMixin);
-
-// ============================================================================
-// MutationBuilder - Unified builder for INSERT, UPDATE, DELETE
-// ============================================================================
-
-class MutationBuilder {
-  constructor(volcanoAuth, table, databaseName, operation, values) {
-    this.volcanoAuth = volcanoAuth;
-    this.table = table;
-    this.databaseName = databaseName;
-    this.operation = operation;
-    this.values = values;
-    this.filters = [];
-  }
-
-  async execute() {
-    await this.volcanoAuth._completeOAuthExchange();
-    if (!this.volcanoAuth.accessToken) {
-      return errorResult(
-        this.volcanoAuth._oauthExchangeError || 'No active session. Please sign in first.',
-      );
-    }
-
-    if (!this.databaseName) {
-      return errorResult('Database name not set. Use .database(databaseName) first.');
-    }
-
-    const requestBody = { table: this.table };
-    if (this.values) {
-      requestBody.values = this.values;
-    }
-    if (this.filters.length > 0) {
-      requestBody.filters = this.filters;
-    }
-
-    try {
-      const response = await fetchWithAuthRetry(
-        this.volcanoAuth,
-        `${this.volcanoAuth.apiUrl}/databases/${encodeURIComponent(this.databaseName)}/query/${encodeURIComponent(this.operation)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        },
-      );
-
-      const result = await safeJsonParse(response);
-
-      if (!response.ok) {
-        return errorResult(result.error || `${this.operation} failed`);
-      }
-
-      return { data: result.data, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error(`${this.operation} failed`),
-      };
-    }
-  }
-
-  then(resolve, reject) {
-    return this.execute().then(resolve, reject);
-  }
-}
-
-Object.assign(MutationBuilder.prototype, FilterMixin);
 
 // ============================================================================
 // StorageFileApi - For storage operations on a specific bucket
