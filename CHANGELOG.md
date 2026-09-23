@@ -44,6 +44,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [1.15.0](https://github.com/Kong/volcano-sdk-js/compare/v1.14.0...v1.15.0) (2026-09-23)
+
+### Features
+
+- **sdk:** type auth and function transport boundaries ([#265](https://github.com/Kong/volcano-sdk-js/issues/265)) ([26b5afe](https://github.com/Kong/volcano-sdk-js/commit/26b5afe219ec7752ff671aae1c87d4f78727d383))
+
 ## [1.14.0](https://github.com/Kong/volcano-sdk-js/compare/v1.13.0...v1.14.0) (2026-09-23)
 
 ### Features
