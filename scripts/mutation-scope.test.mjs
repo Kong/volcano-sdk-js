@@ -3,7 +3,7 @@ import { unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { changedRuntimePatterns, criticalRuntime, mutationPatterns } from './mutation-scope.mjs';
 
-test('selects only added handwritten runtime lines from a PR diff', () => {
+test('selects changed handwritten runtime lines from a PR diff', () => {
   const diff = [
     'diff --git a/src/auth-validation.ts b/src/auth-validation.ts',
     '--- a/src/auth-validation.ts',
@@ -21,7 +21,23 @@ test('selects only added handwritten runtime lines from a PR diff', () => {
     '+++ /dev/null',
     '@@ -1,1 +0,0 @@',
   ].join('\n');
-  assert.deepEqual(changedRuntimePatterns(diff), ['src/auth-validation.ts:1-3']);
+  assert.deepEqual(changedRuntimePatterns(diff), [
+    'src/auth-validation.ts:1-3',
+    'src/auth-validation.ts:8-9',
+  ]);
+});
+
+test('deletion-only changes at EOF still select surviving source', () => {
+  const path = `src/mutation-deletion-fixture-${String(process.pid)}.ts`;
+  writeFileSync(path, 'export const one = 1;\nexport const two = 2;\n');
+  try {
+    const diff = `+++ b/${path}\n@@ -3,1 +3,0 @@`;
+    assert.deepEqual(changedRuntimePatterns(diff), [`${path}:1-2`]);
+    writeFileSync(path, '');
+    assert.throws(() => changedRuntimePatterns(diff), /empty handwritten runtime file/);
+  } finally {
+    unlinkSync(path);
+  }
 });
 
 test('includes committed, working, and newly added runtime code alongside critical modules', () => {

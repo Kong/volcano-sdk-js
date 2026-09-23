@@ -13,8 +13,8 @@
     "configFile": "jest.mutation.config.cjs"
   },
   "coverageAnalysis": "perTest",
-  "concurrency": 2,
-  "timeoutMS": 15000,
+  "concurrency": 4,
+  "timeoutMS": 60000,
   "cleanTempDir": "always",
   "reporters": ["clear-text", "json"],
   "clearTextReporter": {

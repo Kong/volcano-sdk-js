@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Stryker has native file/line selection, but no git-base selector for a clean CI checkout.
 export const criticalRuntime = [
@@ -38,6 +38,17 @@ export function changedRuntimePatterns(diff) {
       const count = Number(match[2] ?? '1');
       if (count > 0) {
         patterns.add(`${path}:${start}-${start + count - 1}`);
+      } else {
+        // A deletion has no added line to select. Mutate the two surviving
+        // neighbors, clamping deletions at the beginning or end of the file.
+        const source = readFileSync(path, 'utf8');
+        const lineCount =
+          source.length === 0 ? 0 : source.split('\n').length - Number(source.endsWith('\n'));
+        if (lineCount === 0) {
+          throw new Error(`${path}: empty handwritten runtime file after deletion`);
+        }
+        const anchor = Math.min(Math.max(1, start), lineCount);
+        patterns.add(`${path}:${Math.max(1, anchor - 1)}-${anchor}`);
       }
     }
   }
