@@ -7,8 +7,8 @@ import {
 import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
-import { FilterMixin } from './database-filters.ts';
 import { MutationBuilder } from './database-mutations.ts';
+import { QueryBuilder } from './database-query.ts';
 import { durablePathSegments } from './durable-paths.ts';
 import {
   AuthRefreshDiscardedError,
@@ -2722,105 +2722,6 @@ class VolcanoAuth {
 }
 
 // ============================================================================
-// QueryBuilder - For SELECT operations
-// ============================================================================
-
-class QueryBuilder {
-  constructor(volcanoAuth, table, databaseName) {
-    this.volcanoAuth = volcanoAuth;
-    this.table = table;
-    this.databaseName = databaseName;
-    this.selectColumns = [];
-    this.filters = [];
-    this.orderClauses = [];
-    this.limitValue = null;
-    this.offsetValue = null;
-  }
-
-  select(columns) {
-    if (columns === '*') {
-      this.selectColumns = [];
-    } else if (Array.isArray(columns)) {
-      this.selectColumns = columns;
-    } else {
-      this.selectColumns = columns.split(',').map((c) => c.trim());
-    }
-    return this;
-  }
-
-  order(column, options = {}) {
-    this.orderClauses.push({
-      column,
-      ascending: options.ascending !== false,
-    });
-    return this;
-  }
-
-  limit(count) {
-    this.limitValue = count;
-    return this;
-  }
-
-  offset(count) {
-    this.offsetValue = count;
-    return this;
-  }
-
-  async execute() {
-    await this.volcanoAuth._completeOAuthExchange();
-    if (!this.volcanoAuth.accessToken) {
-      return errorResult(
-        this.volcanoAuth._oauthExchangeError || 'No active session. Please sign in first.',
-        { count: 0 },
-      );
-    }
-
-    if (!this.databaseName) {
-      return errorResult('Database name not set. Use .database(databaseName) first.', { count: 0 });
-    }
-
-    const requestBody = { table: this.table };
-    if (this.selectColumns.length > 0) {
-      requestBody.select = this.selectColumns;
-    }
-    if (this.filters.length > 0) {
-      requestBody.filters = this.filters;
-    }
-    if (this.orderClauses.length > 0) {
-      requestBody.order = this.orderClauses;
-    }
-    if (this.limitValue !== null) {
-      requestBody.limit = this.limitValue;
-    }
-    if (this.offsetValue !== null) {
-      requestBody.offset = this.offsetValue;
-    }
-
-    try {
-      const response = await this.volcanoAuth._transport.queryDatabaseSelect(
-        encodeURIComponent(this.databaseName),
-        requestBody,
-        this.volcanoAuth._generatedOptions('session'),
-      );
-      const result = response.data;
-      return { data: result.data, error: null, count: result.count || result.data.length };
-    } catch (error) {
-      return {
-        data: null,
-        error: error instanceof Error ? error : new Error('Query failed'),
-        count: 0,
-      };
-    }
-  }
-
-  then(resolve, reject) {
-    return this.execute().then(resolve, reject);
-  }
-}
-
-Object.assign(QueryBuilder.prototype, FilterMixin);
-
-// ============================================================================
 // StorageFileApi - For storage operations on a specific bucket
 // ============================================================================
 
@@ -3312,7 +3213,8 @@ async function loadRealtime() {
 // at runtime. See VOL-505.
 const VolcanoClient = VolcanoAuth;
 
-export { loadRealtime, QueryBuilder, StorageFileApi, VolcanoAuth, VolcanoClient };
+export { loadRealtime, StorageFileApi, VolcanoAuth, VolcanoClient };
+export { QueryBuilder } from './database-query.ts';
 export { isBrowser } from './next/request.ts';
 export default VolcanoAuth;
 
