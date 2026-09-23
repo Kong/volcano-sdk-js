@@ -164,5 +164,3 @@ export function NoteEditor({ onCreate }) {
     </form>
   );
 }
-
-export default NoteEditor;

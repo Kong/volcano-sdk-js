@@ -212,5 +212,3 @@ export function NoteCard({ note, onEdit, onDelete }) {
     </div>
   );
 }
-
-export default NoteCard;

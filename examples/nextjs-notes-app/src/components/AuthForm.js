@@ -285,5 +285,3 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
     </div>
   );
 }
-
-export default AuthForm;
