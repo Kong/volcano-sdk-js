@@ -388,6 +388,15 @@ export interface FunctionError extends Error {
   retryAfter?: number;
 }
 
+export interface FunctionInvokeResponse<TResult = unknown> {
+  data: TResult | string | null;
+  status: number | null;
+  headers: Record<string, string>;
+  version: string | null;
+  /** Platform failures are errors; non-2xx function responses remain data. */
+  error: FunctionError | null;
+}
+
 export interface Functions {
   /**
    * Invoke a serverless function.
@@ -412,21 +421,7 @@ export interface Functions {
   invoke<TPayload = JsonValue, TResult = unknown>(
     functionName: string,
     payload?: TPayload,
-  ): Promise<{
-    data: TResult | string | null;
-    status: number | null;
-    headers: Record<string, string>;
-    version: string | null;
-    /**
-     * A platform-layer invocation failure (the deploy is failed/provisioning,
-     * the gateway is down, or the network call failed) is a
-     * {@link VolcanoSystemError} — detect it via `VolcanoSystemError.is(error)`. A
-     * function's own non-2xx response is not an error here; it comes back as
-     * `data` with `error` null. Pre-dispatch HTTP errors retain optional status,
-     * code, and retry metadata.
-     */
-    error: FunctionError | null;
-  }>;
+  ): Promise<FunctionInvokeResponse<TResult>>;
 }
 
 export interface Durable {

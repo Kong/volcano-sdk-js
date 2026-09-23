@@ -124,7 +124,9 @@ import { logActivityResult, logSearchResult } from './project-logs.ts';
 import type {
   Auth,
   Durable,
+  FunctionInvokeResponse,
   Functions,
+  JsonValue,
   Logs,
   ProjectLocks,
   Storage,
@@ -976,10 +978,14 @@ class VolcanoAuth {
   // Function Invocation
   // ========================================================================
 
+  invokeFunction<TPayload = JsonValue, TResult = unknown>(
+    functionName: string,
+    payload?: TPayload,
+  ): Promise<FunctionInvokeResponse<TResult>>;
   async invokeFunction(
     functionName: string,
     payload: unknown = {},
-  ): ReturnType<typeof invokeFunctionWithClient> {
+  ): Promise<FunctionInvokeResponse> {
     return invokeFunctionWithClient(this, functionName, payload);
   }
 
