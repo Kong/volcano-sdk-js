@@ -31,6 +31,17 @@ describe('Next.js middleware helpers', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  test.each([null, undefined, 0, 42])('getUser rejects an untyped %p token', async (token) => {
+    const client = createServerClient(config);
+    const result: unknown = Reflect.apply(client.getUser.bind(client), undefined, [token]);
+
+    await expect(result).resolves.toEqual({
+      user: null,
+      error: new Error('No access token provided'),
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   test('getUser returns a user from the response payload', async () => {
     const expectedUser = user('user-123');
     jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ user: expectedUser }));
@@ -138,6 +149,18 @@ describe('Next.js middleware helpers', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  test.each([null, undefined, 0, 42])('refreshToken rejects an untyped %p token', async (token) => {
+    const client = createServerClient(config);
+    const result: unknown = Reflect.apply(client.refreshToken.bind(client), undefined, [token]);
+
+    await expect(result).resolves.toEqual({
+      accessToken: null,
+      refreshToken: null,
+      error: new Error('No refresh token provided'),
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   test('refreshToken sends the current refresh token and returns its replacement', async () => {
     jest
       .mocked(globalThis.fetch)
@@ -214,6 +237,17 @@ describe('Next.js middleware helpers', () => {
     jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ user: null }));
 
     await createServerClient({ anonKey: config.anonKey }).getUser('access-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://api.volcano.dev/auth/user',
+      expect.any(Object),
+    );
+  });
+
+  test('defaults to the production API URL when the override is empty', async () => {
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ user: null }));
+
+    await createServerClient({ anonKey: config.anonKey, apiUrl: '' }).getUser('access-token');
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://api.volcano.dev/auth/user',

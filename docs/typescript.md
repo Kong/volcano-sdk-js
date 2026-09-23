@@ -54,7 +54,9 @@ interface VolcanoAuthConfig {
 }
 ```
 
-### User
+### User (root SDK)
+
+The root SDK and the Next.js middleware entrypoint export separate `User` types.
 
 ```typescript
 type UserStatus = 'active' | 'banned' | 'deleted';
@@ -513,6 +515,8 @@ interface SessionsResponse {
 
 ## Middleware Types
 
+The middleware `User` requires `id`, `email`, and `status`. Its timestamps are optional, matching the auth response contract.
+
 ```typescript
 import type {
   ServerClientConfig,
@@ -521,6 +525,15 @@ import type {
   GetUserResult,
   RefreshTokenResult,
 } from '@volcano.dev/sdk/next/middleware';
+
+interface User {
+  id: string;
+  email: string;
+  status: 'active' | 'banned' | 'deleted';
+  user_metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface ServerClientConfig {
   anonKey: string;

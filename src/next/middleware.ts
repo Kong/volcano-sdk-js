@@ -60,6 +60,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
 function optionalString(value: Record<string, unknown>, field: string): boolean {
   const fieldValue = value[field];
   return fieldValue === undefined || typeof fieldValue === 'string';
@@ -171,13 +175,13 @@ async function refreshResponse(response: Response): Promise<RefreshTokenResult> 
 }
 
 export function createServerClient(config: ServerClientConfig): ServerClient {
-  const apiUrl =
-    config.apiUrl === undefined || config.apiUrl === '' ? 'https://api.volcano.dev' : config.apiUrl;
+  const configuredUrl: unknown = config.apiUrl;
+  const apiUrl = isNonEmptyString(configuredUrl) ? configuredUrl : 'https://api.volcano.dev';
   const anonKey = config.anonKey;
 
   return {
     async getUser(accessToken: string): Promise<GetUserResult> {
-      if (accessToken === '') {
+      if (!isNonEmptyString(accessToken)) {
         return { user: null, error: new Error('No access token provided') };
       }
       try {
@@ -196,7 +200,7 @@ export function createServerClient(config: ServerClientConfig): ServerClient {
     },
 
     async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {
-      if (refreshToken === '') {
+      if (!isNonEmptyString(refreshToken)) {
         return {
           accessToken: null,
           refreshToken: null,
