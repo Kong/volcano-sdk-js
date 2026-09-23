@@ -285,8 +285,10 @@ const user = await withAuth(request, client);
 // Extract token from request (Authorization header or cookie)
 const token = getTokenFromRequest(request);
 
-// Validate token manually
-const { user, error } = await client.getUser(token);
+// Validate a token manually when the request carries one
+if (token !== null) {
+  const { user: validatedUser, error } = await client.getUser(token);
+}
 
 // Refresh a token
 const { accessToken, refreshToken, error } = await client.refreshToken(oldRefreshToken);

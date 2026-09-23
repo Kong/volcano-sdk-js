@@ -109,7 +109,7 @@ export default [
   },
   // Next.js middleware helpers bundle
   {
-    input: 'src/next/middleware.js',
+    input: 'src/next/middleware.ts',
     plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     output: [
       {

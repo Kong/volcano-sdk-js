@@ -129,6 +129,30 @@ assert.equal(commonjs.default, commonjs.VolcanoRealtime);
     env,
     timeout: 30_000,
   });
+  await writeFile(
+    join(directory, 'next-imports.mjs'),
+    `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { createServerClient, getTokenFromRequest, withAuth } from '@volcano.dev/sdk/next/middleware';
+
+const commonjs = createRequire(import.meta.url)('@volcano.dev/sdk/next/middleware');
+for (const entrypoint of [{ createServerClient, getTokenFromRequest, withAuth }, commonjs]) {
+  assert.equal(typeof entrypoint.createServerClient, 'function');
+  assert.equal(typeof entrypoint.getTokenFromRequest, 'function');
+  assert.equal(typeof entrypoint.withAuth, 'function');
+  const client = entrypoint.createServerClient({ anonKey: 'synthetic-anon' });
+  assert.deepEqual(await client.getUser(''), {
+    user: null,
+    error: new Error('No access token provided'),
+  });
+}
+`,
+  );
+  await run(process.execPath, ['next-imports.mjs'], {
+    cwd: directory,
+    env,
+    timeout: 30_000,
+  });
   await writeFile(join(directory, 'quickstart.mjs'), quickstart);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
