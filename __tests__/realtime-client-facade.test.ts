@@ -130,10 +130,10 @@ describe('realtime client facade', () => {
     expect(latestTransport()).toBe(transport);
 
     transport.emit('connected', { client: 3, latency: 'bad' });
-    transport.emit('error', { error: new Error('lost'), message: 'lost', code: 4 });
+    transport.emit('error', { type: 'transport', error: { message: 'lost', code: 4 } });
     transport.emit('disconnected', { code: 1, reason: 'network', reconnect: true });
     expect(connected).toEqual([{ client: 'connected', latency: 1 }, {}]);
-    expect(errors).toEqual([{ error: new Error('lost'), message: 'lost', code: 4 }]);
+    expect(errors).toEqual([{ error: { message: 'lost', code: 4 }, message: 'lost', code: 4 }]);
     expect(disconnected).toEqual([{ code: 1, reason: 'network', reconnect: true }]);
     expect(realtime.isConnected()).toBe(false);
 

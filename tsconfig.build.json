@@ -4,7 +4,8 @@
     "noEmit": false,
     "declaration": true,
     "rootDir": "src",
-    "outDir": "dist/typescript"
+    "outDir": "dist/typescript",
+    "stripInternal": true
   },
   "include": ["src/**/*.ts"]
 }

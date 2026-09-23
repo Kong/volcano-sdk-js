@@ -45,21 +45,36 @@ import {
  * RealtimeChannel - Represents a subscription to a realtime channel
  */
 class RealtimeChannel {
+  /** @internal */
   readonly _realtime: VolcanoRealtime;
+  /** @internal */
   readonly _name: string;
+  /** @internal */
   readonly _type: ChannelType;
+  /** @internal */
   readonly _options: ChannelOptions;
+  /** @internal */
   _subscription: TransportSubscription | null = null;
+  /** @internal */
   _lifecycleVersion = 0;
+  /** @internal */
   _paused = false;
+  /** @internal */
   _callbacks = new Map<unknown, ChannelCallback[]>();
+  /** @internal */
   _presenceState: Record<string, unknown> = {};
+  /** @internal */
   readonly _fetchConfig: ActiveFetchConfig;
+  /** @internal */
   _pendingFetches = new Map<string, PendingBatch>();
+  /** @internal */
   _eventHandlers: Record<string, EventHandler> = {};
+  /** @internal */
   _presenceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  /** @internal */
   _myPresenceState: Record<string, unknown> = {};
 
+  /** @internal */
   constructor(realtime: VolcanoRealtime, name: string, type: ChannelType, options: ChannelOptions) {
     this._realtime = realtime;
     this._name = name;
@@ -95,6 +110,7 @@ class RealtimeChannel {
     await subscribeChannel(this);
   }
 
+  /** @internal */
   async _activateSubscription(): Promise<void> {
     if (this._subscription === null) {
       throw new Error('Subscription missing');
@@ -106,10 +122,12 @@ class RealtimeChannel {
     unsubscribeChannel(this);
   }
 
+  /** @internal */
   _dispose(): void {
     disposeChannel(this);
   }
 
+  /** @internal */
   _resetForIdentityChange(): void {
     resetChannelForIdentityChange(this);
   }
@@ -118,6 +136,7 @@ class RealtimeChannel {
    * Handle publication from server-side subscription
    * Called by VolcanoRealtime when a message arrives on the internal channel
    */
+  /** @internal */
   _handlePublication(ctx: unknown): void {
     if (this._paused) {
       return;
@@ -139,6 +158,7 @@ class RealtimeChannel {
    * @param {Object} data - Lightweight notification data
    * @param {Object} ctx - Publication context
    */
+  /** @internal */
   async _handleLightweightNotification(data: LightweightNotification, ctx: unknown): Promise<void> {
     // DELETE notifications may include old_record, deliver immediately
     if (data.type === 'DELETE') {
@@ -156,6 +176,7 @@ class RealtimeChannel {
     await this._deliverFetchedNotification(data, ctx, this._lifecycleVersion);
   }
 
+  /** @internal */
   async _deliverFetchedNotification(
     data: LightweightNotification,
     ctx: unknown,
@@ -199,6 +220,7 @@ class RealtimeChannel {
    * @param {*} id - Primary key value
    * @returns {Promise<Object>} The fetched record
    */
+  /** @internal */
   _fetchRow(schema: string, table: string, id: unknown): Promise<unknown> {
     const tableKey = `${schema}.${table}`;
 
@@ -236,6 +258,7 @@ class RealtimeChannel {
    * @param {string} schema - Schema name
    * @param {string} table - Table name
    */
+  /** @internal */
   async _flushFetch(schema: string, table: string): Promise<void> {
     const tableKey = `${schema}.${table}`;
     const batch = this._pendingFetches.get(tableKey);
@@ -265,6 +288,7 @@ class RealtimeChannel {
    * @param {Object} data - Payload data
    * @param {Object} ctx - Publication context
    */
+  /** @internal */
   _deliverPayload(data: unknown, ctx: unknown): void {
     const event = payloadEvent(data);
     const callbacks = this._callbacks.get(event) ?? [];
@@ -394,6 +418,7 @@ class RealtimeChannel {
     return isPresenceState(state) ? state : {};
   }
 
+  /** @internal */
   _updatePresenceState(ctx: unknown): void {
     this._presenceState = {};
     const clients = property(ctx, 'clients');
@@ -402,10 +427,12 @@ class RealtimeChannel {
     }
   }
 
+  /** @internal */
   _triggerPresenceSync(): void {
     this._triggerEvent('presence_sync', this._presenceState);
   }
 
+  /** @internal */
   _triggerEvent(event: string, data: unknown): void {
     const callbacks = this._callbacks.get(event) ?? [];
     callbacks.forEach((cb) => {

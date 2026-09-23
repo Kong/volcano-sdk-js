@@ -103,6 +103,23 @@ describe('untrusted realtime payloads', () => {
       code: 4,
     });
     expect(errorContext({ error: 'lost', message: 3, code: '4' })).toEqual({});
+    const transportFailure = { code: 7, message: 'connection refused' };
+    expect(errorContext({ type: 'connect', error: transportFailure })).toEqual({
+      error: transportFailure,
+      message: 'connection refused',
+      code: 7,
+    });
+    expect(
+      errorContext({ error: { code: 7, message: 'nested' }, message: 'outer', code: 8 }),
+    ).toEqual({
+      error: { code: 7, message: 'nested' },
+      message: 'outer',
+      code: 8,
+    });
+    expect(errorContext({ error: { code: 'bad', message: 'nested' } })).toEqual({
+      message: 'nested',
+    });
+    expect(errorContext({ error: { code: 3, message: false } })).toEqual({ code: 3 });
   });
 
   test('validates presence state and optional fields', () => {

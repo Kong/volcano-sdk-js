@@ -157,7 +157,7 @@ export interface DisconnectContext {
 /** Context for error events */
 export interface ErrorContext {
   /** Error object */
-  error?: Error;
+  error?: Error | { code: number; message: string };
   /** Error message */
   message?: string;
   /** Error code */

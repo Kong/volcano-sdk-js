@@ -38,6 +38,7 @@ import {
 } from './realtime-values.ts';
 import { loadWebSocket } from './realtime-websocket.ts';
 
+/** @internal */
 export function isTransportClient(value: unknown): value is TransportClient {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -66,22 +67,39 @@ export function isTransportClient(value: unknown): value is TransportClient {
  * 2. Service key: anonKey (optional) + accessToken (service role key)
  */
 class VolcanoRealtime {
+  /** @internal */
   readonly apiUrl: string;
+  /** @internal */
   readonly anonKey: string;
+  /** @internal */
   accessToken: string | undefined;
+  /** @internal */
   readonly getToken: (() => Promise<string>) | undefined;
+  /** @internal */
   _recoveryIdentity: RecoveryIdentity;
+  /** @internal */
   readonly _webSocket: WebSocketConstructor | null;
+  /** @internal */
   _client: TransportClient | null = null;
+  /** @internal */
   _clientHandlers: ClientHandlers | null = null;
+  /** @internal */
   readonly _channels = new Map<string, RealtimeChannel>();
+  /** @internal */
   _connected = false;
+  /** @internal */
   _connectionPromise: Promise<void> | null = null;
+  /** @internal */
   _onConnect: ((context: ConnectContext) => void)[] = [];
+  /** @internal */
   _onDisconnect: ((context: DisconnectContext) => void)[] = [];
+  /** @internal */
   _onError: ((context: ErrorContext) => void)[] = [];
+  /** @internal */
   _volcanoClient: RealtimeConfig['volcanoClient'] | null;
+  /** @internal */
   readonly _fetchConfig: ActiveFetchConfig;
+  /** @internal */
   _databaseName: string | null;
   /**
    * Create a new VolcanoRealtime client
@@ -177,6 +195,7 @@ class VolcanoRealtime {
     }
   }
 
+  /** @internal */
   async _doConnect(): Promise<void> {
     const CentrifugeClient = await loadCentrifuge();
     const WebSocket = this._webSocket ?? (await loadWebSocket());
@@ -236,11 +255,13 @@ class VolcanoRealtime {
     return waitForConnection(this._client);
   }
 
+  /** @internal */
   _adoptAccessToken(token: string): void {
     this.accessToken = token;
     this._synchronizeRecoveryIdentity();
   }
 
+  /** @internal */
   _synchronizeRecoveryIdentity(): void {
     const nextIdentity = recoveryIdentity(this.accessToken);
     if (sameRecoveryIdentity(this._recoveryIdentity, nextIdentity)) {
@@ -322,6 +343,7 @@ class VolcanoRealtime {
    * The server automatically adds the project ID prefix based on
    * the authenticated connection. Clients never need to know about project IDs.
    */
+  /** @internal */
   _formatChannelName(name: string, type: ChannelType): string {
     return `${type}:${name}`;
   }
@@ -331,6 +353,7 @@ class VolcanoRealtime {
    * The server uses project-prefixed channels: "projectId:type:name"
    * We extract the type:name portion and route to the SDK channel
    */
+  /** @internal */
   _handleServerPublication(ctx: unknown): void {
     const route = serverEventRoute(ctx);
     if (route === null) {
@@ -360,6 +383,7 @@ class VolcanoRealtime {
     }
   }
 
+  /** @internal */
   _activePresenceChannel(ctx: unknown): RealtimeChannel | null {
     const route = serverEventRoute(ctx);
     if (route === null) {
@@ -372,6 +396,7 @@ class VolcanoRealtime {
   /**
    * Handle join events from server-side subscriptions
    */
+  /** @internal */
   _handleServerJoin(ctx: unknown): void {
     const channel = this._activePresenceChannel(ctx);
     if (channel === null) {
@@ -389,6 +414,7 @@ class VolcanoRealtime {
   /**
    * Handle leave events from server-side subscriptions
    */
+  /** @internal */
   _handleServerLeave(ctx: unknown): void {
     const channel = this._activePresenceChannel(ctx);
     if (channel === null) {
@@ -406,6 +432,7 @@ class VolcanoRealtime {
   /**
    * Handle subscribed events - includes initial presence state
    */
+  /** @internal */
   _handleServerSubscribed(ctx: unknown): void {
     const channel = this._activePresenceChannel(ctx);
     if (channel === null) {

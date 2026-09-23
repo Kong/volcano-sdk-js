@@ -79,14 +79,35 @@ function disconnectContext(value: unknown): DisconnectContext {
   };
 }
 
+function transportError(value: unknown): value is Error | { code: number; message: string } {
+  return (
+    value instanceof Error ||
+    (record(value) && typeof value['code'] === 'number' && typeof value['message'] === 'string')
+  );
+}
+
+function preferredString(outer: unknown, nested: unknown): string | undefined {
+  if (typeof outer === 'string') {
+    return outer;
+  }
+  return typeof nested === 'string' ? nested : undefined;
+}
+
+function preferredNumber(outer: unknown, nested: unknown): number | undefined {
+  if (typeof outer === 'number') {
+    return outer;
+  }
+  return typeof nested === 'number' ? nested : undefined;
+}
+
 function errorContext(value: unknown): ErrorContext {
   const error = property(value, 'error');
-  const message = property(value, 'message');
-  const code = property(value, 'code');
+  const message = preferredString(property(value, 'message'), property(error, 'message'));
+  const code = preferredNumber(property(value, 'code'), property(error, 'code'));
   return {
-    ...(error instanceof Error ? { error } : {}),
-    ...(typeof message === 'string' ? { message } : {}),
-    ...(typeof code === 'number' ? { code } : {}),
+    ...(transportError(error) ? { error } : {}),
+    ...(message === undefined ? {} : { message }),
+    ...(code === undefined ? {} : { code }),
   };
 }
 
