@@ -1,5 +1,74 @@
-const { sessionToken } = require('./session-fixtures.ts');
-const { VolcanoAuth } = require('../src/index.js');
+/** @jest-environment node */
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { VolcanoAuth } from '../src/index.js';
+import { sessionToken } from './session-fixtures.ts';
+
+const fetchMock = jest.mocked(globalThis.fetch);
+
+interface ResponseFixture {
+  ok?: boolean;
+  status?: number;
+  json?: () => Promise<unknown>;
+  blob?: () => Promise<Blob>;
+  headers?: Pick<Headers, 'get'>;
+}
+
+function responseStatus(input: ResponseFixture): number {
+  return input.status ?? (input.ok === false ? 400 : 200);
+}
+
+function responseHeaders(input: ResponseFixture): Headers {
+  const headers = new Headers();
+  if (input.json !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return headers;
+}
+
+function responseFixture(input: ResponseFixture): Response {
+  const response = new Response(null, {
+    status: responseStatus(input),
+    headers: responseHeaders(input),
+  });
+  if (input.json !== undefined) {
+    jest.spyOn(response, 'json').mockImplementation(input.json);
+  }
+  if (input.blob !== undefined) {
+    jest.spyOn(response, 'blob').mockImplementation(input.blob);
+  }
+  if (input.headers !== undefined) {
+    jest.spyOn(response.headers, 'get').mockImplementation(input.headers.get);
+  }
+  return response;
+}
+
+function requestAt(index: number): RequestInit {
+  const call = fetchMock.mock.calls[index];
+  if (call?.[1] === undefined) {
+    throw new TypeError(`Expected fetch call ${String(index)}`);
+  }
+  return call[1];
+}
+
+function formAt(index: number): FormData {
+  const body = requestAt(index).body;
+  if (!(body instanceof FormData)) {
+    throw new TypeError(`Expected FormData in fetch call ${String(index)}`);
+  }
+  return body;
+}
+
+function textBodyAt(index: number): string {
+  const body = requestAt(index).body;
+  if (typeof body !== 'string') {
+    throw new TypeError(`Expected text body in fetch call ${String(index)}`);
+  }
+  return body;
+}
+
+function headerAt(index: number, name: string): string | null {
+  return new Headers(requestAt(index).headers).get(name);
+}
 
 describe('Storage', () => {
   const config = {
@@ -7,34 +76,43 @@ describe('Storage', () => {
     anonKey: 'ak-test-anon-key',
   };
 
-  let volcano;
+  let volcano: VolcanoAuth;
 
   beforeEach(() => {
-    volcano = new VolcanoAuth(config);
-    volcano.accessToken = 'test-access-token';
+    volcano = new VolcanoAuth({ ...config, accessToken: 'test-access-token' });
   });
 
   it.each(['status', 'abort', 'download'])(
     'preserves a missing object HTTP status for %s',
     async (operation) => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        json: async () => ({ error: 'not found', code: 'storage_not_found' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ error: 'not found', code: 'storage_not_found' }),
+        }),
+      );
       const bucket = volcano.storage.from('uploads');
-      const operations = {
-        status: () => bucket.getUploadSession('missing.bin', 'missing-session'),
-        abort: () => bucket.abortUploadSession('missing.bin', 'missing-session'),
-        download: () => bucket.download('missing.bin'),
-      };
-      const result = await operations[operation]();
+      let result;
+      switch (operation) {
+        case 'status': {
+          result = await bucket.getUploadSession('missing.bin', 'missing-session');
+          break;
+        }
+        case 'abort': {
+          result = await bucket.abortUploadSession('missing.bin', 'missing-session');
+          break;
+        }
+        default: {
+          result = await bucket.download('missing.bin');
+        }
+      }
       expect(result.error).toMatchObject({
         status: 404,
         message: 'not found',
         code: 'storage_not_found',
       });
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -54,7 +132,7 @@ describe('Storage', () => {
 
     it('should store bucket name', () => {
       const bucket = volcano.storage.from('my-bucket');
-      expect(bucket.bucketName).toBe('my-bucket');
+      expect(Reflect.get(bucket, 'bucketName')).toBe('my-bucket');
     });
   });
 
@@ -62,71 +140,105 @@ describe('Storage', () => {
     const absentValues = [undefined, null, false, 0, Number.NaN, ''];
 
     it.each(absentValues)('omits a falsy list prefix (%s)', async (prefix) => {
-      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ objects: [] }) });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, json: () => Promise.resolve({ objects: [] }) }),
+      );
 
-      const result = await volcano.storage.from('files').list(prefix);
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(bucket.list.bind(bucket), undefined, [prefix]);
 
-      expect(result.error).toBeNull();
-      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/files');
+      expect(result).toMatchObject({ error: null });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.test.com/storage/files');
     });
 
     it.each(absentValues)('omits falsy list options (%s)', async (value) => {
-      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ objects: [] }) });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, json: () => Promise.resolve({ objects: [] }) }),
+      );
 
-      const result = await volcano.storage.from('files').list('', {
-        limit: value,
-        cursor: value,
-      });
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(bucket.list.bind(bucket), undefined, [
+        '',
+        {
+          limit: value,
+          cursor: value,
+        },
+      ]);
 
-      expect(result.error).toBeNull();
-      expect(fetch.mock.calls[0][0]).toBe('https://api.test.com/storage/files');
+      expect(result).toMatchObject({ error: null });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.test.com/storage/files');
     });
 
     it.each(absentValues)('rejects a falsy upload size locally (%s)', async (totalSize) => {
-      const result = await volcano.storage
-        .from('files')
-        .createUploadSession('file.bin', { totalSize });
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(
+        bucket.createUploadSession.bind(bucket),
+        undefined,
+        ['file.bin', { totalSize }],
+      );
 
-      expect(result.error.message).toBe('totalSize is required');
-      expect(fetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: { message: 'totalSize is required' } });
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it.each(absentValues)('defaults a falsy session content type (%s)', async (contentType) => {
-      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, json: () => Promise.resolve({}) }),
+      );
 
-      const result = await volcano.storage
-        .from('files')
-        .createUploadSession('file.bin', { totalSize: 1, contentType });
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(
+        bucket.createUploadSession.bind(bucket),
+        undefined,
+        ['file.bin', { totalSize: 1, contentType }],
+      );
 
-      expect(result.error).toBeNull();
-      expect(JSON.parse(fetch.mock.calls[0][1].body).content_type).toBe('application/octet-stream');
+      expect(result).toMatchObject({ error: null });
+      const body: unknown = JSON.parse(textBodyAt(0));
+      expect(body).toMatchObject({ content_type: 'application/octet-stream' });
     });
 
     it.each(absentValues)('defaults a falsy Blob content type (%s)', async (contentType) => {
-      global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, json: () => Promise.resolve({}) }),
+      );
 
-      const result = await volcano.storage
-        .from('files')
-        .upload('file.bin', new Blob(['data']), { contentType });
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(bucket.upload.bind(bucket), undefined, [
+        'file.bin',
+        new Blob(['data']),
+        { contentType },
+      ]);
 
-      expect(result.error).toBeNull();
-      expect(fetch.mock.calls[0][1].body.get('file').type).toBe('application/octet-stream');
+      expect(result).toMatchObject({ error: null });
+      expect(formAt(0).get('file')).toMatchObject({ type: 'application/octet-stream' });
     });
 
     it.each(absentValues)('omits a falsy download range (%s)', async (range) => {
-      global.fetch.mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['data']) });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, blob: () => Promise.resolve(new Blob(['data'])) }),
+      );
 
-      const result = await volcano.storage.from('files').download('file.bin', { range });
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(bucket.download.bind(bucket), undefined, [
+        'file.bin',
+        { range },
+      ]);
 
-      expect(result.error).toBeNull();
-      expect(fetch.mock.calls[0][1].headers.Range).toBeUndefined();
+      expect(result).toMatchObject({ error: null });
+      expect(headerAt(0, 'Range')).toBeNull();
     });
 
     it('rejects null session options locally', async () => {
-      const result = await volcano.storage.from('files').createUploadSession('file.bin', null);
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(
+        bucket.createUploadSession.bind(bucket),
+        undefined,
+        ['file.bin', null],
+      );
 
-      expect(result.error.message).toBe('totalSize is required');
-      expect(fetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ error: { message: 'totalSize is required' } });
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -140,10 +252,12 @@ describe('Storage', () => {
         mime_type: 'image/png',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       // Create a mock File
       const file = new File(['test content'], 'avatar.png', { type: 'image/png' });
@@ -152,7 +266,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/avatars/user/avatar.png',
         expect.objectContaining({
           method: 'POST',
@@ -164,43 +278,53 @@ describe('Storage', () => {
     });
 
     it('replays the same upload file after an authentication rejection', async () => {
-      volcano.accessToken = sessionToken();
-      volcano.refreshToken = 'valid-refresh';
-      const file = new File(['hello\u0000\u00ff'], 'file.bin', {
+      volcano = new VolcanoAuth({
+        ...config,
+        accessToken: sessionToken(),
+        refreshToken: 'valid-refresh',
+      });
+      const file = new File(['hello\u0000\u00FF'], 'file.bin', {
         type: 'application/octet-stream',
       });
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 401,
-          json: async () => ({ error: 'expired' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            access_token: sessionToken(undefined, true),
-            refresh_token: 'new-refresh',
-            expires_in: 3600,
-            user: { id: 'user-123' },
+      fetchMock
+        .mockResolvedValueOnce(
+          responseFixture({
+            ok: false,
+            status: 401,
+            json: () => Promise.resolve({ error: 'expired' }),
           }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 201,
-          json: async () => ({ name: 'file.bin' }),
-        });
+        )
+        .mockResolvedValueOnce(
+          responseFixture({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                access_token: sessionToken(undefined, true),
+                refresh_token: 'new-refresh',
+                expires_in: 3600,
+                user: { id: 'user-123' },
+              }),
+          }),
+        )
+        .mockResolvedValueOnce(
+          responseFixture({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve({ name: 'file.bin' }),
+          }),
+        );
 
       const result = await volcano.storage.from('files').upload('file.bin', file);
 
       expect(result.error).toBeNull();
-      expect(fetch).toHaveBeenCalledTimes(3);
-      const first = fetch.mock.calls[0];
-      const replay = fetch.mock.calls[2];
-      expect(replay[0]).toBe(first[0]);
-      expect(replay[1].headers.Authorization).toBe(`Bearer ${sessionToken(undefined, true)}`);
-      expect(first[1].body.get('file')).toBe(file);
-      expect(replay[1].body.get('file')).toBe(file);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const first = fetchMock.mock.calls[0];
+      const replay = fetchMock.mock.calls[2];
+      expect(replay?.[0]).toBe(first?.[0]);
+      expect(headerAt(2, 'Authorization')).toBe(`Bearer ${sessionToken(undefined, true)}`);
+      expect(formAt(0).get('file')).toBe(file);
+      expect(formAt(2).get('file')).toBe(file);
     });
 
     it('should upload a Blob successfully', async () => {
@@ -211,10 +335,12 @@ describe('Storage', () => {
         mime_type: 'application/json',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const blob = new Blob(['{"hello": "world"}'], { type: 'application/json' });
 
@@ -233,10 +359,12 @@ describe('Storage', () => {
         size: 4,
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const buffer = new ArrayBuffer(4);
 
@@ -247,35 +375,41 @@ describe('Storage', () => {
     });
 
     it('should return error for invalid file body type', async () => {
-      const { data, error } = await volcano.storage
-        .from('files')
-        .upload('test.txt', 'invalid string body');
+      const bucket = volcano.storage.from('files');
+      const result: unknown = await Reflect.apply(bucket.upload.bind(bucket), undefined, [
+        'test.txt',
+        'invalid string body',
+      ]);
 
-      expect(data).toBeNull();
-      expect(error.message).toBe('Invalid file body type. Expected File, Blob, or ArrayBuffer.');
+      expect(result).toMatchObject({
+        data: null,
+        error: { message: 'Invalid file body type. Expected File, Blob, or ArrayBuffer.' },
+      });
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const file = new File(['test'], 'test.txt', { type: 'text/plain' });
       const { data, error } = await volcano.storage.from('files').upload('test.txt', file);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error on upload failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'File too large' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'File too large' }),
+        }),
+      );
 
       const file = new File(['test'], 'test.txt', { type: 'text/plain' });
       const { data, error } = await volcano.storage.from('files').upload('test.txt', file);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('File too large');
+      expect(error?.message).toBe('File too large');
     });
   });
 
@@ -283,16 +417,18 @@ describe('Storage', () => {
     it('should download a file successfully', async () => {
       const mockBlob = new Blob(['file content'], { type: 'text/plain' });
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        blob: () => Promise.resolve(mockBlob),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          blob: () => Promise.resolve(mockBlob),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').download('document.txt');
 
       expect(error).toBeNull();
       expect(data).toBeInstanceOf(Blob);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files/document.txt',
         expect.objectContaining({
           method: 'GET',
@@ -306,13 +442,15 @@ describe('Storage', () => {
     it('should preserve JSON file bytes as a Blob', async () => {
       const mockBlob = new Blob(['{"hello":"world"}'], { type: 'application/json' });
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve({ hello: 'world' }),
-        blob: () => Promise.resolve(mockBlob),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: () => Promise.resolve({ hello: 'world' }),
+          blob: () => Promise.resolve(mockBlob),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').download('data.json');
 
@@ -323,14 +461,16 @@ describe('Storage', () => {
     it('should support Range header for partial downloads', async () => {
       const mockBlob = new Blob(['partial content']);
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        blob: () => Promise.resolve(mockBlob),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          blob: () => Promise.resolve(mockBlob),
+        }),
+      );
 
       await volcano.storage.from('files').download('large-file.zip', { range: 'bytes=0-1023' });
 
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
@@ -341,24 +481,26 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage.from('files').download('test.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error on download failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'File not found' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'File not found' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').download('nonexistent.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('File not found');
+      expect(error?.message).toBe('File not found');
     });
   });
 
@@ -369,10 +511,12 @@ describe('Storage', () => {
         { id: 'obj-2', name: 'file2.txt', size: 200 },
       ];
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ objects: mockObjects, next_cursor: null }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ objects: mockObjects, next_cursor: null }),
+        }),
+      );
 
       const { data, error, nextCursor } = await volcano.storage.from('files').list();
 
@@ -382,66 +526,82 @@ describe('Storage', () => {
     });
 
     it('should refresh token on 401 and retry', async () => {
-      volcano.accessToken = sessionToken();
-      volcano.refreshToken = 'valid-refresh';
+      volcano = new VolcanoAuth({
+        ...config,
+        accessToken: sessionToken(),
+        refreshToken: 'valid-refresh',
+      });
 
       // First call returns 401
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: () => Promise.resolve({ error: 'Token expired' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ error: 'Token expired' }),
+        }),
+      );
 
       // Refresh call succeeds
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: sessionToken(undefined, true),
-            refresh_token: 'new-refresh-token',
-            expires_in: 3600,
-            user: { id: 'user-123' },
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: sessionToken(undefined, true),
+              refresh_token: 'new-refresh-token',
+              expires_in: 3600,
+              user: { id: 'user-123' },
+            }),
+        }),
+      );
 
       // Retry call succeeds
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ objects: [], next_cursor: null }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ objects: [], next_cursor: null }),
+        }),
+      );
 
       const { error } = await volcano.storage.from('files').list();
 
       expect(error).toBeNull();
-      expect(volcano.accessToken).toBe(sessionToken(undefined, true));
+      expect(Reflect.get(volcano, 'accessToken')).toBe(sessionToken(undefined, true));
     });
 
     it('should list files with prefix', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ objects: [], next_cursor: null }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ objects: [], next_cursor: null }),
+        }),
+      );
 
       await volcano.storage.from('files').list('user/documents/');
 
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files?prefix=user%2Fdocuments%2F',
         expect.any(Object),
       );
     });
 
     it('should support pagination options', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ objects: [], next_cursor: 'cursor-abc' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ objects: [], next_cursor: 'cursor-abc' }),
+        }),
+      );
 
       const { nextCursor } = await volcano.storage
         .from('files')
         .list('', { limit: 50, cursor: 'prev-cursor' });
 
-      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('limit=50'), expect.any(Object));
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('limit=50'),
+        expect.any(Object),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('cursor=prev-cursor'),
         expect.any(Object),
       );
@@ -449,44 +609,50 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage.from('files').list();
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error on list failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'Access denied' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'Access denied' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').list();
 
       expect(data).toBeNull();
-      expect(error.message).toBe('Access denied');
+      expect(error?.message).toBe('Access denied');
     });
   });
 
   describe('remove()', () => {
     it('preserves each failed deletion and the first failure metadata', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 404,
-          json: async () => ({ error: 'missing', code: 'not_found' }),
-        })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 429,
-          headers: { get: () => '7' },
-          json: async () => ({ error: 'slow down', code: 'rate_limited' }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(
+          responseFixture({
+            ok: false,
+            status: 404,
+            json: () => Promise.resolve({ error: 'missing', code: 'not_found' }),
+          }),
+        )
+        .mockResolvedValueOnce(responseFixture({ ok: true, json: () => Promise.resolve({}) }))
+        .mockResolvedValueOnce(
+          responseFixture({
+            ok: false,
+            status: 429,
+            headers: { get: () => '7' },
+            json: () => Promise.resolve({ error: 'slow down', code: 'rate_limited' }),
+          }),
+        );
       const result = await volcano.storage.from('files').remove(['missing', 'removed', 'limited']);
-      expect(result.data.deleted).toEqual(['removed']);
+      expect(result.data?.deleted).toEqual(['removed']);
       expect(result.error).toMatchObject({
         status: 404,
         code: 'not_found',
@@ -495,74 +661,80 @@ describe('Storage', () => {
           { path: 'limited', error: { status: 429, code: 'rate_limited', retryAfter: 7 } },
         ],
       });
-      expect(result.error.retryAfter).toBeUndefined();
-      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(result.error?.retryAfter).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it('preserves metadata when deleting one file fails', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        headers: { get: () => '7' },
-        json: async () => ({ error: 'slow down', code: 'rate_limited' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          status: 429,
+          headers: { get: () => '7' },
+          json: () => Promise.resolve({ error: 'slow down', code: 'rate_limited' }),
+        }),
+      );
       const result = await volcano.storage.from('files').remove('limited');
       expect(result.error).toMatchObject({ status: 429, code: 'rate_limited', retryAfter: 7 });
-      expect(result.data.deleted).toEqual([]);
+      expect(result.data?.deleted).toEqual([]);
     });
 
     it('should delete a single file successfully', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ message: 'deleted' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ message: 'deleted' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').remove('old-file.txt');
 
       expect(error).toBeNull();
-      expect(data.deleted).toContain('old-file.txt');
-      expect(fetch).toHaveBeenCalledWith(
+      expect(data?.deleted).toContain('old-file.txt');
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files/old-file.txt',
         expect.objectContaining({ method: 'DELETE' }),
       );
     });
 
     it('should delete multiple files successfully', async () => {
-      global.fetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      fetchMock
+        .mockResolvedValueOnce(responseFixture({ ok: true, json: () => Promise.resolve({}) }))
+        .mockResolvedValueOnce(responseFixture({ ok: true, json: () => Promise.resolve({}) }))
+        .mockResolvedValueOnce(responseFixture({ ok: true, json: () => Promise.resolve({}) }));
 
       const { data, error } = await volcano.storage
         .from('files')
         .remove(['file1.txt', 'file2.txt', 'file3.txt']);
 
       expect(error).toBeNull();
-      expect(data.deleted).toHaveLength(3);
-      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(data?.deleted).toHaveLength(3);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it('should return partial error when some files fail to delete', async () => {
-      global.fetch
-        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      fetchMock
+        .mockResolvedValueOnce(
+          responseFixture({ ok: false, json: () => Promise.resolve({ error: 'Not found' }) }),
+        )
+        .mockResolvedValueOnce(responseFixture({ ok: true, json: () => Promise.resolve({}) }));
 
       const { data, error } = await volcano.storage
         .from('files')
         .remove(['missing.txt', 'exists.txt']);
 
-      expect(data.deleted).toContain('exists.txt');
-      expect(error.message).toContain('Failed to delete 1 file(s)');
-      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(data?.deleted).toContain('exists.txt');
+      expect(error?.message).toContain('Failed to delete 1 file(s)');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage.from('files').remove('test.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
   });
 
@@ -573,10 +745,12 @@ describe('Storage', () => {
         name: 'new-location/file.txt',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('files')
@@ -584,7 +758,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files/move',
         expect.objectContaining({
           method: 'POST',
@@ -594,24 +768,26 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage.from('files').move('from.txt', 'to.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error on move failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'Source not found' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'Source not found' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').move('missing.txt', 'dest.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('Source not found');
+      expect(error?.message).toBe('Source not found');
     });
   });
 
@@ -622,10 +798,12 @@ describe('Storage', () => {
         name: 'copy/file.txt',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('files')
@@ -633,7 +811,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files/copy',
         expect.objectContaining({
           method: 'POST',
@@ -643,38 +821,34 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage.from('files').copy('from.txt', 'to.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error on copy failure', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'Access denied' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'Access denied' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage.from('files').copy('protected.txt', 'copy.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('Access denied');
+      expect(error?.message).toBe('Access denied');
     });
   });
 
   describe('getPublicUrl()', () => {
     // Create a valid JWT-like anon key with project_id
-    const validAnonKey =
-      'ak-' +
-      btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })) +
-      '.' +
-      btoa(JSON.stringify({ project_id: 'proj-123-456' })) +
-      '.' +
-      btoa('signature');
+    const validAnonKey = `ak-${btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))}.${btoa(JSON.stringify({ project_id: 'proj-123-456' }))}.${btoa('signature')}`;
 
-    let volcanoWithValidKey;
+    let volcanoWithValidKey: VolcanoAuth;
 
     beforeEach(() => {
       volcanoWithValidKey = new VolcanoAuth({
@@ -689,7 +863,7 @@ describe('Storage', () => {
         .getPublicUrl('images/photo.jpg');
 
       expect(error).toBeNull();
-      expect(data.publicUrl).toBe(
+      expect(data?.publicUrl).toBe(
         'https://api.test.com/public/proj-123-456/public-bucket/images/photo.jpg',
       );
     });
@@ -700,7 +874,7 @@ describe('Storage', () => {
         .getPublicUrl('folder/file name.txt');
 
       expect(error).toBeNull();
-      expect(data.publicUrl).toBe(
+      expect(data?.publicUrl).toBe(
         'https://api.test.com/public/proj-123-456/files/folder/file%20name.txt',
       );
     });
@@ -711,7 +885,7 @@ describe('Storage', () => {
         .getPublicUrl('screenshots/Screenshot 2026-01-21 at 10.17.07 PM.png');
 
       expect(error).toBeNull();
-      expect(data.publicUrl).toBe(
+      expect(data?.publicUrl).toBe(
         'https://api.test.com/public/proj-123-456/user-files/screenshots/Screenshot%202026-01-21%20at%2010.17.07%20PM.png',
       );
     });
@@ -722,7 +896,7 @@ describe('Storage', () => {
         .getPublicUrl('file.txt');
 
       expect(error).toBeNull();
-      expect(data.publicUrl).toBe('https://api.test.com/public/proj-123-456/my%20bucket/file.txt');
+      expect(data?.publicUrl).toBe('https://api.test.com/public/proj-123-456/my%20bucket/file.txt');
     });
 
     it('should return error for invalid anon key format', () => {
@@ -734,7 +908,7 @@ describe('Storage', () => {
       const { data, error } = volcanoInvalid.storage.from('bucket').getPublicUrl('file.txt');
 
       expect(data).toBeNull();
-      expect(error.message).toContain('Invalid anon key format');
+      expect(error?.message).toContain('Invalid anon key format');
     });
 
     it('should extract project ID correctly from JWT payload', () => {
@@ -743,26 +917,29 @@ describe('Storage', () => {
         .getPublicUrl('user/profile.png');
 
       expect(error).toBeNull();
-      expect(data.publicUrl).toContain('/public/proj-123-456/');
+      expect(data?.publicUrl).toContain('/public/proj-123-456/');
     });
 
     it.each([
       ['an empty path', ''],
       ['multiple paths', ['first.txt', 'second.txt']],
     ])('should reject %s', (_description, path) => {
-      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+      const bucket = volcanoWithValidKey.storage.from('avatars');
+      const result: unknown = Reflect.apply(bucket.getPublicUrl.bind(bucket), undefined, [path]);
 
-      expect(data).toBeNull();
-      expect(error.message).toBe('Storage path must be a non-empty string');
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        data: null,
+        error: { message: 'Storage path must be a non-empty string' },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it.each(['.', 'avatars/../secret.txt'])('should reject dot segment path %s', (path) => {
       const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('Public URL paths cannot contain dot segments');
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(error?.message).toBe('Public URL paths cannot contain dot segments');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 
@@ -774,10 +951,12 @@ describe('Storage', () => {
         is_public: true,
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('files')
@@ -785,7 +964,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/files/file.txt/visibility',
         expect.objectContaining({
           method: 'PATCH',
@@ -801,42 +980,46 @@ describe('Storage', () => {
         is_public: false,
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('files')
         .updateVisibility('file.txt', false);
 
       expect(error).toBeNull();
-      expect(data.is_public).toBe(false);
+      expect(data?.is_public).toBe(false);
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage
         .from('files')
         .updateVisibility('file.txt', true);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
 
     it('should return error when not the owner', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'only the file owner can change visibility' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'only the file owner can change visibility' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('files')
         .updateVisibility('someone-elses-file.txt', true);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('only the file owner can change visibility');
+      expect(error?.message).toBe('only the file owner can change visibility');
     });
   });
 
@@ -853,10 +1036,12 @@ describe('Storage', () => {
         expires_at: '2026-01-30T00:00:00Z',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('uploads')
@@ -867,7 +1052,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/uploads/large-video.mp4',
         expect.objectContaining({
           method: 'POST',
@@ -880,23 +1065,25 @@ describe('Storage', () => {
     });
 
     it('should return error when totalSize is not provided', async () => {
-      const { data, error } = await volcano.storage
-        .from('uploads')
-        .createUploadSession('file.mp4', {});
+      const bucket = volcano.storage.from('uploads');
+      const result: unknown = await Reflect.apply(
+        bucket.createUploadSession.bind(bucket),
+        undefined,
+        ['file.mp4', {}],
+      );
 
-      expect(data).toBeNull();
-      expect(error.message).toBe('totalSize is required');
+      expect(result).toMatchObject({ data: null, error: { message: 'totalSize is required' } });
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage
         .from('uploads')
         .createUploadSession('file.mp4', { totalSize: 1000 });
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
   });
 
@@ -908,10 +1095,12 @@ describe('Storage', () => {
         size: 25 * 1024 * 1024,
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const partData = new ArrayBuffer(1024);
       const { data, error } = await volcano.storage
@@ -920,7 +1109,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/uploads/large-video.mp4',
         expect.objectContaining({
           method: 'PUT',
@@ -934,14 +1123,14 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { data, error } = await volcano.storage
         .from('uploads')
         .uploadPart('file.mp4', 'sess-123', 1, new ArrayBuffer(100));
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
   });
 
@@ -954,10 +1143,12 @@ describe('Storage', () => {
         mime_type: 'video/mp4',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('uploads')
@@ -965,7 +1156,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/uploads/large-video.mp4',
         expect.objectContaining({
           method: 'POST',
@@ -978,17 +1169,19 @@ describe('Storage', () => {
     });
 
     it('should return error when not all parts uploaded', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'not all parts uploaded' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'not all parts uploaded' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('uploads')
         .completeUploadSession('file.mp4', 'sess-123');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('not all parts uploaded');
+      expect(error?.message).toBe('not all parts uploaded');
     });
   });
 
@@ -1012,10 +1205,12 @@ describe('Storage', () => {
         created_at: '2026-01-23T00:00:00Z',
       };
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('uploads')
@@ -1023,7 +1218,7 @@ describe('Storage', () => {
 
       expect(error).toBeNull();
       expect(data).toEqual(mockResponse);
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/uploads/large-video.mp4',
         expect.objectContaining({
           method: 'GET',
@@ -1035,33 +1230,37 @@ describe('Storage', () => {
     });
 
     it('should return error for non-existent session', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'session not found' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'session not found' }),
+        }),
+      );
 
       const { data, error } = await volcano.storage
         .from('uploads')
         .getUploadSession('file.mp4', 'invalid-session');
 
       expect(data).toBeNull();
-      expect(error.message).toBe('session not found');
+      expect(error?.message).toBe('session not found');
     });
   });
 
   describe('abortUploadSession()', () => {
     it('should abort an upload session successfully', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ message: 'session aborted' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ message: 'session aborted' }),
+        }),
+      );
 
       const { error } = await volcano.storage
         .from('uploads')
         .abortUploadSession('large-video.mp4', 'sess-123');
 
       expect(error).toBeNull();
-      expect(fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.test.com/storage/uploads/large-video.mp4',
         expect.objectContaining({
           method: 'DELETE',
@@ -1073,93 +1272,107 @@ describe('Storage', () => {
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const { error } = await volcano.storage
         .from('uploads')
         .abortUploadSession('file.mp4', 'sess-123');
 
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
   });
 
   describe('uploadResumable()', () => {
     it('should upload a file in parts successfully', async () => {
       // Mock create session
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: 'sess-123',
-            total_parts: 2,
-            part_size: 1024,
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              session_id: 'sess-123',
+              total_parts: 2,
+              part_size: 1024,
+            }),
+        }),
+      );
 
       // Mock upload part 1
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ part_number: 1, etag: 'etag1' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ part_number: 1, etag: 'etag1' }),
+        }),
+      );
 
       // Mock upload part 2
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ part_number: 2, etag: 'etag2' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({ part_number: 2, etag: 'etag2' }),
+        }),
+      );
 
       // Mock complete session
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            id: 'obj-123',
-            name: 'file.bin',
-            size: 2048,
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: 'obj-123',
+              name: 'file.bin',
+              size: 2048,
+            }),
+        }),
+      );
 
       const file = new Blob([new ArrayBuffer(2048)], { type: 'application/octet-stream' });
-      const progressCalls = [];
+      const progressCalls: { uploaded: number; total: number }[] = [];
 
       const { data, error } = await volcano.storage
         .from('uploads')
         .uploadResumable('file.bin', file, {
           partSize: 1024,
-          onProgress: (uploaded, total) => {
+          onProgress(uploaded, total) {
             progressCalls.push({ uploaded, total });
           },
         });
 
       expect(error).toBeNull();
-      expect(data.name).toBe('file.bin');
-      expect(fetch).toHaveBeenCalledTimes(4); // create + 2 parts + complete
+      expect(data).toMatchObject({ name: 'file.bin' });
+      expect(fetchMock).toHaveBeenCalledTimes(4); // create + 2 parts + complete
       expect(progressCalls).toHaveLength(2);
     });
 
     it('should abort and return error when part upload fails', async () => {
       // Mock create session
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: 'sess-123',
-            total_parts: 2,
-            part_size: 1024,
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              session_id: 'sess-123',
+              total_parts: 2,
+              part_size: 1024,
+            }),
+        }),
+      );
 
       // Mock upload part 1 failure
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'upload failed' }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: false,
+          json: () => Promise.resolve({ error: 'upload failed' }),
+        }),
+      );
 
       // Mock abort
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({
+          ok: true,
+          json: () => Promise.resolve({}),
+        }),
+      );
 
       const file = new Blob([new ArrayBuffer(2048)]);
 
@@ -1168,11 +1381,11 @@ describe('Storage', () => {
         .uploadResumable('file.bin', file, { partSize: 1024 });
 
       expect(data).toBeNull();
-      expect(error.message).toBe('upload failed');
+      expect(error?.message).toBe('upload failed');
     });
 
     it('should return error when not authenticated', async () => {
-      volcano.accessToken = null;
+      volcano = new VolcanoAuth(config);
 
       const file = new Blob([new ArrayBuffer(1024)]);
       const { data, error } = await volcano.storage
@@ -1180,7 +1393,7 @@ describe('Storage', () => {
         .uploadResumable('file.bin', file);
 
       expect(data).toBeNull();
-      expect(error.message).toBe('No active session. Please sign in first.');
+      expect(error?.message).toBe('No active session. Please sign in first.');
     });
   });
 });
