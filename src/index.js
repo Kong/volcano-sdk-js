@@ -1,10 +1,33 @@
 import { apiRequestError } from './api-errors.ts';
 import {
+  generateAuthStateNonce,
+  getStorageItem,
+  hasOAuthCallbackInUrl,
+  hasSessionInUrl,
+  OAUTH_RESPONSE_QUERY_KEYS,
+  peekAuthRedirectUrl,
+  peekAuthState,
+  removeOAuthResponseParams,
+  removeStorageItem,
+  setStorageItem,
+  storeAuthState,
+  stripAuthHashFromUrl,
+  stripOAuthQueryFromUrl,
+  takeAuthRedirectUrl,
+  takeAuthState,
+} from './auth-browser.ts';
+import {
   sessionIdsEqual,
   validateRefreshSource,
   validateSessionContinuation,
 } from './auth-continuity.ts';
 import { fetchWithAuthRetry } from './auth-fetch-retry.ts';
+import {
+  completeOAuthExchange,
+  consumeOAuthCodeFromUrl,
+  consumeSessionFromUrl,
+  replaceSessionFromUrl,
+} from './auth-redirect.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { MutationBuilder } from './database-mutations.ts';
@@ -89,34 +112,6 @@ const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
 const DEFAULT_SESSIONS_LIMIT = 20;
 const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
-// sessionStorage key holding the one-time RP nonce that binds a managed/OAuth
-// redirect session to the flow this client initiated (login-CSRF defense).
-const STORAGE_KEY_AUTH_STATE = 'volcano_auth_state';
-const STORAGE_KEY_AUTH_REDIRECT = 'volcano_auth_redirect_url';
-
-// Fragment params produced by the managed hosted-auth / OAuth redirect hand-off.
-// Used to decide when the URL fragment is safe to strip after adopting a session:
-// the fragment is only cleared when every key is one of these, so an app's own
-// hash routing is never clobbered. Includes the standard OAuth redirect keys
-// (state/error) so tokens are still removed when they ride alongside them.
-const AUTH_HASH_KEYS = new Set([
-  'access_token',
-  'refresh_token',
-  'token_type',
-  'expires_in',
-  'state',
-  'error',
-  'error_description',
-]);
-const OAUTH_RESPONSE_QUERY_KEYS = new Set([
-  'code',
-  'state',
-  'error',
-  'error_description',
-  'error_uri',
-  'iss',
-  'vh_state',
-]);
 const DEFAULT_FUNCTION_NEGATIVE_RESOLVE_TTL_SECONDS = 30;
 // Present only once the platform has dispatched to the function. Its absence on
 // a 404 is what says the id we cached no longer names anything, as opposed to
@@ -2095,14 +2090,18 @@ class VolcanoAuth {
 
     this._oauthExchangeError = null;
     this.accessToken = data.access_token;
-    this.refreshToken = data.refresh_token;
+    this.refreshToken = data.refresh_token ?? null;
     this.currentUser = data.user;
     this._sessionGeneration += 1;
     this._sessionOperations = new AuthSessionOperations(data);
     this._pendingUrlAuthNotify = false;
 
     this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    if (this.refreshToken) {
+      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
+    } else {
+      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    }
 
     this._notifyAuthCallbacks(this.currentUser);
     return true;
@@ -2173,107 +2172,23 @@ class VolcanoAuth {
   // ========================================================================
 
   _hasOAuthCallbackInUrl() {
-    const storedRedirectURL = this._peekAuthRedirectURL();
-    if (!isBrowser() || !this._peekAuthState() || !storedRedirectURL) {
-      return false;
-    }
-    try {
-      const callbackURL = new URL(window.location.href);
-      const params = callbackURL.searchParams;
-      if (!params.get('state') || (!params.get('code') && !params.get('error'))) {
-        return false;
-      }
-      const expectedURL = new URL(storedRedirectURL);
-      // Mutating both URLSearchParams instances normalizes equivalent browser
-      // query serialization, such as `%20` and `+`, before exact comparison.
-      this._removeOAuthResponseParams(callbackURL);
-      this._removeOAuthResponseParams(expectedURL);
-      return callbackURL.toString() === expectedURL.toString();
-    } catch {
-      return false;
-    }
+    return hasOAuthCallbackInUrl(this._peekAuthRedirectURL(), Boolean(this._peekAuthState()));
   }
 
-  async _consumeOAuthCodeFromUrl() {
-    let callbackURL;
-    try {
-      callbackURL = new URL(window.location.href);
-    } catch {
-      return false;
-    }
-    const code = callbackURL.searchParams.get('code') || '';
-    const providerError = callbackURL.searchParams.get('error') || '';
-    const providerErrorDescription = callbackURL.searchParams.get('error_description') || '';
-    const urlState = callbackURL.searchParams.get('state') || '';
-    if ((!code && !providerError) || !urlState) {
-      return false;
-    }
-
-    const expectedState = this._takeAuthState();
-    const storedRedirectURL = this._takeAuthRedirectURL();
-    this._stripOAuthQueryFromUrl(callbackURL);
-    if (!expectedState || urlState !== expectedState) {
-      this._oauthExchangeError = new Error('OAuth callback state did not match');
-      return false;
-    }
-    if (providerError) {
-      this._oauthExchangeError = new Error(
-        providerErrorDescription || `OAuth provider rejected sign-in: ${providerError}`,
-      );
-      return false;
-    }
-    const redirectURL =
-      storedRedirectURL || `${callbackURL.origin}${callbackURL.pathname}${callbackURL.search}`;
-    const expectedGeneration = this._sessionGeneration;
-    const result = await this._anonFetch('/auth/oauth/exchange', {
-      method: 'POST',
-      body: JSON.stringify({ code, redirect_url: redirectURL }),
-    });
-    if (expectedGeneration !== this._sessionGeneration) {
-      return false;
-    }
-    if (!result.ok) {
-      this._oauthExchangeError = result.error || new Error('OAuth code exchange failed');
-      return false;
-    }
-    return this._setSession(result.data, expectedGeneration);
+  _consumeOAuthCodeFromUrl() {
+    return consumeOAuthCodeFromUrl(this);
   }
 
-  async _completeOAuthExchange() {
-    if (!this._oauthExchangePromise) {
-      return;
-    }
-    const promise = this._oauthExchangePromise;
-    try {
-      await promise;
-    } catch (error) {
-      this._oauthExchangeError =
-        error instanceof Error ? error : new Error('OAuth code exchange failed');
-    } finally {
-      if (this._oauthExchangePromise === promise) {
-        this._oauthExchangePromise = null;
-      }
-    }
+  _completeOAuthExchange() {
+    return completeOAuthExchange(this);
   }
 
   _stripOAuthQueryFromUrl(callbackURL) {
-    try {
-      this._removeOAuthResponseParams(callbackURL, false);
-      const cleanURL =
-        (callbackURL.pathname || '/') + callbackURL.search + (callbackURL.hash || '');
-      window.history.replaceState(window.history.state, '', cleanURL);
-    } catch {
-      // best-effort; leaving a one-time code in place is non-fatal
-    }
+    stripOAuthQueryFromUrl(callbackURL);
   }
 
   _removeOAuthResponseParams(callbackURL, clearHash = true) {
-    for (const key of OAUTH_RESPONSE_QUERY_KEYS) {
-      callbackURL.searchParams.delete(key);
-    }
-    if (clearHash) {
-      callbackURL.hash = '';
-    }
+    removeOAuthResponseParams(callbackURL, clearHash);
   }
 
   /**
@@ -2282,15 +2197,7 @@ class VolcanoAuth {
    * Cheap peek that does not mutate state.
    */
   _hasSessionInUrl() {
-    if (!isBrowser()) {
-      return false;
-    }
-    try {
-      const hash = (window.location && window.location.hash) || '';
-      return hash.includes('access_token');
-    } catch {
-      return false;
-    }
+    return hasSessionInUrl();
   }
 
   /**
@@ -2302,69 +2209,11 @@ class VolcanoAuth {
    * the URL. Returns true if a session was adopted. Browser-only and idempotent.
    */
   _consumeSessionFromUrl() {
-    // Adopt at most once per client. When the fragment mixes tokens with app
-    // params we deliberately leave the hash in place, so without this guard
-    // every later getUser() would re-adopt and re-fire auth callbacks.
-    if (this._urlSessionConsumed) {
-      return false;
-    }
-    if (!this._hasSessionInUrl()) {
-      return false;
-    }
-
-    let params;
-    try {
-      params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
-    } catch {
-      return false;
-    }
-
-    const accessToken = params.get('access_token');
-    if (!accessToken) {
-      return false;
-    }
-
-    // Login-CSRF / session-fixation defense: only adopt a redirect session that
-    // this client initiated. signInWithHostedAuth()/signInWithOAuth() store a
-    // one-time nonce before redirecting; the hosted page and OAuth callback echo
-    // it back as `state`. Reject (and scrub) any fragment whose `state` does not
-    // match the stored nonce — e.g. an attacker-crafted #access_token link.
-    const expectedNonce = this._takeAuthState();
-    this._takeAuthRedirectURL();
-    const urlState = params.get('state') || '';
-    if (!expectedNonce || urlState === '' || urlState !== expectedNonce) {
-      // Unsolicited or mismatched session: do not authenticate. Scrub the tokens
-      // from the URL so they don't linger, and mark as handled so we don't loop.
-      this._urlSessionConsumed = true;
-      this._stripAuthHashFromUrl(params);
-      return false;
-    }
-
-    const refreshToken = params.get('refresh_token');
-
-    // The redirect hand-off is a complete session and fully replaces any
-    // previously stored one. Adopt its refresh token verbatim — or clear a
-    // stale stored token when the hand-off carries none — so we never pair this
-    // access token with a different session's refresh token (which could
-    // otherwise refresh into the wrong account).
-    this._replaceSessionFromUrl(accessToken, refreshToken);
-    this._urlSessionConsumed = true;
-    this._stripAuthHashFromUrl(params);
-    return true;
+    return consumeSessionFromUrl(this);
   }
 
   _replaceSessionFromUrl(accessToken, refreshToken) {
-    this.accessToken = accessToken;
-    this.refreshToken = refreshToken || null;
-    this.currentUser = null;
-    this._sessionGeneration += 1;
-    this._sessionOperations = new AuthSessionOperations();
-    this._setStorageItem(STORAGE_KEY_ACCESS_TOKEN, this.accessToken);
-    if (this.refreshToken) {
-      this._setStorageItem(STORAGE_KEY_REFRESH_TOKEN, this.refreshToken);
-    } else {
-      this._removeStorageItem(STORAGE_KEY_REFRESH_TOKEN);
-    }
+    replaceSessionFromUrl(this, accessToken, refreshToken);
   }
 
   /**
@@ -2373,20 +2222,7 @@ class VolcanoAuth {
    * exclusively the hand-off params, to avoid clobbering app hash routing.
    */
   _stripAuthHashFromUrl(params) {
-    try {
-      const onlyAuthParams = Array.from(params.keys()).every((key) => AUTH_HASH_KEYS.has(key));
-      if (!onlyAuthParams) {
-        return;
-      }
-      if (!window.history || typeof window.history.replaceState !== 'function') {
-        return;
-      }
-      const loc = window.location;
-      const cleanUrl = (loc.pathname || '/') + (loc.search || '');
-      window.history.replaceState(window.history.state, '', cleanUrl);
-    } catch {
-      // best-effort; leaving the fragment in place is non-fatal
-    }
+    stripAuthHashFromUrl(params);
   }
 
   // ========================================================================
@@ -2398,85 +2234,30 @@ class VolcanoAuth {
   // Web Crypto (browsers and Node >= 20 provide it) rather than fall back to a
   // predictable PRNG.
   _generateAuthStateNonce() {
-    const cryptoObj =
-      (isBrowser() && window.crypto) ||
-      (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
-    if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') {
-      throw new Error(
-        'A Web Crypto implementation (crypto.getRandomValues) is required to start a hosted-auth/OAuth flow.',
-      );
-    }
-    const bytes = new Uint8Array(16);
-    cryptoObj.getRandomValues(bytes);
-    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return generateAuthStateNonce();
   }
 
   // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
   // survives the navigation away to the hosted page and back to this origin.
   _storeAuthState(nonce, redirectURL = '') {
-    if (!isBrowser()) {
-      return;
-    }
-    try {
-      window.sessionStorage.setItem(STORAGE_KEY_AUTH_STATE, nonce);
-      if (redirectURL) {
-        window.sessionStorage.setItem(STORAGE_KEY_AUTH_REDIRECT, redirectURL);
-      } else {
-        window.sessionStorage.removeItem(STORAGE_KEY_AUTH_REDIRECT);
-      }
-    } catch {
-      // sessionStorage may be unavailable (privacy mode); the redirect will then
-      // be rejected on return, which fails safe.
-    }
+    storeAuthState(nonce, redirectURL);
   }
 
   // Read and clear the stored nonce (one-time use).
   _takeAuthState() {
-    if (!isBrowser()) {
-      return null;
-    }
-    try {
-      const nonce = window.sessionStorage.getItem(STORAGE_KEY_AUTH_STATE);
-      window.sessionStorage.removeItem(STORAGE_KEY_AUTH_STATE);
-      return nonce;
-    } catch {
-      return null;
-    }
+    return takeAuthState();
   }
 
   _peekAuthState() {
-    if (!isBrowser()) {
-      return null;
-    }
-    try {
-      return window.sessionStorage.getItem(STORAGE_KEY_AUTH_STATE);
-    } catch {
-      return null;
-    }
+    return peekAuthState();
   }
 
   _takeAuthRedirectURL() {
-    if (!isBrowser()) {
-      return null;
-    }
-    try {
-      const redirectURL = window.sessionStorage.getItem(STORAGE_KEY_AUTH_REDIRECT);
-      window.sessionStorage.removeItem(STORAGE_KEY_AUTH_REDIRECT);
-      return redirectURL;
-    } catch {
-      return null;
-    }
+    return takeAuthRedirectUrl();
   }
 
   _peekAuthRedirectURL() {
-    if (!isBrowser()) {
-      return null;
-    }
-    try {
-      return window.sessionStorage.getItem(STORAGE_KEY_AUTH_REDIRECT);
-    } catch {
-      return null;
-    }
+    return peekAuthRedirectUrl();
   }
 
   // ========================================================================
@@ -2484,34 +2265,15 @@ class VolcanoAuth {
   // ========================================================================
 
   _getStorageItem(key) {
-    if (isBrowser()) {
-      try {
-        return window.localStorage.getItem(key);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return getStorageItem(key);
   }
 
   _setStorageItem(key, value) {
-    if (isBrowser()) {
-      try {
-        window.localStorage.setItem(key, value);
-      } catch {
-        // Keep the in-memory session when browser storage is unavailable.
-      }
-    }
+    setStorageItem(key, value);
   }
 
   _removeStorageItem(key) {
-    if (isBrowser()) {
-      try {
-        window.localStorage.removeItem(key);
-      } catch {
-        // The in-memory session is already cleared.
-      }
-    }
+    removeStorageItem(key);
   }
 
   // ========================================================================

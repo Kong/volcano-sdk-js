@@ -1,5 +1,9 @@
 import { describe, expect, test } from '@jest/globals';
-import { sanitizeProvider, validateCompleteSession } from '../src/auth-validation.ts';
+import {
+  sanitizeProvider,
+  validateCompleteSession,
+  validateOAuthSession,
+} from '../src/auth-validation.ts';
 
 const credentials = { access_token: 'access', refresh_token: 'refresh' };
 const invalidObjects: readonly unknown[] = [
@@ -66,6 +70,37 @@ describe('session validation', () => {
     expect(validateCompleteSession(credentials)).toEqual(
       new TypeError('Session user must be an object'),
     );
+  });
+});
+
+describe('OAuth token response validation', () => {
+  const response = { access_token: 'access', user: { id: 'user-1' } };
+
+  test.each([response, { ...response, refresh_token: 'refresh' }])(
+    'accepts a valid token response with optional refresh credentials',
+    (value) => {
+      expect(validateOAuthSession(value)).toBeNull();
+    },
+  );
+
+  test.each([null, false, [], 'token'])('rejects non-object responses: %p', (value) => {
+    expect(validateOAuthSession(value)).toEqual(new TypeError('Session must be an object'));
+  });
+
+  test.each([undefined, '', 1])('rejects invalid access tokens: %p', (value) => {
+    expect(validateOAuthSession({ ...response, access_token: value })).toEqual(
+      new TypeError('Session access_token must be a non-empty string'),
+    );
+  });
+
+  test.each([null, '', 1])('rejects invalid supplied refresh tokens: %p', (value) => {
+    expect(validateOAuthSession({ ...response, refresh_token: value })).toEqual(
+      new TypeError('Session refresh_token must be a non-empty string'),
+    );
+  });
+
+  test.each([null, {}, { id: '' }])('rejects invalid users: %p', (value) => {
+    expect(validateOAuthSession({ ...response, user: value })).not.toBeNull();
   });
 });
 

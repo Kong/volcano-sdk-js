@@ -39,6 +39,20 @@ export function validateCompleteSession(session: unknown): TypeError | null {
   return validateCredentials(session) ?? validateUser(session['user']);
 }
 
+export function validateOAuthSession(session: unknown): TypeError | null {
+  if (!isObject(session)) {
+    return new TypeError('Session must be an object');
+  }
+  if (!isNonEmptyString(session['access_token'])) {
+    return new TypeError('Session access_token must be a non-empty string');
+  }
+  const refreshToken = session['refresh_token'];
+  if (refreshToken !== undefined && !isNonEmptyString(refreshToken)) {
+    return new TypeError('Session refresh_token must be a non-empty string');
+  }
+  return validateUser(session['user']);
+}
+
 export function assertCompleteSession(session: unknown): asserts session is CompleteSessionFields {
   const error = validateCompleteSession(session);
   if (error !== null) {
