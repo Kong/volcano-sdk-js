@@ -45,8 +45,8 @@
  */
 
 import { loadCentrifuge } from './realtime-centrifuge.ts';
-import { postgresBaseChannelFromParts, sdkChannelFromParts } from './realtime-channel-name.ts';
 import { channelFetchConfig, globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
+import { serverEventRoute } from './realtime-event-route.ts';
 import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
 import { loadWebSocket } from './realtime-websocket.ts';
 
@@ -367,19 +367,14 @@ class VolcanoRealtime {
    * We extract the type:name portion and route to the SDK channel
    */
   _handleServerPublication(ctx) {
-    const serverChannel = ctx.channel;
-
-    // Server channel format: projectId:type:name
-    // We need to extract type:name to match our SDK channel
-    const parts = serverChannel.split(':');
-    const sdkChannel = sdkChannelFromParts(parts);
-    if (sdkChannel === null) {
+    const route = serverEventRoute(ctx);
+    if (route === null) {
       // Not a valid server channel format, ignore
       return;
     }
 
     // Find the SDK channel and deliver the message
-    let channel = this._channels.get(sdkChannel);
+    let channel = this._channels.get(route.sdkChannel);
 
     // Postgres changes are delivered on a per-user channel for RLS isolation:
     // projectId:postgres:schema:table:userID. onPostgresChanges takes schema and
@@ -390,9 +385,8 @@ class VolcanoRealtime {
     // never fires. Requiring exactly 5 segments avoids over-matching anything
     // that isn't this well-defined per-user format.
     if (!channel) {
-      const postgresBaseChannel = postgresBaseChannelFromParts(parts);
-      if (postgresBaseChannel !== null) {
-        channel = this._channels.get(postgresBaseChannel);
+      if (route.postgresBaseChannel !== null) {
+        channel = this._channels.get(route.postgresBaseChannel);
       }
     }
 
@@ -405,13 +399,11 @@ class VolcanoRealtime {
    * Handle join events from server-side subscriptions
    */
   _handleServerJoin(ctx) {
-    const serverChannel = ctx.channel;
-    const parts = serverChannel.split(':');
-    const sdkChannel = sdkChannelFromParts(parts);
-    if (sdkChannel === null) {
+    const route = serverEventRoute(ctx);
+    if (route === null) {
       return;
     }
-    const channel = this._channels.get(sdkChannel);
+    const channel = this._channels.get(route.sdkChannel);
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
@@ -426,13 +418,11 @@ class VolcanoRealtime {
    * Handle leave events from server-side subscriptions
    */
   _handleServerLeave(ctx) {
-    const serverChannel = ctx.channel;
-    const parts = serverChannel.split(':');
-    const sdkChannel = sdkChannelFromParts(parts);
-    if (sdkChannel === null) {
+    const route = serverEventRoute(ctx);
+    if (route === null) {
       return;
     }
-    const channel = this._channels.get(sdkChannel);
+    const channel = this._channels.get(route.sdkChannel);
     if (channel && channel._type === 'presence' && !channel._paused) {
       // Update presence state
       if (ctx.info) {
@@ -447,13 +437,11 @@ class VolcanoRealtime {
    * Handle subscribed events - includes initial presence state
    */
   _handleServerSubscribed(ctx) {
-    const serverChannel = ctx.channel;
-    const parts = serverChannel.split(':');
-    const sdkChannel = sdkChannelFromParts(parts);
-    if (sdkChannel === null) {
+    const route = serverEventRoute(ctx);
+    if (route === null) {
       return;
     }
-    const channel = this._channels.get(sdkChannel);
+    const channel = this._channels.get(route.sdkChannel);
 
     // For presence channels, populate initial state from subscribe response
     if (channel && channel._type === 'presence' && !channel._paused && ctx.data) {
