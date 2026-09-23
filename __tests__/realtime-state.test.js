@@ -142,6 +142,45 @@ describe('realtime server state contract', () => {
     expect(onInsert).toHaveBeenCalledWith(change, expect.anything());
   });
 
+  test('routes a legacy user publication before a colliding scoped channel', () => {
+    const token = `header.${Buffer.from(
+      JSON.stringify({ project_id: 'project', sub: 'user-id' }),
+    ).toString('base64url')}.signature`;
+    const { realtime } = createRealtime({ accessToken: token });
+    const legacy = realtime.channel('public:items', { type: 'postgres' });
+    const scoped = realtime.channel('items:user-id', {
+      type: 'postgres',
+      databaseName: 'public',
+    });
+    const onLegacy = jest.fn();
+    const onScoped = jest.fn();
+    legacy.on('*', onLegacy);
+    scoped.on('*', onScoped);
+    const change = { type: 'INSERT', schema: 'public', table: 'items' };
+
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:user-id',
+      data: change,
+    });
+    expect(onLegacy).toHaveBeenCalledWith(change, expect.anything());
+    expect(onScoped).not.toHaveBeenCalled();
+
+    const scopedChange = { type: 'INSERT', schema: 'items', table: 'user-id' };
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:user-id:user-id',
+      data: scopedChange,
+    });
+    expect(onScoped).toHaveBeenCalledWith(scopedChange, expect.anything());
+    expect(onLegacy).toHaveBeenCalledTimes(1);
+
+    realtime.removeChannel('public:items', { type: 'postgres', databaseName: null });
+    realtime._handleServerPublication({
+      channel: 'project:postgres:public:items:user-id',
+      data: change,
+    });
+    expect(onScoped).toHaveBeenCalledTimes(1);
+  });
+
   test.each([
     ['service key', 'sk-project-key', 'service:key-id'],
     ['user token', userToken, 'user-uuid'],

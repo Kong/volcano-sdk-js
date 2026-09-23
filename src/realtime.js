@@ -466,30 +466,40 @@ class VolcanoRealtime {
       return;
     }
 
-    // Find the SDK channel and deliver the message
-    let channel = this._channels.get(sdkChannel);
-
     // Service keys have a two-part `service:<key-id>` identity; user tokens
-    // have a one-part identity. Resolve the suffix from the current credential
-    // before looking up a channel, since a table may be named `service`.
-    if (!channel) {
-      const serviceKey = typeof this.accessToken === 'string' && this.accessToken.startsWith('sk-');
-      if (
-        serviceKey &&
-        (parts.length === 6 || parts.length === 7) &&
-        parts[1] === 'postgres' &&
-        parts.at(-2) === 'service' &&
-        parts.at(-1) !== ''
-      ) {
-        channel = this._channels.get(parts.slice(1, -2).join(':'));
-      } else {
-        const postgresBaseChannel = postgresBaseChannelFromParts(parts);
-        if (postgresBaseChannel !== null) {
-          channel = this._channels.get(postgresBaseChannel);
-        }
-      }
+    // have a one-part identity. A recipient channel can also be the exact
+    // name of a different database-scoped channel, so resolve it first.
+    const serviceKey = typeof this.accessToken === 'string' && this.accessToken.startsWith('sk-');
+    let recipientChannel = null;
+    if (
+      serviceKey &&
+      (parts.length === 6 || parts.length === 7) &&
+      parts[1] === 'postgres' &&
+      parts.at(-2) === 'service' &&
+      parts.at(-1) !== ''
+    ) {
+      recipientChannel = parts.slice(1, -2).join(':');
+    } else if (
+      this._recoveryIdentity.kind === 'user' &&
+      parts.at(-1) === this._recoveryIdentity.subject
+    ) {
+      recipientChannel = postgresBaseChannelFromParts(parts);
     }
 
+    if (recipientChannel !== null) {
+      this._channels.get(recipientChannel)?._handlePublication(ctx);
+      return;
+    }
+
+    // Keep the exact lookup for ordinary channels and the legacy fallback for
+    // callers whose token does not expose a usable user identity.
+    let channel = this._channels.get(sdkChannel);
+    if (!channel) {
+      const postgresBaseChannel = postgresBaseChannelFromParts(parts);
+      if (postgresBaseChannel !== null) {
+        channel = this._channels.get(postgresBaseChannel);
+      }
+    }
     if (channel) {
       channel._handlePublication(ctx);
     }

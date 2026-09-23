@@ -146,6 +146,10 @@ const dbB = realtime.channel('public:posts', {
 });
 ```
 
+Postgres change callbacks stay with their matching database and table channel,
+including when a legacy single-database channel and a database-scoped channel
+share part of a channel name.
+
 When `databaseName` is absent on a channel, the selector configured with
 `realtime.setDatabaseName()` (or the `VolcanoRealtime` `databaseName` option) is
 captured when the channel is created. The selected database on a bound `volcano`
