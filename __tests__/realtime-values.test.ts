@@ -103,6 +103,7 @@ describe('untrusted realtime payloads', () => {
       code: 4,
     });
     expect(errorContext({ error: 'lost', message: 3, code: '4' })).toEqual({ error: 'lost' });
+    expect(errorContext({ message: 'outer' })).toEqual({ message: 'outer' });
     const transportFailure = { code: 7, message: 'connection refused' };
     expect(errorContext({ type: 'connect', error: transportFailure })).toEqual({
       error: transportFailure,
