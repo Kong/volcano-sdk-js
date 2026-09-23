@@ -400,6 +400,28 @@ describe('realtime server state contract', () => {
     );
   });
 
+  test('formats only nonempty postgres selectors into channel identity', () => {
+    const { realtime } = createRealtime();
+    expect(realtime._formatChannelName('public:items', 'postgres', null)).toBe(
+      'postgres:public:items',
+    );
+    expect(realtime._formatChannelName('public:items', 'postgres', '')).toBe(
+      'postgres:public:items',
+    );
+    expect(realtime._formatChannelName('public:items', 'postgres', 'app')).toBe(
+      'postgres:app:public:items',
+    );
+    expect(realtime._formatChannelName('room', 'presence', 'app')).toBe('presence:room');
+  });
+
+  test('does not attach a configured database selector to a broadcast transport', async () => {
+    const { realtime, client } = createRealtime({ databaseName: 'app' });
+    const channel = realtime.channel('room');
+    await channel.subscribe();
+    expect(channel._databaseName).toBeNull();
+    expect(client.newSubscription).toHaveBeenCalledWith('broadcast:room', { joinLeave: false });
+  });
+
   test('keeps no-selector postgres channels on the legacy wire identity', async () => {
     const { realtime, client } = createRealtime();
 
@@ -649,6 +671,48 @@ describe('realtime server state contract', () => {
     });
     expect(live).toEqual(initial);
     expect(transportInfo).not.toHaveProperty('data');
+  });
+
+  test('emits named join and leave events for server presence changes', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    const onJoin = jest.fn();
+    const onLeave = jest.fn();
+    channel.on('join', onJoin);
+    channel.on('leave', onLeave);
+    await channel.subscribe();
+
+    const info = { client: 'remote-client', chanInfo: { status: 'working' } };
+    realtime._handleServerJoin({ channel: 'project:presence:lobby', info });
+    realtime._handleServerLeave({ channel: 'project:presence:lobby', info });
+
+    expect(onJoin).toHaveBeenCalledWith(
+      {
+        client: 'remote-client',
+        chanInfo: { status: 'working' },
+        data: { status: 'working' },
+      },
+      undefined,
+    );
+    expect(onLeave).toHaveBeenCalledWith(
+      {
+        client: 'remote-client',
+        chanInfo: { status: 'working' },
+        data: { status: 'working' },
+      },
+      undefined,
+    );
+  });
+
+  test('ignores a malformed leave client when retaining other presence entries', async () => {
+    const { realtime } = createRealtime();
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    channel._presenceState.undefined = { client: 'undefined' };
+
+    realtime._handleServerLeave({ channel: 'project:presence:lobby', info: {} });
+
+    expect(channel._presenceState.undefined).toEqual({ client: 'undefined' });
   });
 
   test('resends the current tracked state after resubscribe', async () => {
