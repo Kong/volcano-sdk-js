@@ -231,6 +231,39 @@ describe('durable.get / durable.list / durable.stop', () => {
     expect(status).toBeNull();
     expect(error?.message).toBe('Failed to stop durable execution');
   });
+
+  test('keeps malformed transport responses inside the durable result envelope', async () => {
+    const getDurableExecution = jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValueOnce({ data: execution, status: 'not-a-status' })
+      .mockResolvedValueOnce({ data: execution })
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => Promise.resolve())
+      .mockImplementationOnce(() => rejectWithForeignValue({ status: 'not-a-status' }));
+    const options = {
+      apiUrl: 'https://api.test.com',
+      anonKey: 'ak-durable',
+      accessToken: 'owner-token',
+      transportFactory: () => ({ getDurableExecution }),
+    };
+    const volcano = new VolcanoClient(options);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const malformed = await volcano.durable.get('proj-1', 'order-pipeline', 'exec-1');
+      expect(malformed).toMatchObject({
+        data: null,
+        status: null,
+        error: { message: 'Failed to read durable execution' },
+      });
+    }
+    const rejected = await volcano.durable.get('proj-1', 'order-pipeline', 'exec-1');
+    expect(rejected).toMatchObject({
+      data: null,
+      status: null,
+      error: { message: 'Failed to read durable execution' },
+    });
+    expect(rejected.error?.cause).toEqual({ status: 'not-a-status' });
+  });
 });
 
 // The transport tests above settle the credential and the validation; the route

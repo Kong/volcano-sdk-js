@@ -37,7 +37,7 @@ import {
 import { sanitizeProvider, validateCompleteSession } from './auth-validation.ts';
 import { MutationBuilder } from './database-mutations.ts';
 import { QueryBuilder } from './database-query.ts';
-import { durablePathSegments } from './durable-paths.ts';
+import { DurableFacade } from './durable-facade.ts';
 import {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
@@ -125,7 +125,6 @@ const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 // The idempotency header's documented limit. Checked here so a name that is too
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
-const MAX_EXECUTION_NAME_LENGTH = 255;
 const GENERATED_TRANSPORT = {
   acquireProjectLock,
   authSignin,
@@ -192,6 +191,7 @@ class VolcanoAuth {
     this._oauthExchangeError = null;
     this._functionResolveState = getSharedFunctionResolveState();
     this._transport = (config.transportFactory || (() => GENERATED_TRANSPORT))(this);
+    this._durableFacade = new DurableFacade(this);
 
     // Server-side use: Allow passing accessToken directly (e.g., in Lambda functions)
     if (config.accessToken) {
@@ -1714,201 +1714,20 @@ class VolcanoAuth {
   // Durable Executions
   // ========================================================================
 
-  /**
-   * Starts a durable execution of a durable function and returns its handle.
-   *
-   * The durable counterpart of `functions.invoke`, and the only durable
-   * operation an application credential may perform: reading a result or
-   * stopping an execution is owner-scoped, because an anon key is shared by
-   * everyone who loads the page and an execution is addressed by id alone. A
-   * durable function that has to report back writes what it produced somewhere
-   * the app can read; a backend holding the project's token follows it with
-   * `durable.get`.
-   */
-  async startDurableExecution(functionName, input = {}, options = {}) {
-    // Through the same helper as the owner-scoped reads, so a later tightening
-    // of the segment rule reaches the start too.
-    const { segments, error: segmentError } = durablePathSegments({ functionName });
-    if (segmentError) {
-      return { data: null, status: null, error: segmentError };
-    }
-
-    const executionName = options.executionName;
-    if (
-      executionName !== undefined &&
-      (typeof executionName !== 'string' || !executionName.trim())
-    ) {
-      return {
-        data: null,
-        status: null,
-        error: new Error('executionName must be a non-empty string when provided'),
-      };
-    }
-    // The name the platform sees is the trimmed one, so the limit is checked
-    // against that rather than against what the caller passed.
-    if (executionName !== undefined && executionName.trim().length > MAX_EXECUTION_NAME_LENGTH) {
-      return {
-        data: null,
-        status: null,
-        error: new Error(`executionName must be at most ${MAX_EXECUTION_NAME_LENGTH} characters`),
-      };
-    }
-
-    await this._completeOAuthExchange();
-    const context = this._captureAuthContext();
-    // Same credential rule as an invoke: a signed-in session speaks for its
-    // user, otherwise the key the client was built with (anon in a browser, a
-    // service key on a server).
-    const useAnonKey = !context.accessToken;
-
-    const headers = executionName
-      ? { 'X-Volcano-Execution-Name': executionName.trim() }
-      : undefined;
-
-    return this._durableResult('Failed to start durable execution', () =>
-      this._transport.startDurableExecutionFromApplication(
-        segments.functionName,
-        input,
-        this._generatedOptions(useAnonKey ? 'anon' : 'session', headers),
-      ),
-    );
+  startDurableExecution(functionName, input = {}, options = {}) {
+    return this._durableFacade.start(functionName, input, options);
   }
 
-  /**
-   * Reads a durable execution, including its `result` once it has succeeded.
-   * This is how a caller finds out how a started execution went.
-   *
-   * Owner-scoped, so it takes the project id and needs the project's token: an
-   * execution is addressed by its id alone, and an anon key is held by everyone
-   * who loads the page. Poll it from your backend, or use the CLI.
-   *
-   * @param {string} projectId
-   * @param {string} functionName - Durable function name, or its id.
-   * @param {string} executionId
-   */
-  async getDurableExecution(projectId, functionName, executionId) {
-    const { segments, error } = durablePathSegments({ projectId, functionName, executionId });
-    if (error) {
-      return { data: null, status: null, error };
-    }
-    const sessionError = await this._durableOwnerSession();
-    if (sessionError) {
-      return { data: null, status: null, error: sessionError };
-    }
-    return this._durableResult('Failed to read durable execution', () =>
-      this._transport.getDurableExecution(
-        segments.projectId,
-        segments.functionName,
-        segments.executionId,
-        this._generatedOptions('session'),
-      ),
-    );
+  getDurableExecution(projectId, functionName, executionId) {
+    return this._durableFacade.get(projectId, functionName, executionId);
   }
 
-  /**
-   * Lists a durable function's executions, most recent first.
-   *
-   * Each entry carries the status the platform last observed rather than a live
-   * one; read a single execution for that. Owner-scoped, like
-   * `durable.get`.
-   *
-   * @param {string} projectId
-   * @param {string} functionName - Durable function name, or its id.
-   * @param {object} [options]
-   * @param {string} [options.status] - Only executions in this status.
-   * @param {number} [options.page]
-   * @param {number} [options.limit]
-   */
-  async listDurableExecutions(projectId, functionName, options = {}) {
-    const { segments, error } = durablePathSegments({ projectId, functionName });
-    if (error) {
-      return { data: null, status: null, error };
-    }
-    const sessionError = await this._durableOwnerSession();
-    if (sessionError) {
-      return { data: null, status: null, error: sessionError };
-    }
-    const params = {};
-    for (const field of ['status', 'page', 'limit']) {
-      if (options[field] !== undefined) {
-        params[field] = options[field];
-      }
-    }
-    return this._durableResult('Failed to list durable executions', () =>
-      this._transport.listDurableExecutions(
-        segments.projectId,
-        segments.functionName,
-        params,
-        this._generatedOptions('session'),
-      ),
-    );
+  listDurableExecutions(projectId, functionName, options = {}) {
+    return this._durableFacade.list(projectId, functionName, options);
   }
 
-  /**
-   * Asks a running execution to stop. Accepted rather than awaited: what
-   * resolves here is the execution read back after asking, and it often still
-   * says `running`, so poll `durable.get` to see it reach `stopped`. Completed
-   * steps are not undone.
-   *
-   * Owner-scoped, like `durable.get`. Repeating a stop is safe — an execution
-   * that has already finished reports the state it is in.
-   *
-   * @param {string} projectId
-   * @param {string} functionName - Durable function name, or its id.
-   * @param {string} executionId
-   */
-  async stopDurableExecution(projectId, functionName, executionId) {
-    const { segments, error } = durablePathSegments({ projectId, functionName, executionId });
-    if (error) {
-      return { data: null, status: null, error };
-    }
-    const sessionError = await this._durableOwnerSession();
-    if (sessionError) {
-      return { data: null, status: null, error: sessionError };
-    }
-    return this._durableResult('Failed to stop durable execution', () =>
-      this._transport.stopDurableExecution(
-        segments.projectId,
-        segments.functionName,
-        segments.executionId,
-        this._generatedOptions('session'),
-      ),
-    );
-  }
-
-  /**
-   * The owner-scoped durable routes carry the project's own token, so without a
-   * session there is nothing to send them. Refused here rather than spending a
-   * round trip on the 401 the platform would answer, which is how `logs.search`
-   * treats the same credential.
-   */
-  async _durableOwnerSession() {
-    await this._completeOAuthExchange();
-    if (!this.accessToken) {
-      return this._oauthExchangeError || new Error('No active session');
-    }
-    return null;
-  }
-
-  /**
-   * The envelope every durable operation answers with. A refusal carries the
-   * platform's status rather than throwing, because the status is what tells a
-   * caller a deleted function from a cap it has hit.
-   */
-  async _durableResult(failureMessage, call) {
-    try {
-      const response = await call();
-      return { data: response.data, status: response.status, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        status: typeof error?.status === 'number' ? error.status : null,
-        // A transport that rejects with a string or a plain object still has to
-        // leave the reason recoverable, so it rides as `cause` rather than
-        // being replaced by the generic message.
-        error: error instanceof Error ? error : new Error(failureMessage, { cause: error }),
-      };
-    }
+  stopDurableExecution(projectId, functionName, executionId) {
+    return this._durableFacade.stop(projectId, functionName, executionId);
   }
 
   // ========================================================================
