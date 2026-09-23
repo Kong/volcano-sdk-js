@@ -9,12 +9,7 @@ import {
 import type { PendingRow } from '../src/realtime-internal-types.ts';
 
 function fetchFrom(client: unknown, name: string | null = null, schema = 'public'): unknown {
-  return runBatchQuery(
-    { getVolcanoClient: () => client, getDatabaseName: () => name },
-    schema,
-    'tasks',
-    ['1', '2'],
-  );
+  return runBatchQuery(client, name, schema, 'tasks', ['1', '2']);
 }
 
 describe('auto-fetch database boundary', () => {
@@ -59,6 +54,37 @@ describe('auto-fetch database boundary', () => {
     );
   });
 
+  test('leaves the client selection untouched when a legacy query lacks a selector', () => {
+    const writes: string[] = [];
+    const client = {
+      get _currentDatabaseName() {
+        return 'previous';
+      },
+      set _currentDatabaseName(name: string) {
+        writes.push(name);
+      },
+      from: () => ({}),
+      database: () => ({}),
+    };
+    expect(() => fetchFrom(client)).toThrow('Database name not set');
+    expect(writes).toEqual([]);
+  });
+
+  test('does not change a client when its database selector API is unavailable', () => {
+    const writes: string[] = [];
+    const client = {
+      get _currentDatabaseName() {
+        return 'previous';
+      },
+      set _currentDatabaseName(name: string) {
+        writes.push(name);
+      },
+      from: () => ({}),
+    };
+    expect(() => fetchFrom(client, 'db')).toThrow('volcanoClient.database not available');
+    expect(writes).toEqual([]);
+  });
+
   test('queries clients that directly expose from without a database selector', () => {
     const tables: string[] = [];
     const client = {
@@ -70,12 +96,32 @@ describe('auto-fetch database boundary', () => {
     expect(fetchFrom(client)).toEqual({ data: [] });
     expect(tables).toEqual(['tasks']);
     expect(
-      fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }),
+      fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }, 'chosen'),
     ).toEqual({ data: [] });
   });
 
+  test('uses an unqualified table when the schema is empty', () => {
+    const tables: string[] = [];
+    const client = {
+      from(table: string) {
+        tables.push(table);
+        return { select: () => ({ in: () => ({ data: [] }) }) };
+      },
+    };
+    expect(fetchFrom(client, null, '')).toEqual({ data: [] });
+    expect(tables).toEqual(['tasks']);
+  });
+
+  test('rejects a callable value that happens to expose query methods', () => {
+    const client = Object.assign(jest.fn(), {
+      from: () => ({ select: () => ({ in: () => ({ data: [] }) }) }),
+    });
+    expect(() => fetchFrom(client)).toThrow('volcanoClient must be an object');
+  });
+
   test('rejects clients with incomplete query capabilities', () => {
-    expect(() => fetchFrom(null)).toThrow('volcanoClient.from not available');
+    expect(() => fetchFrom(null)).toThrow('volcanoClient must be an object');
+    expect(() => fetchFrom({}, 'db')).toThrow('volcanoClient.from not available');
     expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
       'volcanoClient.database not available',
     );

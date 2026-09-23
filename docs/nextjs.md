@@ -499,10 +499,8 @@ export function LivePosts() {
         setPosts((current) => current.map((p) => (p.id === change.record.id ? change.record : p)));
       });
 
-      channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
-        setPosts((current) => current.filter((p) => p.id !== change.old_record.id));
-      });
-
+      // End-user channels do not receive DELETE events.
+      // Re-fetch after application actions that can delete posts.
       channel.subscribe();
     });
 

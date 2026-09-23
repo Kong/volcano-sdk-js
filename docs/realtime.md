@@ -129,6 +129,43 @@ channel.onPostgresChanges('*', 'public', 'posts', (change) => {
 await channel.subscribe();
 ```
 
+The selected database is part of the Postgres channel identity. For example,
+`realtime.channel('public:posts', { type: 'postgres', databaseName: 'db-a' })`
+creates the `postgres:db-a:public:posts` wire channel and sends
+`{"database_name":"db-a"}` as the raw subscription data. Two channels for the
+same schema and table can therefore subscribe to different databases at once:
+
+```javascript
+const dbA = realtime.channel('public:posts', {
+  type: 'postgres',
+  databaseName: 'db-a',
+});
+const dbB = realtime.channel('public:posts', {
+  type: 'postgres',
+  databaseName: 'db-b',
+});
+```
+
+Postgres change callbacks stay with their matching database and table channel,
+including when a legacy single-database channel and a database-scoped channel
+share part of a channel name.
+
+When `databaseName` is absent on a channel, the selector configured with
+`realtime.setDatabaseName()` (or the `VolcanoRealtime` `databaseName` option) is
+captured when the channel is created. The selected database on a bound `volcano`
+client is used if neither selector is set. Later calls to `setDatabaseName()`
+affect new channels only; create a new channel to use a different database. A
+channel created without a selector keeps the legacy wire identity and never
+acquires a selector later. A project with one active database can omit
+the selector; this preserves the legacy `postgres:public:posts` wire channel
+and sends no subscription data. The server accepts that omission only for a
+project with exactly one active database. An unknown or inactive name causes
+subscription to fail with the server's `unknown database selector` error.
+
+Legacy and database-scoped Postgres channels can coexist in one realtime client
+for signed-in users and server-side service keys, including when a table is named
+`service`.
+
 Insert and update notifications can load the current row through the authenticated
 client. Automatic lookup requires a primary key named `id`; rapid updates may
 have changed the row by the time the lookup runs. A failed lookup leaves the
@@ -159,7 +196,7 @@ await comments.subscribe();
 ### Row-Level Security and deletion
 
 Volcano checks the current row against the subscriber's Row-Level Security policies.
-Authenticated user subscriptions currently do not receive delete notifications after
+Anonymous and authenticated subscriptions do not receive delete notifications after
 the row is gone. Service-key subscriptions can receive deletion events with the
 primary key in `old_record`; other deleted columns are not retained. See
 [Postgres Changes](/platform/realtime/postgres-changes) for platform behavior.
@@ -169,8 +206,10 @@ Unsubscribe or remove channels during cleanup:
 
 ```javascript
 channel.unsubscribe();
-realtime.removeChannel('public:posts', 'postgres');
+realtime.removeChannel('public:posts', { type: 'postgres', databaseName: 'app' });
 realtime.removeChannel('public:comments', 'postgres');
+// After changing the global selector, remove a previously created legacy channel:
+realtime.removeChannel('public:legacy', { type: 'postgres', databaseName: null });
 ```
 
 ## Broadcast
@@ -277,9 +316,16 @@ Initial snapshots and join updates retain the same full client record. The
 original handler continues to receive membership updates as other connections
 join and leave. Unsubscribing clears the local roster; resubscribing reloads it.
 
-`track(state)` stores application state locally. It does not publish that state
-or replace the server's authenticated identity and metadata. Use a broadcast
-channel to share application updates such as cursor positions.
+`track(state)` publishes the JSON object as this connection's custom presence
+state. Other clients receive the state in `info.data` for join events and in
+each entry of `onPresenceSync`; initial and live entries use the same full
+client record shape. The original server metadata remains available in
+`info.chanInfo` for compatibility. The SDK retains a detached snapshot and
+sends it again when the channel reconnects. If `track()` runs while the first
+`subscribe()` is pending, both promises wait until the latest state is accepted.
+The tracked state remains available across token refreshes for the same user
+and project. When the recovery identity changes, the SDK clears the tracked
+state before a new subscription; call `track()` again for the new identity.
 
 ```javascript
 await channel.track({ status: 'working' });
@@ -327,6 +373,10 @@ from a fresh snapshot.
 
 Row fetches and presence snapshots started before unsubscribe are discarded when
 they finish, even if you have since subscribed again.
+If a presence state update is still pending, `unsubscribe()` cancels that attempt;
+its `track()` promise may reject. A new `subscribe()` starts a fresh attempt and
+waits for it. Calling `track()` while paused saves the latest state for the
+next subscribe attempt without resuming the channel.
 
 `removeChannel()`, `removeAllChannels()`, and `disconnect()` discard subscriptions
 and listeners. Auth identity changes discard subscriptions while preserving
@@ -392,6 +442,10 @@ const realtime = new VolcanoRealtime({
   databaseName: 'your_database_name' // Optional if volcano.database(...) already called
 });
 ```
+
+Auto-fetch uses each Postgres channel's database selector without changing the
+database selected on the bound `VolcanoAuth` client. Other queries made with
+`volcano.from()` continue to use the client's existing selection.
 
 ## TypeScript
 
@@ -496,11 +550,9 @@ channel.onPostgresChanges('INSERT', 'public', 'posts', (change) => {
 channel.onPostgresChanges('UPDATE', 'public', 'posts', (change) => {
   setPosts((current) => current.map((p) => (p.id === change.record.id ? change.record : p)));
 });
-
-channel.onPostgresChanges('DELETE', 'public', 'posts', (change) => {
-  setPosts((current) => current.filter((p) => p.id !== change.old_record.id));
-});
 ```
+
+End-user subscriptions do not receive `DELETE` events. Re-fetch after application actions that can delete rows. A server-side service-key subscription can handle `DELETE` events when needed.
 
 ## Next Steps
 

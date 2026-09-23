@@ -8,6 +8,7 @@ import {
 import {
   activateChannelSubscription,
   disposeChannel,
+  pauseChannelSubscription,
   resetChannelForIdentityChange,
   subscribeChannel,
   unsubscribeChannel,
@@ -32,10 +33,12 @@ import type {
   UnsubscribeFunction,
 } from './realtime-public-types.ts';
 import {
+  clonePresenceState,
   isLightweightNotification,
   isPresenceState,
   isPublicationContext,
   matchesPostgresChange,
+  normalizePresenceInfo,
   payloadEvent,
   property,
   record,
@@ -72,7 +75,17 @@ class RealtimeChannel {
   /** @internal */
   _presenceTimeoutId: ReturnType<typeof setTimeout> | null = null;
   /** @internal */
-  _myPresenceState: Record<string, unknown> = {};
+  _myPresenceState: Record<string, unknown> | undefined;
+  /** @internal */
+  _presenceStateVersion = 0;
+  /** @internal */
+  _presenceAcknowledgedVersion = 0;
+  /** @internal */
+  _presenceResubscribePromise: Promise<void> | null = null;
+  /** @internal */
+  _activationPromise: Promise<void> | null = null;
+  /** @internal */
+  readonly _databaseName: string | null;
 
   /** @internal */
   constructor(realtime: VolcanoRealtime, name: string, type: ChannelType, options: ChannelOptions) {
@@ -80,6 +93,7 @@ class RealtimeChannel {
     this._name = name;
     this._type = type;
     this._options = options;
+    this._databaseName = options.databaseName ?? null;
     this._subscription = null;
     this._lifecycleVersion = 0;
     this._paused = false;
@@ -118,6 +132,25 @@ class RealtimeChannel {
     await activateChannelSubscription(this, this._subscription);
   }
 
+  /** @internal */
+  async _awaitActivation(): Promise<void> {
+    if (this._presenceResubscribePromise !== null) {
+      await this._presenceResubscribePromise;
+      await this._ensureTrackedPresenceAcknowledged();
+      return;
+    }
+    const activation = this._activationPromise ?? this._activateSubscription();
+    this._activationPromise = activation;
+    try {
+      await activation;
+    } finally {
+      if (this._activationPromise === activation) {
+        this._activationPromise = null;
+      }
+    }
+    await this._ensureTrackedPresenceAcknowledged();
+  }
+
   unsubscribe(): void {
     unsubscribeChannel(this);
   }
@@ -129,7 +162,15 @@ class RealtimeChannel {
 
   /** @internal */
   _resetForIdentityChange(): void {
+    this._myPresenceState = undefined;
+    this._presenceStateVersion = 0;
+    this._presenceAcknowledgedVersion = 0;
     resetChannelForIdentityChange(this);
+  }
+
+  /** @internal */
+  _pauseSubscription(): void {
+    pauseChannelSubscription(this);
   }
 
   /**
@@ -274,9 +315,13 @@ class RealtimeChannel {
     this._pendingFetches.delete(tableKey);
 
     try {
-      const result: unknown = await runBatchQuery(this._realtime, schema, table, [
-        ...batch.ids.keys(),
-      ]);
+      const result: unknown = await runBatchQuery(
+        this._realtime.getVolcanoClient(),
+        this._databaseName,
+        schema,
+        table,
+        [...batch.ids.keys()],
+      );
       settleBatch(batch.ids, recordsFromQuery(result), table);
     } catch (err) {
       rejectBatch(batch.ids, err);
@@ -390,24 +435,90 @@ class RealtimeChannel {
 
   /**
    * Track this client's presence
-   * @param {Object} state - Presence state data (optional, for client-side state tracking)
-   *
-   * Note: Presence data is automatically sent from the server based on your
-   * user metadata (from sign-up). Custom presence data should be included
-   * when creating the anonymous user.
+   * @param {Object} state - JSON presence state to publish to other subscribers
    */
-  track(state: Record<string, unknown> = {}): Promise<void> {
+  track(state?: Record<string, unknown>): Promise<void>;
+  track(state: unknown = {}): Promise<void> {
     if (this._type !== 'presence') {
       return Promise.reject(new Error('track() is only available for presence channels'));
     }
 
-    // Store local presence state for client-side access
-    this._myPresenceState = state;
+    if (!record(state)) {
+      return Promise.reject(new TypeError('Presence state must be a JSON object'));
+    }
+    return this._trackPresence(state);
+  }
 
-    // Presence is automatically managed by Centrifuge based on subscription
-    // The connection data (from user metadata) is what other clients see
-    // Note: Custom state is stored locally for client-side access
-    return Promise.resolve();
+  async _trackPresence(state: Record<string, unknown>): Promise<void> {
+    this._myPresenceState = clonePresenceState(state);
+    this._presenceStateVersion += 1;
+    if (this._subscription === null) {
+      return;
+    }
+    this._subscription.setData(this._myPresenceState);
+    if (this._activationPromise === null) {
+      return this._ensureTrackedPresenceAcknowledged();
+    }
+    await this._activationPromise;
+    await this._ensureTrackedPresenceAcknowledged();
+  }
+
+  /** @internal */
+  async _ensureTrackedPresenceAcknowledged(): Promise<void> {
+    if (this._presenceAcknowledgedVersion >= this._presenceStateVersion) {
+      return;
+    }
+    if (this._paused && this._presenceResubscribePromise === null) {
+      return;
+    }
+    const acknowledgedVersion = this._presenceAcknowledgedVersion;
+    await this._awaitTrackedResubscribe();
+    if (this._presenceAcknowledgedVersion <= acknowledgedVersion) {
+      throw new Error('Tracked presence state made no progress');
+    }
+    await this._ensureTrackedPresenceAcknowledged();
+  }
+
+  /** @internal */
+  async _awaitTrackedResubscribe(): Promise<void> {
+    const resubscribe = this._presenceResubscribePromise ?? this._resubscribeTrackedPresence();
+    this._presenceResubscribePromise = resubscribe;
+    try {
+      await resubscribe;
+    } finally {
+      if (this._presenceResubscribePromise === resubscribe) {
+        this._presenceResubscribePromise = null;
+      }
+    }
+  }
+
+  /** @internal */
+  async _resubscribeTrackedPresence(): Promise<void> {
+    if (this._presenceAcknowledgedVersion >= this._presenceStateVersion) {
+      return;
+    }
+    const acknowledgedVersion = this._presenceAcknowledgedVersion;
+    const stateVersion = this._presenceStateVersion;
+    this._pauseSubscription();
+    const lifecycleVersion = this._lifecycleVersion;
+    await this._activateSubscription();
+    if (this._lifecycleVersion !== lifecycleVersion) {
+      return;
+    }
+    if (this._presenceAcknowledgedVersion <= acknowledgedVersion) {
+      throw new Error('Tracked presence state made no progress');
+    }
+    if (stateVersion !== this._presenceStateVersion) {
+      this._updateTrackedSubscriptionData();
+    }
+    await this._resubscribeTrackedPresence();
+  }
+
+  /** @internal */
+  _updateTrackedSubscriptionData(): void {
+    if (this._subscription !== null && this._myPresenceState !== undefined) {
+      this._subscription.setData(this._myPresenceState);
+    }
   }
 
   /**
@@ -423,7 +534,9 @@ class RealtimeChannel {
     this._presenceState = {};
     const clients = property(ctx, 'clients');
     if (record(clients)) {
-      this._presenceState = { ...clients };
+      this._presenceState = Object.fromEntries(
+        Object.entries(clients).map(([id, info]) => [id, normalizePresenceInfo(info)]),
+      );
     }
   }
 

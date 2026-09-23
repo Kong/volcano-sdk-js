@@ -277,12 +277,16 @@ interface RealtimeConfig {
   accessToken?: string;
   getToken?: () => Promise<string>;
   volcanoClient?: VolcanoAuth;
+  /** Global database selector inherited by Postgres channels. */
+  databaseName?: string;
   fetchConfig?: FetchConfig;
   webSocket?: WebSocketConstructor;
 }
 
 interface ChannelOptions {
   type?: 'broadcast' | 'presence' | 'postgres';
+  /** Database selector used in the Postgres channel identity and subscription data. */
+  databaseName?: string | null;
   autoFetch?: boolean;
   fetchBatchWindowMs?: number;
   fetchMaxBatchSize?: number;
@@ -359,8 +363,9 @@ channel.onPresenceSync((state: PresenceState) => {
 ```
 
 Each entry is a server connection record. One user can have multiple connections.
-`connInfo` and `chanInfo` contain server metadata when present. `track()` keeps
-local application state; it does not place custom fields on these records.
+`connInfo` and `chanInfo` contain server metadata when present. `track(state)`
+publishes custom JSON state as `info.data`; the original `chanInfo` is retained
+for compatibility, and initial and live entries use the same record shape.
 
 ## Functions Types
 

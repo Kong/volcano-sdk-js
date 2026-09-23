@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './json-clone.ts';
 import type {
   ConnectContext,
   DisconnectContext,
@@ -18,6 +19,29 @@ function property(value: unknown, key: string): unknown {
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function clonePresenceState(state: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(state).map(([key, value]) => [
+      key,
+      value === undefined ? undefined : cloneJsonValue(value),
+    ]),
+  );
+}
+
+function normalizePresenceInfo(info: unknown): unknown {
+  if (!record(info)) {
+    return info;
+  }
+  const normalized = clonePresenceState(info);
+  if (normalized['data'] !== undefined) {
+    return normalized;
+  }
+  if (normalized['chanInfo'] !== undefined) {
+    normalized['data'] = cloneJsonValue(normalized['chanInfo']);
+  }
+  return normalized;
 }
 
 function isChangeType(value: unknown): value is LightweightNotification['type'] {
@@ -178,6 +202,7 @@ function matchesPostgresChange(
 }
 
 export {
+  clonePresenceState,
   connectContext,
   disconnectContext,
   errorContext,
@@ -189,6 +214,7 @@ export {
   isPresenceState,
   isPublicationContext,
   matchesPostgresChange,
+  normalizePresenceInfo,
   optionalDatabaseName,
   optionalRecord,
   optionalString,

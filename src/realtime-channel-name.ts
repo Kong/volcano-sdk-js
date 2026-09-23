@@ -3,7 +3,7 @@ export function sdkChannelFromParts(parts: readonly string[]): string | null {
 }
 
 export function postgresBaseChannelFromParts(parts: readonly string[]): string | null {
-  if (parts.length !== 5 || parts[1] !== 'postgres') {
+  if ((parts.length !== 5 && parts.length !== 6) || parts[1] !== 'postgres') {
     return null;
   }
   return parts.slice(1, -1).join(':');

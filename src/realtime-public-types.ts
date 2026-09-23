@@ -83,7 +83,7 @@ export interface RealtimeConfig {
    */
   volcanoClient?: VolcanoAuth;
   /**
-   * Database name for auto-fetch queries (required for VolcanoAuth).
+   * Database selector captured by new Postgres channels for identity, subscriptions, and auto-fetch.
    * You can also call volcanoClient.database(name) before passing it in.
    */
   databaseName?: string;
@@ -96,6 +96,8 @@ export interface RealtimeConfig {
 export interface ChannelOptions {
   /** Channel type: 'broadcast', 'presence', or 'postgres' */
   type?: 'broadcast' | 'presence' | 'postgres';
+  /** Database selector captured for postgres channel identity, subscription data, and auto-fetch */
+  databaseName?: string | null;
   /** Enable auto-fetch for lightweight notifications (default: true) */
   autoFetch?: boolean;
   /** Batch window in milliseconds for fetch requests (overrides global config) */
@@ -173,7 +175,7 @@ export interface PresenceInfo {
   connInfo?: Record<string, unknown>;
   /** Server subscription metadata */
   chanInfo?: Record<string, unknown>;
-  /** Legacy transport data, when supplied */
+  /** Custom presence state normalized from server subscription metadata */
   data?: Record<string, unknown>;
 }
 

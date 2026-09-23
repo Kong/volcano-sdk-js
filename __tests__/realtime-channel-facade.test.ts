@@ -27,6 +27,7 @@ describe('realtime channel facade', () => {
       subscribe: jest.fn(),
       unsubscribe: jest.fn(),
       ready: jest.fn(() => Promise.resolve()),
+      setData: jest.fn(),
     };
     await channel.send({ text: 'hello' });
     expect(publish).toHaveBeenCalledWith({ text: 'hello' });
@@ -96,7 +97,7 @@ describe('realtime channel facade', () => {
       table: 'tasks',
     });
     await channel._flushFetch('public', 'tasks');
-    expect(rejected).toEqual([new TypeError('volcanoClient.from not available')]);
+    expect(rejected).toEqual([new TypeError('volcanoClient must be an object')]);
     expect(channel._pendingFetches.size).toBe(0);
   });
 

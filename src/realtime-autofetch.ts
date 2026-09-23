@@ -2,12 +2,7 @@ import type { PendingRow } from './realtime-internal-types.ts';
 import type { LightweightNotification } from './realtime-public-types.ts';
 import { property, record } from './realtime-values.ts';
 
-interface FetchClient {
-  getVolcanoClient(): unknown;
-  getDatabaseName(): string | null;
-}
-
-function selectedDatabase(client: unknown, name: string | null): unknown {
+function selectedDatabase(client: Record<string, unknown>, name: string | null): unknown {
   if (typeof property(client, 'from') !== 'function') {
     throw new TypeError('volcanoClient.from not available');
   }
@@ -69,15 +64,6 @@ function deletePayload(data: LightweightNotification): Record<string, unknown> {
   };
 }
 
-function preferredDatabaseName(realtime: FetchClient, client: unknown): string | null {
-  const configured = realtime.getDatabaseName();
-  if (configured !== null && configured !== '') {
-    return configured;
-  }
-  const current = property(client, '_currentDatabaseName');
-  return typeof current === 'string' && current !== '' ? current : null;
-}
-
 function databaseFetchError(value: unknown): Error {
   const message = property(value, 'message');
   return new Error(
@@ -85,16 +71,34 @@ function databaseFetchError(value: unknown): Error {
   );
 }
 
+function restoreDatabaseSelection(
+  client: Record<string, unknown>,
+  name: string | null,
+  previous: unknown,
+): void {
+  if (name === null || typeof property(client, 'database') !== 'function') {
+    return;
+  }
+  Reflect.set(client, '_currentDatabaseName', previous);
+}
+
 function runBatchQuery(
-  realtime: FetchClient,
+  client: unknown,
+  databaseName: string | null,
   schema: string,
   table: string,
   ids: string[],
 ): unknown {
-  const client: unknown = realtime.getVolcanoClient();
-  const selected = selectedDatabase(client, preferredDatabaseName(realtime, client));
+  if (!record(client)) {
+    throw new TypeError('volcanoClient must be an object');
+  }
   const tableName = schema !== '' && schema !== 'public' ? `${schema}.${table}` : table;
-  return runRowQuery(selected, tableName, ids);
+  const previousDatabase = property(client, '_currentDatabaseName');
+  try {
+    return runRowQuery(selectedDatabase(client, databaseName), tableName, ids);
+  } finally {
+    restoreDatabaseSelection(client, databaseName, previousDatabase);
+  }
 }
 
 function recordsFromQuery(result: unknown): Map<string, Record<string, unknown>> {

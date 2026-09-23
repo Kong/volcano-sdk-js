@@ -250,7 +250,7 @@ describe('realtime client facade', () => {
     const first = realtime.channel('one');
     const second = realtime.channel('two');
     realtime.removeChannel('unknown');
-    realtime.removeChannel('one');
+    realtime.removeChannel('one', {});
     expect(realtime._channels.has('broadcast:one')).toBe(false);
     await realtime.connect();
     jest.spyOn(second, '_dispose').mockImplementationOnce(() => {

@@ -39,7 +39,7 @@ function createRealtime() {
 
 describe('realtime in-flight work', () => {
   test.each(['presence', 'join'])(
-    'preserves full client identity from %s events',
+    'normalizes tracked state and preserves full client identity from %s events',
     async (event) => {
       const { realtime, subscriptions } = createRealtime();
       const channel = realtime.channel('lobby', { type: 'presence' });
@@ -49,16 +49,51 @@ describe('realtime in-flight work', () => {
       const info = {
         client: 'remote-client',
         user: 'user-id',
+        chanInfo: { status: 'working' },
         connInfo: { user_metadata: { display_name: 'Contract' } },
       };
       subscriptions[0].handlers.get(event)(
         event === 'join' ? { info } : { clients: { 'remote-client': info } },
       );
-      expect(channel.getPresenceState()).toEqual({ 'remote-client': info });
-      expect(onSync).toHaveBeenLastCalledWith({ 'remote-client': info });
+      const normalized = { ...info, data: { status: 'working' } };
+      expect(channel.getPresenceState()).toEqual({ 'remote-client': normalized });
+      expect(onSync).toHaveBeenLastCalledWith({ 'remote-client': normalized });
+      expect(info).not.toHaveProperty('data');
       channel.unsubscribe();
     },
   );
+
+  test('normalizes tracked state from delayed client presence', async () => {
+    jest.useFakeTimers();
+    try {
+      const { realtime, client, subscriptions } = createRealtime();
+      client.presence.mockResolvedValue({
+        clients: {
+          'remote-client': {
+            client: 'remote-client',
+            user: 'user-id',
+            chanInfo: { status: 'working' },
+          },
+        },
+      });
+      const channel = realtime.channel('lobby', { type: 'presence' });
+      await channel.subscribe();
+
+      subscriptions[0].handlers.get('subscribed')();
+      await jest.advanceTimersByTimeAsync(150);
+
+      expect(channel.getPresenceState()).toEqual({
+        'remote-client': {
+          client: 'remote-client',
+          user: 'user-id',
+          chanInfo: { status: 'working' },
+          data: { status: 'working' },
+        },
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 
   test.each(['resolve', 'reject'])(
     'ignores a stale row fetch that will %s after resubscribing',

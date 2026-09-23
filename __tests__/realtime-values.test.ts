@@ -1,5 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import {
+  clonePresenceState,
   connectContext,
   disconnectContext,
   errorContext,
@@ -11,6 +12,7 @@ import {
   isPresenceState,
   isPublicationContext,
   matchesPostgresChange,
+  normalizePresenceInfo,
   optionalDatabaseName,
   optionalRecord,
   optionalString,
@@ -27,6 +29,33 @@ const location = { schema: 'public', table: 'tasks', timestamp: '2025-01-01T00:0
 const absent = undefined;
 
 describe('untrusted realtime payloads', () => {
+  test('leaves malformed presence records unmodified for the caller to validate', () => {
+    expect(normalizePresenceInfo(null)).toBeNull();
+    expect(normalizePresenceInfo('invalid')).toBe('invalid');
+  });
+
+  test('retains explicit presence data and detaches legacy metadata', () => {
+    const explicit = { client: 'c', data: { state: 'ready' }, chanInfo: { state: 'stale' } };
+    expect(normalizePresenceInfo(explicit)).toEqual(explicit);
+    const legacy = { client: 'c', chanInfo: { cursor: ['first'] } };
+    const normalized = normalizePresenceInfo(legacy);
+    expect(normalized).toEqual({ ...legacy, data: { cursor: ['first'] } });
+    legacy.chanInfo.cursor[0] = 'changed';
+    expect(normalized).toEqual({
+      client: 'c',
+      chanInfo: { cursor: ['first'] },
+      data: { cursor: ['first'] },
+    });
+    expect(normalizePresenceInfo({ client: 'c' })).toEqual({ client: 'c' });
+  });
+
+  test('clones nested arrays while preserving scalar values', () => {
+    const state = { label: 'ready', steps: [{ label: 'first' }], optional: undefined };
+    const snapshot = clonePresenceState(state);
+    state.steps.push({ label: 'second' });
+    expect(snapshot).toEqual({ label: 'ready', steps: [{ label: 'first' }], optional: undefined });
+  });
+
   test('reads fields only from objects', () => {
     expect(property(null, 'data')).toBeUndefined();
     expect(property('text', 'data')).toBeUndefined();

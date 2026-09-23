@@ -29,6 +29,7 @@ export interface TransportSubscription {
   subscribe(): void;
   unsubscribe(): void;
   ready(timeout: number): Promise<void>;
+  setData(data: Record<string, unknown>): void;
   state: string;
   publish(data: Record<string, unknown>): Promise<unknown>;
 }
