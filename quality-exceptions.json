@@ -1,0 +1,20 @@
+[
+  {
+    "rule": "@typescript-eslint/no-unnecessary-type-parameters",
+    "scope": "src/index.ts:VolcanoAuth.invokeFunction<TPayload>",
+    "rationale": "Preserves the published two-parameter generic call signature while TypeScript generates declarations from the implementation.",
+    "evidence": "test/types/auth-contract.ts and test/types/durable-contract.ts exercise the public declaration surface."
+  },
+  {
+    "rule": "@typescript-eslint/no-unnecessary-type-parameters",
+    "scope": "src/sdk-public-types.ts:Functions.invoke<TPayload>",
+    "rationale": "Preserves existing caller-specified payload and result type parameters for source-compatible SDK upgrades.",
+    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options."
+  },
+  {
+    "rule": "@typescript-eslint/no-unnecessary-type-parameters",
+    "scope": "src/sdk-public-types.ts:Durable.start<TInput>",
+    "rationale": "Preserves the published caller-specified durable input type parameter.",
+    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options."
+  }
+]

@@ -289,4 +289,10 @@ module.exports = [
       '@typescript-eslint/explicit-module-boundary-types': 'error',
     },
   },
+  {
+    files: ['src/index.ts', 'src/sdk-public-types.ts'],
+    rules: {
+      '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+    },
+  },
 ];
