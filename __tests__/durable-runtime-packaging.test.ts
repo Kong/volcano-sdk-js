@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from '@jest/globals';
 
@@ -60,6 +62,49 @@ describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
     for (const file of durableBuilds) {
       test(`${file} loads it at runtime`, () => {
         expect(readFileSync(join(ROOT, file), 'utf8')).toContain(RUNTIME);
+      });
+
+      test(`${file} invokes with an installed runtime`, () => {
+        const fixture = mkdtempSync(join(tmpdir(), 'volcano-durable-package-'));
+        try {
+          const runtimeDir = join(fixture, 'node_modules', '@aws', 'durable-execution-sdk-js');
+          mkdirSync(runtimeDir, { recursive: true });
+          writeFileSync(
+            join(runtimeDir, 'package.json'),
+            JSON.stringify({ name: RUNTIME, main: 'index.cjs' }),
+          );
+          writeFileSync(
+            join(runtimeDir, 'index.cjs'),
+            `module.exports = {
+              withDurableExecution: (handler) => handler,
+              StepSemantics: { AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY' },
+              createRetryStrategy: (config) => config,
+              createWaitStrategy: (config) => config,
+            };`,
+          );
+          const filename = file.split('/').at(-1);
+          if (filename === undefined || filename === '') {
+            throw new Error('Missing bundle filename');
+          }
+          copyFileSync(join(ROOT, file), join(fixture, filename));
+          const esm = filename.endsWith('.mjs');
+          const load = esm
+            ? `import { durable } from './${filename}';`
+            : `const { durable } = require('./${filename}');`;
+          const script = `${load}
+            const handler = durable(async (input) => input.marker);
+            handler({ marker: 'packaged-runtime-ok' }, { logger: {} })
+              .then((result) => process.stdout.write(result))
+              .catch((error) => { console.error(error); process.exitCode = 1; });`;
+          const output = execFileSync(
+            process.execPath,
+            [`--input-type=${esm ? 'module' : 'commonjs'}`, '--eval', script],
+            { cwd: fixture, encoding: 'utf8', timeout: 5000 },
+          );
+          expect(output).toBe('packaged-runtime-ok');
+        } finally {
+          rmSync(fixture, { recursive: true, force: true });
+        }
       });
     }
   });
