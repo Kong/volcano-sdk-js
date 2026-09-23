@@ -1,40 +1,26 @@
-const { VolcanoRealtime } = require('../src/realtime.ts');
+import { describe, expect, jest, test } from '@jest/globals';
+import { VolcanoRealtime } from '../src/realtime.ts';
+import {
+  deferredVoid,
+  subscriptionAt,
+  TestSubscription,
+  TestTransportClient,
+} from './realtime-transport-fixtures.ts';
 
-function token(projectId, subject, expires = 1) {
+function token(projectId: string, subject: string, expires = 1): string {
   const payload = Buffer.from(
     JSON.stringify({ project_id: projectId, sub: subject, exp: expires }),
   ).toString('base64url');
   return `header.${payload}.signature`;
 }
 
-function deferred() {
-  const result = {};
-  result.promise = new Promise((resolve) => {
-    result.resolve = resolve;
-  });
-  return result;
-}
-
-function createRealtime(accessToken) {
+function createRealtime(accessToken: string) {
   const realtime = new VolcanoRealtime({
     apiUrl: 'https://api.example.com',
     anonKey: 'project.key',
     accessToken,
   });
-  const client = {
-    newSubscription: jest.fn(() => {
-      const handlers = new Map();
-      return {
-        on: jest.fn((event, callback) => handlers.set(event, callback)),
-        off: jest.fn((event) => handlers.delete(event)),
-        subscribe: jest.fn(),
-        unsubscribe: jest.fn(),
-        ready: jest.fn().mockResolvedValue(undefined),
-        emit: (event, data) => handlers.get(event)?.(data),
-      };
-    }),
-    removeSubscription: jest.fn(),
-  };
+  const client = new TestTransportClient();
   jest.spyOn(realtime, 'getClient').mockReturnValue(client);
   return { realtime, client };
 }
@@ -66,14 +52,14 @@ describe('realtime auth identity', () => {
     const onMessage = jest.fn();
     channel.on('message', onMessage);
     await channel.subscribe();
-    const previous = channel._subscription;
+    const previous = subscriptionAt(client, 0);
     realtime._adoptAccessToken(next);
     expect(previous.unsubscribe).toHaveBeenCalledTimes(1);
     expect(client.removeSubscription).toHaveBeenCalledWith(previous);
     previous.emit('publication', { data: { event: 'message', text: 'old' } });
     expect(onMessage).not.toHaveBeenCalled();
     await channel.subscribe();
-    channel._subscription.emit('publication', { data: { event: 'message', text: 'new' } });
+    subscriptionAt(client, 1).emit('publication', { data: { event: 'message', text: 'new' } });
     expect(client.newSubscription).toHaveBeenCalledTimes(2);
     expect(onMessage).toHaveBeenCalledTimes(1);
   });
@@ -97,8 +83,8 @@ describe('realtime auth identity', () => {
   test('rejects readiness invalidated by an identity change', async () => {
     const { realtime, client } = createRealtime('old');
     const channel = realtime.channel('room');
-    const ready = deferred();
-    const subscription = client.newSubscription();
+    const ready = deferredVoid();
+    const subscription = new TestSubscription();
     subscription.ready.mockReturnValue(ready.promise);
     client.newSubscription.mockReturnValueOnce(subscription);
     const pending = channel.subscribe();
@@ -115,8 +101,8 @@ describe('realtime auth identity', () => {
     realtime._adoptAccessToken('new');
     const onMessage = jest.fn();
     channel.on('message', onMessage);
-    const ready = deferred();
-    const subscription = client.newSubscription();
+    const ready = deferredVoid();
+    const subscription = new TestSubscription();
     subscription.ready.mockReturnValue(ready.promise);
     client.newSubscription.mockReturnValueOnce(subscription);
     const pending = channel.subscribe();

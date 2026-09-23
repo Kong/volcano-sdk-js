@@ -1,36 +1,20 @@
-const { VolcanoRealtime } = require('../src/realtime.ts');
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-function subscription() {
-  return {
-    on: jest.fn(),
-    off: jest.fn(),
-    subscribe: jest.fn(),
-    unsubscribe: jest.fn(),
-    ready: jest.fn().mockResolvedValue(undefined),
-  };
-}
+import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { RealtimeChannel, VolcanoRealtime } from '../src/realtime.ts';
+import {
+  deferredVoid,
+  TestSubscription,
+  TestTransportClient,
+} from './realtime-transport-fixtures.ts';
 
 describe('channel subscription readiness', () => {
-  let client;
-  let channel;
-  let transport;
+  let client: TestTransportClient;
+  let channel: RealtimeChannel;
+  let transport: TestSubscription;
 
   beforeEach(() => {
-    transport = subscription();
-    client = {
-      newSubscription: jest.fn().mockReturnValue(transport),
-      removeSubscription: jest.fn(),
-    };
+    transport = new TestSubscription();
+    client = new TestTransportClient();
+    client.newSubscription.mockReturnValue(transport);
     const realtime = new VolcanoRealtime({
       apiUrl: 'https://api.example.com',
       anonKey: 'project.key',
@@ -40,7 +24,7 @@ describe('channel subscription readiness', () => {
   });
 
   test('waits for readiness, including concurrent subscribe calls', async () => {
-    const ready = deferred();
+    const ready = deferredVoid();
     transport.ready.mockReturnValue(ready.promise);
     const completed = jest.fn();
     const first = channel.subscribe().then(completed);
@@ -67,7 +51,7 @@ describe('channel subscription readiness', () => {
   test('retries the retained subscription after readiness fails', async () => {
     transport.ready.mockRejectedValue(new Error('denied'));
     await expect(channel.subscribe()).rejects.toThrow('denied');
-    transport.ready.mockResolvedValue(undefined);
+    transport.ready.mockResolvedValue();
     await expect(channel.subscribe()).resolves.toBeUndefined();
     expect(transport.subscribe).toHaveBeenCalledTimes(2);
     expect(transport.ready).toHaveBeenCalledWith(10_000);
@@ -75,14 +59,15 @@ describe('channel subscription readiness', () => {
   });
 
   test('does not pause a resumed subscription when an earlier wait rejects', async () => {
-    const ready = deferred();
-    ready.promise.catch(() => undefined);
+    const ready = deferredVoid();
+    const observedRejection = ready.promise.catch((error: unknown) => error);
     transport.ready.mockReturnValue(ready.promise);
-    const failed = channel.subscribe().catch((error) => error);
+    const failed = channel.subscribe().catch((error: unknown) => error);
     channel.unsubscribe();
-    transport.ready.mockResolvedValue(undefined);
+    transport.ready.mockResolvedValue();
     await channel.subscribe();
     ready.reject(new Error('cancelled'));
+    await expect(observedRejection).resolves.toEqual(new Error('cancelled'));
     await expect(failed).resolves.toEqual(new Error('cancelled'));
     expect(transport.unsubscribe).toHaveBeenCalledTimes(1);
     expect(channel._subscription).toBe(transport);

@@ -1,33 +1,30 @@
+/** @jest-environment ./__tests__/node-environment.cjs */
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 /**
  * Realtime Auto-Fetch Unit Tests
  *
  * These tests verify the auto-fetch functionality for lightweight notifications
  * in Phase 3 of the realtime scalability implementation.
  */
+import { VolcanoAuth } from '../src/index.js';
+import { VolcanoRealtime } from '../src/realtime.ts';
 
-const { VolcanoRealtime } = require('../src/realtime.ts');
+const fetchMock = jest.mocked(globalThis.fetch);
 
-// Mock volcano client for database queries
-const createMockVolcanoClient = (mockData = []) => {
-  const query = {
-    select: jest.fn().mockReturnThis(),
-    in: jest.fn().mockResolvedValue({ data: mockData, error: null }),
-  };
-
-  const client = {
-    _currentDatabaseName: null,
-    database: jest.fn((name) => {
-      client._currentDatabaseName = name;
-      return client;
-    }),
-    from: jest.fn(() => query),
-  };
-
-  return { client, query };
-};
+function createMockVolcanoClient(mockData: Record<string, unknown>[] = []) {
+  const client = new VolcanoAuth({
+    apiUrl: 'https://api.example.com',
+    anonKey: 'project123.secret',
+    accessToken: 'token123',
+  });
+  const databaseSpy = jest.spyOn(client, 'database');
+  const fromSpy = jest.spyOn(client, 'from');
+  fetchMock.mockResolvedValue(Response.json({ data: mockData }));
+  return { client, databaseSpy, fromSpy };
+}
 
 describe('Realtime Auto-Fetch', () => {
-  let realtime;
+  let realtime: VolcanoRealtime;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -277,7 +274,7 @@ describe('Realtime Auto-Fetch', () => {
       });
 
       // Fast-forward timer to flush batch
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
 
       // Wait for promises to resolve
       await Promise.resolve();
@@ -313,7 +310,7 @@ describe('Realtime Auto-Fetch', () => {
         },
       });
 
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -329,7 +326,11 @@ describe('Realtime Auto-Fetch', () => {
 
   describe('_fetchRow batching', () => {
     test('batches multiple fetch requests within window', async () => {
-      const { client: mockClient } = createMockVolcanoClient([
+      const {
+        client: mockClient,
+        databaseSpy,
+        fromSpy,
+      } = createMockVolcanoClient([
         { id: 1, name: 'Alice' },
         { id: 2, name: 'Bob' },
         { id: 3, name: 'Charlie' },
@@ -355,18 +356,18 @@ describe('Realtime Auto-Fetch', () => {
         });
       }
 
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
       await Promise.resolve();
       await Promise.resolve();
 
       // Should have made only ONE database query
-      expect(mockClient.database).toHaveBeenCalledWith('testdb');
-      expect(mockClient.from).toHaveBeenCalledTimes(1);
-      expect(mockClient.from).toHaveBeenCalledWith('users');
+      expect(databaseSpy).toHaveBeenCalledWith('testdb');
+      expect(fromSpy).toHaveBeenCalledTimes(1);
+      expect(fromSpy).toHaveBeenCalledWith('users');
     });
 
     test('uses schema-qualified table names for non-public schemas', async () => {
-      const { client: mockClient } = createMockVolcanoClient([{ id: 1, name: 'Secret' }]);
+      const { client: mockClient, fromSpy } = createMockVolcanoClient([{ id: 1, name: 'Secret' }]);
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('private:secrets', { type: 'postgres' });
@@ -382,16 +383,19 @@ describe('Realtime Auto-Fetch', () => {
         },
       });
 
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(mockClient.from).toHaveBeenCalledWith('private.secrets');
+      expect(fromSpy).toHaveBeenCalledWith('private.secrets');
     });
 
     test('forces flush at max batch size', async () => {
-      const mockData = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `User ${i + 1}` }));
-      const { client: mockClient } = createMockVolcanoClient(mockData);
+      const mockData = Array.from({ length: 50 }, (_, i) => ({
+        id: i + 1,
+        name: `User ${String(i + 1)}`,
+      }));
+      const { client: mockClient, fromSpy } = createMockVolcanoClient(mockData);
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('public:users', {
@@ -420,21 +424,14 @@ describe('Realtime Auto-Fetch', () => {
       await Promise.resolve();
 
       // Should have flushed when hitting batch size
-      expect(mockClient.from).toHaveBeenCalled();
+      expect(fromSpy).toHaveBeenCalled();
     });
   });
 
   describe('handles fetch errors gracefully', () => {
     test('delivers lightweight on database error', async () => {
-      const query = {
-        select: jest.fn().mockReturnThis(),
-        in: jest.fn().mockResolvedValue({ data: null, error: { message: 'Database error' } }),
-      };
-      const mockClient = {
-        _currentDatabaseName: null,
-        database: jest.fn(() => mockClient),
-        from: jest.fn(() => query),
-      };
+      const { client: mockClient } = createMockVolcanoClient();
+      fetchMock.mockResolvedValue(Response.json({ error: 'Database error' }, { status: 400 }));
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('public:users', { type: 'postgres' });
@@ -443,7 +440,10 @@ describe('Realtime Auto-Fetch', () => {
       channel.on('*', callback);
 
       // Suppress console.warn for this test
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnings: unknown[][] = [];
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(args);
+      });
 
       channel._handlePublication({
         data: {
@@ -456,12 +456,13 @@ describe('Realtime Auto-Fetch', () => {
         },
       });
 
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
       await Promise.resolve();
       await Promise.resolve();
 
       // Should still deliver the notification (lightweight)
       expect(callback).toHaveBeenCalled();
+      expect(warnings).not.toHaveLength(0);
 
       consoleSpy.mockRestore();
     });
@@ -476,7 +477,10 @@ describe('Realtime Auto-Fetch', () => {
       const callback = jest.fn();
       channel.on('*', callback);
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const warnings: unknown[][] = [];
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(args);
+      });
 
       channel._handlePublication({
         data: {
@@ -489,12 +493,13 @@ describe('Realtime Auto-Fetch', () => {
         },
       });
 
-      jest.advanceTimersByTime(50);
+      await jest.advanceTimersByTimeAsync(50);
       await Promise.resolve();
       await Promise.resolve();
 
       // Callback should still be called (with lightweight data as fallback)
       expect(callback).toHaveBeenCalled();
+      expect(warnings).not.toHaveLength(0);
 
       consoleSpy.mockRestore();
     });

@@ -1,47 +1,26 @@
-const { VolcanoRealtime } = require('../src/realtime.ts');
-
-function deferred() {
-  const result = {};
-  result.promise = new Promise((resolve, reject) => {
-    result.resolve = resolve;
-    result.reject = reject;
-  });
-  return result;
-}
+import { describe, expect, jest, test } from '@jest/globals';
+import { VolcanoAuth } from '../src/index.js';
+import { VolcanoRealtime } from '../src/realtime.ts';
+import { deferred, subscriptionAt, TestTransportClient } from './realtime-transport-fixtures.ts';
 
 function createRealtime() {
-  const subscriptions = [];
   const realtime = new VolcanoRealtime({
     apiUrl: 'https://api.example.com',
     anonKey: 'project.key',
   });
-  const client = {
-    newSubscription: jest.fn(() => {
-      const handlers = new Map();
-      const subscription = {
-        on: jest.fn((event, handler) => handlers.set(event, handler)),
-        off: jest.fn((event) => handlers.delete(event)),
-        subscribe: jest.fn(),
-        unsubscribe: jest.fn(),
-        ready: jest.fn().mockResolvedValue(undefined),
-        handlers,
-      };
-      subscriptions.push(subscription);
-      return subscription;
-    }),
-    presence: jest.fn(),
-    removeSubscription: jest.fn(),
-  };
+  const client = new TestTransportClient();
   jest.spyOn(realtime, 'getClient').mockReturnValue(client);
-  realtime.setVolcanoClient({});
-  return { realtime, client, subscriptions };
+  realtime.setVolcanoClient(
+    new VolcanoAuth({ apiUrl: 'https://api.example.com', anonKey: 'project.key' }),
+  );
+  return { realtime, client };
 }
 
 describe('realtime in-flight work', () => {
   test.each(['presence', 'join'])(
     'preserves full client identity from %s events',
     async (event) => {
-      const { realtime, subscriptions } = createRealtime();
+      const { realtime, client } = createRealtime();
       const channel = realtime.channel('lobby', { type: 'presence' });
       const onSync = jest.fn();
       channel.onPresenceSync(onSync);
@@ -51,7 +30,8 @@ describe('realtime in-flight work', () => {
         user: 'user-id',
         connInfo: { user_metadata: { display_name: 'Contract' } },
       };
-      subscriptions[0].handlers.get(event)(
+      subscriptionAt(client, 0).emit(
+        event,
         event === 'join' ? { info } : { clients: { 'remote-client': info } },
       );
       expect(channel.getPresenceState()).toEqual({ 'remote-client': info });
@@ -65,18 +45,29 @@ describe('realtime in-flight work', () => {
     async (settle) => {
       const { realtime } = createRealtime();
       const channel = realtime.channel('public:items', { type: 'postgres' });
-      const fetch = deferred();
+      const fetch = deferred<unknown>();
       jest.spyOn(channel, '_fetchRow').mockReturnValue(fetch.promise);
       await channel.subscribe();
       const delivery = channel._handleLightweightNotification(
-        { type: 'INSERT', schema: 'public', table: 'items', id: 1, mode: 'lightweight' },
+        {
+          type: 'INSERT',
+          schema: 'public',
+          table: 'items',
+          id: 1,
+          mode: 'lightweight',
+          timestamp: '2024-01-01T00:00:00Z',
+        },
         {},
       );
       channel.unsubscribe();
       const onInsert = jest.fn();
       channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
       await channel.subscribe();
-      fetch[settle](settle === 'resolve' ? { id: 1 } : new Error('stale failure'));
+      if (settle === 'resolve') {
+        fetch.resolve({ id: 1 });
+      } else {
+        fetch.reject(new Error('stale failure'));
+      }
       await delivery;
       expect(onInsert).not.toHaveBeenCalled();
     },
@@ -85,12 +76,12 @@ describe('realtime in-flight work', () => {
   test('ignores a stale presence snapshot after resubscribing', async () => {
     jest.useFakeTimers();
     try {
-      const { realtime, client, subscriptions } = createRealtime();
-      const snapshot = deferred();
+      const { realtime, client } = createRealtime();
+      const snapshot = deferred<unknown>();
       client.presence.mockReturnValue(snapshot.promise);
       const channel = realtime.channel('lobby', { type: 'presence' });
       await channel.subscribe();
-      subscriptions[0].handlers.get('subscribed')();
+      subscriptionAt(client, 0).emit('subscribed');
       await jest.advanceTimersByTimeAsync(150);
       expect(client.presence).toHaveBeenCalledTimes(1);
       channel.unsubscribe();
