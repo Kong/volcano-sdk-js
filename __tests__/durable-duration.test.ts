@@ -53,7 +53,7 @@ test.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINI
   },
 );
 
-test.each(['', ' ', 'soon', '400ms', '1.5h', '-1s', '1', '1S', '1 s', '1s\t2s', '1s!', '1é'])(
+test.each(['', ' ', 's', 'soon', '400ms', '1.5h', '-1s', '1', '1S', '1 s', '1s\t2s', '1s!', '1é'])(
   'rejects malformed duration text: %p',
   (value) => {
     expect(() => waitDuration(value)).toThrow('wait must be a duration in whole seconds');
@@ -75,6 +75,12 @@ test.each([{ milliseconds: 500 }, { seconds: 1, extra: 0 }, [1]])(
     expect(() => waitDuration(value)).toThrow('wait duration takes days, hours, minutes, seconds');
   },
 );
+
+test('names every unknown duration field', () => {
+  expect(() => waitDuration({ milliseconds: 500, weeks: 1 })).toThrow(
+    'wait duration takes days, hours, minutes, seconds (got milliseconds, weeks)',
+  );
+});
 
 test.each([null, false, '1', 1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
   'rejects invalid duration parts: %p',
