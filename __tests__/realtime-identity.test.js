@@ -30,6 +30,7 @@ function createRealtime(accessToken) {
         subscribe: jest.fn(),
         unsubscribe: jest.fn(),
         ready: jest.fn().mockResolvedValue(undefined),
+        setData: jest.fn(),
         emit: (event, data) => handlers.get(event)?.(data),
       };
     }),
@@ -92,6 +93,39 @@ describe('realtime auth identity', () => {
       data: { presence: { 'old-client': { data: { online: true } } } },
     });
     expect(channel.getPresenceState()).toEqual({});
+  });
+
+  test('does not send Alice tracked presence state when Bob subscribes', async () => {
+    const { realtime, client } = createRealtime(token('project', 'alice'));
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    const onMessage = jest.fn();
+    channel.on('message', onMessage);
+    await channel.subscribe();
+    await channel.track({ privateTitle: 'alice-only' });
+
+    realtime._adoptAccessToken(token('project', 'bob'));
+    await channel.subscribe();
+
+    expect(client.newSubscription.mock.calls[1][1]).not.toHaveProperty('data');
+    expect(channel._myPresenceState).toBeUndefined();
+    expect(channel._presenceStateVersion).toBe(0);
+    expect(channel._presenceAcknowledgedVersion).toBe(0);
+    channel._subscription.emit('publication', { data: { event: 'message', text: 'bob' } });
+    expect(onMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves tracked presence state for the same recovery identity', async () => {
+    const { realtime, client } = createRealtime(token('project', 'alice'));
+    const channel = realtime.channel('lobby', { type: 'presence' });
+    await channel.subscribe();
+    await channel.track({ status: 'ready' });
+
+    realtime._adoptAccessToken(token('project', 'alice', 2));
+
+    expect(channel._myPresenceState).toEqual({ status: 'ready' });
+    expect(channel._presenceStateVersion).toBe(1);
+    expect(channel._presenceAcknowledgedVersion).toBe(1);
+    expect(client.removeSubscription).not.toHaveBeenCalled();
   });
 
   test('rejects readiness invalidated by an identity change', async () => {

@@ -894,6 +894,9 @@ class RealtimeChannel {
   }
 
   _resetForIdentityChange() {
+    this._myPresenceState = undefined;
+    this._presenceStateVersion = 0;
+    this._presenceAcknowledgedVersion = 0;
     this.unsubscribe();
     if (this._subscription) {
       for (const [event, handler] of Object.entries(this._eventHandlers)) {
@@ -1077,23 +1080,29 @@ class RealtimeChannel {
       }
 
       const databaseName = this._databaseName;
-      let dbClient = volcanoClient;
+      const tableName = schema && schema !== 'public' ? `${schema}.${table}` : table;
+      let query;
       if (databaseName) {
         if (typeof volcanoClient.database !== 'function') {
           throw new TypeError('volcanoClient.database not available');
         }
-        dbClient = volcanoClient.database(databaseName);
+        const selectedDatabaseName = volcanoClient._currentDatabaseName;
+        try {
+          query = volcanoClient.database(databaseName).from(tableName);
+        } finally {
+          volcanoClient._currentDatabaseName = selectedDatabaseName;
+        }
       } else if (typeof volcanoClient.database === 'function') {
         throw new TypeError(
           'Database name not set. Call volcanoClient.database(name) or pass databaseName to VolcanoRealtime.',
         );
+      } else {
+        query = volcanoClient.from(tableName);
       }
-
-      const tableName = schema && schema !== 'public' ? `${schema}.${table}` : table;
 
       // Fetch all records in a single query using IN clause
       // Assumes primary key column is 'id' - this is a common convention
-      const { data, error } = await dbClient.from(tableName).select('*').in('id', idsToFetch);
+      const { data, error } = await query.select('*').in('id', idsToFetch);
 
       if (error) {
         // Reject all pending callbacks

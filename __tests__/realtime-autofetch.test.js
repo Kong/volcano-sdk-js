@@ -6,6 +6,7 @@
  */
 
 const { VolcanoRealtime } = require('../src/realtime.ts');
+const { VolcanoAuth } = require('../src/index.js');
 
 // Mock volcano client for database queries
 const createMockVolcanoClient = (mockData = []) => {
@@ -328,6 +329,57 @@ describe('Realtime Auto-Fetch', () => {
   });
 
   describe('_fetchRow batching', () => {
+    test('scoped auto-fetch preserves the bound client database selection', async () => {
+      const queryDatabaseSelect = jest.fn().mockResolvedValue({
+        data: { data: [{ id: 7, name: 'feed item' }], count: 1 },
+      });
+      const volcanoClient = new VolcanoAuth({
+        anonKey: 'project123.secret',
+        accessToken: 'user-token',
+        transportFactory: () => ({ queryDatabaseSelect }),
+      });
+      volcanoClient.database('app-db');
+      realtime.setVolcanoClient(volcanoClient);
+      const channel = realtime.channel('public:items', {
+        type: 'postgres',
+        databaseName: 'feed-db',
+      });
+
+      const fetched = channel._fetchRow('public', 'items', 7);
+      jest.advanceTimersByTime(50);
+      await expect(fetched).resolves.toEqual({ id: 7, name: 'feed item' });
+
+      expect(queryDatabaseSelect).toHaveBeenCalledWith(
+        'feed-db',
+        expect.objectContaining({ table: 'items' }),
+        expect.anything(),
+      );
+      expect(volcanoClient._currentDatabaseName).toBe('app-db');
+      expect(volcanoClient.from('other_items').databaseName).toBe('app-db');
+    });
+
+    test('restores the bound database when scoped builder creation fails', async () => {
+      const volcanoClient = new VolcanoAuth({
+        anonKey: 'project123.secret',
+        accessToken: 'user-token',
+      });
+      volcanoClient.database('app-db');
+      realtime.setVolcanoClient(volcanoClient);
+      const channel = realtime.channel('public:items', {
+        type: 'postgres',
+        databaseName: 'feed-db',
+      });
+      jest.spyOn(volcanoClient, 'from').mockImplementationOnce(() => {
+        throw new Error('builder failed');
+      });
+
+      const fetched = channel._fetchRow('public', 'items', 7);
+      jest.advanceTimersByTime(50);
+      await expect(fetched).rejects.toThrow('builder failed');
+      expect(volcanoClient._currentDatabaseName).toBe('app-db');
+      expect(volcanoClient.from('other_items').databaseName).toBe('app-db');
+    });
+
     test('batches multiple fetch requests within window', async () => {
       const { client: mockClient } = createMockVolcanoClient([
         { id: 1, name: 'Alice' },

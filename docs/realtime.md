@@ -319,6 +319,9 @@ client record shape. The original server metadata remains available in
 `info.chanInfo` for compatibility. The SDK retains a detached snapshot and
 sends it again when the channel reconnects. If `track()` runs while the first
 `subscribe()` is pending, both promises wait until the latest state is accepted.
+The tracked state remains available across token refreshes for the same user
+and project. When the recovery identity changes, the SDK clears the tracked
+state before a new subscription; call `track()` again for the new identity.
 
 ```javascript
 await channel.track({ status: 'working' });
@@ -435,6 +438,10 @@ const realtime = new VolcanoRealtime({
   databaseName: 'your_database_name' // Optional if volcano.database(...) already called
 });
 ```
+
+Auto-fetch uses each Postgres channel's database selector without changing the
+database selected on the bound `VolcanoAuth` client. Other queries made with
+`volcano.from()` continue to use the client's existing selection.
 
 ## TypeScript
 
