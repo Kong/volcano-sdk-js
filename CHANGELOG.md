@@ -46,10 +46,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.14.0](https://github.com/Kong/volcano-sdk-js/compare/v1.13.0...v1.14.0) (2026-09-23)
 
-
 ### Features
 
-* **auth:** type session lifecycle and revocation ([#262](https://github.com/Kong/volcano-sdk-js/issues/262)) ([33574e6](https://github.com/Kong/volcano-sdk-js/commit/33574e64a72ceb98c76b55e5f24c0f0cb1ff31c2))
+- **auth:** type session lifecycle and revocation ([#262](https://github.com/Kong/volcano-sdk-js/issues/262)) ([33574e6](https://github.com/Kong/volcano-sdk-js/commit/33574e64a72ceb98c76b55e5f24c0f0cb1ff31c2))
 
 ## [1.13.0](https://github.com/Kong/volcano-sdk-js/compare/v1.12.0...v1.13.0) (2026-09-23)
 
