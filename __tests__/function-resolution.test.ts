@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from '@jest/globals';
-import { type ResolutionClient, resolveFunctionByHttp } from '../src/function-resolution.ts';
+import {
+  isResolutionOutcome,
+  type ResolutionClient,
+  resolveFunctionByHttp,
+} from '../src/function-resolution.ts';
 import {
   clearSharedFunctionResolveStateForTests,
   getSharedFunctionResolveState,
@@ -7,6 +11,23 @@ import {
 
 beforeEach(() => {
   clearSharedFunctionResolveStateForTests();
+});
+
+test('accepts only complete shared in-flight resolution outcomes', () => {
+  expect(isResolutionOutcome({ functionId: 'fn-1', error: null, status: 200 })).toBe(true);
+  expect(isResolutionOutcome({ functionId: null, error: new Error('missing'), status: null })).toBe(
+    true,
+  );
+  for (const value of [
+    null,
+    [],
+    {},
+    { functionId: 1, error: null, status: 200 },
+    { functionId: 'fn-1', error: 'failed', status: 200 },
+    { functionId: 'fn-1', error: null, status: '200' },
+  ]) {
+    expect(isResolutionOutcome(value)).toBe(false);
+  }
 });
 
 function clientWithResponse(

@@ -1,3 +1,4 @@
+import type { RequestResult } from './auth-request.ts';
 import type {
   ProjectLockAcquireOptions,
   ProjectLockAcquireResult,
@@ -9,7 +10,6 @@ import type {
   ProjectLocks,
   ProjectLockState,
 } from './index.js';
-import type { RequestResult } from './auth-request.ts';
 import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
@@ -111,7 +111,7 @@ export class ProjectLocksApi implements ProjectLocks {
       body: JSON.stringify({ ttl_seconds: ttl }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
-    if (!result.ok) {
+    if (result.ok !== true) {
       return { lease, error: result.error };
     }
     const fields = leaseFields(result.data);
@@ -150,7 +150,7 @@ export class ProjectLocksApi implements ProjectLocks {
       method: 'GET',
       headers: { 'X-Volcano-Request-Id': lockId(options.requestId) },
     });
-    if (!result.ok) {
+    if (result.ok !== true) {
       return { state: null, error: result.error };
     }
     return { state: stateFields(result.data), error: null };
@@ -165,7 +165,7 @@ export class ProjectLocksApi implements ProjectLocks {
       method: 'DELETE',
       headers: { 'X-Volcano-Request-Id': lockId(options.requestId) },
     });
-    return { error: result.ok ? null : result.error };
+    return { error: result.ok === true ? null : result.error };
   }
 
   async withLock<T>(

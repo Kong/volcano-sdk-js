@@ -31,17 +31,26 @@ export interface ResolutionOutcome {
 }
 
 export function isResolutionOutcome(value: unknown): value is ResolutionOutcome {
-  if (typeof value !== 'object' || value === null) {
+  if (!isRecord(value)) {
     return false;
   }
   return (
-    'functionId' in value &&
-    (typeof value.functionId === 'string' || value.functionId === null) &&
-    'error' in value &&
-    (value.error instanceof Error || value.error === null) &&
-    'status' in value &&
-    (typeof value.status === 'number' || value.status === null)
+    validResolvedId(value['functionId']) &&
+    validResolvedError(value['error']) &&
+    validResolvedStatus(value['status'])
   );
+}
+
+function validResolvedId(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function validResolvedError(value: unknown): value is Error | null {
+  return value instanceof Error || value === null;
+}
+
+function validResolvedStatus(value: unknown): value is number | null {
+  return typeof value === 'number' || value === null;
 }
 
 export async function resolveFunctionByHttp(
@@ -55,7 +64,7 @@ export async function resolveFunctionByHttp(
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!result.ok) {
+  if (result.ok !== true) {
     return failedResolution(client._functionResolveState, cacheKey, result);
   }
   return successfulResolution(client._functionResolveState, cacheKey, result);
