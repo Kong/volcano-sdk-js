@@ -2515,7 +2515,15 @@ describe('VolcanoAuth', () => {
         )
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ object: { path: 'avatar.png', is_public: true } }),
+          json: () =>
+            Promise.resolve({
+              id: 'object-1',
+              bucket_id: 'bucket-1',
+              name: 'avatar.png',
+              is_public: true,
+              size: 4,
+              mime_type: 'image/png',
+            }),
         });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });

@@ -12,12 +12,13 @@ const renewed = () =>
   reply(200, {
     access_token: sessionToken(SESSION, true),
     refresh_token: 'refresh-2',
-    user: { id: 'user' },
+    expires_in: 3600,
+    user: { id: 'user', email: 'user@example.com', status: 'active' },
   });
 const replacement = {
   access_token: sessionToken(OTHER),
   refresh_token: 'other-refresh',
-  user: { id: 'other' },
+  user: { id: 'other', email: 'other@example.com', status: 'active' },
 };
 const cases = [
   ['request email', (c) => c.auth.requestEmailChange('new@example.com'), 200, {}],
@@ -26,7 +27,7 @@ const cases = [
     'list sessions',
     (c) => c.auth.getSessions({ page: 2, limit: 10 }),
     200,
-    { sessions: [], total: 0 },
+    { sessions: [], total: 0, page: 2, limit: 10, total_pages: 0 },
   ],
   ['delete others', (c) => c.auth.deleteAllOtherSessions(), 204, {}],
   ['delete session', (c) => c.auth.deleteSession(OTHER), 204, {}],
@@ -38,8 +39,18 @@ const cases = [
     { authorization_url: 'https://provider.example' },
   ],
   ['unlink', (c) => c.auth.unlinkOAuthProvider('github'), 204, {}],
-  ['token', (c) => c.auth.getOAuthProviderToken('github'), 200, { provider: 'github' }],
-  ['refresh token', (c) => c.auth.refreshOAuthToken('github'), 200, { provider: 'github' }],
+  [
+    'token',
+    (c) => c.auth.getOAuthProviderToken('github'),
+    200,
+    { message: 'ready', provider: 'github', expires_in: 3600 },
+  ],
+  [
+    'refresh token',
+    (c) => c.auth.refreshOAuthToken('github'),
+    200,
+    { message: 'refreshed', provider: 'github', expires_in: 3600 },
+  ],
   [
     'provider API',
     (c) =>

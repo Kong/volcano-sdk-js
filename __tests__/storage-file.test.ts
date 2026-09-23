@@ -1,6 +1,13 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { type StorageAuthHost, StorageFileApi } from '../src/storage-file.ts';
+import {
+  completedUpload,
+  storageObject,
+  uploadPart,
+  uploadSession,
+  uploadStatus,
+} from './storage-response-fixtures.ts';
 
 type Upload = StorageAuthHost['_transport']['uploadStorageObject'];
 type Download = StorageAuthHost['_transport']['downloadStorageObject'];
@@ -21,7 +28,7 @@ function fixture(accessToken: string | null = 'token'): Fixture {
   globalThis.fetch = request;
   const upload = jest.fn<Upload>();
   const download = jest.fn<Download>();
-  upload.mockResolvedValue({ data: { name: 'file.bin' } });
+  upload.mockResolvedValue({ data: storageObject() });
   download.mockResolvedValue({ data: new Blob(['data']) });
   const host: StorageAuthHost = {
     apiUrl,
@@ -110,7 +117,7 @@ test('uploads a File unchanged through the generated transport', async () => {
   const given = fixture();
   const file = new File(['data'], 'file.bin', { type: 'text/plain' });
   await expect(given.api.upload('folder/file.bin', file)).resolves.toEqual({
-    data: { name: 'file.bin' },
+    data: storageObject(),
     error: null,
   });
   expect(given.upload).toHaveBeenCalledWith(
@@ -119,6 +126,15 @@ test('uploads a File unchanged through the generated transport', async () => {
     { file },
     expect.anything(),
   );
+});
+
+test('rejects an incomplete successful upload object', async () => {
+  const given = fixture();
+  given.upload.mockResolvedValue({ data: { name: 'incomplete' } });
+  await expect(given.api.upload('file.bin', new Blob(['data']))).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid storage upload response'),
+  });
 });
 
 test.each([
@@ -222,9 +238,11 @@ test('does not download without a session', async () => {
 
 test('lists objects with the same prefix, limit, and cursor query shape', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ objects: [{ name: 'one' }], next_cursor: 'next' }));
+  given.fetch.mockResolvedValue(
+    Response.json({ objects: [storageObject({ name: 'one' })], next_cursor: 'next' }),
+  );
   await expect(given.api.list('photos/', { limit: 2, cursor: 'last' })).resolves.toEqual({
-    data: [{ name: 'one' }],
+    data: [storageObject({ name: 'one' })],
     error: null,
     nextCursor: 'next',
   });
@@ -369,9 +387,9 @@ test.each(['move', 'copy'] as const)(
   '%s sends an authenticated transfer request',
   async (operation) => {
     const given = fixture();
-    given.fetch.mockResolvedValue(Response.json({ name: 'destination.bin' }));
+    given.fetch.mockResolvedValue(Response.json(storageObject({ name: 'destination.bin' })));
     await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toEqual({
-      data: { name: 'destination.bin' },
+      data: storageObject({ name: 'destination.bin' }),
       error: null,
     });
     expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/${operation}`);
@@ -403,9 +421,9 @@ test('returns a bucket-scoped public URL', () => {
 
 test('updates visibility through the storage route', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ is_public: true }));
+  given.fetch.mockResolvedValue(Response.json(storageObject({ is_public: true })));
   await expect(given.api.updateVisibility('file.bin', true)).resolves.toEqual({
-    data: { is_public: true },
+    data: storageObject({ is_public: true }),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/file.bin/visibility`);
@@ -449,9 +467,9 @@ test('rejects absent session options locally', async () => {
 
 test('creates an upload session with the legacy body defaults', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ session_id: 'session-1' }));
+  given.fetch.mockResolvedValue(Response.json(uploadSession()));
   await expect(given.api.createUploadSession('', { totalSize: 4 })).resolves.toEqual({
-    data: { session_id: 'session-1' },
+    data: uploadSession(),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
@@ -466,7 +484,7 @@ test('creates an upload session with the legacy body defaults', async () => {
 
 test('creates a session with explicit content type and part size', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ session_id: 'session-1' }));
+  given.fetch.mockResolvedValue(Response.json(uploadSession()));
   await given.api.createUploadSession('folder/file.bin', {
     totalSize: 10,
     contentType: 'application/custom',
@@ -492,10 +510,10 @@ test('does not create an upload session without authentication', async () => {
 
 test('uploads a binary part with ownership and part-number headers', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ part_number: 2 }));
+  given.fetch.mockResolvedValue(Response.json(uploadPart({ part_number: 2 })));
   const part = new Blob(['data']);
   await expect(given.api.uploadPart('file.bin', 'session-1', 2, part)).resolves.toEqual({
-    data: { part_number: 2 },
+    data: uploadPart({ part_number: 2 }),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
@@ -510,8 +528,11 @@ test('uploads a binary part with ownership and part-number headers', async () =>
 
 test('completes an upload session with its owner header', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ object: { name: 'file.bin' } }));
-  await given.api.completeUploadSession('file.bin', 'session-1');
+  given.fetch.mockResolvedValue(Response.json(completedUpload()));
+  await expect(given.api.completeUploadSession('file.bin', 'session-1')).resolves.toEqual({
+    data: completedUpload(),
+    error: null,
+  });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'POST',
     body: '{}',
@@ -524,8 +545,11 @@ test('completes an upload session with its owner header', async () => {
 
 test('reads an upload session with its owner header', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ status: 'uploading' }));
-  await given.api.getUploadSession('file.bin', 'session-1');
+  given.fetch.mockResolvedValue(Response.json(uploadStatus()));
+  await expect(given.api.getUploadSession('file.bin', 'session-1')).resolves.toEqual({
+    data: uploadStatus(),
+    error: null,
+  });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'GET',
     headers: expect.objectContaining({ 'X-Upload-Session': 'session-1' }),
@@ -564,15 +588,28 @@ test.each([
 test('resumable upload delegates through the typed session facade', async () => {
   const given = fixture();
   const create = jest.spyOn(given.api, 'createUploadSession').mockResolvedValue({
-    data: { session_id: 'session-1', total_parts: 0, part_size: 1 },
+    data: {
+      session_id: 'session-1',
+      total_parts: 0,
+      part_size: 1,
+      expires_at: '2026-09-24T00:00:00Z',
+    },
     error: null,
   });
+  const object = {
+    id: 'object-1',
+    bucket_id: 'bucket-1',
+    name: 'file.bin',
+    is_public: false,
+    size: 4,
+    mime_type: 'application/octet-stream',
+  };
   const complete = jest.spyOn(given.api, 'completeUploadSession').mockResolvedValue({
-    data: { object: { name: 'file.bin' } },
+    data: { object },
     error: null,
   });
   await expect(given.api.uploadResumable('file.bin', new Blob(['data']))).resolves.toEqual({
-    data: { object: { name: 'file.bin' } },
+    data: { object },
     error: null,
   });
   expect(create).toHaveBeenCalledWith('file.bin', {

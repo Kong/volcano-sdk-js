@@ -13,12 +13,13 @@ const renewed = () =>
   reply(200, {
     access_token: token(SESSION, 2),
     refresh_token: 'rotated',
-    user: { id: 'user' },
+    expires_in: 3600,
+    user: { id: 'user', email: 'user@example.com', status: 'active' },
   });
 const replacement = {
   access_token: token(OTHER),
   refresh_token: 'other-refresh',
-  user: { id: 'other' },
+  user: { id: 'other', email: 'other@example.com', status: 'active' },
 };
 
 function deferred() {
