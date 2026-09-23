@@ -116,11 +116,11 @@ describe('auto-fetch database boundary', () => {
     const client = Object.assign(() => {}, {
       from: () => ({ select: () => ({ in: () => ({ data: [] }) }) }),
     });
-    expect(() => fetchFrom(client)).toThrow('volcanoClient.from not available');
+    expect(() => fetchFrom(client)).toThrow('volcanoClient must be an object');
   });
 
   test('rejects clients with incomplete query capabilities', () => {
-    expect(() => fetchFrom(null)).toThrow('volcanoClient.from not available');
+    expect(() => fetchFrom(null)).toThrow('volcanoClient must be an object');
     expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
       'volcanoClient.database not available',
     );

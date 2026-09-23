@@ -90,7 +90,7 @@ function runBatchQuery(
   ids: string[],
 ): unknown {
   if (!record(client)) {
-    throw new TypeError('volcanoClient.from not available');
+    throw new TypeError('volcanoClient must be an object');
   }
   const tableName = schema !== '' && schema !== 'public' ? `${schema}.${table}` : table;
   const previousDatabase = property(client, '_currentDatabaseName');
