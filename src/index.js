@@ -44,6 +44,7 @@ import { buildStorageUrl, encodeStoragePath } from './storage-paths.ts';
 import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
 import { storageRequest } from './storage-transport.ts';
+import { downloadStorageFile, uploadStorageFile } from './storage-transfers.ts';
 import { extractRequiredProjectIdFromToken, extractSessionIdFromToken } from './token-claims.ts';
 
 /**
@@ -2633,59 +2634,14 @@ class StorageFileApi {
    * Upload a file to the bucket
    */
   async upload(path, fileBody, options = {}) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    try {
-      let file;
-
-      if (fileBody instanceof File) {
-        file = fileBody;
-      } else if (fileBody instanceof Blob || fileBody instanceof ArrayBuffer) {
-        const contentType = options.contentType || 'application/octet-stream';
-        file = new File([fileBody], path.split('/').pop() || 'file', { type: contentType });
-      } else {
-        return errorResult('Invalid file body type. Expected File, Blob, or ArrayBuffer.');
-      }
-
-      const response = await this.volcanoAuth._transport.uploadStorageObject(
-        encodeURIComponent(this.bucketName),
-        this._encodePath(path),
-        { file },
-        this.volcanoAuth._generatedOptions('session'),
-      );
-
-      return { data: response.data, error: null };
-    } catch (error) {
-      return { data: null, error: error instanceof Error ? error : new Error('Upload failed') };
-    }
+    return uploadStorageFile(this, path, fileBody, options);
   }
 
   /**
    * Download a file from the bucket
    */
   async download(path, options = {}) {
-    const authError = await this._checkAuth();
-    if (authError) {
-      return authError;
-    }
-
-    try {
-      const response = await this.volcanoAuth._transport.downloadStorageObject(
-        encodeURIComponent(this.bucketName),
-        this._encodePath(path),
-        this.volcanoAuth._generatedOptions(
-          'session',
-          options.range ? { Range: options.range } : undefined,
-          'blob',
-        ),
-      );
-      return { data: response.data, error: null };
-    } catch (error) {
-      return { data: null, error: error instanceof Error ? error : new Error('Download failed') };
-    }
+    return downloadStorageFile(this, path, options);
   }
 
   /**
