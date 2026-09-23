@@ -46,10 +46,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.13.0](https://github.com/Kong/volcano-sdk-js/compare/v1.12.0...v1.13.0) (2026-09-23)
 
-
 ### Features
 
-* **auth:** type browser redirect and session handoff ([#260](https://github.com/Kong/volcano-sdk-js/issues/260)) ([7f6833c](https://github.com/Kong/volcano-sdk-js/commit/7f6833ca0cf0cbc2d260f15703b48c9afee200c6))
+- **auth:** type browser redirect and session handoff ([#260](https://github.com/Kong/volcano-sdk-js/issues/260)) ([7f6833c](https://github.com/Kong/volcano-sdk-js/commit/7f6833ca0cf0cbc2d260f15703b48c9afee200c6))
 
 ## [1.12.0](https://github.com/Kong/volcano-sdk-js/compare/v1.11.1...v1.12.0) (2026-09-23)
 
