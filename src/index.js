@@ -1,3 +1,4 @@
+import { apiRequestError, errorResult } from './api-errors.ts';
 import {
   sessionIdsEqual,
   validateRefreshSource,
@@ -207,30 +208,6 @@ async function fetchWithAuthRetry(volcanoAuth, url, options = {}) {
   }
 
   return response;
-}
-
-/**
- * Create an error result object
- * @param {string|Error} message - Error message or existing error
- * @param {Object} [extra] - Extra fields to include
- * @returns {Object}
- */
-function errorResult(message, extra = {}) {
-  const error = message instanceof Error ? message : new Error(message);
-  return { data: null, error, ...extra };
-}
-
-function apiRequestError(response, data, message = data?.error || 'Request failed') {
-  const error = new Error(message);
-  error.status = response.status;
-  if (data?.code) {
-    error.code = data.code;
-  }
-  const retryAfter = Number.parseInt(getHeaderValue(response, 'retry-after') || '', 10);
-  if (Number.isFinite(retryAfter)) {
-    error.retryAfter = retryAfter;
-  }
-  return error;
 }
 
 class ProjectLocksApi {
