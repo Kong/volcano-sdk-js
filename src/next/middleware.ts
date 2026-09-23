@@ -120,13 +120,10 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
   try {
     const payload: unknown = await response.json();
     const detail = isRecord(payload) ? payload['error'] : undefined;
-    if (typeof detail === 'string' && detail !== '') {
-      return detail;
-    }
+    return typeof detail === 'string' && detail !== '' ? detail : fallback;
   } catch {
     return fallback;
   }
-  return fallback;
 }
 
 async function userResponse(response: Response): Promise<GetUserResult> {
@@ -136,8 +133,12 @@ async function userResponse(response: Response): Promise<GetUserResult> {
       error: new Error(await errorMessage(response, `Auth failed: ${String(response.status)}`)),
     };
   }
-  const payload: unknown = await response.json().catch(() => ({}));
-  return { user: userFromPayload(payload), error: null };
+  try {
+    const payload: unknown = await response.json();
+    return { user: userFromPayload(payload), error: null };
+  } catch {
+    return { user: null, error: null };
+  }
 }
 
 function refreshPair(
