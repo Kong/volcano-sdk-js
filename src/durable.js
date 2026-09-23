@@ -2,6 +2,7 @@ import { mapArgs, namedArgs, requireFunction } from './durable-arguments.ts';
 import { batchResult } from './durable-batch-result.ts';
 import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
 import { waitDuration } from './durable-duration.ts';
+import { parallelBranches } from './durable-parallel-branches.ts';
 import { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 
 /**
@@ -169,7 +170,11 @@ function durableContext(context, engine) {
     parallel(name, branches, options) {
       const [parallelName, branchList, parallelOptions] = namedArgs(name, branches, options);
       return context
-        .parallel(parallelName, parallelBranches(branchList, engine), batchConfig(parallelOptions))
+        .parallel(
+          parallelName,
+          parallelBranches(branchList, (branchContext) => durableContext(branchContext, engine)),
+          batchConfig(parallelOptions),
+        )
         .then(batchResult);
     },
   };
@@ -183,24 +188,6 @@ function durableContext(context, engine) {
  */
 function stepScope(scope) {
   return { log: scope.logger, attempt: scope.attempt };
-}
-
-function parallelBranches(branches, engine) {
-  if (!Array.isArray(branches)) {
-    throw new TypeError('ctx.parallel() requires an array of branches');
-  }
-  return branches.map((branch) => {
-    if (typeof branch === 'function') {
-      return (branchContext) => branch(durableContext(branchContext, engine));
-    }
-    if (typeof branch?.run !== 'function') {
-      throw new TypeError('a parallel branch is a function, or { name, run }');
-    }
-    return {
-      name: branch.name,
-      func: (branchContext) => branch.run(durableContext(branchContext, engine)),
-    };
-  });
 }
 
 export { durable };
