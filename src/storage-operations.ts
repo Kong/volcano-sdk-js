@@ -44,23 +44,15 @@ function listUrl(host: StorageOperationHost, prefix: string, options: StorageLis
   if (prefix.length > 0) {
     params.set('prefix', prefix);
   }
-  if (hasLimit(options.limit)) {
+  if (Boolean(options.limit)) {
     params.set('limit', String(options.limit));
   }
-  if (hasCursor(options.cursor)) {
-    params.set('cursor', options.cursor);
+  if (Boolean(options.cursor)) {
+    params.set('cursor', String(options.cursor));
   }
   const query = params.toString();
   const base = `${host.volcanoAuth.apiUrl}/storage/${encodeURIComponent(host.bucketName)}`;
   return query.length > 0 ? `${base}?${query}` : base;
-}
-
-function hasLimit(value: number | undefined): value is number {
-  return value !== undefined && value !== 0;
-}
-
-function hasCursor(value: string | undefined): value is string {
-  return value !== undefined && value.length > 0;
 }
 
 function listResponse(value: unknown): StorageListResult {

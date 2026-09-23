@@ -376,6 +376,18 @@ describe('Storage', () => {
       expect(nextCursor).toBe('cursor-abc');
     });
 
+    it('should omit a null cursor returned by the previous page', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ objects: [], next_cursor: null }),
+      });
+
+      const { error } = await volcano.storage.from('files').list('', { cursor: null });
+
+      expect(error).toBeNull();
+      expect(fetch).toHaveBeenCalledWith('https://api.test.com/storage/files', expect.any(Object));
+    });
+
     it('should return error when not authenticated', async () => {
       volcano.accessToken = null;
 
@@ -814,6 +826,30 @@ describe('Storage', () => {
 
       expect(data).toBeNull();
       expect(error.message).toBe('totalSize is required');
+    });
+
+    it.each([null, Number.NaN])('should reject invalid totalSize %s locally', async (totalSize) => {
+      const { data, error } = await volcano.storage
+        .from('uploads')
+        .createUploadSession('file.mp4', { totalSize });
+
+      expect(data).toBeNull();
+      expect(error.message).toBe('totalSize is required');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('defaults a null content type before sending the upload request', async () => {
+      global.fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      const { error } = await volcano.storage
+        .from('uploads')
+        .createUploadSession('file.mp4', { totalSize: 1000, contentType: null });
+
+      expect(error).toBeNull();
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+        content_type: 'application/octet-stream',
+        total_size: 1000,
+      });
     });
 
     it('should return error when not authenticated', async () => {

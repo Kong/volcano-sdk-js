@@ -22,26 +22,28 @@ export async function createStorageUploadSession(
   if (authError !== null) {
     return authError;
   }
-  if (!hasTotalSize(options)) {
+  const totalSize = options?.totalSize;
+  if (!Boolean(totalSize)) {
     return errorResult('totalSize is required');
   }
   return host._storageRequest(host._buildUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: uploadFileName(path),
-      content_type: uploadContentType(options.contentType),
-      total_size: options.totalSize,
-      part_size: options.partSize,
-    }),
+    body: JSON.stringify(uploadSessionBody(path, options, totalSize)),
   });
 }
 
-function hasTotalSize(
+function uploadSessionBody(
+  path: string,
   options: Partial<CreateUploadSessionOptions> | null | undefined,
-): options is CreateUploadSessionOptions {
-  const totalSize = options?.totalSize;
-  return totalSize !== undefined && totalSize !== 0;
+  totalSize: number | undefined,
+): object {
+  return {
+    filename: uploadFileName(path),
+    content_type: uploadContentType(options?.contentType),
+    total_size: totalSize,
+    part_size: options?.partSize,
+  };
 }
 
 function uploadFileName(path: string): string {
@@ -49,10 +51,8 @@ function uploadFileName(path: string): string {
   return name.length > 0 ? name : path;
 }
 
-function uploadContentType(contentType: string | undefined): string {
-  return contentType === undefined || contentType.length === 0
-    ? 'application/octet-stream'
-    : contentType;
+function uploadContentType(contentType: unknown): unknown {
+  return Boolean(contentType) ? contentType : 'application/octet-stream';
 }
 
 /** Upload one part without changing its binary body. */
