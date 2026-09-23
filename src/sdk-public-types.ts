@@ -69,16 +69,16 @@ export interface User {
   user_metadata?: UserMetadata;
   app_metadata?: UserMetadata;
   avatar_url?: string;
-  status?: UserStatus;
+  status: UserStatus;
   banned_until?: string | null;
   last_sign_in_at?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Session {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
 }
 
