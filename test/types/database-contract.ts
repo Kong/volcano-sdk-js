@@ -1,4 +1,10 @@
-import { databaseConnectionString, type DatabaseConnectionStringOptions } from '../../src/index.js';
+import {
+  databaseConnectionString,
+  type DatabaseConnectionStringOptions,
+  type MutationBuilder,
+  type QueryBuilder,
+  type QueryResult,
+} from '../../src/index.js';
 
 type ExistingOptions = { userId?: string | null };
 type ExistingFunction = (base: string, options?: ExistingOptions) => string;
@@ -18,3 +24,9 @@ void [
   acceptsExistingFunction,
   preservesExistingFunction,
 ];
+
+declare const query: QueryBuilder<{ id: number }>;
+declare const mutation: MutationBuilder<{ id: number }>;
+const queryResult: Promise<QueryResult<{ id: number }>> = Promise.resolve(query);
+const mutationResult: Promise<QueryResult<{ id: number }>> = Promise.resolve(mutation);
+void [queryResult, mutationResult];
