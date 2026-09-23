@@ -2,7 +2,8 @@ import { clearSharedFunctionResolveStateForTests } from '../src/function-resolve
 
 // Mock fetch globally. Suites that drive the SDK against a real local server
 // restore this reference instead.
-Object.assign(globalThis, { __realFetch: globalThis.fetch });
+export const realFetch = globalThis.fetch;
+Object.assign(globalThis, { __realFetch: realFetch });
 globalThis.fetch = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
 
 // Mock localStorage

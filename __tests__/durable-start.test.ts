@@ -1,4 +1,6 @@
-const { VolcanoClient } = require('../src/index.js');
+import { describe, expect, jest, test } from '@jest/globals';
+import { type VolcanoAuthConfig, VolcanoClient } from '../src/index.js';
+import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 const execution = {
   id: 'exec-1',
@@ -9,19 +11,34 @@ const execution = {
   created_at: '2026-09-06T12:00:00Z',
 };
 
-function clientWithTransport(overrides = {}, config = {}) {
+type StartOperation = (
+  functionName: string,
+  input: unknown,
+  options: { headers?: Record<string, string> },
+) => Promise<{ data: typeof execution; status: number }>;
+
+interface StartTransport {
+  startDurableExecutionFromApplication: jest.Mock<StartOperation>;
+}
+
+function clientWithTransport(
+  overrides: Partial<StartTransport> = {},
+  config: Partial<VolcanoAuthConfig> = {},
+) {
   const transport = {
-    startDurableExecutionFromApplication: jest
-      .fn()
-      .mockResolvedValue({ data: execution, status: 202 }),
+    startDurableExecutionFromApplication: jest.fn<StartOperation>().mockResolvedValue({
+      data: execution,
+      status: 202,
+    }),
     ...overrides,
   };
-  const volcano = new VolcanoClient({
+  const options = {
     apiUrl: 'https://api.test.com',
     anonKey: 'ak-durable',
     transportFactory: () => transport,
     ...config,
-  });
+  };
+  const volcano = new VolcanoClient(options);
   return { volcano, transport };
 }
 
@@ -58,22 +75,30 @@ describe('durable.start', () => {
     const { volcano, transport } = clientWithTransport();
 
     await volcano.durable.start('order-pipeline', {}, { executionName: ' order-42 ' });
-    expect(transport.startDurableExecutionFromApplication.mock.calls[0][2]).toEqual(
+    expect(transport.startDurableExecutionFromApplication.mock.calls[0]?.[2]).toEqual(
       expect.objectContaining({ headers: { 'X-Volcano-Execution-Name': 'order-42' } }),
     );
 
     await volcano.durable.start('order-pipeline');
-    expect(transport.startDurableExecutionFromApplication.mock.calls[1][2].headers).toBeUndefined();
+    expect(
+      transport.startDurableExecutionFromApplication.mock.calls[1]?.[2].headers,
+    ).toBeUndefined();
   });
 
   test('refuses a missing function name before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
 
     for (const name of ['', '   ', undefined, 42]) {
-      const { data, status, error } = await volcano.durable.start(name);
-      expect(data).toBeNull();
-      expect(status).toBeNull();
-      expect(error.message).toContain('functionName must be a non-empty string');
+      const result: unknown = Reflect.apply(
+        volcano.durable.start.bind(volcano.durable),
+        undefined,
+        [name],
+      );
+      await expect(result).resolves.toMatchObject({
+        data: null,
+        status: null,
+        error: { message: expect.stringContaining('functionName must be a non-empty string') },
+      });
     }
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
@@ -83,7 +108,7 @@ describe('durable.start', () => {
 
     const { error } = await volcano.durable.start('order-pipeline', {}, { executionName: '  ' });
 
-    expect(error.message).toContain('executionName must be a non-empty string');
+    expect(error?.message).toContain('executionName must be a non-empty string');
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
 
@@ -99,7 +124,7 @@ describe('durable.start', () => {
       { executionName: 'o'.repeat(256) },
     );
 
-    expect(error.message).toContain('executionName must be at most 255 characters');
+    expect(error?.message).toContain('executionName must be at most 255 characters');
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
 
     await volcano.durable.start('order-pipeline', {}, { executionName: ` ${'o'.repeat(255)} ` });
@@ -111,7 +136,9 @@ describe('durable.start', () => {
   test('surfaces a platform refusal with its status', async () => {
     const refusal = Object.assign(new Error('too many executions in flight'), { status: 429 });
     const { volcano } = clientWithTransport({
-      startDurableExecutionFromApplication: jest.fn().mockRejectedValue(refusal),
+      startDurableExecutionFromApplication: jest
+        .fn<StartOperation>()
+        .mockImplementation(() => Promise.reject(refusal)),
     });
 
     await expect(volcano.durable.start('order-pipeline')).resolves.toEqual({
@@ -123,13 +150,15 @@ describe('durable.start', () => {
 
   test('reports a transport failure that carries no status', async () => {
     const { volcano } = clientWithTransport({
-      startDurableExecutionFromApplication: jest.fn().mockRejectedValue('socket hang up'),
+      startDurableExecutionFromApplication: jest
+        .fn<StartOperation>()
+        .mockImplementation(() => rejectWithForeignValue('socket hang up')),
     });
 
     const { data, status, error } = await volcano.durable.start('order-pipeline');
 
     expect(data).toBeNull();
     expect(status).toBeNull();
-    expect(error.message).toBe('Failed to start durable execution');
+    expect(error?.message).toBe('Failed to start durable execution');
   });
 });
