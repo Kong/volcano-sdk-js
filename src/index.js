@@ -1,4 +1,3 @@
-import { apiRequestError } from './api-errors.ts';
 import {
   cancelEmailChange as cancelAccountEmailChange,
   confirmEmail as confirmAccountEmail,
@@ -114,7 +113,6 @@ import {
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
 import { StorageFileApi } from './storage-file.ts';
-import { extractRequiredProjectIdFromToken } from './token-claims.ts';
 
 /**
  * Volcano Auth SDK - Official JavaScript client for Volcano
@@ -176,15 +174,6 @@ const GENERATED_TRANSPORT = {
   stopDurableExecution,
   uploadStorageObject,
 };
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-function authSessionChangedResult() {
-  const error = new AuthSessionChangedError();
-  return { data: null, status: error.status, headers: {}, version: null, error };
-}
 
 // ============================================================================
 // VolcanoAuth Class
