@@ -41,6 +41,17 @@ test('prunes on the normal interval and leaves recent entries untouched between 
   expect(state.lastPruneAtMs).toBe(previousPrune);
 });
 
+test('prunes when the interval has elapsed exactly', () => {
+  const state = getSharedFunctionResolveState();
+  state.lastPruneAtMs = 1000;
+  state.cache.set('expired', { expiresAt: 5000 });
+
+  pruneFunctionResolveCache(state, 6000);
+
+  expect(state.cache.has('expired')).toBe(false);
+  expect(state.lastPruneAtMs).toBe(6000);
+});
+
 test('forced scans reject stale and malformed shared entries', () => {
   const state = getSharedFunctionResolveState();
   state.cache.set('null', null);
@@ -64,4 +75,15 @@ test('evicts earliest expirations first when the shared cache reaches its bound'
 
   pruneFunctionResolveCache(state, 6000, true);
   expect([...state.cache.keys()]).toEqual(['latest', 'middle']);
+});
+
+test('retains every live entry while the cache remains below its bound', () => {
+  const state = getSharedFunctionResolveState();
+  state.maxEntries = 3;
+  state.cache.set('first', { expiresAt: 7000 });
+  state.cache.set('second', { expiresAt: 8000 });
+
+  pruneFunctionResolveCache(state, 6000, true);
+
+  expect([...state.cache.keys()]).toEqual(['first', 'second']);
 });
