@@ -178,6 +178,9 @@ test.each([new Error('upload failed'), 'upload failed'])(
     const result = await given.api.upload('file.bin', new Blob(['data']));
     expect(result.data).toBeNull();
     expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe(
+      failure instanceof Error ? failure.message : 'Upload failed',
+    );
   },
 );
 
@@ -530,9 +533,9 @@ test.each([undefined, null, false, 0, Number.NaN, ''])(
   },
 );
 
-test('rejects absent session options locally', async () => {
+test.each([null, undefined])('rejects absent session options locally', async (options) => {
   const given = fixture();
-  await expect(given.api.createUploadSession('file.bin', null)).resolves.toMatchObject({
+  await expect(given.api.createUploadSession('file.bin', options)).resolves.toMatchObject({
     error: { message: 'totalSize is required' },
   });
 });
