@@ -113,15 +113,15 @@ export type BatchCompletionReason =
 export interface BatchFailure {
   name: string;
   message: string;
-  type?: string;
-  data?: string;
+  type?: unknown;
+  data?: unknown;
 }
 
 export interface BatchItem<TResult> {
   index: number;
   status: 'succeeded' | 'failed';
-  result?: TResult;
-  error?: BatchFailure;
+  result?: TResult | undefined;
+  error?: BatchFailure | undefined;
 }
 
 export interface BatchResult<TResult> {
@@ -141,7 +141,7 @@ export interface BatchResult<TResult> {
   failed: number;
   /** How many items finished, which is `succeeded + failed`. */
   completed: number;
-  completionReason?: BatchCompletionReason;
+  completionReason?: BatchCompletionReason | undefined;
   /** Throws the first failure, if there was one. */
   throwIfFailed(): void;
 }

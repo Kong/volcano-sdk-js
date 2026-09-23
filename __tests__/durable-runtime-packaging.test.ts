@@ -76,7 +76,16 @@ describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
           writeFileSync(
             join(runtimeDir, 'index.cjs'),
             `module.exports = {
-              withDurableExecution: (handler) => handler,
+              withDurableExecution: (handler) => (event) => handler(event, {
+                logger: { info() {}, warn() {}, error() {}, debug() {} },
+                configureLogger() {},
+                step() {},
+                wait() {},
+                runInChildContext() {},
+                waitForCondition() {},
+                map() {},
+                parallel() {},
+              }),
               StepSemantics: { AtMostOncePerRetry: 'AT_MOST_ONCE_PER_RETRY' },
               createRetryStrategy: (config) => config,
               createWaitStrategy: (config) => config,

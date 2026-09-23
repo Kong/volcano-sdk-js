@@ -4,6 +4,9 @@
     "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@aws/durable-execution-sdk-js": ["./src/durable-runtime-peer.d.ts"]
+    },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

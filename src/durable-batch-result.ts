@@ -1,4 +1,5 @@
 import { failureDetail } from './durable-failure-detail.ts';
+import type { BatchCompletionReason, BatchResult } from './durable-types.ts';
 
 interface EngineBatchItem<Result> {
   index: number;
@@ -17,33 +18,17 @@ export interface EngineBatch<Result> {
   throwIfError(): void;
 }
 
-interface FlattenedBatchResult<Result> {
-  items: {
-    index: number;
-    status: string;
-    result: Result | undefined;
-    error: ReturnType<typeof failureDetail> | undefined;
-  }[];
-  results: Result[];
-  errors: ReturnType<typeof failureDetail>[];
-  succeeded: number;
-  failed: number;
-  completed: number;
-  completionReason: string | undefined;
-  throwIfFailed(): void;
-}
-
 /**
  * In-flight items and the live total can change on replay after early
  * completion. Expose completed items and their count so handlers see the same
  * JSON-safe result when resumed.
  */
-export function batchResult<Result>(batch: EngineBatch<Result>): FlattenedBatchResult<Result> {
+export function batchResult<Result>(batch: EngineBatch<Result>): BatchResult<Result> {
   const items = batch.all
     .filter((item) => item.status !== 'STARTED')
     .map((item) => ({
       index: item.index,
-      status: item.status.toLowerCase(),
+      status: item.status === 'SUCCEEDED' ? ('succeeded' as const) : ('failed' as const),
       result: item.result,
       error: item.error === undefined ? undefined : failureDetail(item.error),
     }));
@@ -62,8 +47,16 @@ export function batchResult<Result>(batch: EngineBatch<Result>): FlattenedBatchR
   };
 }
 
-function completionReason(batch: EngineBatch<unknown>): string | undefined {
+const completionReasons = new Map<string, BatchCompletionReason>([
+  ['ALL_COMPLETED', 'all_completed'],
+  ['MIN_SUCCESSFUL_REACHED', 'min_successful_reached'],
+  ['FAILURE_TOLERANCE_EXCEEDED', 'failure_tolerance_exceeded'],
+  ['CUSTOM_COMPLETION_SUCCEEDED', 'custom_completion_succeeded'],
+  ['CUSTOM_COMPLETION_FAILED', 'custom_completion_failed'],
+]);
+
+function completionReason(batch: EngineBatch<unknown>): BatchCompletionReason | undefined {
   return typeof batch.completionReason === 'string'
-    ? batch.completionReason.toLowerCase()
+    ? completionReasons.get(batch.completionReason)
     : undefined;
 }
