@@ -46,10 +46,9 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [1.12.0](https://github.com/Kong/volcano-sdk-js/compare/v1.11.1...v1.12.0) (2026-09-23)
 
-
 ### Features
 
-* **realtime:** migrate typed facade and preserve transport errors ([#257](https://github.com/Kong/volcano-sdk-js/issues/257)) ([4aa1039](https://github.com/Kong/volcano-sdk-js/commit/4aa1039399c52324f5efdc4e37b3045f31903715))
+- **realtime:** migrate typed facade and preserve transport errors ([#257](https://github.com/Kong/volcano-sdk-js/issues/257)) ([4aa1039](https://github.com/Kong/volcano-sdk-js/commit/4aa1039399c52324f5efdc4e37b3045f31903715))
 
 ## [1.11.1](https://github.com/Kong/volcano-sdk-js/compare/v1.11.0...v1.11.1) (2026-09-23)
 
