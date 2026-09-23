@@ -243,9 +243,9 @@ export interface DeleteSessionResponse {
 export type OAuthProviderName = 'google' | 'github' | 'microsoft' | 'apple';
 
 export interface OAuthProvider {
-  provider: OAuthProviderName;
-  linked_at: string;
-  updated_at: string;
+  provider: string;
+  linked_at?: string;
+  updated_at?: string;
 }
 
 export interface LinkProviderResponse {
