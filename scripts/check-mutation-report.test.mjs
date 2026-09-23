@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { mutationReportProblems } from './check-mutation-report.mjs';
+import { mutationGateFailed, mutationReportProblems } from './check-mutation-report.mjs';
 
 function reportWith(status) {
   return { files: { 'src/example.ts': { mutants: [{ id: '7', status }] } } };
@@ -34,6 +34,19 @@ test('rejects incomplete file results', () => {
     'src/example.ts: missing mutant results',
     'Mutation report contains no mutants',
   ]);
+});
+
+test('the full audit accepts historical survivors but rejects incomplete reports', () => {
+  assert.equal(mutationGateFailed(reportWith('Survived'), true), false);
+  assert.equal(mutationGateFailed(reportWith('Survived')), true);
+  for (const report of [
+    {},
+    { files: {} },
+    { files: { 'src/example.ts': {} } },
+    { files: { 'src/example.ts': { mutants: [] } } },
+  ]) {
+    assert.equal(mutationGateFailed(report, true), true);
+  }
 });
 
 test('the required PR mutation threshold cannot be lowered', () => {

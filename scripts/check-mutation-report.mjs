@@ -1,34 +1,45 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-export function mutationReportProblems(report) {
+export function mutationReportFindings(report) {
   const files = report?.files;
   if (files === null || typeof files !== 'object' || Array.isArray(files)) {
-    return ['Missing mutation report files'];
+    return { integrity: ['Missing mutation report files'], outcomes: [] };
   }
   const entries = Object.entries(files);
   if (entries.length === 0) {
-    return ['Mutation report contains no source files'];
+    return { integrity: ['Mutation report contains no source files'], outcomes: [] };
   }
 
-  const problems = [];
+  const integrity = [];
+  const outcomes = [];
   let mutants = 0;
   for (const [filename, file] of entries) {
     if (!Array.isArray(file?.mutants)) {
-      problems.push(`${filename}: missing mutant results`);
+      integrity.push(`${filename}: missing mutant results`);
       continue;
     }
     for (const mutant of file.mutants) {
       mutants += 1;
       if (mutant.status !== 'Killed' && mutant.status !== 'CompileError') {
-        problems.push(`${filename}:${String(mutant.id)} ${String(mutant.status)}`);
+        outcomes.push(`${filename}:${String(mutant.id)} ${String(mutant.status)}`);
       }
     }
   }
   if (mutants === 0) {
-    problems.push('Mutation report contains no mutants');
+    integrity.push('Mutation report contains no mutants');
   }
-  return problems;
+  return { integrity, outcomes };
+}
+
+export function mutationReportProblems(report) {
+  const findings = mutationReportFindings(report);
+  return [...findings.integrity, ...findings.outcomes];
+}
+
+export function mutationGateFailed(report, audit = false) {
+  const findings = mutationReportFindings(report);
+  return findings.integrity.length > 0 || (!audit && findings.outcomes.length > 0);
 }
 
 export function mutationStatusCounts(report) {
@@ -64,7 +75,7 @@ async function main() {
     if (problems.length > 25) {
       console.error(`... and ${String(problems.length - 25)} more; inspect ${path}`);
     }
-    if (process.argv[2] !== '--audit') {
+    if (mutationGateFailed(report, process.argv[2] === '--audit')) {
       process.exitCode = 1;
     }
     return;
