@@ -9,6 +9,7 @@ import {
   reply,
   resultError,
   signal,
+  within,
 } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -248,10 +249,12 @@ test.each([401, 403])(
       return reply(204, {});
     });
     const pending = target.functions.invoke('echo');
-    await refreshing.promise;
-    expect(await resultError(target.auth.deleteSession(SESSION_ID))).toBeNull();
+    await within(refreshing.promise, 'refresh request');
+    expect(
+      await within(resultError(target.auth.deleteSession(SESSION_ID)), 'session deletion'),
+    ).toBeNull();
     finishRefresh.resolve(reply(status, { error: 'refresh denied' }));
-    const result = await pending;
+    const result = await within(pending, 'function invocation after deletion');
     expect(result.error).toMatchObject({ code: 'auth_session_changed' });
     expect(fetchMock.mock.calls.filter(([url]) => fetchUrl(url).endsWith('/invoke'))).toHaveLength(
       1,

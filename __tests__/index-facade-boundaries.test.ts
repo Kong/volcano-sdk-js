@@ -8,6 +8,7 @@ import {
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
 import { loadRealtime, VolcanoAuth } from '../src/index.ts';
+import { deferred, within } from './auth-concurrency-fixtures.ts';
 
 beforeEach(clearSharedFunctionResolveStateForTests);
 afterEach(() => {
@@ -233,11 +234,60 @@ describe('shared function resolution boundary', () => {
     const sdk = client();
     const state = getSharedFunctionResolveState();
     const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
-    state.inFlight.set(key, Promise.resolve({ functionId: 42 }));
+    const borrowed = Promise.resolve({ functionId: 42 });
+    state.inFlight.set(key, borrowed);
     await expect(resolveWith(sdk, anonToken, true)).rejects.toThrow(
       'Invalid in-flight function resolution',
     );
+    expect(state.inFlight.get(key)).toBe(borrowed);
   });
+
+  test('leaves a replacement in-flight resolution owned by another caller', async () => {
+    const sdk = client();
+    const state = getSharedFunctionResolveState();
+    const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
+    const response = deferred<RequestResult>();
+    jest.spyOn(sdk, '_anonFetch').mockReturnValue(response.promise);
+
+    const resolution = resolveWith(sdk, anonToken, true);
+    expect(state.inFlight.has(key)).toBe(true);
+    const replacement = Promise.resolve({
+      functionId: 'replacement',
+      error: null,
+      status: 200,
+    });
+    state.inFlight.set(key, replacement);
+    response.resolve({
+      ok: true,
+      status: 200,
+      data: { function_id: 'first', cache_ttl_seconds: 60 },
+      error: null,
+    });
+
+    await expect(within(resolution, 'first function resolution')).resolves.toMatchObject({
+      functionId: 'first',
+    });
+    expect(state.inFlight.get(key)).toBe(replacement);
+  });
+
+  test.each([null, ''])(
+    'does not refresh a 401 resolution with %p refresh credential',
+    async (refreshToken) => {
+      const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
+      const sdk = new VolcanoAuth({ anonKey: 'ak-test', accessToken: token });
+      // Browser storage can restore an empty refresh token even though constructor input normalizes it.
+      sdk.refreshToken = refreshToken;
+      const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
+      getSharedFunctionResolveState().inFlight.set(
+        key,
+        Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
+      );
+      const refresh = jest.spyOn(sdk, '_refreshSessionForContext');
+
+      await expect(resolveWith(sdk, token, false)).rejects.toThrow('Session expired');
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
 
   test.each(['discarded', 'changed'] as const)(
     'does not overwrite the session after a %s refresh',

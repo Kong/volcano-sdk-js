@@ -1,4 +1,5 @@
 const { sessionToken } = require('./session-fixtures.ts');
+const { within } = require('./auth-concurrency-fixtures.ts');
 const {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
@@ -4885,7 +4886,7 @@ describe('VolcanoAuth', () => {
       });
 
       const invocation = volcano.functions.invoke('my-function');
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'function request start');
       volcano._clearSession(volcano._captureAuthContext());
       response.resolve({
         ok: true,
@@ -4899,7 +4900,7 @@ describe('VolcanoAuth', () => {
           }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
@@ -4920,7 +4921,7 @@ describe('VolcanoAuth', () => {
       });
 
       const invocation = volcano.functions.invoke('my-function');
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'function request start');
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
@@ -4938,7 +4939,7 @@ describe('VolcanoAuth', () => {
           }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
@@ -4968,7 +4969,7 @@ describe('VolcanoAuth', () => {
       });
 
       const invocation = anonymousVolcano.functions.invoke('public-function');
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'function request start');
       anonymousVolcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_A,
         refresh_token: 'refresh-token-a',
@@ -4986,7 +4987,7 @@ describe('VolcanoAuth', () => {
           }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
@@ -5027,7 +5028,7 @@ describe('VolcanoAuth', () => {
         });
 
       const invocation = volcano.functions.invoke('my-function');
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'function request start');
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
@@ -5040,7 +5041,7 @@ describe('VolcanoAuth', () => {
         json: () => Promise.resolve({ error: 'Not found' }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
@@ -5074,7 +5075,7 @@ describe('VolcanoAuth', () => {
         });
 
       const invocation = volcano.functions.invoke('my-function');
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'function request start');
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'refresh-token-b',
@@ -5087,7 +5088,7 @@ describe('VolcanoAuth', () => {
         json: () => Promise.resolve({ submitted: true }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthSessionChangedError.is(result.error)).toBe(true);
@@ -5136,7 +5137,7 @@ describe('VolcanoAuth', () => {
         });
 
       const invocation = volcano.functions.invoke('my-function', { operation: 'mutate' });
-      await refreshStarted.promise;
+      await within(refreshStarted.promise, 'token refresh start');
       volcano._setSession({
         access_token: TEST_ACCESS_TOKEN_PROJECT_B,
         refresh_token: 'replacement-refresh',
@@ -5154,7 +5155,7 @@ describe('VolcanoAuth', () => {
           }),
       });
 
-      const result = await invocation;
+      const result = await within(invocation, 'function invocation completion');
 
       expect(result.data).toBeNull();
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);

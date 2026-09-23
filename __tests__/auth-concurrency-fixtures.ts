@@ -33,6 +33,24 @@ export function signal(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
+export async function within<T>(pending: Promise<T>, operation: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${operation} did not complete within 2 seconds`));
+        }, 2_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export function fetchCall(index: number): Parameters<typeof fetch> {
   const call = jest.mocked(globalThis.fetch).mock.calls[index];
   if (call === undefined) {
