@@ -31,6 +31,7 @@ import {
   stopDurableExecution,
   uploadStorageObject,
 } from './generated-runtime/client.js';
+import { applyLockLeaseResponse } from './lock-lease-response.ts';
 import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
@@ -244,8 +245,9 @@ class ProjectLocksApi {
     const requestId = options.requestId || crypto.randomUUID();
     const lease = { key, token, expiresAt: null, fencingToken: null };
     await this.client._completeOAuthExchange();
+    const authorization = `Bearer ${this.client.accessToken}`;
     const requestOptions = this.client._generatedOptions('anon', {
-      Authorization: `Bearer ${this.client.accessToken}`,
+      Authorization: authorization,
       'X-Volcano-Lock-Token': token,
       'X-Volcano-Request-Id': requestId,
     });
@@ -268,14 +270,40 @@ class ProjectLocksApi {
       }
     }
     if (response) {
-      lease.expiresAt = response.data.expires_at;
-      lease.fencingToken = response.data.fencing_token ?? null;
+      try {
+        applyLockLeaseResponse(lease, response.data);
+      } catch (error) {
+        const validationError =
+          error instanceof Error ? error : new TypeError('Invalid lock response');
+        const cleanupError = await this._releaseMalformedAcquisition(key, token, authorization);
+        if (cleanupError) {
+          validationError.cause = cleanupError;
+          validationError.lease = lease;
+        }
+        return { acquired: false, lease: cleanupError ? lease : null, error: validationError };
+      }
       return { acquired: true, lease, error: null };
     }
     if (requestError?.status === 409 && LOCK_CONTENTION_CODES.has(requestError.info?.code)) {
       return { acquired: false, lease: null, error: null };
     }
     return { acquired: false, lease, error: requestError };
+  }
+
+  async _releaseMalformedAcquisition(key, token, authorization) {
+    try {
+      await this.client._transport.releaseProjectLock(
+        encodeURIComponent(key),
+        this.client._generatedOptions('anon', {
+          Authorization: authorization,
+          'X-Volcano-Lock-Token': token,
+          'X-Volcano-Request-Id': crypto.randomUUID(),
+        }),
+      );
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error : new Error('Lock cleanup failed');
+    }
   }
 
   async renew(key, lease, options = {}) {
@@ -293,8 +321,7 @@ class ProjectLocksApi {
     if (!result.ok) {
       return { lease, error: result.error };
     }
-    lease.expiresAt = result.data.expires_at;
-    lease.fencingToken = result.data.fencing_token ?? lease.fencingToken;
+    applyLockLeaseResponse(lease, result.data);
     return { lease, error: null };
   }
 

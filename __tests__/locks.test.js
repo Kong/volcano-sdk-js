@@ -87,7 +87,9 @@ describe('project locks', () => {
         volcano.accessToken = 'sk-replacement';
         throw new Error('response lost');
       })
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }));
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 1 }),
+      );
 
     const result = await volcano.locks.acquire('leader', { ttl: 30 });
 
@@ -137,7 +139,9 @@ describe('project locks', () => {
   });
 
   test('accepts the 90 day maximum TTL', async () => {
-    fetch.mockResolvedValue(response(201, { expires_at: '2026-10-18T12:00:00Z' }));
+    fetch.mockResolvedValue(
+      response(201, { expires_at: '2026-10-18T12:00:00Z', fencing_token: 1 }),
+    );
 
     const result = await volcano.locks.acquire('long-running-leader', {
       ttl: 7_776_000,
@@ -172,7 +176,9 @@ describe('project locks', () => {
   test('retries an ambiguous acquire with the same token', async () => {
     fetch
       .mockRejectedValueOnce(new Error('connection reset'))
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }));
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 1 }),
+      );
 
     const result = await volcano.locks.acquire('leader', {
       ttl: 10,
@@ -192,9 +198,13 @@ describe('project locks', () => {
   test('withLock releases after callback success and failure', async () => {
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000004');
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 1 }),
+      )
       .mockResolvedValueOnce(response(204, {}))
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 2 }),
+      )
       .mockResolvedValueOnce(response(204, {}));
 
     const success = await volcano.locks.withLock('leader', { ttl: 10 }, async () => 42);
@@ -213,7 +223,9 @@ describe('project locks', () => {
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000005');
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:05Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:05Z', fencing_token: 1 }),
+      )
       .mockResolvedValueOnce(
         response(409, {
           error: 'Lock ownership lost',
@@ -245,7 +257,11 @@ describe('project locks', () => {
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(
+              () =>
+                resolve(response(201, { expires_at: '2026-07-20T12:00:05Z', fencing_token: 1 })),
+              4000,
+            );
           }),
       )
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:00:09Z' }))
@@ -273,7 +289,11 @@ describe('project locks', () => {
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(
+              () =>
+                resolve(response(201, { expires_at: '2026-07-20T12:00:05Z', fencing_token: 1 })),
+              4000,
+            );
           }),
       )
       .mockImplementationOnce(
@@ -306,7 +326,11 @@ describe('project locks', () => {
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve(response(201, { expires_at: '2026-07-20T12:00:05Z' })), 4000);
+            setTimeout(
+              () =>
+                resolve(response(201, { expires_at: '2026-07-20T12:00:05Z', fencing_token: 1 })),
+              4000,
+            );
           }),
       )
       .mockImplementationOnce(async () => ({
@@ -388,7 +412,9 @@ describe('project locks', () => {
       return values;
     });
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T11:59:00Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T11:59:00Z', fencing_token: 1 }),
+      )
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:01:00Z' }))
       .mockResolvedValueOnce(response(204, {}));
 
@@ -421,7 +447,9 @@ describe('project locks', () => {
     });
     let finishRenewal;
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:05Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-07-20T12:00:05Z', fencing_token: 1 }),
+      )
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -464,7 +492,9 @@ describe('project locks', () => {
       return values;
     });
     fetch
-      .mockResolvedValueOnce(response(201, { expires_at: '2026-10-18T12:00:00Z' }))
+      .mockResolvedValueOnce(
+        response(201, { expires_at: '2026-10-18T12:00:00Z', fencing_token: 1 }),
+      )
       .mockResolvedValueOnce(
         response(409, {
           error: 'Lock ownership lost',

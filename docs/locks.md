@@ -92,6 +92,12 @@ for a new lease after release or expiry. Keep the token private. Every lock
 method accepts `requestId`; `withLock` forwards its `token` and `requestId` only
 to acquisition, and generates separate request IDs for renewal and release.
 
+If the server returns an invalid success response, the SDK attempts to release
+the acquired lock using the credential that acquired it. If cleanup fails, the
+returned error's `lease` contains the ownership token and its `cause` is the
+cleanup failure. Retain that token to retry release, including when using
+`withLock`.
+
 ## Fencing token
 
 `lease.fencingToken` rises whenever the lock changes hands and stays the same

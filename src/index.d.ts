@@ -1024,6 +1024,8 @@ export interface ProjectLockError extends Error {
   status?: number;
   code?: string;
   retryAfter?: number;
+  /** Token to retry release when cleanup of an invalid acquisition response failed. */
+  lease?: ProjectLockLease;
 }
 
 export interface ProjectLockResult<T = unknown> {
