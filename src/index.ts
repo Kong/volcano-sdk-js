@@ -60,13 +60,16 @@ import {
 } from './auth-redirect.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import {
+  type AuthContext,
   fetchSessionRefresh,
   performSessionRefresh,
+  type RefreshResult,
   refreshSession,
   refreshSessionForContext,
   revokeAccessSession,
   signOut,
   signOutCaptured,
+  type SignOutResult,
 } from './auth-session-lifecycle.ts';
 import {
   adoptSessionInMemory,
@@ -89,12 +92,17 @@ import { DurableFacade } from './durable-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { invokeFunction as invokeFunctionWithClient } from './function-invoke.ts';
-import { isResolutionOutcome, resolveFunctionByHttp } from './function-resolution.ts';
+import {
+  isResolutionOutcome,
+  type ResolutionOutcome,
+  resolveFunctionByHttp,
+} from './function-resolution.ts';
 import {
   cachedFunctionResolution,
   clearFunctionResolveCache,
   clearSharedFunctionResolveStateForTests,
   functionResolveCacheKey,
+  type FunctionResolveState,
   getSharedFunctionResolveState,
   pruneFunctionResolveCache,
 } from './function-resolve-cache.ts';
@@ -113,9 +121,6 @@ import {
 } from './generated/client.ts';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
-import { StorageFileApi } from './storage-file.ts';
-import type { AuthContext, RefreshResult, SignOutResult } from './auth-session-lifecycle.ts';
-import type { FunctionResolveState } from './function-resolve-cache.ts';
 import type {
   Auth,
   Durable,
@@ -125,6 +130,7 @@ import type {
   Storage,
   VolcanoAuthConfig,
 } from './sdk-public-types.ts';
+import { StorageFileApi } from './storage-file.ts';
 
 export type * from './sdk-public-types.ts';
 
@@ -379,7 +385,11 @@ class VolcanoAuth {
   // Logs Methods
   // ========================================================================
 
-  async _postProjectLogRequest(projectId: string, endpoint: string, request: unknown) {
+  async _postProjectLogRequest(
+    projectId: string,
+    endpoint: string,
+    request: unknown,
+  ): Promise<{ data: unknown; error: Error | null }> {
     if (typeof projectId !== 'string' || projectId.trim() === '') {
       return { data: null, error: new Error('projectId must be a non-empty string') };
     }
@@ -388,22 +398,28 @@ class VolcanoAuth {
       `/projects/${encodeURIComponent(projectId)}/logs/${endpoint}`,
       {
         method: 'POST',
-        body: JSON.stringify(request || {}),
+        body: JSON.stringify(Boolean(request) ? request : {}),
       },
     );
 
-    if (!result.ok) {
+    if (result.ok !== true) {
       return { data: null, error: result.error };
     }
 
     return { data: result.data, error: null };
   }
 
-  searchLogs(projectId: string, request: import('./sdk-public-types.ts').LogSearchRequest) {
+  searchLogs(
+    projectId: string,
+    request: import('./sdk-public-types.ts').LogSearchRequest,
+  ): ReturnType<VolcanoAuth['_postProjectLogRequest']> {
     return this._postProjectLogRequest(projectId, 'search', request);
   }
 
-  getLogActivity(projectId: string, request: import('./sdk-public-types.ts').LogActivityRequest) {
+  getLogActivity(
+    projectId: string,
+    request: import('./sdk-public-types.ts').LogActivityRequest,
+  ): ReturnType<VolcanoAuth['_postProjectLogRequest']> {
     return this._postProjectLogRequest(projectId, 'activity', request);
   }
 
@@ -416,7 +432,7 @@ class VolcanoAuth {
    * @param {string} bucketName - The name of the bucket
    * @returns {StorageFileApi} - Storage file API for the bucket
    */
-  storageBucket(bucketName: string) {
+  storageBucket(bucketName: string): StorageFileApi {
     return new StorageFileApi(this, bucketName);
   }
 
@@ -428,7 +444,10 @@ class VolcanoAuth {
    * Make an authenticated request with access token
    * @private
    */
-  async _authFetch(path: string | (() => string), options: RequestInit | (() => RequestInit) = {}) {
+  async _authFetch(
+    path: string | (() => string),
+    options: RequestInit | (() => RequestInit) = {},
+  ): Promise<Awaited<ReturnType<typeof authFetchWithContext>>['result']> {
     const { result } = await this._authFetchWithContext(path, options);
     return result;
   }
@@ -451,26 +470,36 @@ class VolcanoAuth {
     volcanoAuthorization: 'anon' | 'session',
     headers?: Record<string, string>,
     responseType?: 'blob',
-  ) {
+  ): {
+    volcanoAuthorization: 'anon' | 'session';
+    volcanoClient: VolcanoAuth;
+    headers?: Record<string, string>;
+    volcanoResponseType?: 'blob';
+  } {
     return {
       volcanoAuthorization,
       volcanoClient: this,
-      ...(headers ? { headers } : {}),
-      ...(responseType ? { volcanoResponseType: responseType } : {}),
+      ...(headers === undefined ? {} : { headers }),
+      ...(responseType === undefined ? {} : { volcanoResponseType: responseType }),
     };
   }
 
-  async _generatedFetch(path: string, options: RequestInit, authorization: 'anon' | 'session') {
+  async _generatedFetch(
+    path: string,
+    options: RequestInit,
+    authorization: 'anon' | 'session',
+  ): Promise<Response> {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
+      const headers = new Headers(options.headers);
+      if (!headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${this.anonKey}`);
+      }
       return fetchWithTimeout(
         url,
         {
           ...options,
-          headers: {
-            Authorization: `Bearer ${this.anonKey}`,
-            ...options.headers,
-          },
+          headers,
         },
         this.timeout,
       );
@@ -494,19 +523,14 @@ class VolcanoAuth {
     return functionResolveCacheKey(this.apiUrl, functionName, token, useAnonKey);
   }
 
-  _clearFunctionResolveCache(functionName: string, token: string, useAnonKey: boolean) {
+  _clearFunctionResolveCache(functionName: string, token: string, useAnonKey: boolean): void {
     const cacheKey = this._functionResolveCacheKey(functionName, token, useAnonKey);
     clearFunctionResolveCache(this._functionResolveState, cacheKey);
   }
 
   async _resolveFunctionIdByName(
     functionName: string,
-    {
-      authContext,
-      token,
-      useAnonKey,
-      allowRefresh = true,
-    }: {
+    options: {
       authContext: AuthContext;
       token: string | null;
       useAnonKey: boolean;
@@ -514,26 +538,40 @@ class VolcanoAuth {
     },
   ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
-    if (!hostLabel) {
+    if (hostLabel === null) {
       throw new Error(
         'functionName must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars',
       );
     }
-
-    if (!this._isAuthContextCurrent(authContext)) {
-      throw new AuthSessionChangedError();
-    }
-
+    const { authContext, token, useAnonKey } = options;
+    this._assertCurrentAuthContext(authContext);
     if (token === null) {
       throw new Error('No credential available to resolve function');
     }
     const cacheKey = this._functionResolveCacheKey(hostLabel, token, useAnonKey);
+    const cached = this._readFunctionResolveCache(cacheKey, token);
+    if (cached !== null) {
+      return cached;
+    }
+    return await this._resolveUncachedFunction(hostLabel, functionName, cacheKey, token, options);
+  }
+
+  private _assertCurrentAuthContext(authContext: AuthContext): void {
+    if (!this._isAuthContextCurrent(authContext)) {
+      throw new AuthSessionChangedError();
+    }
+  }
+
+  private _readFunctionResolveCache(
+    cacheKey: string,
+    token: string,
+  ): { functionId: string | null; invokeUrl: unknown; token: string } | null {
     const now = Date.now();
     pruneFunctionResolveCache(this._functionResolveState, now);
     const rawCached = this._functionResolveState.cache.get(cacheKey);
     const cached = cachedFunctionResolution(rawCached);
-    if (cached && cached.expiresAt > now) {
-      if (cached.error) {
+    if (cached !== null && cached.expiresAt > now) {
+      if (cached.error !== null) {
         throw Object.assign(new Error(cached.error), { status: 404 }, cached.errorMetadata);
       }
       return { functionId: cached.functionId, invokeUrl: cached.invokeUrl, token };
@@ -541,67 +579,106 @@ class VolcanoAuth {
     if (rawCached !== undefined) {
       this._functionResolveState.cache.delete(cacheKey);
     }
+    return null;
+  }
 
+  private async _resolveUncachedFunction(
+    hostLabel: string,
+    functionName: string,
+    cacheKey: string,
+    token: string,
+    options: {
+      authContext: AuthContext;
+      useAnonKey: boolean;
+      allowRefresh?: boolean;
+    },
+  ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
     let pending = this._functionResolveState.inFlight.get(cacheKey);
-    const ownsPending = !pending;
-    if (!pending) {
+    const ownsPending = pending === undefined;
+    if (pending === undefined) {
       // Share only the credentialed HTTP result. Session validation and 401
       // refresh belong to each caller, not the shared request.
       pending = resolveFunctionByHttp(this, hostLabel, token, cacheKey);
-
       this._functionResolveState.inFlight.set(cacheKey, pending);
     }
-
     try {
-      let outcome;
-      try {
-        outcome = await pending;
-      } catch (error) {
-        if (!this._isAuthContextCurrent(authContext)) {
-          throw new AuthSessionChangedError();
-        }
-        throw error;
+      const outcome = await this._awaitFunctionResolution(pending, options.authContext);
+      if (outcome.error !== null) {
+        return await this._handleFunctionResolutionError(outcome, functionName, options);
       }
-      if (!this._isAuthContextCurrent(authContext)) {
-        throw new AuthSessionChangedError();
-      }
-
-      if (!isResolutionOutcome(outcome)) {
-        throw new Error('Invalid in-flight function resolution');
-      }
-
-      if (outcome.error) {
-        if (outcome.status === 401 && !useAnonKey && allowRefresh) {
-          const sessionExpiredError = Object.assign(new Error('Session expired'), outcome.error);
-          if (!authContext.refreshToken) {
-            throw sessionExpiredError;
-          }
-          const refreshed = await this._refreshSessionForContext(authContext);
-          if (AuthRefreshDiscardedError.is(refreshed.error)) {
-            throw refreshed.error;
-          }
-          if (refreshed.error) {
-            throw sessionExpiredError;
-          }
-          if (!this._isAuthContextCurrent(authContext)) {
-            throw new AuthRefreshDiscardedError();
-          }
-          const refreshedContext = this._captureAuthContext();
-          return this._resolveFunctionIdByName(functionName, {
-            authContext: refreshedContext,
-            token: refreshedContext.accessToken,
-            useAnonKey,
-            allowRefresh: false,
-          });
-        }
-        throw outcome.error;
-      }
-
       return { functionId: outcome.functionId, invokeUrl: outcome.invokeUrl, token };
     } finally {
       if (ownsPending && this._functionResolveState.inFlight.get(cacheKey) === pending) {
         this._functionResolveState.inFlight.delete(cacheKey);
       }
+    }
+  }
+
+  private async _awaitFunctionResolution(
+    pending: Promise<unknown>,
+    authContext: AuthContext,
+  ): Promise<ResolutionOutcome> {
+    let outcome: unknown;
+    try {
+      outcome = await pending;
+    } catch (error) {
+      this._assertCurrentAuthContext(authContext);
+      throw error;
+    }
+    this._assertCurrentAuthContext(authContext);
+    if (!isResolutionOutcome(outcome)) {
+      throw new Error('Invalid in-flight function resolution');
+    }
+    return outcome;
+  }
+
+  private async _handleFunctionResolutionError(
+    outcome: ResolutionOutcome,
+    functionName: string,
+    options: {
+      authContext: AuthContext;
+      useAnonKey: boolean;
+      allowRefresh?: boolean;
+    },
+  ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
+    if (outcome.error === null) {
+      throw new Error('Expected function resolution error');
+    }
+    if (outcome.status === 401 && !options.useAnonKey && options.allowRefresh !== false) {
+      return await this._retryFunctionResolution(functionName, options, outcome.error);
+    }
+    throw outcome.error;
+  }
+
+  private async _retryFunctionResolution(
+    functionName: string,
+    options: { authContext: AuthContext; useAnonKey: boolean },
+    cause: Error,
+  ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
+    const sessionExpiredError = Object.assign(new Error('Session expired'), cause);
+    if (options.authContext.refreshToken === null || options.authContext.refreshToken === '') {
+      throw sessionExpiredError;
+    }
+    const refreshed = await this._refreshSessionForContext(options.authContext);
+    if (AuthRefreshDiscardedError.is(refreshed.error)) {
+      throw refreshed.error;
+    }
+    this._assertRefreshSucceeded(refreshed.error, sessionExpiredError);
+    if (!this._isAuthContextCurrent(options.authContext)) {
+      throw new AuthRefreshDiscardedError();
+    }
+    const refreshedContext = this._captureAuthContext();
+    return await this._resolveFunctionIdByName(functionName, {
+      authContext: refreshedContext,
+      token: refreshedContext.accessToken,
+      useAnonKey: options.useAnonKey,
+      allowRefresh: false,
+    });
+  }
+
+  private _assertRefreshSucceeded(error: unknown, sessionExpiredError: Error): void {
+    if (error !== null) {
+      throw sessionExpiredError;
     }
   }
 
@@ -617,24 +694,24 @@ class VolcanoAuth {
   // Query Builder Methods
   // ========================================================================
 
-  from(table: string) {
+  from(table: string): QueryBuilder {
     return new QueryBuilder(this, table, this._currentDatabaseName);
   }
 
-  database(databaseName: string) {
+  database(databaseName: string): this {
     this._currentDatabaseName = databaseName;
     return this;
   }
 
-  insert(table: string, values: Record<string, unknown>) {
+  insert(table: string, values: Record<string, unknown>): MutationBuilder {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
   }
 
-  update(table: string, values: Record<string, unknown>) {
+  update(table: string, values: Record<string, unknown>): MutationBuilder {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
   }
 
-  delete(table: string) {
+  delete(table: string): MutationBuilder {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'delete', null);
   }
 
@@ -898,11 +975,15 @@ class VolcanoAuth {
     functionName: string,
     input: unknown = {},
     options: { executionName?: string } = {},
-  ) {
+  ): ReturnType<DurableFacade['start']> {
     return this._durableFacade.start(functionName, input, options);
   }
 
-  getDurableExecution(projectId: string, functionName: string, executionId: string) {
+  getDurableExecution(
+    projectId: string,
+    functionName: string,
+    executionId: string,
+  ): ReturnType<DurableFacade['get']> {
     return this._durableFacade.get(projectId, functionName, executionId);
   }
 
@@ -910,11 +991,15 @@ class VolcanoAuth {
     projectId: string,
     functionName: string,
     options: Parameters<DurableFacade['list']>[2] = {},
-  ) {
+  ): ReturnType<DurableFacade['list']> {
     return this._durableFacade.list(projectId, functionName, options);
   }
 
-  stopDurableExecution(projectId: string, functionName: string, executionId: string) {
+  stopDurableExecution(
+    projectId: string,
+    functionName: string,
+    executionId: string,
+  ): ReturnType<DurableFacade['stop']> {
     return this._durableFacade.stop(projectId, functionName, executionId);
   }
 
@@ -926,7 +1011,7 @@ class VolcanoAuth {
     return captureAuthContext(this);
   }
 
-  _adoptSessionInMemory(session: Parameters<typeof adoptSessionInMemory>[1]) {
+  _adoptSessionInMemory(session: Parameters<typeof adoptSessionInMemory>[1]): void {
     adoptSessionInMemory(this, session);
   }
 
@@ -956,7 +1041,7 @@ class VolcanoAuth {
     return clearSessionAtGeneration(this, generation);
   }
 
-  _notifyAuthCallbacks(user: unknown) {
+  _notifyAuthCallbacks(user: unknown): void {
     notifyAuthCallbacks(this, user);
   }
 
@@ -976,11 +1061,11 @@ class VolcanoAuth {
     return completeOAuthExchange(this);
   }
 
-  _stripOAuthQueryFromUrl(callbackURL: URL) {
+  _stripOAuthQueryFromUrl(callbackURL: URL): void {
     stripOAuthQueryFromUrl(callbackURL);
   }
 
-  _removeOAuthResponseParams(callbackURL: URL, clearHash = true) {
+  _removeOAuthResponseParams(callbackURL: URL, clearHash = true): void {
     removeOAuthResponseParams(callbackURL, clearHash);
   }
 
@@ -1005,7 +1090,7 @@ class VolcanoAuth {
     return consumeSessionFromUrl(this);
   }
 
-  _replaceSessionFromUrl(accessToken: string, refreshToken: string | null) {
+  _replaceSessionFromUrl(accessToken: string, refreshToken: string | null): void {
     replaceSessionFromUrl(this, accessToken, refreshToken);
   }
 
@@ -1014,7 +1099,7 @@ class VolcanoAuth {
    * in history, referrers, or bookmarks. Only strips when the fragment is
    * exclusively the hand-off params, to avoid clobbering app hash routing.
    */
-  _stripAuthHashFromUrl(params: URLSearchParams) {
+  _stripAuthHashFromUrl(params: URLSearchParams): void {
     stripAuthHashFromUrl(params);
   }
 
@@ -1032,7 +1117,7 @@ class VolcanoAuth {
 
   // Persist the nonce across the redirect. sessionStorage is per-tab+origin and
   // survives the navigation away to the hosted page and back to this origin.
-  _storeAuthState(nonce: string, redirectURL = '') {
+  _storeAuthState(nonce: string, redirectURL = ''): void {
     storeAuthState(nonce, redirectURL);
   }
 
@@ -1061,11 +1146,11 @@ class VolcanoAuth {
     return getStorageItem(key);
   }
 
-  _setStorageItem(key: string, value: string) {
+  _setStorageItem(key: string, value: string): void {
     setStorageItem(key, value);
   }
 
-  _removeStorageItem(key: string) {
+  _removeStorageItem(key: string): void {
     removeStorageItem(key);
   }
 
@@ -1073,39 +1158,50 @@ class VolcanoAuth {
   // Initialization
   // ========================================================================
 
-  async initialize() {
-    // getUser() also adopts a managed-auth session from the URL fragment when
-    // present, so trigger it if there is a stored session or a redirect hand-off.
-    if (
-      this.accessToken ||
-      this.refreshToken ||
+  private _hasInitialSession(): boolean {
+    return (
+      this._hasStoredSession() ||
       this._hasSessionInUrl() ||
-      this._oauthExchangePromise ||
-      this._oauthExchangeError
-    ) {
-      await this._completeOAuthExchange();
-      if (this._oauthExchangeError) {
-        const error = this._oauthExchangeError;
-        this._oauthExchangeError = null;
-        return { user: null, error };
-      }
-      const { user, error } = await this.getUser();
-      return { user, error };
+      this._oauthExchangePromise !== null ||
+      this._oauthExchangeError !== null
+    );
+  }
+
+  private _hasStoredSession(): boolean {
+    return (
+      (this.accessToken !== null && this.accessToken !== '') ||
+      (this.refreshToken !== null && this.refreshToken !== '')
+    );
+  }
+
+  async initialize(): Promise<{ user: unknown; error: Error | null }> {
+    if (!this._hasInitialSession()) {
+      return { user: null, error: null };
     }
-    return { user: null, error: null };
+    await this._completeOAuthExchange();
+    if (this._oauthExchangeError !== null) {
+      const error = this._oauthExchangeError;
+      this._oauthExchangeError = null;
+      return { user: null, error };
+    }
+    return await this.getUser();
   }
 
   /**
    * @internal Test-only helper to ensure deterministic cache behavior in unit tests.
    */
-  static __resetFunctionResolveCacheForTests() {
+  static __resetFunctionResolveCacheForTests(): void {
     clearSharedFunctionResolveStateForTests();
   }
 
   /**
    * @internal Test-only helper for asserting global resolver cache state.
    */
-  static __getFunctionResolveCacheMetricsForTests() {
+  static __getFunctionResolveCacheMetricsForTests(): {
+    cacheSize: number;
+    inFlightSize: number;
+    maxEntries: number;
+  } {
     const state = getSharedFunctionResolveState();
     return {
       cacheSize: state.cache.size,
@@ -1117,7 +1213,7 @@ class VolcanoAuth {
   /**
    * @internal Test-only helper for forcing resolver cache limits.
    */
-  static __setFunctionResolveCacheMaxEntriesForTests(maxEntries: number) {
+  static __setFunctionResolveCacheMaxEntriesForTests(maxEntries: unknown): void {
     const nextMax = Number(maxEntries);
     if (!Number.isInteger(nextMax) || nextMax < 1) {
       throw new Error('maxEntries must be a positive integer');
@@ -1145,7 +1241,10 @@ class VolcanoAuth {
  * Lazy-load the realtime module
  * @returns {Promise<{VolcanoRealtime: any, RealtimeChannel: any}>}
  */
-async function loadRealtime() {
+async function loadRealtime(): Promise<{
+  VolcanoRealtime: typeof import('./realtime.ts').VolcanoRealtime;
+  RealtimeChannel: typeof import('./realtime.ts').RealtimeChannel;
+}> {
   const module = await import('./realtime.ts');
   return {
     VolcanoRealtime: module.VolcanoRealtime,

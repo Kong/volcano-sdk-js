@@ -19,31 +19,42 @@ export interface CachedFunctionResolution {
 }
 
 export function cachedFunctionResolution(value: unknown): CachedFunctionResolution | null {
-  if (typeof value !== 'object' || value === null) {
+  if (!isCachedResolution(value)) {
     return null;
   }
-  if (!('expiresAt' in value) || typeof value.expiresAt !== 'number') {
-    return null;
-  }
-  if (!('functionId' in value) || !validCacheId(value.functionId)) {
-    return null;
-  }
-  if (!('error' in value) || !validCacheError(value.error)) {
-    return null;
-  }
-  const metadata = 'errorMetadata' in value ? value.errorMetadata : undefined;
-  if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
-    return null;
-  }
+  const metadata = value.errorMetadata;
   return {
     expiresAt: value.expiresAt,
     functionId: value.functionId,
     error: value.error,
-    ...('invokeUrl' in value ? { invokeUrl: value.invokeUrl } : {}),
-    ...(metadata === undefined
-      ? {}
-      : { errorMetadata: Object.fromEntries(Object.entries(metadata)) }),
+    ...('invokeUrl' in value ? { invokeUrl: value['invokeUrl'] } : {}),
+    ...(metadata === undefined ? {} : { errorMetadata: metadata }),
   };
+}
+
+function isCachedResolution(value: unknown): value is Record<string, unknown> & {
+  expiresAt: number;
+  functionId: string | null;
+  error: string | null;
+  errorMetadata?: Record<string, unknown>;
+} {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value['expiresAt'] === 'number' &&
+    validCacheId(value['functionId']) &&
+    validCacheError(value['error']) &&
+    validCacheMetadata(value['errorMetadata'])
+  );
+}
+
+function validCacheMetadata(value: unknown): value is Record<string, unknown> | undefined {
+  return value === undefined || isRecord(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function validCacheId(value: unknown): value is string | null {
