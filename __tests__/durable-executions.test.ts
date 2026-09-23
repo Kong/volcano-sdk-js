@@ -62,7 +62,7 @@ describe('durable.get / durable.list / durable.stop', () => {
     await expect(volcano.durable.get('proj-1', 'orders', 'exec-1')).resolves.toMatchObject({
       data: null,
       status: null,
-      error: expect.any(TypeError),
+      error: new TypeError('Invalid durable response: Failed to read durable execution'),
     });
     await expect(volcano.durable.list('proj-1', 'orders')).resolves.toMatchObject({
       data: null,

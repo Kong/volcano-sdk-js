@@ -666,3 +666,21 @@ test('resumable upload delegates through the typed session facade', async () => 
   });
   expect(complete).toHaveBeenCalledWith('file.bin', 'session-1');
 });
+
+test('resumable upload rejects an incomplete successful completion', async () => {
+  const given = fixture();
+  jest.spyOn(given.api, 'createUploadSession').mockResolvedValue({
+    data: {
+      session_id: 'session-1',
+      total_parts: 0,
+      part_size: 1,
+      expires_at: '2026-09-24T00:00:00Z',
+    },
+    error: null,
+  });
+  jest.spyOn(given.api, 'completeUploadSession').mockResolvedValue({ data: null, error: null });
+  await expect(given.api.uploadResumable('file.bin', new Blob(['data']))).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid resumable upload response'),
+  });
+});
