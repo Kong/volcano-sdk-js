@@ -2591,7 +2591,7 @@ class VolcanoAuth {
  * @returns {Promise<{VolcanoRealtime: any, RealtimeChannel: any}>}
  */
 async function loadRealtime() {
-  const module = await import('./realtime.js');
+  const module = await import('./realtime.ts');
   return {
     VolcanoRealtime: module.VolcanoRealtime,
     RealtimeChannel: module.RealtimeChannel,

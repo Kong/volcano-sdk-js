@@ -40,7 +40,7 @@ server-backed SDK integration tests.
 ## Package Structure
 
 - `src/index.js` contains the main SDK client.
-- `src/realtime.js` contains the realtime WebSocket client.
+- `src/realtime.ts` contains the realtime WebSocket client.
 - `src/next/middleware.ts` contains Next.js middleware helpers.
 - `src/*.d.ts` and `src/next/*.d.ts` contain checked-in TypeScript
   declarations.

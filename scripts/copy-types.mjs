@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 
 const declarationFiles = [
@@ -18,8 +18,6 @@ const declarationFiles = [
   ['src/index.d.ts', 'dist/index.esm.d.mts', toEsmDeclaration],
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.d.ts'],
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.esm.d.mts', toEsmDeclaration],
-  ['src/realtime.d.ts', 'dist/realtime.d.ts'],
-  ['src/realtime.d.ts', 'dist/realtime.esm.d.mts', toEsmDeclaration],
   ['dist/typescript/durable-types.d.ts', 'dist/durable-types.d.ts', toCjsDeclaration],
   ['dist/typescript/durable-types.d.ts', 'dist/durable-types.esm.d.mts', toEsmDeclaration],
   [
@@ -37,6 +35,18 @@ const declarationFiles = [
   ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.d.ts', toCjsDeclaration],
   ['dist/typescript/next/middleware.d.ts', 'dist/next/middleware.esm.d.mts', toEsmDeclaration],
 ];
+
+for (const filename of await readdir('dist/typescript')) {
+  if (!filename.startsWith('realtime') || !filename.endsWith('.d.ts')) {
+    continue;
+  }
+  const source = `dist/typescript/${filename}`;
+  const stem = filename.slice(0, -'.d.ts'.length);
+  declarationFiles.push(
+    [source, `dist/${stem}.d.ts`, toCjsDeclaration],
+    [source, `dist/${stem}.esm.d.mts`, toEsmDeclaration],
+  );
+}
 
 for (const [source, target, transform] of declarationFiles) {
   await mkdir(dirname(target), { recursive: true });

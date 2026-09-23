@@ -14,7 +14,7 @@ export interface CentrifugeClient {
   on(event: string, callback: (...args: unknown[]) => void): void;
   off(event: string, callback: (...args: unknown[]) => void): void;
   newSubscription(channel: string, options?: Record<string, unknown>): unknown;
-  getSubscription(channel: string): unknown | undefined;
+  getSubscription(channel: string): unknown;
   removeSubscription(subscription: unknown): void;
 }
 
@@ -156,8 +156,8 @@ export interface DisconnectContext {
 
 /** Context for error events */
 export interface ErrorContext {
-  /** Error object */
-  error?: Error;
+  /** Original transport error; narrow before reading transport-specific fields. */
+  error?: unknown;
   /** Error message */
   message?: string;
   /** Error code */
@@ -178,181 +178,3 @@ export interface PresenceInfo {
 }
 
 export type UnsubscribeFunction = () => void;
-
-/**
- * Realtime channel for subscribing to events
- */
-export declare class RealtimeChannel {
-  /**
-   * Channel name in format "type:name"
-   * Server automatically prefixes with project ID from anon key
-   */
-  readonly name: string;
-
-  /**
-   * Subscribe to the channel and resolve once it is ready (10-second timeout)
-   */
-  subscribe(): Promise<void>;
-
-  /**
-   * Pause delivery while retaining event handlers
-   */
-  unsubscribe(): void;
-
-  /**
-   * Listen for events on the channel
-   * @param event - Event name or '*' for all events
-   * @param callback - Callback function
-   * @returns Unsubscribe function
-   */
-  on(
-    event: string,
-    callback: (data: unknown, ctx?: PublicationContext) => void,
-  ): UnsubscribeFunction;
-
-  /**
-   * Send a message to the channel (broadcast only)
-   * @param data - Message data
-   */
-  send(data: Record<string, unknown>): Promise<void>;
-
-  /**
-   * Listen for database changes (postgres channels only)
-   * @param event - Event type: 'INSERT', 'UPDATE', 'DELETE', or '*'
-   * @param schema - Schema name
-   * @param table - Table name
-   * @param callback - Callback function
-   * @returns Unsubscribe function
-   */
-  onPostgresChanges(
-    event: 'INSERT' | 'UPDATE' | 'DELETE' | '*',
-    schema: string,
-    table: string,
-    callback: (data: PostgresChange, ctx?: PublicationContext) => void,
-  ): UnsubscribeFunction;
-
-  /**
-   * Listen for presence state sync
-   * @param callback - Callback with presence state
-   * @returns Unsubscribe function
-   */
-  onPresenceSync(callback: (state: PresenceState) => void): UnsubscribeFunction;
-
-  /**
-   * Track this client's presence
-   * @param state - Presence state data
-   */
-  track(state?: Record<string, unknown>): Promise<void>;
-
-  /**
-   * Get current presence state
-   */
-  getPresenceState(): PresenceState;
-}
-
-/**
- * Main realtime client
- */
-export declare class VolcanoRealtime {
-  /**
-   * Create a new VolcanoRealtime client
-   * @param config - Configuration options
-   */
-  constructor(config: RealtimeConfig);
-
-  /** WebSocket URL for realtime connections */
-  readonly wsUrl: string;
-
-  /**
-   * Connect to the realtime server
-   */
-  connect(): Promise<void>;
-
-  /**
-   * Disconnect from the realtime server
-   */
-  disconnect(): void;
-
-  /**
-   * Check if connected to the realtime server
-   */
-  isConnected(): boolean;
-
-  /**
-   * Create or get a channel
-   * @param name - Channel name (without project prefix)
-   * @param options - Channel options
-   */
-  channel(name: string, options?: ChannelOptions): RealtimeChannel;
-
-  /**
-   * Register callback for connection events
-   * @param callback - Callback function receiving connection context
-   * @returns Unsubscribe function
-   */
-  onConnect(callback: (ctx: ConnectContext) => void): UnsubscribeFunction;
-
-  /**
-   * Register callback for disconnection events
-   * @param callback - Callback function receiving disconnect context
-   * @returns Unsubscribe function
-   */
-  onDisconnect(callback: (ctx: DisconnectContext) => void): UnsubscribeFunction;
-
-  /**
-   * Register callback for error events
-   * @param callback - Callback function receiving error context
-   * @returns Unsubscribe function
-   */
-  onError(callback: (ctx: ErrorContext) => void): UnsubscribeFunction;
-
-  /**
-   * Remove all channels and listeners
-   */
-  removeAllChannels(): void;
-
-  /**
-   * Remove a specific channel
-   * @param name - Channel name
-   * @param type - Channel type (default: 'broadcast')
-   */
-  removeChannel(name: string, type?: 'broadcast' | 'presence' | 'postgres'): void;
-
-  /**
-   * Get the underlying Centrifuge client
-   * @returns The Centrifuge client or null if not connected
-   */
-  getClient(): CentrifugeClient | null;
-
-  /**
-   * Set the VolcanoAuth client for auto-fetching lightweight notifications
-   * @param volcanoClient - VolcanoAuth client instance
-   */
-  setVolcanoClient(volcanoClient: VolcanoAuth): void;
-
-  /**
-   * Get the configured VolcanoAuth client
-   * @returns The VolcanoAuth client or null
-   */
-  getVolcanoClient(): VolcanoAuth | null;
-
-  /**
-   * Get the fetch configuration
-   * @returns The fetch configuration
-   */
-  getFetchConfig(): FetchConfig;
-
-  /**
-   * Set the database name for auto-fetch queries
-   * @param databaseName - Database name
-   */
-  setDatabaseName(databaseName: string): void;
-
-  /**
-   * Get the configured database name
-   * @returns The database name or null
-   */
-  getDatabaseName(): string | null;
-}
-
-export default VolcanoRealtime;
