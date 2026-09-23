@@ -41,11 +41,12 @@ jobs:
         run: bash .github/scripts/actionlint.sh
 
   sdk:
-    name: ${{ matrix.node-version == '20' && 'SDK Lint, Tests, and Build' || 'SDK Node 22' }}
+    name: SDK Node ${{ matrix.node-version }} mutation shard ${{ matrix.mutation-shard }}
     strategy:
       fail-fast: false
       matrix:
         node-version: ['20', '22']
+        mutation-shard: [0, 1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -72,26 +73,41 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run SDK quality checks
+        env:
+          MUTATION_SHARD_INDEX: ${{ matrix.mutation-shard }}
+          MUTATION_SHARD_COUNT: '4'
         run: pnpm quality
 
       - name: Preserve failing tests and property counterexamples
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-failures-node-${{ matrix.node-version }}
+          name: test-failures-node-${{ matrix.node-version }}-shard-${{ matrix.mutation-shard }}
           path: |
             reports/unit.json
             reports/mutation.json
           if-no-files-found: ignore
 
+  sdk-required:
+    name: SDK Lint, Tests, and Build
+    if: ${{ always() }}
+    needs: [sdk]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every runtime and mutation shard
+        env:
+          RESULT: ${{ needs.sdk.result }}
+        run: test "$RESULT" = success
+
   quality:
     name: Quality Gate
     if: ${{ always() }}
-    needs: [actions, sdk]
+    needs: [actions, sdk, sdk-required]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every mandatory job to succeed
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
-        run: jq -e 'length == 2 and all(. == "success")' <<< "$RESULTS"
+        run: jq -e 'length == 3 and all(. == "success")' <<< "$RESULTS"

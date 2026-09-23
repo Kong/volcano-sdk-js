@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { changedRuntimePatterns, criticalRuntime, mutationPatterns } from './mutation-scope.mjs';
+import {
+  changedRuntimePatterns,
+  criticalRuntime,
+  mutationPatterns,
+  shardMutationPatterns,
+} from './mutation-scope.mjs';
 
 test('selects changed handwritten runtime lines from a PR diff', () => {
   const diff = [
@@ -60,6 +65,35 @@ test('a new handwritten runtime file cannot fall outside the PR mutation scope',
   writeFileSync(path, 'export const newSource = true;\n');
   try {
     assert.ok(mutationPatterns('', '', [path]).includes(path));
+  } finally {
+    unlinkSync(path);
+  }
+});
+
+test('mutation shards partition every selected source line without overlap', () => {
+  const path = `src/mutation-shard-fixture-${String(process.pid)}.ts`;
+  writeFileSync(
+    path,
+    `${Array.from({ length: 81 }, (_, index) => `export const v${String(index)} = ${String(index)};`).join('\n')}\n`,
+  );
+  try {
+    const patterns = [path, `${path}:15-45`];
+    const seen = new Set();
+    for (let shard = 0; shard < 4; shard += 1) {
+      for (const pattern of shardMutationPatterns(patterns, shard, 4)) {
+        const match = /:(\d+)-(\d+)$/.exec(pattern);
+        assert.ok(match);
+        for (let line = Number(match[1]); line <= Number(match[2]); line += 1) {
+          assert.ok(!seen.has(line), `line ${String(line)} repeated`);
+          seen.add(line);
+        }
+      }
+    }
+    assert.deepEqual(
+      [...seen].sort((left, right) => left - right),
+      Array.from({ length: 81 }, (_, index) => index + 1),
+    );
+    assert.throws(() => shardMutationPatterns(patterns, 4, 4), /Invalid mutation shard/);
   } finally {
     unlinkSync(path);
   }

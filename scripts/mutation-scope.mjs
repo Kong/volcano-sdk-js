@@ -70,3 +70,62 @@ export function mutationPatterns(committedDiff, workingDiff, untrackedPaths) {
   }
   return [...patterns];
 }
+
+export function shardMutationPatterns(patterns, shardIndex, shardCount) {
+  if (
+    !Number.isInteger(shardIndex) ||
+    !Number.isInteger(shardCount) ||
+    shardCount < 1 ||
+    shardIndex < 0 ||
+    shardIndex >= shardCount
+  ) {
+    throw new Error('Invalid mutation shard index or count');
+  }
+
+  const selectedLines = new Map();
+  for (const pattern of patterns) {
+    const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
+    if (!match) {
+      throw new Error(`Invalid mutation pattern: ${pattern}`);
+    }
+    const [, path, first, last] = match;
+    const source = readFileSync(path, 'utf8');
+    const lineCount =
+      source.length === 0 ? 0 : source.split('\n').length - Number(source.endsWith('\n'));
+    const start = first === undefined ? 1 : Number(first);
+    const end = last === undefined ? lineCount : Number(last);
+    if (start < 1 || end < start || end > lineCount) {
+      throw new Error(`Invalid mutation range: ${pattern}`);
+    }
+    const lines = selectedLines.get(path) ?? new Set();
+    for (let line = start; line <= end; line += 1) {
+      lines.add(line);
+    }
+    selectedLines.set(path, lines);
+  }
+
+  const selected = [];
+  for (const [path, lines] of selectedLines) {
+    const owned = [...lines].filter(
+      (line) => Math.floor((line - 1) / 20) % shardCount === shardIndex,
+    );
+    owned.sort((left, right) => left - right);
+    let start = null;
+    let end = null;
+    for (const line of owned) {
+      if (start !== null && line !== end + 1) {
+        selected.push(`${path}:${start}-${end}`);
+        start = null;
+      }
+      start ??= line;
+      end = line;
+    }
+    if (start !== null) {
+      selected.push(`${path}:${start}-${end}`);
+    }
+  }
+  if (selected.length === 0) {
+    throw new Error(`Mutation shard ${shardIndex}/${shardCount} selected no source`);
+  }
+  return selected;
+}
