@@ -110,10 +110,10 @@ function tokenString(value: unknown, name: string): string {
 
 function tokenExpiry(value: unknown): number {
   const field = requiredField(value, 'expires_in');
-  if (typeof field !== 'number' || !Number.isInteger(field)) {
+  if (!Number.isInteger(field)) {
     throw new TypeError('OAuth token expires_in must be an integer');
   }
-  return field;
+  return Number(field);
 }
 
 function tokenStatus(host: AuthProviderHost, response: ContextRequest): OAuthTokenResponse {

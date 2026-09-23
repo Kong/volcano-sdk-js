@@ -41,10 +41,37 @@ test('accepts required session fields without invented timestamps', async () => 
   });
 });
 
+test.each(['email', 'google', 'github', 'microsoft', 'apple', 'anonymous'] as const)(
+  'accepts a %s session provider',
+  async (provider) => {
+    const linked = { ...session, provider };
+    await expect(getSessions(hostWith(response([linked])), {})).resolves.toMatchObject({
+      sessions: [linked],
+      error: null,
+    });
+  },
+);
+
+test.each([
+  'user_agent',
+  'ip_address',
+  'last_ip_address',
+  'last_activity_at',
+  'session_started_at',
+  'created_at',
+  'updated_at',
+] as const)('rejects a non-string %s field', async (field) => {
+  await expect(getSessions(hostWith(response([{ ...session, [field]: 42 }])), {})).rejects.toThrow(
+    'Auth sessions response must contain valid sessions',
+  );
+});
+
 test.each([
   null,
   'session',
   [null],
+  [Object.assign([], session)],
+  [Object.assign(() => 0, session)],
   [{ ...session, id: 12 }],
   [{ ...session, user_id: null }],
   [{ ...session, provider: 'unsupported' }],

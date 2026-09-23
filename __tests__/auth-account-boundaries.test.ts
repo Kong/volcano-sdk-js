@@ -301,6 +301,14 @@ test('getSession returns independent user data and no session without an access 
   expect(withoutUser.data.session?.user).toBeNull();
 });
 
+test('getSession rejects corrupted in-memory user data before exposing it', () => {
+  const host = fixture();
+  host.accessToken = 'access';
+  Reflect.set(host, 'currentUser', { id: 'user-1', email: 'user@example.com' });
+
+  expect(() => getSession(host)).toThrow('Auth user status must be active, banned, or deleted');
+});
+
 test('setSession adopts only a validated clone', async () => {
   const host = fixture();
   const session = { access_token: 'access', refresh_token: 'refresh', user };

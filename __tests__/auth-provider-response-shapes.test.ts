@@ -24,14 +24,24 @@ function hostWith(data: unknown): AuthProviderHost {
   };
 }
 
-test.each([null, {}, { authorization_url: 42 }])(
-  'rejects malformed successful OAuth link response: %p',
-  async (data) => {
-    await expect(linkOAuthProvider(hostWith(data), 'google')).rejects.toThrow(
-      'OAuth link response must include an authorization URL',
-    );
-  },
-);
+test.each([
+  null,
+  {},
+  { authorization_url: 42 },
+  Object.assign([], { authorization_url: 'url' }),
+  Object.assign(() => 0, { authorization_url: 'url' }),
+])('rejects malformed successful OAuth link response: %p', async (data) => {
+  await expect(linkOAuthProvider(hostWith(data), 'google')).rejects.toThrow(
+    'OAuth link response must include an authorization URL',
+  );
+});
+
+test('treats a null OAuth providers field as an empty collection', async () => {
+  await expect(getLinkedOAuthProviders(hostWith({ providers: null }))).resolves.toEqual({
+    providers: [],
+    error: null,
+  });
+});
 
 test.each([
   { providers: 'google' },

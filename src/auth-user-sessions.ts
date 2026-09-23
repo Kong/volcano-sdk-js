@@ -82,10 +82,10 @@ function sessionsField(value: unknown): AuthSession[] {
 
 function integerField(value: unknown, name: string, minimum: number): number {
   const field = requiredField(value, name);
-  if (typeof field !== 'number' || !Number.isInteger(field) || field < minimum) {
+  if (!Number.isInteger(field) || Number(field) < minimum) {
     throw new TypeError(`Auth sessions ${name} must be an integer of at least ${String(minimum)}`);
   }
-  return field;
+  return Number(field);
 }
 
 function failedSessions(error: Error): SessionsResponse {

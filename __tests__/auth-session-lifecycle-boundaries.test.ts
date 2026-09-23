@@ -4,8 +4,10 @@ import { AuthSessionOperations } from '../src/auth-session.ts';
 import {
   type AuthContext,
   type AuthLifecycleHost,
+  fetchSessionRefresh,
   type RefreshResult,
   refreshSession,
+  refreshSessionForContext,
   revokeAccessSession,
   signOutCaptured,
   type SignOutResult,
@@ -84,6 +86,81 @@ test('sign-out normalizes a rejected concurrent refresh and still clears the ses
   });
   expect(Reflect.get(host, '_clearSession')).toHaveBeenCalledWith(context);
   expect(Reflect.get(host, '_anonFetch')).not.toHaveBeenCalled();
+});
+
+test('sign-out accepts a completed preceding refresh even when its old pair is unverified', async () => {
+  const { host, context } = fixture();
+  context.operations.verifyPair(null);
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({ ok: true, status: 204, data: null, error: null } satisfies RequestResult),
+  );
+
+  await expect(
+    signOutCaptured(
+      host,
+      context,
+      Promise.resolve({ ok: true, status: 200, data: session, error: null }),
+    ),
+  ).resolves.toEqual({ error: null });
+  expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledWith('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: 'refresh' }),
+  });
+});
+
+test('sign-out normalizes a nonstandard failure retained from an in-flight refresh', async () => {
+  const { host, context } = fixture();
+  const accessToken = `x.${Buffer.from(JSON.stringify({ session_id: '00000000-0000-4000-8000-000000000001' })).toString('base64url')}.x`;
+  const captured: AuthContext = { ...context, accessToken };
+  captured.operations.verifyPair(null);
+  const rejection = new Error('transport failed');
+  Object.setPrototypeOf(rejection, null);
+
+  await expect(signOutCaptured(host, captured, Promise.reject(rejection))).resolves.toEqual({
+    error: new Error('Sign out failed'),
+  });
+  expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledTimes(1);
+});
+
+test('refresh converts an unexpected nonstandard validation failure into a stable error', async () => {
+  const { host, context } = fixture();
+  const rejection = new Error('unavailable');
+  Object.setPrototypeOf(rejection, null);
+  jest.spyOn(context.operations, 'hasVerifiedPair').mockImplementation(() => {
+    throw rejection;
+  });
+
+  await expect(refreshSessionForContext(host, context)).resolves.toEqual({
+    session: null,
+    error: new Error('Refresh failed'),
+  });
+  expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
+});
+
+test('refresh checks the current user rather than a stale captured user ID', async () => {
+  const { host, context } = fixture();
+  const captured: AuthContext = { ...context, userId: 'stale-user' };
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({ ok: true, status: 200, data: session, error: null } satisfies RequestResult),
+  );
+
+  await expect(fetchSessionRefresh(host, captured)).resolves.toMatchObject({ ok: true });
+});
+
+test('refresh rejects a different user while the captured session still owns the client', async () => {
+  const { host, context } = fixture();
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      data: { ...session, user: { ...session.user, id: 'another-user' } },
+      error: null,
+    } satisfies RequestResult),
+  );
+
+  await expect(fetchSessionRefresh(host, context)).rejects.toThrow(
+    'Refreshed session belongs to a different user',
+  );
 });
 
 test('access-session revocation reports a failed refresh after an unauthorized delete', async () => {
