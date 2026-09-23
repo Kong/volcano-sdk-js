@@ -82,7 +82,7 @@ export function shardMutationPatterns(patterns, shardIndex, shardCount) {
     throw new Error('Invalid mutation shard index or count');
   }
 
-  const selectedLines = new Map();
+  const groups = new Map();
   for (const pattern of patterns) {
     const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
     if (!match) {
@@ -97,33 +97,29 @@ export function shardMutationPatterns(patterns, shardIndex, shardCount) {
     if (start < 1 || end < start || end > lineCount) {
       throw new Error(`Invalid mutation range: ${pattern}`);
     }
-    const lines = selectedLines.get(path) ?? new Set();
+    const group = groups.get(path) ?? { path, patterns: [], lines: new Set() };
+    group.patterns.push(pattern);
     for (let line = start; line <= end; line += 1) {
-      lines.add(line);
+      group.lines.add(line);
     }
-    selectedLines.set(path, lines);
+    groups.set(path, group);
   }
 
-  const selected = [];
-  for (const [path, lines] of selectedLines) {
-    const owned = [...lines].filter(
-      (line) => Math.floor((line - 1) / 20) % shardCount === shardIndex,
-    );
-    owned.sort((left, right) => left - right);
-    let start = null;
-    let end = null;
-    for (const line of owned) {
-      if (start !== null && line !== end + 1) {
-        selected.push(`${path}:${start}-${end}`);
-        start = null;
+  const shards = Array.from({ length: shardCount }, () => ({ patterns: [], weight: 0 }));
+  const ordered = [...groups.values()].sort(
+    (left, right) => right.lines.size - left.lines.size || left.path.localeCompare(right.path),
+  );
+  for (const group of ordered) {
+    let target = shards[0];
+    for (const shard of shards.slice(1)) {
+      if (shard.weight < target.weight) {
+        target = shard;
       }
-      start ??= line;
-      end = line;
     }
-    if (start !== null) {
-      selected.push(`${path}:${start}-${end}`);
-    }
+    target.patterns.push(...group.patterns);
+    target.weight += group.lines.size;
   }
+  const selected = shards[shardIndex].patterns;
   if (selected.length === 0) {
     throw new Error(`Mutation shard ${shardIndex}/${shardCount} selected no source`);
   }

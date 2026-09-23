@@ -70,31 +70,36 @@ test('a new handwritten runtime file cannot fall outside the PR mutation scope',
   }
 });
 
-test('mutation shards partition every selected source line without overlap', () => {
-  const path = `src/mutation-shard-fixture-${String(process.pid)}.ts`;
-  writeFileSync(
-    path,
-    `${Array.from({ length: 81 }, (_, index) => `export const v${String(index)} = ${String(index)};`).join('\n')}\n`,
+test('mutation shards keep every file and its overlapping ranges together', () => {
+  const paths = Array.from(
+    { length: 4 },
+    (_, index) => `src/mutation-shard-fixture-${String(process.pid)}-${String(index)}.ts`,
   );
+  for (const [index, path] of paths.entries()) {
+    writeFileSync(
+      path,
+      `${Array.from({ length: 20 + index * 10 }, (_, line) => `export const v${String(line)} = ${String(line)};`).join('\n')}\n`,
+    );
+  }
   try {
-    const patterns = [path, `${path}:15-45`];
-    const seen = new Set();
+    const patterns = [paths[0], `${paths[0]}:15-19`, ...paths.slice(1)];
+    const owner = new Map();
+    const seen = [];
     for (let shard = 0; shard < 4; shard += 1) {
       for (const pattern of shardMutationPatterns(patterns, shard, 4)) {
-        const match = /:(\d+)-(\d+)$/.exec(pattern);
-        assert.ok(match);
-        for (let line = Number(match[1]); line <= Number(match[2]); line += 1) {
-          assert.ok(!seen.has(line), `line ${String(line)} repeated`);
-          seen.add(line);
-        }
+        const path = pattern.split(':')[0];
+        assert.ok(!owner.has(path) || owner.get(path) === shard);
+        owner.set(path, shard);
+        seen.push(pattern);
       }
     }
-    assert.deepEqual(
-      [...seen].sort((left, right) => left - right),
-      Array.from({ length: 81 }, (_, index) => index + 1),
-    );
+    assert.deepEqual(seen.sort(), patterns.sort());
+    assert.equal(owner.size, paths.length);
     assert.throws(() => shardMutationPatterns(patterns, 4, 4), /Invalid mutation shard/);
+    assert.throws(() => shardMutationPatterns([paths[0]], 3, 4), /selected no source/);
   } finally {
-    unlinkSync(path);
+    for (const path of paths) {
+      unlinkSync(path);
+    }
   }
 });
