@@ -61,6 +61,10 @@ test('uses the JSON reader when no text reader exists', async () => {
   expect(json).toHaveBeenCalledTimes(1);
 });
 
+test('preserves an undefined JSON-reader result', async () => {
+  await expect(parseResponseBody({ json: () => Promise.resolve() })).resolves.toBeUndefined();
+});
+
 test('returns null when a JSON-only response cannot be read', async () => {
   const json = jest.fn<() => Promise<unknown>>().mockRejectedValue(new Error('read failed'));
   await expect(parseResponseBody({ json })).resolves.toBeNull();

@@ -24,7 +24,7 @@ import type {
   UploadStorageObjectBodyOne
 } from './model';
 
-import { volcanoFetch } from './volcano-fetch';
+import { volcanoFetch } from '../volcano-fetch';
 export type startDurableExecutionFromApplicationResponse202 = {
   data: DurableExecution
   status: 202

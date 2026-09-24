@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { AuthRefreshDiscardedError, VolcanoAuth } from '../src/index.js';
+import { AuthRefreshDiscardedError, VolcanoAuth } from '../src/index.ts';
 import { sessionToken } from './session-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -299,7 +299,7 @@ describe('QueryBuilder', () => {
               access_token: sessionToken(undefined, true),
               refresh_token: 'new-refresh-token',
               expires_in: 3600,
-              user: { id: 'user-123' },
+              user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
             }),
         }),
       );
@@ -344,7 +344,7 @@ describe('QueryBuilder', () => {
       setSessionFixture(volcano, {
         access_token: 'old-access',
         refresh_token: 'old-refresh',
-        user: { id: 'user-1' },
+        user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
       fetchMock
         .mockResolvedValueOnce(
@@ -364,7 +364,7 @@ describe('QueryBuilder', () => {
       setSessionFixture(volcano, {
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
-        user: { id: 'user-2' },
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
       });
       refreshResponse.resolve(
         responseFixture({
@@ -374,7 +374,7 @@ describe('QueryBuilder', () => {
             Promise.resolve({
               access_token: 'stale-access',
               refresh_token: 'stale-refresh',
-              user: { id: 'user-1' },
+              user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
               expires_in: 3600,
             }),
         }),
@@ -386,7 +386,11 @@ describe('QueryBuilder', () => {
       expect(AuthRefreshDiscardedError.is(result.error)).toBe(true);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(Reflect.get(volcano, 'accessToken')).toBe('replacement-access');
-      expect(Reflect.get(volcano, 'currentUser')).toEqual({ id: 'user-2' });
+      expect(Reflect.get(volcano, 'currentUser')).toEqual({
+        id: 'user-2',
+        email: 'fixture@example.com',
+        status: 'active',
+      });
     });
 
     it('should return error when not authenticated', async () => {

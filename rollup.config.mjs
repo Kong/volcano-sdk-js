@@ -25,7 +25,7 @@ const umdBrowserGlobalFooter = `;(function () {
 export default [
   // Main SDK bundle
   {
-    input: 'src/index.js',
+    input: 'src/index.ts',
     plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [

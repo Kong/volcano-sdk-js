@@ -1,10 +1,14 @@
-import type { Auth, ProjectLockLease, ProjectLocks, User, UserStatus } from '../../src/index.js';
 import {
+  type Auth,
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
+  type ProjectLockLease,
+  type ProjectLocks,
+  type User,
+  type UserStatus,
   VolcanoClient,
   VolcanoSystemError,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 declare const user: User;
 declare const auth: Auth;
@@ -20,20 +24,31 @@ const status: UserStatus | undefined = user.status;
 const bannedUntil: string | null | undefined = user.banned_until;
 const lastSignInAt: string | undefined = user.last_sign_in_at;
 
-void [projectId, emailConfirmed, appMetadata, avatarUrl, status, bannedUntil, lastSignInAt];
-void auth.resetPasswordForEmail('alice@example.com');
+export const userFields = [
+  projectId,
+  emailConfirmed,
+  appMetadata,
+  avatarUrl,
+  status,
+  bannedUntil,
+  lastSignInAt,
+];
+export const reset = auth.resetPasswordForEmail('alice@example.com');
 const tokenClient = new VolcanoClient({ anonKey: 'example', accessToken: 'supplied-access' });
-void tokenClient.auth.getSession();
-void locks.renew('leader', lease, { ttl: 5, signal });
+export const session = tokenClient.auth.getSession();
+export const renewal = locks.renew('leader', lease, { ttl: 5, signal });
 
 // Auth errors historically inherit Error's constructor signature in declarations.
-void new AuthRefreshDiscardedError('ignored', { cause: new Error('ignored') });
-void new AuthSessionChangedError('ignored', { cause: new Error('ignored') });
+export const refreshError = new AuthRefreshDiscardedError('ignored', {
+  cause: new Error('ignored'),
+});
+export const sessionError = new AuthSessionChangedError('ignored', {
+  cause: new Error('ignored'),
+});
 const systemFailure = new VolcanoSystemError('failed', {
   status: null,
   code: 'gateway_failed',
   retryAfter: 0,
   cause: new Error('network'),
 });
-const systemFailureName: 'VolcanoSystemError' = systemFailure.name;
-void systemFailureName;
+export const systemFailureName: 'VolcanoSystemError' = systemFailure.name;

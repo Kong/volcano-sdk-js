@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@aws/durable-execution-sdk-js": ["./src/durable-runtime-peer.d.ts"],
+      "@volcano.dev/sdk": ["./dist/index.js"],
+      "@volcano.dev/sdk/durable": ["./dist/durable.js"]
+    }
+  }
+}

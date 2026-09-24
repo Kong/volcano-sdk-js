@@ -372,11 +372,7 @@ class VolcanoRealtime {
     // userID; otherwise the publication is silently dropped and onPostgresChanges
     // never fires. Requiring exactly 5 segments avoids over-matching anything
     // that isn't this well-defined per-user format.
-    if (channel === undefined) {
-      if (route.postgresBaseChannel !== null) {
-        channel = this._channels.get(route.postgresBaseChannel);
-      }
-    }
+    channel ??= this._channels.get(route.postgresBaseChannel ?? route.sdkChannel);
 
     if (channel !== undefined) {
       channel._handlePublication(ctx);

@@ -36,6 +36,17 @@ test.each(['one', 'one.two', 'one.two.three.four'])('requires three segments: %s
   expect(extractSessionIdFromToken(value)).toBeNull();
 });
 
+test('rejects an otherwise valid claim set with an extra token segment', () => {
+  const payload = Buffer.from(
+    JSON.stringify({ project_id: 'project', session_id: 'abcdef01-2345-6789-abcd-ef0123456789' }),
+  ).toString('base64url');
+  const malformed = `header.${payload}.signature.extra`;
+  expect(extractSessionIdFromToken(malformed)).toBeNull();
+  expect(() => extractRequiredProjectIdFromToken(malformed)).toThrow(
+    'accessToken must be a JWT with project_id claim',
+  );
+});
+
 test.each(['header.!.signature', 'header.eA.signature', 'header..signature'])(
   'handles invalid encoded JSON: %s',
   (value) => {
@@ -70,12 +81,18 @@ test.each(['ABCDEF01-2345-6789-ABCD-EF0123456789', 'abcdef01-2345-6789-abcd-ef01
   },
 );
 
-test.each([null, 12, {}, '', 'not-a-uuid', ' abcdef01-2345-6789-abcd-ef0123456789'])(
-  'rejects invalid session claims: %p',
-  (sessionId) => {
-    expect(extractSessionIdFromToken(token({ session_id: sessionId }))).toBeNull();
-  },
-);
+test.each([
+  null,
+  12,
+  {},
+  '',
+  'not-a-uuid',
+  ' abcdef01-2345-6789-abcd-ef0123456789',
+  'abcdef01-2345-6789-abcd-ef0123456789-extra',
+  ['abcdef01-2345-6789-abcd-ef0123456789'],
+])('rejects invalid session claims: %p', (sessionId) => {
+  expect(extractSessionIdFromToken(token({ session_id: sessionId }))).toBeNull();
+});
 
 test.each([
   ['Zg', 'f'],

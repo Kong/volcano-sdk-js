@@ -39,11 +39,10 @@ server-backed SDK integration tests.
 
 ## Package Structure
 
-- `src/index.js` contains the main SDK client.
+- `src/index.ts` contains the main SDK client.
 - `src/realtime.ts` contains the realtime WebSocket client.
 - `src/next/middleware.ts` contains Next.js middleware helpers.
-- `src/*.d.ts` and `src/next/*.d.ts` contain checked-in TypeScript
-  declarations.
+- TypeScript declarations are emitted from `src/**/*.ts` during `pnpm build`.
 - `openapi/openapi.yaml` is the vendored public API contract.
 - `src/generated/openapi.d.ts` is generated from that contract and must not be
   edited by hand.

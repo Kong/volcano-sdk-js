@@ -6,30 +6,10 @@ function git(...args) {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
 }
 
-const base = process.env.MUTATION_BASE_REF ?? 'origin/main';
-git('rev-parse', '--verify', base);
-const committedDiff = git(
-  'diff',
-  '--no-ext-diff',
-  '--no-renames',
-  '--unified=0',
-  `${base}...HEAD`,
-  '--',
-  'src',
-);
-const workingDiff = git(
-  'diff',
-  '--no-ext-diff',
-  '--no-renames',
-  '--unified=0',
-  'HEAD',
-  '--',
-  'src',
-);
-const untrackedPaths = git('ls-files', '--others', '--exclude-standard', '--', 'src')
+const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src')
   .split('\n')
   .filter(Boolean);
-const allPatterns = mutationPatterns(committedDiff, workingDiff, untrackedPaths);
+const allPatterns = mutationPatterns(paths);
 const shardIndex = process.env.MUTATION_SHARD_INDEX;
 const shardCount = process.env.MUTATION_SHARD_COUNT;
 if ((shardIndex === undefined) !== (shardCount === undefined)) {

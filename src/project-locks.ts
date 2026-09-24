@@ -1,3 +1,4 @@
+import type { RequestResult } from './auth-request.ts';
 import type {
   ProjectLockAcquireOptions,
   ProjectLockAcquireResult,
@@ -12,12 +13,6 @@ import type {
 import { secureRandomUnit } from './lock-random.ts';
 import { lockRequestStart, LockSession } from './lock-session.ts';
 import { validateLease, validateLockKey, validateLockOptions } from './lock-validation.ts';
-
-interface LockResponse {
-  ok: boolean;
-  data: unknown;
-  error: ProjectLockError | null;
-}
 
 export interface LockClient {
   readonly accessToken: string | null;
@@ -39,10 +34,13 @@ export interface LockClient {
       body?: string;
       signal?: AbortSignal;
     },
-  ): Promise<LockResponse>;
+  ): Promise<RequestResult>;
 }
 
-const CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
+const CONTENTION_CODES: ReadonlySet<unknown> = new Set(['lock_held', 'lock_ownership_lost']);
+type LockAttempt =
+  | { response: { data: unknown }; error: null }
+  | { response: null; error: ProjectLockError };
 
 export class ProjectLocksApi implements ProjectLocks {
   constructor(private readonly client: LockClient) {}
@@ -78,26 +76,32 @@ export class ProjectLocksApi implements ProjectLocks {
     key: string,
     ttl: number,
     requestOptions: unknown,
-  ): Promise<
-    { response: { data: unknown }; error: null } | { response: null; error: ProjectLockError }
-  > {
-    let requestError: ProjectLockError = new Error('Lock acquisition failed');
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await this.client._transport.acquireProjectLock(
-          encodeURIComponent(key),
-          { ttl_seconds: ttl },
-          requestOptions,
-        );
-        return { response, error: null };
-      } catch (error) {
-        requestError = error instanceof Error ? error : new Error('Lock acquisition failed');
-        if (!retryable(requestError)) {
-          break;
-        }
-      }
+  ): Promise<LockAttempt> {
+    const first = await this.acquireAttempt(key, ttl, requestOptions);
+    if (first.response !== null || !retryable(first.error)) {
+      return first;
     }
-    return { response: null, error: requestError };
+    return this.acquireAttempt(key, ttl, requestOptions);
+  }
+
+  private async acquireAttempt(
+    key: string,
+    ttl: number,
+    requestOptions: unknown,
+  ): Promise<LockAttempt> {
+    try {
+      const response = await this.client._transport.acquireProjectLock(
+        encodeURIComponent(key),
+        { ttl_seconds: ttl },
+        requestOptions,
+      );
+      return { response, error: null };
+    } catch (error) {
+      return {
+        response: null,
+        error: error instanceof Error ? error : new Error('Lock acquisition failed'),
+      };
+    }
   }
 
   async renew(
@@ -116,7 +120,7 @@ export class ProjectLocksApi implements ProjectLocks {
       body: JSON.stringify({ ttl_seconds: ttl }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
-    if (!result.ok) {
+    if (result.ok !== true) {
       return { lease, error: result.error };
     }
     const fields = leaseFields(result.data);
@@ -155,7 +159,7 @@ export class ProjectLocksApi implements ProjectLocks {
       method: 'GET',
       headers: { 'X-Volcano-Request-Id': lockId(options.requestId) },
     });
-    if (!result.ok) {
+    if (result.ok !== true) {
       return { state: null, error: result.error };
     }
     return { state: stateFields(result.data), error: null };
@@ -170,7 +174,7 @@ export class ProjectLocksApi implements ProjectLocks {
       method: 'DELETE',
       headers: { 'X-Volcano-Request-Id': lockId(options.requestId) },
     });
-    return { error: result.ok ? null : result.error };
+    return { error: result.error };
   }
 
   async withLock<T>(
@@ -256,10 +260,8 @@ function optionalNumber(value: unknown, message: string): number | null {
 }
 
 function errorStatus(error: Error): number | null {
-  if (!('status' in error)) {
-    return null;
-  }
-  return typeof error.status === 'number' ? error.status : null;
+  const status: unknown = Reflect.get(error, 'status');
+  return typeof status === 'number' ? status : null;
 }
 
 function retryable(error: Error): boolean {
@@ -268,9 +270,9 @@ function retryable(error: Error): boolean {
 }
 
 function isContention(error: Error): boolean {
-  if (errorStatus(error) !== 409 || !('info' in error) || !isRecord(error.info)) {
+  const info: unknown = Reflect.get(error, 'info');
+  if (errorStatus(error) !== 409 || !isRecord(info)) {
     return false;
   }
-  const code = error.info['code'];
-  return typeof code === 'string' && CONTENTION_CODES.has(code);
+  return CONTENTION_CODES.has(info['code']);
 }

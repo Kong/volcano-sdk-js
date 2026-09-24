@@ -32,6 +32,7 @@ test('posts encoded mutations with values and filters, and remains awaitable', a
     'https://api.test/databases/db%20%2F%20one/query/update',
     expect.objectContaining({
       method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         table: 'records',
         values: { label: 'new' },
@@ -77,10 +78,9 @@ test('rejects missing credentials before requesting a mutation', async () => {
     data: null,
     error: new Error('No active session. Please sign in first.'),
   });
-  await expect(messageFailure.execute()).resolves.toMatchObject({
-    data: null,
-    error: new Error('exchange refused'),
-  });
+  const messageResult = await messageFailure.execute();
+  expect(messageResult.data).toBeNull();
+  expect(messageResult.error?.message).toBe('exchange refused');
   await expect(failedExchange.execute()).resolves.toMatchObject({
     data: null,
     error: exchangeFailure,
@@ -123,10 +123,21 @@ test.each([{}, 12])('preserves missing data as undefined: %p', async (body) => {
 test('converts a null response into an error', async () => {
   mockResponse(200, null);
   const builder = new MutationBuilder(client(), 'records', 'db', 'insert', {});
-  await expect(builder.execute()).resolves.toMatchObject({
-    data: null,
-    error: new TypeError('Mutation response is null'),
-  });
+  const result = await builder.execute();
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(TypeError);
+  expect(result.error?.message).toBe('Mutation response is null');
+});
+
+test('converts an undefined response into the same explicit error', async () => {
+  const response = Response.json({});
+  response.json = () => Promise.resolve();
+  globalThis.fetch = jest.fn(() => Promise.resolve(response));
+  const builder = new MutationBuilder(client(), 'records', 'db', 'insert', {});
+  const result = await builder.execute();
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(TypeError);
+  expect(result.error?.message).toBe('Mutation response is null');
 });
 
 test('returns network errors without changing their identity', async () => {

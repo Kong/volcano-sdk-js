@@ -1,21 +1,25 @@
-import type {
-  Auth,
-  CompleteSession,
-  StorageFileApi,
-  CreateUploadSessionResponse,
-  Durable,
-  DurableExecution,
-  OpenAPIComponents,
-  OpenAPIOperations,
-  QueryBuilder,
-  MutationBuilder,
-  UploadSessionStatusResponse,
-} from '../../src/index.js';
 import {
+  type Auth,
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
+  type CompleteSession,
+  type CreateUploadSessionResponse,
+  type Durable,
+  type DurableExecution,
+  type MutationBuilder,
+  type OpenAPIComponents,
+  type OpenAPIOperations,
+  type QueryBuilder,
+  type StorageFileApi,
+  type UploadSessionStatusResponse,
   VolcanoSystemError,
-} from '../../src/index.js';
+} from '../../src/index.ts';
+import type {
+  PostgresChange,
+  PresenceInfo,
+  PresenceState,
+  RealtimeChannel,
+} from '../../src/realtime.ts';
 
 type Assert<T extends true> = T;
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
@@ -32,21 +36,22 @@ type _SetSessionRejectsNullUser = Assert<null extends SetSessionParameter['user'
 declare const sourceAuth: Auth;
 declare const targetAuth: Auth;
 
-async function adoptCurrentSession() {
+async function adoptCurrentSession(): Promise<unknown> {
   const {
     data: { session },
   } = await sourceAuth.getSession();
-  if (!session?.refresh_token || !session.user) {
+  if (session === null) {
     return;
   }
-  await targetAuth.setSession({
+  if (session.refresh_token === null || session.refresh_token === '' || session.user === null) {
+    return;
+  }
+  return targetAuth.setSession({
     ...session,
     refresh_token: session.refresh_token,
     user: session.user,
   });
 }
-
-void adoptCurrentSession;
 
 type SignupBody = OpenAPIOperations['authSignup']['requestBody']['content']['application/json'];
 type SignupMetadata = NonNullable<SignupBody['user_metadata']>;
@@ -92,12 +97,12 @@ type _StorageMimeTypesCanBeNull = Assert<
 type _StorageOwnerCanBeNull = Assert<null extends StorageObject['owner_id'] ? true : false>;
 
 type UploadSessionCreated = NonNullable<CreateUploadSessionResponse['data']>;
-type UploadSessionCreatedShape = {
+interface UploadSessionCreatedShape {
   session_id: string;
   part_size: number;
   total_parts: number;
   expires_at: string;
-};
+}
 type _UploadSessionCreatedMatchesHosting = Assert<
   Equal<UploadSessionCreated, UploadSessionCreatedShape>
 >;
@@ -109,7 +114,7 @@ type _UploadSessionCreatedKeysMatchOpenAPI = Assert<
 >;
 
 type UploadSessionStatus = NonNullable<UploadSessionStatusResponse['data']>;
-type UploadSessionStatusShape = {
+interface UploadSessionStatusShape {
   session_id: string;
   status: 'pending' | 'uploading' | 'completing' | 'completed' | 'aborted';
   path: string;
@@ -122,7 +127,7 @@ type UploadSessionStatusShape = {
   parts: { part_number: number; etag: string; size: number }[];
   expires_at: string;
   created_at: string;
-};
+}
 type _UploadSessionStatusMatchesHosting = Assert<
   Equal<UploadSessionStatus, UploadSessionStatusShape>
 >;
@@ -140,7 +145,7 @@ type OAuthBody = NonNullable<OAuthRequest['body']>;
 type OAuthResponse =
   OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
 type _OAuthBodyAcceptsProperties = Assert<{ visibility: string } extends OAuthBody ? true : false>;
-type OAuthResponseShape = {
+interface OAuthResponseShape {
   provider: 'google' | 'github' | 'microsoft' | 'apple';
   endpoint: string;
   status_code: number;
@@ -149,10 +154,10 @@ type OAuthResponseShape = {
   // endpoint that answers with an array or a scalar reaches the caller as one.
   // A body hosting cannot decode is a 502 and never arrives here.
   data: unknown;
-};
+}
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 
-type DurableExecutionShape = {
+interface DurableExecutionShape {
   id: string;
   function_id: string;
   name: string;
@@ -162,7 +167,7 @@ type DurableExecutionShape = {
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped' | 'unknown';
   region: string;
   created_at: string;
-};
+}
 type _DurableStartHandleMatchesHosting = Assert<
   DurableExecutionShape extends DurableExecution ? true : false
 >;
@@ -174,48 +179,37 @@ declare const durable: Durable;
 
 // A start is answered, never thrown: `error` is what a refusal arrives as, and
 // `data` is only a handle once it is null-checked.
-async function startDurableExecution() {
+async function startDurableExecution(): Promise<unknown> {
   const { data, status, error } = await durable.start('order-pipeline', { order_id: 4417 });
-  if (error) {
+  if (error !== null) {
     const refusal: number | null = status;
-    void refusal;
-    return;
+    return refusal;
   }
   const handle: DurableExecution | null = data;
-  void handle;
+  return handle;
 }
-
-void startDurableExecution;
 
 // The owner-scoped half: reading, listing and stopping all answer the same
 // envelope, and a page carries the executions rather than a bare array.
-async function followDurableExecution() {
+async function followDurableExecution(): Promise<unknown> {
   const read = await durable.get('proj-1', 'order-pipeline', 'exec-1');
-  if (!read.error) {
-    const result: DurableExecution | null = read.data;
-    void result;
-  }
+  const result: DurableExecution | null = read.data;
 
   const listed = await durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 20 });
-  if (!listed.error && listed.data) {
-    const executions: DurableExecution[] = listed.data.data;
-    const more: boolean = listed.data.has_more;
-    void [executions, more];
-  }
+  const executions: DurableExecution[] = listed.data?.data ?? [];
+  const more: boolean = listed.data?.has_more ?? false;
 
   const stopped = await durable.stop('proj-1', 'order-pipeline', 'exec-1');
-  void stopped.status;
+  return { result, executions, more, status: stopped.status };
 }
 
-void followDurableExecution;
-
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
-type LogSearchEventShape = {
+interface LogSearchEventShape {
   id: string;
   timestamp: string;
   body: string;
   resource: OpenAPIComponents['schemas']['LogResource'];
-};
+}
 type _LogSearchEventIsUsable = Assert<LogSearchEventShape extends LogSearchEvent ? true : false>;
 type LogSearchEventStructuredShape = Omit<LogSearchEventShape, 'body'> & {
   body: { attempt: number };
@@ -224,21 +218,52 @@ type _LogSearchEventBodyKeepsJsonTypes = Assert<
   LogSearchEventStructuredShape extends LogSearchEvent ? true : false
 >;
 
+export type OpenApiContractChecks = [
+  _CompleteSessionCanBeAdopted,
+  _SetSessionRejectsNullRefreshToken,
+  _SetSessionRejectsNullUser,
+  _SignupMetadataAcceptsProperties,
+  _UserMetadataAcceptsProperties,
+  _AppMetadataAcceptsProperties,
+  _AuthUserBanCanBeNull,
+  _ListProjectsAcceptsMetadataExpansions,
+  _ProjectGitConnectionUsesSummary,
+  _ProjectHealthUsesSummary,
+  _DefaultedRequestFieldsStayOptional,
+  _StorageLimitsCanBeNull,
+  _StorageMimeTypesCanBeNull,
+  _StorageOwnerCanBeNull,
+  _UploadSessionCreatedMatchesHosting,
+  _UploadSessionCreatedKeysMatchOpenAPI,
+  _UploadSessionStatusMatchesHosting,
+  _InvocationPayloadAcceptsProperties,
+  _OAuthBodyAcceptsProperties,
+  _OAuthResponseUsesHostingEnvelope,
+  _DurableStartHandleMatchesHosting,
+  _DurableExecutionComesOffTheWire,
+  _LogSearchEventIsUsable,
+  _LogSearchEventBodyKeepsJsonTypes,
+];
+
 declare const refreshError: unknown;
+let refreshErrorFields: ['auth_refresh_discarded', 409, 'AuthRefreshDiscardedError'] | undefined;
 if (AuthRefreshDiscardedError.is(refreshError)) {
   const code: 'auth_refresh_discarded' = refreshError.code;
   const status: 409 = refreshError.status;
   const name: 'AuthRefreshDiscardedError' = refreshError.name;
-  void [code, status, name];
+  refreshErrorFields = [code, status, name];
 }
+export { refreshErrorFields };
 
 declare const sessionChangedError: unknown;
+let sessionErrorFields: ['auth_session_changed', 409, 'AuthSessionChangedError'] | undefined;
 if (AuthSessionChangedError.is(sessionChangedError)) {
   const code: 'auth_session_changed' = sessionChangedError.code;
   const status: 409 = sessionChangedError.status;
   const name: 'AuthSessionChangedError' = sessionChangedError.name;
-  void [code, status, name];
+  sessionErrorFields = [code, status, name];
 }
+export { sessionErrorFields };
 
 declare const query: QueryBuilder;
 declare const mutation: MutationBuilder;
@@ -250,7 +275,7 @@ query.is('enabled', 'true');
 mutation.is('enabled', 1);
 
 declare const bucket: StorageFileApi;
-async function uploadResponseEnvelopes() {
+async function uploadResponseEnvelopes(): Promise<unknown> {
   const completed = await bucket.completeUploadSession('file.bin', 'session');
   const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
   const uploaded = await bucket.upload('file.bin', new Blob(['bytes']));
@@ -259,15 +284,20 @@ async function uploadResponseEnvelopes() {
     resumed.data?.object.name,
     uploaded.data?.name,
   ];
-  // @ts-expect-error Completion returns an object envelope, not flattened metadata.
-  completed.data?.name;
-  // @ts-expect-error Resumable upload preserves the completion envelope.
-  resumed.data?.name;
-  void names;
+  return names;
 }
-void uploadResponseEnvelopes;
 
-async function storageErrorMetadata() {
+async function rejectFlattenedUploadResponses(): Promise<unknown> {
+  const completed = await bucket.completeUploadSession('file.bin', 'session');
+  const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
+  // @ts-expect-error Completion returns an object envelope, not flattened metadata.
+  const completedName: unknown = completed.data?.name;
+  // @ts-expect-error Resumable upload preserves the completion envelope.
+  const resumedName: unknown = resumed.data?.name;
+  return [completedName, resumedName];
+}
+
+async function storageErrorMetadata(): Promise<unknown> {
   const results = [
     await bucket.upload('file.bin', new Blob(['bytes'])),
     await bucket.download('file.bin'),
@@ -283,26 +313,24 @@ async function storageErrorMetadata() {
     await bucket.abortUploadSession('file.bin', 'session'),
     await bucket.uploadResumable('file.bin', new Blob(['bytes'])),
   ];
-  for (const { error } of results) {
+  return results.map(({ error }) => {
     const status: number | undefined = error?.status;
     const code: string | undefined = error?.code;
     const retryAfter: number | undefined = error?.retryAfter;
-    void [status, code, retryAfter];
-  }
+    return [status, code, retryAfter];
+  });
 }
-void storageErrorMetadata;
 
-async function removalFailureMetadata() {
+async function removalFailureMetadata(): Promise<unknown> {
   const removed = await bucket.remove(['one.bin', 'two.bin']);
-  for (const failure of removed.error?.failures ?? []) {
+  return (removed.error?.failures ?? []).map((failure) => {
     const path: string = failure.path;
     const status: number | undefined = failure.error.status;
-    void [path, status];
-  }
+    return [path, status];
+  });
 }
-void removalFailureMetadata;
 
-async function authErrorMetadata() {
+async function authErrorMetadata(): Promise<unknown> {
   const responses = [
     await sourceAuth.getUser(),
     await sourceAuth.updateUser({ metadata: {} }),
@@ -319,46 +347,56 @@ async function authErrorMetadata() {
     await sourceAuth.refreshOAuthToken('github'),
     await sourceAuth.callOAuthAPI('github', { endpoint: '/user' }),
   ];
-  for (const { error } of responses) {
+  return responses.map(({ error }) => {
     const status: number | undefined = error?.status;
     const code: string | undefined = error?.code;
     const retryAfter: number | undefined = error?.retryAfter;
-    void [status, code, retryAfter];
-  }
+    return [status, code, retryAfter];
+  });
 }
-void authErrorMetadata;
 
-import type { PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.ts';
 declare const presenceChannel: RealtimeChannel;
-function presenceIdentity(state: PresenceState) {
-  for (const info of Object.values(state)) {
+function presenceIdentity(state: PresenceState): unknown {
+  return Object.values(state).map((info) => {
     const id: string = info.client;
     const user: string | undefined = info.user;
     const connection: Record<string, unknown> | undefined = info.connInfo;
     const subscription: Record<string, unknown> | undefined = info.chanInfo;
     const same: PresenceInfo = info;
-    void [id, user, connection, subscription, same];
-  }
+    return [id, user, connection, subscription, same];
+  });
 }
 presenceChannel.onPresenceSync(presenceIdentity);
 presenceIdentity(presenceChannel.getPresenceState());
 
-import type { PostgresChange } from '../../src/realtime.ts';
 declare const postgresChange: PostgresChange;
 const primaryKey: string | number | undefined = postgresChange.id;
 const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
-void [primaryKey, deliveryMode];
+export const changeFields = [primaryKey, deliveryMode];
 
-async function functionErrorMetadata(functions: import('../../src/index.js').Functions) {
+async function functionErrorMetadata(
+  functions: import('../../src/index.ts').Functions,
+): Promise<unknown> {
   const { error } = await functions.invoke('echo', { value: 'contract' });
   const status: number | null | undefined = error?.status;
   const code: string | undefined = error?.code;
   const retryAfter: number | undefined = error?.retryAfter;
-  void [status, code, retryAfter];
+  let systemFields: [string | undefined, number | undefined] | undefined;
   if (VolcanoSystemError.is(error)) {
-    const code: string | undefined = error.code;
-    const retryAfter: number | undefined = error.retryAfter;
-    void [code, retryAfter];
+    systemFields = [error.code, error.retryAfter];
   }
+  return { status, code, retryAfter, systemFields };
 }
-void functionErrorMetadata;
+
+export const contractOperations = {
+  adoptCurrentSession,
+  startDurableExecution,
+  followDurableExecution,
+  uploadResponseEnvelopes,
+  rejectFlattenedUploadResponses,
+  storageErrorMetadata,
+  removalFailureMetadata,
+  authErrorMetadata,
+  presenceIdentity,
+  functionErrorMetadata,
+};

@@ -11,6 +11,18 @@ afterEach(() => {
 });
 
 describe('realtime channel facade', () => {
+  test('starts active and delivers full publications', () => {
+    const channel = realtime().channel('room');
+    const received: unknown[] = [];
+    channel.on('message', (data) => {
+      received.push(data);
+    });
+
+    expect(channel._paused).toBe(false);
+    channel._handlePublication({ data: { event: 'message', text: 'hello' } });
+    expect(received).toEqual([{ event: 'message', text: 'hello' }]);
+  });
+
   test('rejects activation without a subscription', async () => {
     const channel = realtime().channel('room');
     await expect(channel._activateSubscription()).rejects.toThrow('Subscription missing');
@@ -68,6 +80,7 @@ describe('realtime channel facade', () => {
 
   test('handles empty fetch batches and rejects pending rows when the database is missing', async () => {
     const channel = realtime().channel('public:tasks', { type: 'postgres' });
+    const clear = jest.spyOn(globalThis, 'clearTimeout');
     await channel._flushFetch('public', 'tasks');
     channel._pendingFetches.set('public.tasks', {
       ids: new Map<string, PendingRow>(),
@@ -76,6 +89,7 @@ describe('realtime channel facade', () => {
       table: 'tasks',
     });
     await channel._flushFetch('public', 'tasks');
+    expect(channel._pendingFetches.has('public.tasks')).toBe(true);
     const rejected: unknown[] = [];
     channel._pendingFetches.set('public.tasks', {
       ids: new Map<string, PendingRow>([
@@ -98,6 +112,31 @@ describe('realtime channel facade', () => {
     await channel._flushFetch('public', 'tasks');
     expect(rejected).toEqual([new TypeError('volcanoClient.from not available')]);
     expect(channel._pendingFetches.size).toBe(0);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  test('cancels a scheduled batch flush when it flushes early', async () => {
+    const channel = realtime().channel('public:tasks', { type: 'postgres' });
+    const timer = setTimeout(() => {
+      throw new Error('stale batch timer ran');
+    }, 10_000);
+    const clear = jest.spyOn(globalThis, 'clearTimeout');
+    const rejected: unknown[] = [];
+    channel._pendingFetches.set('public.tasks', {
+      ids: new Map<string, PendingRow>([
+        ['1', { resolve: jest.fn(), reject: (error) => rejected.push(error) }],
+      ]),
+      timer,
+      schema: 'public',
+      table: 'tasks',
+    });
+    try {
+      await channel._flushFetch('public', 'tasks');
+      expect(clear).toHaveBeenCalledWith(timer);
+      expect(rejected).toEqual([new TypeError('volcanoClient.from not available')]);
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   test('falls back to lightweight delivery for non-Error query failures', async () => {
@@ -140,5 +179,30 @@ describe('realtime channel facade', () => {
     channel._callbacks.delete('message');
     remove();
     expect(channel._callbacks.get('message')).toEqual([]);
+  });
+
+  test('unsubscribes only the requested event callback', () => {
+    const channel = realtime().channel('room');
+    const received: string[] = [];
+    channel.on('message', () => {
+      received.push('first');
+    });
+    const removeSecond = channel.on('message', () => {
+      received.push('second');
+    });
+
+    channel._deliverPayload({ event: 'message' }, {});
+    removeSecond();
+    channel._deliverPayload({ event: 'message' }, {});
+
+    expect(received).toEqual(['first', 'second', 'first']);
+    expect(channel._callbacks.get('message')).toHaveLength(1);
+  });
+
+  test('ignores malformed presence snapshots after a valid update', () => {
+    const channel = realtime().channel('lobby', { type: 'presence' });
+    channel._updatePresenceState({ clients: { alice: { client: 'one' } } });
+    channel._updatePresenceState({ clients: 'invalid' });
+    expect(channel._presenceState).toEqual({});
   });
 });

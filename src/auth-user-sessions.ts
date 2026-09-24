@@ -3,9 +3,18 @@ import type { ContextRequest, RequestResult } from './auth-request.ts';
 import { requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { AuthSessionChangedError } from './errors.ts';
+import type { AuthSession, SessionsResponse } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
 const defaultLimit = 20;
+const sessionProviders = new Set<unknown>([
+  'email',
+  'google',
+  'github',
+  'microsoft',
+  'apple',
+  'anonymous',
+]);
 
 export interface AuthUserSessionsHost {
   _authFetchWithContext(
@@ -16,16 +25,76 @@ export interface AuthUserSessionsHost {
   _clearSessionAtGeneration(generation: number): boolean;
 }
 
-interface SessionsResult {
-  sessions: unknown;
-  total: unknown;
-  page: unknown;
-  limit: unknown;
-  total_pages: unknown;
-  error: Error | null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function failedSessions(error: Error): SessionsResult {
+function isSessionProvider(value: unknown): value is AuthSession['provider'] {
+  return sessionProviders.has(value);
+}
+
+function hasSessionIdentity(value: Record<string, unknown>): boolean {
+  return (
+    typeof value['id'] === 'string' &&
+    typeof value['user_id'] === 'string' &&
+    isSessionProvider(value['provider']) &&
+    typeof value['expires_at'] === 'string'
+  );
+}
+
+function hasSessionState(value: Record<string, unknown>): boolean {
+  return typeof value['is_active'] === 'boolean' && typeof value['is_current'] === 'boolean';
+}
+
+function hasOptionalSessionFields(value: Record<string, unknown>): boolean {
+  for (const name of [
+    'user_agent',
+    'ip_address',
+    'last_ip_address',
+    'last_activity_at',
+    'session_started_at',
+    'created_at',
+    'updated_at',
+  ]) {
+    if (Object.hasOwn(value, name) && typeof value[name] !== 'string') {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAuthSession(value: unknown): value is AuthSession {
+  return (
+    isRecord(value) &&
+    hasSessionIdentity(value) &&
+    hasSessionState(value) &&
+    hasOptionalSessionFields(value)
+  );
+}
+
+function sessionsField(value: unknown): AuthSession[] | undefined {
+  const sessions = requiredField(value, 'sessions');
+  if (sessions === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(sessions) || !sessions.every(isAuthSession)) {
+    throw new TypeError('Auth sessions response must contain valid sessions');
+  }
+  return sessions;
+}
+
+function integerField(value: unknown, name: string, minimum: number): number | undefined {
+  const field = requiredField(value, name);
+  if (field === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(field) || Number(field) < minimum) {
+    throw new TypeError(`Auth sessions ${name} must be an integer of at least ${String(minimum)}`);
+  }
+  return Number(field);
+}
+
+function failedSessions(error: Error): SessionsResponse {
   return { sessions: null, total: 0, page: 1, limit: defaultLimit, total_pages: 0, error };
 }
 
@@ -48,7 +117,7 @@ function sessionsPathWithQuery(queryString: string): string {
 export async function getSessions(
   host: AuthUserSessionsHost,
   options: { page?: number; limit?: number },
-): Promise<SessionsResult> {
+): Promise<SessionsResponse> {
   const { result, context } = await host._authFetchWithContext(() => sessionsPath(options));
   if (!host._isAuthContextCurrent(context)) {
     return failedSessions(new AuthSessionChangedError());
@@ -57,11 +126,11 @@ export async function getSessions(
     return failedSessions(result.error);
   }
   return {
-    sessions: requiredField(result.data, 'sessions'),
-    total: requiredField(result.data, 'total'),
-    page: requiredField(result.data, 'page'),
-    limit: requiredField(result.data, 'limit'),
-    total_pages: requiredField(result.data, 'total_pages'),
+    sessions: sessionsField(result.data),
+    total: integerField(result.data, 'total', 0),
+    page: integerField(result.data, 'page', 1),
+    limit: integerField(result.data, 'limit', 1),
+    total_pages: integerField(result.data, 'total_pages', 0),
     error: null,
   };
 }

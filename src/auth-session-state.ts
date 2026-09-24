@@ -1,8 +1,8 @@
 import { validateSessionContinuation } from './auth-continuity.ts';
-import { optionalField } from './auth-response.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from './auth-session-lifecycle.ts';
-import type { CompleteSessionFields } from './auth-validation.ts';
+import { assertAuthUser, type CompleteSessionFields } from './auth-validation.ts';
+import type { User } from './sdk-public-types.ts';
 
 const ACCESS_TOKEN_KEY = 'volcano_access_token';
 const REFRESH_TOKEN_KEY = 'volcano_refresh_token';
@@ -20,21 +20,20 @@ export interface AuthSessionStateHost {
   _pendingUrlAuthNotify: boolean;
   accessToken: string | null;
   refreshToken: string | null;
-  currentUser: unknown;
-  _authCallbacks: ((user: unknown) => void)[];
+  currentUser: User | null;
+  _authCallbacks: ((user: User | null) => void)[];
   _setStorageItem(key: string, value: string): void;
   _removeStorageItem(key: string): void;
   _isAuthContextCurrent(context: AuthContext): boolean;
   _clearSessionAtGeneration(generation: number): boolean;
-  _notifyAuthCallbacks(user: unknown): void;
+  _notifyAuthCallbacks(user: User | null): void;
 }
 
 export function captureAuthContext(host: AuthSessionStateHost): AuthContext {
-  const candidateId = optionalField(host.currentUser, 'id');
   return Object.freeze({
     generation: host._sessionGeneration,
     operations: host._sessionOperations,
-    userId: typeof candidateId === 'string' ? candidateId : null,
+    userId: host.currentUser?.id ?? null,
     accessToken: host.accessToken,
     refreshToken: host.refreshToken,
   });
@@ -65,6 +64,7 @@ export function setSession(
   if (expectedGeneration !== host._sessionGeneration) {
     return false;
   }
+  assertAuthUser(data.user);
   host._oauthExchangeError = null;
   host.accessToken = data.access_token;
   host.refreshToken = data.refresh_token ?? null;
@@ -90,8 +90,7 @@ export function setRefreshedSession(
   if (!host._isAuthContextCurrent(context) || context.refreshToken !== host.refreshToken) {
     return false;
   }
-  const candidateId = optionalField(host.currentUser, 'id');
-  validateSessionContinuation(data, context, candidateId);
+  validateSessionContinuation(data, context, host.currentUser?.id);
   host._oauthExchangeError = null;
   host.accessToken = data.access_token;
   host.refreshToken = data.refresh_token;
@@ -127,7 +126,7 @@ export function clearSessionAtGeneration(host: AuthSessionStateHost, generation:
   return true;
 }
 
-export function notifyAuthCallbacks(host: AuthSessionStateHost, user: unknown): void {
+export function notifyAuthCallbacks(host: AuthSessionStateHost, user: User | null): void {
   for (const callback of host._authCallbacks.slice()) {
     try {
       callback(user);

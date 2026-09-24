@@ -82,7 +82,7 @@ function assertDurationParts(
 }
 
 function isWholeSeconds(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return Number.isInteger(value) && Number(value) >= 0;
 }
 
 function toSeconds(value: unknown, field: string): number {
@@ -111,27 +111,16 @@ function invalidDuration(text: string, field: string): TypeError {
 }
 
 function parseSegment(text: string, at: number, field: string): { seconds: number; next: number } {
-  const numberEnd = scanWhile(text, at, isDigit);
-  const multiplier = durationUnits.get(text.charAt(numberEnd));
-  if (numberEnd === at || multiplier === undefined) {
+  const numberEnd = scanDigits(text, at);
+  if (numberEnd === at) {
     throw invalidDuration(text, field);
   }
+  const multiplier = Number(durationUnits.get(text.charAt(numberEnd)));
   return { seconds: Number(text.slice(at, numberEnd)) * multiplier, next: numberEnd + 1 };
 }
 
-function parseDurationStep(
-  text: string,
-  at: number,
-  field: string,
-): { seconds: number; next: number } {
-  if (text[at] === ' ') {
-    return { seconds: 0, next: at + 1 };
-  }
-  return parseSegment(text, at, field);
-}
-
-function isCompleteDuration(text: string, at: number, seconds: number): boolean {
-  return text.length > 0 && at === text.length && isWholeSeconds(seconds);
+function isCompleteDuration(text: string, seconds: number): boolean {
+  return text.length > 0 && isWholeSeconds(seconds);
 }
 
 // A linear scan avoids backtracking on hostile strings. Milliseconds and
@@ -139,24 +128,30 @@ function isCompleteDuration(text: string, at: number, seconds: number): boolean 
 function parseDurationText(text: string, field: string): number {
   let seconds = 0;
   let at = 0;
-  for (let remaining = text.length; remaining > 0 && at < text.length; remaining -= 1) {
-    const segment = parseDurationStep(text, at, field);
-    seconds += segment.seconds;
-    at = segment.next;
+  let index = 0;
+  for (const character of text) {
+    if (index >= at && character !== ' ') {
+      const segment = parseSegment(text, index, field);
+      seconds += segment.seconds;
+      at = segment.next;
+    }
+    index += character.length;
   }
-  if (!isCompleteDuration(text, at, seconds)) {
+  if (!isCompleteDuration(text, seconds)) {
     throw invalidDuration(text, field);
   }
   return seconds;
 }
 
-function scanWhile(text: string, from: number, accept: (character: string) => boolean): number {
-  for (let at = from; at < text.length; at += 1) {
-    if (!accept(text.charAt(at))) {
+function scanDigits(text: string, from: number): number {
+  let at = from;
+  for (const character of text.slice(from)) {
+    if (!isDigit(character)) {
       return at;
     }
+    at += 1;
   }
-  return text.length;
+  return at;
 }
 
 function secondsToDuration(whole: number): Duration {

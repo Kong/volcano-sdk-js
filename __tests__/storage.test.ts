@@ -1,7 +1,13 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.js';
+import { VolcanoAuth } from '../src/index.ts';
 import { sessionToken } from './session-fixtures.ts';
+import {
+  completedUpload,
+  storageObject,
+  uploadPart,
+  uploadSession,
+} from './storage-response-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 
@@ -183,7 +189,7 @@ describe('Storage', () => {
 
     it.each(absentValues)('defaults a falsy session content type (%s)', async (contentType) => {
       fetchMock.mockResolvedValueOnce(
-        responseFixture({ ok: true, json: () => Promise.resolve({}) }),
+        responseFixture({ ok: true, json: () => Promise.resolve(uploadSession()) }),
       );
 
       const bucket = volcano.storage.from('files');
@@ -200,7 +206,7 @@ describe('Storage', () => {
 
     it.each(absentValues)('defaults a falsy Blob content type (%s)', async (contentType) => {
       fetchMock.mockResolvedValueOnce(
-        responseFixture({ ok: true, json: () => Promise.resolve({}) }),
+        responseFixture({ ok: true, json: () => Promise.resolve(storageObject()) }),
       );
 
       const bucket = volcano.storage.from('files');
@@ -244,13 +250,13 @@ describe('Storage', () => {
 
   describe('upload()', () => {
     it('should upload a File successfully', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         bucket_id: 'bucket-456',
         name: 'avatar.png',
         size: 1024,
         mime_type: 'image/png',
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -303,7 +309,7 @@ describe('Storage', () => {
                 access_token: sessionToken(undefined, true),
                 refresh_token: 'new-refresh',
                 expires_in: 3600,
-                user: { id: 'user-123' },
+                user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
               }),
           }),
         )
@@ -311,7 +317,7 @@ describe('Storage', () => {
           responseFixture({
             ok: true,
             status: 201,
-            json: () => Promise.resolve({ name: 'file.bin' }),
+            json: () => Promise.resolve(storageObject()),
           }),
         );
 
@@ -328,12 +334,12 @@ describe('Storage', () => {
     });
 
     it('should upload a Blob successfully', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         name: 'data.json',
         size: 50,
         mime_type: 'application/json',
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -353,11 +359,11 @@ describe('Storage', () => {
     });
 
     it('should upload an ArrayBuffer successfully', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         name: 'binary.bin',
         size: 4,
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -507,8 +513,8 @@ describe('Storage', () => {
   describe('list()', () => {
     it('should list files successfully', async () => {
       const mockObjects = [
-        { id: 'obj-1', name: 'file1.txt', size: 100 },
-        { id: 'obj-2', name: 'file2.txt', size: 200 },
+        storageObject({ id: 'obj-1', name: 'file1.txt', size: 100 }),
+        storageObject({ id: 'obj-2', name: 'file2.txt', size: 200 }),
       ];
 
       fetchMock.mockResolvedValueOnce(
@@ -550,7 +556,7 @@ describe('Storage', () => {
               access_token: sessionToken(undefined, true),
               refresh_token: 'new-refresh-token',
               expires_in: 3600,
-              user: { id: 'user-123' },
+              user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
             }),
         }),
       );
@@ -740,10 +746,10 @@ describe('Storage', () => {
 
   describe('move()', () => {
     it('should move a file successfully', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         name: 'new-location/file.txt',
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -793,10 +799,10 @@ describe('Storage', () => {
 
   describe('copy()', () => {
     it('should copy a file successfully', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-new',
         name: 'copy/file.txt',
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -945,11 +951,11 @@ describe('Storage', () => {
 
   describe('updateVisibility()', () => {
     it('should update file visibility to public', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         name: 'file.txt',
         is_public: true,
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -974,11 +980,11 @@ describe('Storage', () => {
     });
 
     it('should update file visibility to private', async () => {
-      const mockResponse = {
+      const mockResponse = storageObject({
         id: 'obj-123',
         name: 'file.txt',
         is_public: false,
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -1136,12 +1142,12 @@ describe('Storage', () => {
 
   describe('completeUploadSession()', () => {
     it('should complete an upload session successfully', async () => {
-      const mockResponse = {
+      const mockResponse = completedUpload({
         id: 'obj-123',
         name: 'large-video.mp4',
         size: 100 * 1024 * 1024,
         mime_type: 'video/mp4',
-      };
+      });
 
       fetchMock.mockResolvedValueOnce(
         responseFixture({
@@ -1289,11 +1295,9 @@ describe('Storage', () => {
         responseFixture({
           ok: true,
           json: () =>
-            Promise.resolve({
-              session_id: 'sess-123',
-              total_parts: 2,
-              part_size: 1024,
-            }),
+            Promise.resolve(
+              uploadSession({ session_id: 'sess-123', total_parts: 2, part_size: 1024 }),
+            ),
         }),
       );
 
@@ -1301,7 +1305,7 @@ describe('Storage', () => {
       fetchMock.mockResolvedValueOnce(
         responseFixture({
           ok: true,
-          json: () => Promise.resolve({ part_number: 1, etag: 'etag1' }),
+          json: () => Promise.resolve(uploadPart({ part_number: 1, etag: 'etag1' })),
         }),
       );
 
@@ -1309,7 +1313,7 @@ describe('Storage', () => {
       fetchMock.mockResolvedValueOnce(
         responseFixture({
           ok: true,
-          json: () => Promise.resolve({ part_number: 2, etag: 'etag2' }),
+          json: () => Promise.resolve(uploadPart({ part_number: 2, etag: 'etag2' })),
         }),
       );
 
@@ -1318,11 +1322,7 @@ describe('Storage', () => {
         responseFixture({
           ok: true,
           json: () =>
-            Promise.resolve({
-              id: 'obj-123',
-              name: 'file.bin',
-              size: 2048,
-            }),
+            Promise.resolve(completedUpload({ id: 'obj-123', name: 'file.bin', size: 2048 })),
         }),
       );
 
@@ -1339,7 +1339,7 @@ describe('Storage', () => {
         });
 
       expect(error).toBeNull();
-      expect(data).toMatchObject({ name: 'file.bin' });
+      expect(data).toMatchObject({ object: { name: 'file.bin' } });
       expect(fetchMock).toHaveBeenCalledTimes(4); // create + 2 parts + complete
       expect(progressCalls).toHaveLength(2);
     });
@@ -1350,11 +1350,9 @@ describe('Storage', () => {
         responseFixture({
           ok: true,
           json: () =>
-            Promise.resolve({
-              session_id: 'sess-123',
-              total_parts: 2,
-              part_size: 1024,
-            }),
+            Promise.resolve(
+              uploadSession({ session_id: 'sess-123', total_parts: 2, part_size: 1024 }),
+            ),
         }),
       );
 

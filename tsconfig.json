@@ -26,6 +26,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts"],
+  "include": ["src/**/*.ts", "__tests__/**/*.ts", "test/types/**/*.ts", "test/fixtures/**/*.d.ts"],
   "exclude": ["src/generated", "src/generated-runtime"]
 }
