@@ -33,7 +33,10 @@ test('the required quality command uses Stryker over every handwritten runtime f
     '!src/generated-runtime/**',
   ]);
   assert.equal(packageConfig.scripts.quality, 'pnpm quality:checks && pnpm mutation:full');
-  assert.match(packageConfig.scripts['quality:checks'], /pnpm test:quickstart$/);
+  assert.match(
+    packageConfig.scripts['quality:checks'],
+    /pnpm test:quickstart && pnpm test:examples$/,
+  );
   assert.equal(packageConfig.scripts['mutation:full'], 'node scripts/run-mutation.mjs');
 });
 
