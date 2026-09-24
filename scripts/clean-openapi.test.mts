@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const cleaner = fileURLToPath(new URL('clean-openapi.mjs', import.meta.url));
 const checker = fileURLToPath(new URL('check-openapi.mjs', import.meta.url));
 
-test('regeneration exposes handwritten files added to generated directories', async () => {
+await test('regeneration exposes handwritten files added to generated directories', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'sdk-generated-provenance-'));
   try {
     const generated = join(directory, 'src/generated');

@@ -12,3 +12,5 @@ yarn.lock
 examples/nextjs-notes-app/yarn.lock
 
 .stryker-tmp/
+
+.quality-tools/
