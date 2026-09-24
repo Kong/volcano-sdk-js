@@ -39,6 +39,12 @@ importers:
       '@jest/globals':
         specifier: 30.3.0
         version: 30.3.0
+      '@jest/reporters':
+        specifier: 30.3.0
+        version: 30.3.0
+      '@jest/types':
+        specifier: 30.3.0
+        version: 30.3.0
       '@next/eslint-plugin-next':
         specifier: 15.5.24
         version: 15.5.24
@@ -51,6 +57,9 @@ importers:
       '@stryker-mutator/jest-runner':
         specifier: 9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@20.19.43))
+      '@types/babel__core':
+        specifier: 7.20.5
+        version: 7.20.5
       '@types/jest':
         specifier: 30.0.0
         version: 30.0.0

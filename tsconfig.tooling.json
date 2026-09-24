@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "scripts",
+    "outDir": ".quality-tools",
+    "noEmit": false,
+    "verbatimModuleSyntax": false,
+    "sourceMap": true
+  },
+  "include": ["scripts/**/*.mts", "scripts/**/*.cts"],
+  "exclude": []
+}

@@ -13,7 +13,7 @@ const status = execFileSync(
   { encoding: 'utf8' },
 ).trim();
 
-if (status) {
+if (status !== '') {
   process.stderr.write(`${status}\n`);
   process.stderr.write('Generated OpenAPI files are not up to date.\n');
   process.exitCode = 1;

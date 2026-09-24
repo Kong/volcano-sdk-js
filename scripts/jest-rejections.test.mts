@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import unit from '../jest.config.js';
+import { assertionResults, failureMessages } from './jest-results.mts';
+import { record } from './values.mts';
+
+const require = createRequire(import.meta.url);
+const unit = record(require('../jest.config.js'));
 
 const jest = fileURLToPath(new URL('../node_modules/jest/bin/jest.js', import.meta.url));
 
-async function runFixture(source, config) {
+async function runFixture(
+  source: string,
+  config: Record<string, unknown>,
+): Promise<SpawnSyncReturns<string> & { report: Record<string, unknown> }> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-jest-rejections-'));
   try {
     await writeFile(join(directory, 'fixture.test.js'), source);
@@ -23,7 +31,7 @@ async function runFixture(source, config) {
           testEnvironment: 'node',
           reporters: [],
           testMatch: ['<rootDir>/*.test.js'],
-          waitForUnhandledRejections: config.waitForUnhandledRejections,
+          waitForUnhandledRejections: config['waitForUnhandledRejections'],
         }),
         '--runInBand',
         '--no-cache',
@@ -33,14 +41,14 @@ async function runFixture(source, config) {
     );
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
-    return { ...result, report: JSON.parse(result.stdout) };
+    return { ...result, report: record(JSON.parse(result.stdout)) };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
 for (const [name, config] of Object.entries({ unit })) {
-  test(`${name} attributes an unhandled rejection to the originating test`, async () => {
+  await test(`${name} attributes an unhandled rejection to the originating test`, async () => {
     const result = await runFixture(
       `
         test('detached rejection', () => {
@@ -52,10 +60,10 @@ for (const [name, config] of Object.entries({ unit })) {
       config,
     );
     assert.equal(result.status, 1, result.stderr);
-    assert.equal(result.report.numFailedTests, 1);
-    assert.equal(result.report.numPassedTests, 1);
-    assert.equal(result.report.numRuntimeErrorTestSuites, 0);
-    const assertions = result.report.testResults.flatMap((suite) => suite.assertionResults);
+    assert.equal(result.report['numFailedTests'], 1);
+    assert.equal(result.report['numPassedTests'], 1);
+    assert.equal(result.report['numRuntimeErrorTestSuites'], 0);
+    const assertions = assertionResults(result.report);
     assert.deepEqual(
       assertions.map(({ title, status }) => ({ title, status })),
       [
@@ -63,10 +71,10 @@ for (const [name, config] of Object.entries({ unit })) {
         { title: 'later test', status: 'passed' },
       ],
     );
-    assert.match(assertions[0].failureMessages.join('\n'), /detached work failed/);
+    assert.match(failureMessages(assertions[0]), /detached work failed/);
   });
 
-  test(`${name} accepts a rejection handled on the next event-loop turn`, async () => {
+  await test(`${name} accepts a rejection handled on the next event-loop turn`, async () => {
     const result = await runFixture(
       `
         test('handled rejection', async () => {
@@ -78,7 +86,7 @@ for (const [name, config] of Object.entries({ unit })) {
       config,
     );
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.report.numPassedTests, 1);
-    assert.equal(result.report.numFailedTests, 0);
+    assert.equal(result.report['numPassedTests'], 1);
+    assert.equal(result.report['numFailedTests'], 0);
   });
 }

@@ -4,13 +4,26 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
+import { record, stringValue } from './values.mts';
 
 const run = promisify(execFile);
-const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const manifest = record(
+  JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')),
+);
 const auditScript = await readFile(new URL('audit-dependencies.mjs', import.meta.url), 'utf8');
+const valueScript = await readFile(new URL('values.mjs', import.meta.url), 'utf8');
+interface AuditRequest {
+  url: string | undefined;
+  body: unknown;
+}
+interface AuditResult {
+  code: number;
+  stdout: string;
+  requests: AuditRequest[];
+}
 const cleanReport = {
   actions: [],
   advisories: {},
@@ -41,16 +54,21 @@ const vulnerableReport = {
   },
 };
 
-async function auditFixture(context, status, report) {
+async function auditFixture(
+  context: TestContext,
+  status: number,
+  report: unknown,
+): Promise<AuditResult> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-audit-policy-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
-  await mkdir(join(directory, 'scripts'));
-  await writeFile(join(directory, 'scripts/audit-dependencies.mjs'), auditScript);
+  await mkdir(join(directory, '.quality-tools'));
+  await writeFile(join(directory, '.quality-tools/audit-dependencies.mjs'), auditScript);
+  await writeFile(join(directory, '.quality-tools/values.mjs'), valueScript);
   await writeFile(
     join(directory, 'package.json'),
     JSON.stringify({
-      packageManager: manifest.packageManager,
-      scripts: { audit: manifest.scripts.audit },
+      packageManager: manifest['packageManager'],
+      scripts: { audit: 'node .quality-tools/audit-dependencies.mjs' },
       devDependencies: { 'quality-fixture': '1.0.0' },
     }),
   );
@@ -70,10 +88,13 @@ snapshots:
   quality-fixture@1.0.0: {}
 `,
   );
-  const requests = [];
+  const requests: AuditRequest[] = [];
   const server = createServer((request, response) => {
-    const chunks = [];
-    request.on('data', (chunk) => chunks.push(chunk));
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: unknown) => {
+      assert.ok(Buffer.isBuffer(chunk));
+      chunks.push(chunk);
+    });
     request.on('end', () => {
       const bytes = Buffer.concat(chunks);
       const body = request.headers['content-encoding'] === 'gzip' ? gunzipSync(bytes) : bytes;
@@ -82,19 +103,30 @@ snapshots:
       response.end(JSON.stringify(report));
     });
   });
-  context.after(() => new Promise((resolve) => server.close(resolve)));
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  context.after(
+    () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => {
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        }),
+      ),
+  );
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
-  assert.ok(address && typeof address === 'object');
+  assert.ok(address !== null && typeof address === 'object');
   await writeFile(
     join(directory, '.npmrc'),
-    `registry=http://127.0.0.1:${address.port}\nfetch-retries=0\nverify-deps-before-run=false\n`,
+    `registry=http://127.0.0.1:${String(address.port)}\nfetch-retries=0\nverify-deps-before-run=false\n`,
   );
   const options = {
     cwd: directory,
     env: {
       ...process.env,
-      npm_config_registry: `http://127.0.0.1:${address.port}`,
+      npm_config_registry: `http://127.0.0.1:${String(address.port)}`,
       npm_config_fetch_retries: '0',
     },
     timeout: 15_000,
@@ -103,30 +135,43 @@ snapshots:
     const result = await run('pnpm', ['run', 'audit'], options);
     return { code: 0, stdout: result.stdout, requests };
   } catch (error) {
-    assert.equal(typeof error.code, 'number', String(error));
-    return { code: error.code, stdout: error.stdout + error.stderr, requests };
+    const failure = record(error);
+    const code = failure['code'];
+    assert.ok(typeof code === 'number', String(error));
+    return {
+      code,
+      stdout: stringValue(failure['stdout']) + stringValue(failure['stderr']),
+      requests,
+    };
   }
 }
 
-test('dependency audit accepts a clean registry result', async (context) => {
+await test('dependency audit accepts a clean registry result', async (context) => {
   const result = await auditFixture(context, 200, cleanReport);
   assert.equal(result.code, 0, result.stdout);
   assert.equal(result.requests.length, 1);
-  assert.equal(result.requests[0].url, '/-/npm/v1/security/audits/quick');
-  assert.deepEqual(result.requests[0].body.dependencies['.'].dependencies['quality-fixture'], {
-    dev: true,
-    integrity: 'sha512-fixture',
-    version: '1.0.0',
-  });
+  const request = result.requests[0];
+  assert.ok(request !== undefined);
+  assert.equal(request.url, '/-/npm/v1/security/audits/quick');
+  assert.deepEqual(
+    record(record(record(record(request.body)['dependencies'])['.'])['dependencies'])[
+      'quality-fixture'
+    ],
+    {
+      dev: true,
+      integrity: 'sha512-fixture',
+      version: '1.0.0',
+    },
+  );
 });
 
-test('dependency audit rejects even low-severity development advisories', async (context) => {
+await test('dependency audit rejects even low-severity development advisories', async (context) => {
   const result = await auditFixture(context, 200, vulnerableReport);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /Fixture vulnerability/);
 });
 
-test('dependency audit rejects informational development advisories', async (context) => {
+await test('dependency audit rejects informational development advisories', async (context) => {
   const report = {
     ...vulnerableReport,
     advisories: { 1: { ...vulnerableReport.advisories[1], severity: 'info' } },
@@ -140,14 +185,14 @@ test('dependency audit rejects informational development advisories', async (con
   assert.match(result.stdout, /zero advisories at every severity/);
 });
 
-test('dependency audit rejects an incomplete registry report', async (context) => {
+await test('dependency audit rejects an incomplete registry report', async (context) => {
   const report = { ...cleanReport, metadata: { vulnerabilities: { low: 0 } } };
   const result = await auditFixture(context, 200, report);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /zero advisories at every severity/);
 });
 
-test('dependency audit fails when the registry is unavailable', async (context) => {
+await test('dependency audit fails when the registry is unavailable', async (context) => {
   const result = await auditFixture(context, 503, { error: 'Fixture registry unavailable' });
   assert.notEqual(result.code, 0);
   assert.match(result.stdout, /503/);

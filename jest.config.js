@@ -1,7 +1,7 @@
 module.exports = {
   waitForUnhandledRejections: true,
   testEnvironment: 'jsdom',
-  reporters: ['default', '<rootDir>/scripts/jest-completeness.cjs'],
+  reporters: ['default', '<rootDir>/.quality-tools/jest-completeness.cjs'],
   testMatch: ['**/__tests__/**/*.test.{js,ts}'],
   // Type-check against generated TypeScript while exercising the built SDK artifact.
   moduleNameMapper: {

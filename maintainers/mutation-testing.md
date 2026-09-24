@@ -8,12 +8,12 @@ In [Node 20's full mutation run](https://github.com/Kong/volcano-sdk-js/actions/
 four malformed part-bound mutants abort the native `Blob.slice` implementation
 with `SIGABRT` (`node::Blob::ToSlice`); the [same shard on Node 22](https://github.com/Kong/volcano-sdk-js/actions/runs/35990154684/job/107602058808)
 kills all mutants. The Node 20 crash is not a useful mutant detection.
-`scripts/verify-mutation-shards.mjs` compares the shard mutant counts with
+`scripts/verify-mutation-shards.mts` compares the shard mutant counts with
 Stryker's unfiltered inventory, so a missing range or empty shard fails the
 gate.
 
 Stryker selects the mutants and enforces its native 100% threshold. Its score
-also treats `Timeout` as detected, so `scripts/check-mutation-report.mjs`
+also treats `Timeout` as detected, so `scripts/check-mutation-report.mts`
 checks the JSON report separately: every valid mutant must be `Killed`, while
 invalid `CompileError` mutants are accepted. Surviving, uncovered, timed-out,
 ignored, crashed, pending, empty, and incomplete results fail. The 180-second
