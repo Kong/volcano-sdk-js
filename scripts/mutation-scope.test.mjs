@@ -10,6 +10,13 @@ test('CI starts every required mutation shard', () => {
   assert.ok(matrix);
   assert.ok(environment);
   assert.equal(Number(environment[1]), mutationShardCount);
+  assert.match(workflow, /name: SDK Node 22 mutation shard/);
+  assert.match(workflow, /node-version: '22'/);
+  assert.match(workflow, /name: SDK Node 20 lint, tests, and build/);
+  assert.match(workflow, /node-version: '20'/);
+  assert.match(workflow, /run: pnpm quality:checks/);
+  assert.match(workflow, /needs: \[sdk, sdk-node20\]/);
+  assert.doesNotMatch(workflow, /node-version: \['20', '22'\]/);
   assert.deepEqual(
     [...matrix[1].matchAll(/\d+/g)].map((match) => Number(match[0])),
     Array.from({ length: mutationShardCount }, (_, index) => index),
@@ -25,7 +32,8 @@ test('the required quality command uses Stryker over every handwritten runtime f
     '!src/generated/**',
     '!src/generated-runtime/**',
   ]);
-  assert.match(packageConfig.scripts.quality, /&& pnpm mutation:full$/);
+  assert.equal(packageConfig.scripts.quality, 'pnpm quality:checks && pnpm mutation:full');
+  assert.match(packageConfig.scripts['quality:checks'], /pnpm test:quickstart$/);
   assert.equal(packageConfig.scripts['mutation:full'], 'node scripts/run-mutation.mjs');
 });
 

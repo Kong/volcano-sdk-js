@@ -39,11 +39,10 @@ jobs:
         run: bash .github/scripts/actionlint.sh
 
   sdk:
-    name: SDK Node ${{ matrix.node-version }} mutation shard ${{ matrix.mutation-shard }}
+    name: SDK Node 22 mutation shard ${{ matrix.mutation-shard }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['20', '22']
         mutation-shard:
           [
             0,
@@ -97,7 +96,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -113,28 +112,16 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-failures-node-${{ matrix.node-version }}-shard-${{ matrix.mutation-shard }}
+          name: test-failures-node-22-shard-${{ matrix.mutation-shard }}
           path: |
             reports/unit.json
             reports/mutation.json
           if-no-files-found: ignore
 
-  sdk-required:
-    name: SDK Lint, Tests, and Build
-    if: ${{ always() }}
-    needs: [sdk]
+  sdk-node20:
+    name: SDK Node 20 lint, tests, and build
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require every runtime and mutation shard
-        env:
-          RESULT: ${{ needs.sdk.result }}
-        run: test "$RESULT" = success
-
-  mutation-inventory:
-    name: Mutation shard inventory
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -157,17 +144,66 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run SDK quality checks
+        run: pnpm quality:checks
+
+      - name: Preserve failing tests and property counterexamples
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-failures-node-20
+          path: reports/unit.json
+          if-no-files-found: ignore
+
+  sdk-required:
+    name: SDK Lint, Tests, and Build
+    if: ${{ always() }}
+    needs: [sdk, sdk-node20]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require both runtime checks and every mutation shard
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: jq -e 'length == 2 and all(. == "success")' <<< "$RESULTS"
+
+  mutation-inventory:
+    name: Mutation shard inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.34.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Verify Stryker shard inventory
         run: pnpm build && node scripts/verify-mutation-shards.mjs
 
   quality:
     name: Quality Gate
     if: ${{ always() }}
-    needs: [actions, sdk, sdk-required, mutation-inventory]
+    needs: [actions, sdk, sdk-node20, sdk-required, mutation-inventory]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every mandatory job to succeed
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
-        run: jq -e 'length == 4 and all(. == "success")' <<< "$RESULTS"
+        run: jq -e 'length == 5 and all(. == "success")' <<< "$RESULTS"
