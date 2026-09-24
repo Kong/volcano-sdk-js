@@ -44,6 +44,8 @@ async function select() {
     mode = 'pr';
     sha = event.pull_request.head.sha;
   } else if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+    if (process.env.GITHUB_REF !== 'refs/heads/main')
+      throw new Error('recovery must use the trusted main workflow');
     runID = event.inputs.candidate_run_id;
     if (!/^[1-9]\d*$/.test(runID))
       throw new Error('recovery requires the original candidate run ID');
@@ -119,14 +121,21 @@ async function validateSource(github, candidate, mode) {
 async function dispatchAndWait() {
   const client = await hostingGitHub('write');
   const candidate = readCandidate('package');
+  if (candidate.run_id !== Number(process.env.CANDIDATE_RUN))
+    throw new Error('candidate does not match the selected build run');
   await validateSource(sdkGitHub(), candidate, process.env.RELEASE_MODE);
-  await dispatchValidation(client, candidate, process.env.CANDIDATE_ARTIFACT, (runID) => {
-    output('hosting_run_id', runID);
-    save('hosting-run.json', {
-      run_id: runID,
-      candidate_artifact_id: process.env.CANDIDATE_ARTIFACT,
-    });
-  });
+  await dispatchValidation(
+    client,
+    process.env.CANDIDATE_RUN,
+    process.env.CANDIDATE_ARTIFACT,
+    (runID) => {
+      output('hosting_run_id', runID);
+      save('hosting-run.json', {
+        run_id: runID,
+        candidate_artifact_id: process.env.CANDIDATE_ARTIFACT,
+      });
+    },
+  );
 }
 
 async function evidence() {

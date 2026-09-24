@@ -28,10 +28,20 @@ test('dispatch records returned Hosting run and pins exact cross-repository cand
       },
     },
   };
-  await dispatchValidation(client, { run_id: 12 }, 34, (id) => recorded.push(id));
+  await dispatchValidation(client, 12, 34, (id) => recorded.push(id));
+  for (const invalid of ['', '12-extra', 'secret']) {
+    await assert.rejects(
+      dispatchValidation(client, invalid, 34, () => {}),
+      /exact candidate/,
+    );
+    await assert.rejects(
+      dispatchValidation(client, 12, invalid, () => {}),
+      /exact candidate/,
+    );
+  }
   client.request = async () => ({ data: undefined });
   await assert.rejects(
-    dispatchValidation(client, { run_id: 12 }, 34, () => {}),
+    dispatchValidation(client, 12, 34, () => {}),
     /run ID/,
   );
   client.request = async () => ({ data: { workflow_run_id: 56 } });
@@ -41,7 +51,7 @@ test('dispatch records returned Hosting run and pins exact cross-repository cand
     { run_attempt: 1, status: 'completed', conclusion: 'skipped' },
   ]) {
     client.rest.actions.getWorkflowRun = async () => ({ data: run });
-    await assert.rejects(dispatchValidation(client, { run_id: 12 }, 34, () => {}));
+    await assert.rejects(dispatchValidation(client, 12, 34, () => {}));
   }
 });
 

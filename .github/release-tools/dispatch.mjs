@@ -2,11 +2,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 export async function dispatchValidation(
   client,
-  candidate,
+  candidateRunID,
   artifactID,
   recordRun,
   { now = Date.now, sleep = delay, timeout = 330 * 60 * 1000 } = {},
 ) {
+  if (!/^[1-9]\d*$/.test(String(candidateRunID)) || !/^[1-9]\d*$/.test(String(artifactID)))
+    throw new Error('dispatch requires exact candidate run and artifact IDs');
   const hosting = { owner: 'Kong', repo: 'volcano-hosting' };
   const { data } = await client.request(
     'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches',
@@ -15,7 +17,7 @@ export async function dispatchValidation(
       workflow_id: 'staging-pipeline.yml',
       ref: 'main',
       inputs: {
-        sdk_candidate_run_id: String(candidate.run_id),
+        sdk_candidate_run_id: String(candidateRunID),
         sdk_candidate_artifact_id: String(artifactID),
       },
       headers: { 'X-GitHub-Api-Version': '2026-03-10' },

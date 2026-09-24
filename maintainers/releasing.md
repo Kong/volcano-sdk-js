@@ -27,7 +27,7 @@ or flags, and the final read does not lock out a rollout starting afterward.
 The original candidate artifact contains its source SHA, build run, version,
 backend declaration and SHA-256. Recovery uses `workflow_dispatch` with that
 original merged build run ID, repeats full Hosting validation, and reuses its
-files. No recovery rebuild occurs. A newer staging batch (including a queued batch)
+files. Recovery runs tooling from the dispatch workflow revision on main; it never checks out the old candidate as executable tooling. No recovery rebuild occurs. A newer staging batch (including a queued batch)
 invalidates old evidence conservatively and requires another full validation. Expired/missing artifacts fail closed. If npm
 already contains the version, its tarball must match byte-for-byte.
 
