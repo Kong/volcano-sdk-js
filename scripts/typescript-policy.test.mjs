@@ -35,7 +35,7 @@ function handwrittenSource(files) {
 function maintainedCode(files) {
   return files.filter(
     (path) =>
-      /\.(?:[cm]?js|ts)$/.test(path) &&
+      /\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) &&
       !path.startsWith('src/generated/') &&
       !path.startsWith('src/generated-runtime/'),
   );
@@ -142,7 +142,9 @@ test('tracked SDK code remains in native lint, type, test, and coverage gates', 
       (config) => discoveredTests(config),
     ),
   );
-  for (const path of tests.filter((item) => item.endsWith('.test.ts'))) {
+  for (const path of files.filter((item) =>
+    /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item),
+  )) {
     assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
   }
   const checker = new ESLint();
