@@ -3,8 +3,47 @@ import type {
   MutationBuilder as EsmMutationBuilder,
   QueryBuilder as EsmQueryBuilder,
   QueryResult as EsmQueryResult,
+  VolcanoAuth as EsmVolcanoAuth,
 } from '../../dist/index.esm.mjs';
-import type { FilterValue, MutationBuilder, QueryBuilder, QueryResult } from '../../dist/index.js';
+import type {
+  FilterValue,
+  MutationBuilder,
+  QueryBuilder,
+  QueryResult,
+  VolcanoAuth,
+} from '../../dist/index.js';
+
+interface Post {
+  id: number;
+  title: string;
+}
+declare const sdk: VolcanoAuth;
+declare const esmSdk: EsmVolcanoAuth;
+
+const cjsRead: Promise<QueryResult<Post>> = sdk.from<Post>('posts').select('id,title').execute();
+const cjsInsert: Promise<QueryResult<Post>> = sdk.insert<Post>('posts', { title: 'new' }).execute();
+const cjsUpdate: Promise<QueryResult<Post>> = sdk
+  .update<Post>('posts', { title: 'edited' })
+  .execute();
+const cjsDelete: Promise<QueryResult<Post>> = sdk.delete<Post>('posts').execute();
+const esmRead: Promise<EsmQueryResult<Post>> = esmSdk.from<Post>('posts').execute();
+const esmInsert: Promise<EsmQueryResult<Post>> = esmSdk
+  .insert<Post>('posts', { title: 'new' })
+  .execute();
+const esmUpdate: Promise<EsmQueryResult<Post>> = esmSdk
+  .update<Post>('posts', { title: 'edited' })
+  .execute();
+const esmDelete: Promise<EsmQueryResult<Post>> = esmSdk.delete<Post>('posts').execute();
+export const typedDatabaseResults = [
+  cjsRead,
+  cjsInsert,
+  cjsUpdate,
+  cjsDelete,
+  esmRead,
+  esmInsert,
+  esmUpdate,
+  esmDelete,
+];
 
 const values: FilterValue[] = ['text', 1, false, null, new Date()];
 const esmValues: EsmFilterValue[] = values;

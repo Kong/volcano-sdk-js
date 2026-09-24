@@ -103,6 +103,14 @@ function requirePresent<T>(value: T | null | undefined, label: string): T {
   return value;
 }
 
+function builderField(builder: object, field: string): unknown {
+  if (!(field in builder)) {
+    throw new Error(`Expected builder field ${field}`);
+  }
+  const value: unknown = Reflect.get(builder, field);
+  return value;
+}
+
 function wireSession(value: unknown): {
   access_token: string;
   refresh_token: string;
@@ -2129,7 +2137,7 @@ describe('SDK E2E Integration Tests', () => {
       const qb = volcano.from('users');
 
       expect(qb).toBeDefined();
-      expect(qb.table).toBe('users');
+      expect(builderField(qb, 'table')).toBe('users');
       expect(typeof qb.select).toBe('function');
       expect(typeof qb.eq).toBe('function');
       expect(typeof qb.execute).toBe('function');
@@ -2140,7 +2148,7 @@ describe('SDK E2E Integration Tests', () => {
       volcano.database('test_db');
       const qb = volcano.from('users').select('id, email, name');
 
-      expect(qb.selectColumns).toEqual(['id', 'email', 'name']);
+      expect(builderField(qb, 'selectColumns')).toEqual(['id', 'email', 'name']);
       console.log('  [ok] Select columns set');
     });
 
@@ -2162,10 +2170,10 @@ describe('SDK E2E Integration Tests', () => {
         .limit(10)
         .offset(0);
 
-      expect(qb.filters).toHaveLength(10);
-      expect(qb.orderClauses).toHaveLength(1);
-      expect(qb.limitValue).toBe(10);
-      expect(qb.offsetValue).toBe(0);
+      expect(builderField(qb, 'filters')).toHaveLength(10);
+      expect(builderField(qb, 'orderClauses')).toHaveLength(1);
+      expect(builderField(qb, 'limitValue')).toBe(10);
+      expect(builderField(qb, 'offsetValue')).toBe(0);
       console.log('  [ok] All filter methods chain correctly');
     });
 

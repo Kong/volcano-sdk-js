@@ -131,6 +131,7 @@ import type {
   Functions,
   JsonValue,
   Logs,
+  MutationBuilder as PublicMutationBuilder,
   ProjectLocks,
   QueryBuilder as PublicQueryBuilder,
   Storage,
@@ -728,7 +729,8 @@ class VolcanoAuth {
   // Query Builder Methods
   // ========================================================================
 
-  from(table: string): RuntimeQueryBuilder {
+  from<T = Record<string, JsonValue>>(table: string): PublicQueryBuilder<T>;
+  from(table: string): RuntimeQueryBuilder | PublicQueryBuilder<unknown> {
     return new RuntimeQueryBuilder(this, table, this._currentDatabaseName);
   }
 
@@ -737,15 +739,30 @@ class VolcanoAuth {
     return this;
   }
 
-  insert(table: string, values: Record<string, unknown>): MutationBuilder {
+  insert<T = Record<string, JsonValue>>(
+    table: string,
+    values: Record<string, JsonValue>,
+  ): PublicMutationBuilder<T>;
+  insert(
+    table: string,
+    values: Record<string, unknown>,
+  ): MutationBuilder | PublicMutationBuilder<unknown> {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
   }
 
-  update(table: string, values: Record<string, unknown>): MutationBuilder {
+  update<T = Record<string, JsonValue>>(
+    table: string,
+    values: Record<string, JsonValue>,
+  ): PublicMutationBuilder<T>;
+  update(
+    table: string,
+    values: Record<string, unknown>,
+  ): MutationBuilder | PublicMutationBuilder<unknown> {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
   }
 
-  delete(table: string): MutationBuilder {
+  delete<T = Record<string, JsonValue>>(table: string): PublicMutationBuilder<T>;
+  delete(table: string): MutationBuilder | PublicMutationBuilder<unknown> {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'delete', null);
   }
 
