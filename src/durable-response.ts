@@ -1,14 +1,16 @@
 import type { DurableExecution, PaginatedDurableExecutions } from './sdk-public-types.ts';
 
-const DURABLE_STATUSES = new Set<unknown>([
-  'pending',
-  'running',
-  'succeeded',
-  'failed',
-  'timed_out',
-  'stopped',
-  'unknown',
-]);
+function isDurableStatus(value: unknown): boolean {
+  return new Set<unknown>([
+    'pending',
+    'running',
+    'succeeded',
+    'failed',
+    'timed_out',
+    'stopped',
+    'unknown',
+  ]).has(value);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -27,7 +29,7 @@ function isExecutionIdentity(value: Record<string, unknown>): boolean {
     typeof value['id'] === 'string' &&
     typeof value['function_id'] === 'string' &&
     typeof value['name'] === 'string' &&
-    DURABLE_STATUSES.has(value['status'])
+    isDurableStatus(value['status'])
   );
 }
 
