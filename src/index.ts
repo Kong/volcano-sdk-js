@@ -135,10 +135,11 @@ import type {
   ProjectLocks,
   QueryBuilder as PublicQueryBuilder,
   Storage,
+  StorageFileApi as PublicStorageFileApi,
   User,
   VolcanoAuthConfig,
 } from './sdk-public-types.ts';
-import { StorageFileApi } from './storage-file.ts';
+import { StorageFileApi as RuntimeStorageFileApi } from './storage-file.ts';
 
 export type * from './sdk-public-types.ts';
 
@@ -261,7 +262,9 @@ class VolcanoAuth {
   _functionResolveState: FunctionResolveState;
   _transport: RuntimeTransport;
   _durableFacade: DurableFacade;
+  /** @internal */
   accessToken: string | null;
+  /** @internal */
   refreshToken: string | null;
   auth: Auth;
   functions: Functions;
@@ -464,8 +467,8 @@ class VolcanoAuth {
    * @param {string} bucketName - The name of the bucket
    * @returns {StorageFileApi} - Storage file API for the bucket
    */
-  storageBucket(bucketName: string): StorageFileApi {
-    return new StorageFileApi(this, bucketName);
+  storageBucket(bucketName: string): PublicStorageFileApi {
+    return new RuntimeStorageFileApi(this, bucketName);
   }
 
   // ========================================================================
@@ -1323,7 +1326,8 @@ export { loadRealtime, VolcanoAuth, VolcanoAuth as VolcanoClient };
 export const QueryBuilder = RuntimeQueryBuilder;
 export type QueryBuilder<T = Record<string, JsonValue>> = PublicQueryBuilder<T>;
 export { isBrowser } from './next/request.ts';
-export { StorageFileApi } from './storage-file.ts';
+export const StorageFileApi = RuntimeStorageFileApi;
+export type StorageFileApi = PublicStorageFileApi;
 export default VolcanoAuth;
 
 export type { DatabaseConnectionStringOptions } from './database-connection-string.ts';

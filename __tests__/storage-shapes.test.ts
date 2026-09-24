@@ -90,21 +90,40 @@ test.each([
   expect(guard(value)).toBe(true);
 });
 
+test.each([isUploadSession, isUploadPart, isCompletedUpload, isUploadSessionStatus])(
+  'accepts an upload wire response with all optional fields omitted',
+  (guard) => {
+    expect(guard({})).toBe(true);
+  },
+);
+
+test('accepts partial upload status and part objects', () => {
+  expect(isUploadSessionStatus({ status: 'pending', parts: [{ etag: 'etag' }] })).toBe(true);
+  expect(isUploadSessionStatus({ ...uploadStatus(), parts: [uploadPart(), {}] })).toBe(true);
+});
+
 test.each([
+  [isUploadSession, { ...uploadSession(), session_id: null }],
   [isUploadSession, { ...uploadSession(), expires_at: null }],
+  [isUploadSession, { ...uploadSession(), part_size: -1 }],
   [isUploadSession, { ...uploadSession(), total_parts: -1 }],
   [isUploadPart, { ...uploadPart(), etag: false }],
+  [isUploadPart, { ...uploadPart(), part_number: -1 }],
   [isUploadPart, { ...uploadPart(), size: 1.5 }],
   [isCompletedUpload, { object: { name: 'incomplete' } }],
   [isUploadSessionStatus, { ...uploadStatus(), status: 'unknown' }],
   [isUploadSessionStatus, { ...uploadStatus(), total_size: -1 }],
+  [isUploadSessionStatus, { ...uploadStatus(), part_size: -1 }],
+  [isUploadSessionStatus, { ...uploadStatus(), total_parts: -1 }],
+  [isUploadSessionStatus, { ...uploadStatus(), parts_uploaded: -1 }],
+  [isUploadSessionStatus, { ...uploadStatus(), bytes_uploaded: -1 }],
   [isUploadSessionStatus, { ...uploadStatus(), session_id: null }],
   [isUploadSessionStatus, { ...uploadStatus(), path: null }],
   [isUploadSessionStatus, { ...uploadStatus(), content_type: null }],
   [isUploadSessionStatus, { ...uploadStatus(), expires_at: null }],
   [isUploadSessionStatus, { ...uploadStatus(), created_at: null }],
-  [isUploadSessionStatus, { ...uploadStatus(), parts: [{}] }],
-  [isUploadSessionStatus, { ...uploadStatus(), parts: [uploadPart(), {}] }],
+  [isUploadSessionStatus, { ...uploadStatus(), parts: 'invalid' }],
+  [isUploadSessionStatus, { ...uploadStatus(), parts: [uploadPart(), { etag: false }] }],
 ] as const)('rejects a malformed upload wire response', (guard, value) => {
   expect(guard(value)).toBe(false);
 });

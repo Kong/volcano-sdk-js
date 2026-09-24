@@ -437,41 +437,59 @@ test.each([
     operation: 'move',
     run: (api: StorageFileApi) => api.move('source.bin', 'destination.bin'),
     error: 'Invalid storage move response',
+    payload: {},
   },
   {
     operation: 'copy',
     run: (api: StorageFileApi) => api.copy('source.bin', 'destination.bin'),
     error: 'Invalid storage copy response',
+    payload: {},
   },
   {
     operation: 'visibility',
     run: (api: StorageFileApi) => api.updateVisibility('file.bin', true),
     error: 'Invalid storage visibility response',
+    payload: {},
   },
   {
     operation: 'upload session creation',
     run: (api: StorageFileApi) => api.createUploadSession('file.bin', { totalSize: 4 }),
     error: 'Invalid upload session creation response',
+    payload: null,
   },
   {
     operation: 'upload part',
     run: (api: StorageFileApi) => api.uploadPart('file.bin', 'session-1', 1, new Blob()),
     error: 'Invalid upload part response',
+    payload: null,
   },
   {
     operation: 'completed upload',
     run: (api: StorageFileApi) => api.completeUploadSession('file.bin', 'session-1'),
     error: 'Invalid completed upload response',
+    payload: null,
   },
   {
     operation: 'upload session status',
     run: (api: StorageFileApi) => api.getUploadSession('file.bin', 'session-1'),
     error: 'Invalid upload session status response',
+    payload: null,
   },
-])('$operation reports malformed successful responses', async ({ run, error }) => {
+])('$operation reports malformed successful responses', async ({ run, error, payload }) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json(payload));
+  await expect(run(given.api)).resolves.toMatchObject({ data: null, error: new TypeError(error) });
+});
+
+test.each([
+  (api: StorageFileApi) => api.createUploadSession('file.bin', { totalSize: 4 }),
+  (api: StorageFileApi) => api.uploadPart('file.bin', 'session-1', 1, new Blob()),
+  (api: StorageFileApi) => api.completeUploadSession('file.bin', 'session-1'),
+  (api: StorageFileApi) => api.getUploadSession('file.bin', 'session-1'),
+])('preserves a conforming upload response with omitted fields', async (run) => {
   const given = fixture();
   given.fetch.mockResolvedValue(Response.json({}));
-  await expect(run(given.api)).resolves.toMatchObject({ data: null, error: new TypeError(error) });
+  await expect(run(given.api)).resolves.toEqual({ data: {}, error: null });
 });
 
 test.each(['move', 'copy'] as const)(

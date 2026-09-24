@@ -23,8 +23,11 @@ function hasStringFields(value: Record<string, unknown>, fields: readonly string
   return fields.every((field) => typeof value[field] === 'string');
 }
 
-function hasIntegerFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
-  return fields.every((field) => isInteger(value[field]));
+function hasOptionalIntegerFields(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return fields.every((field) => !Object.hasOwn(value, field) || isInteger(value[field]));
 }
 
 function hasOptionalStringFields(
@@ -69,7 +72,7 @@ function hasOptionalOwner(value: Record<string, unknown>): boolean {
 function hasStorageObjectCore(value: Record<string, unknown>): boolean {
   return (
     hasStringFields(value, ['id', 'bucket_id', 'name', 'mime_type']) &&
-    hasIntegerFields(value, ['size']) &&
+    isInteger(value['size']) &&
     typeof value['is_public'] === 'boolean'
   );
 }
@@ -99,23 +102,23 @@ export function isUploadSession(
 ): value is NonNullable<CreateUploadSessionResponse['data']> {
   return (
     isRecord(value) &&
-    hasStringFields(value, ['session_id', 'expires_at']) &&
-    hasIntegerFields(value, ['part_size', 'total_parts'])
+    hasOptionalStringFields(value, ['session_id', 'expires_at']) &&
+    hasOptionalIntegerFields(value, ['part_size', 'total_parts'])
   );
 }
 
 export function isUploadPart(value: unknown): value is NonNullable<UploadPartResponse['data']> {
   return (
     isRecord(value) &&
-    hasStringFields(value, ['etag']) &&
-    hasIntegerFields(value, ['part_number', 'size'])
+    hasOptionalStringFields(value, ['etag']) &&
+    hasOptionalIntegerFields(value, ['part_number', 'size'])
   );
 }
 
 export function isCompletedUpload(
   value: unknown,
 ): value is NonNullable<CompleteUploadSessionResponse['data']> {
-  return isRecord(value) && isStorageObject(value['object']);
+  return isRecord(value) && (!Object.hasOwn(value, 'object') || isStorageObject(value['object']));
 }
 
 function isUploadStatus(
@@ -132,15 +135,21 @@ function isUploadStatus(
 
 function hasUploadStatusCore(value: Record<string, unknown>): boolean {
   return (
-    hasStringFields(value, ['session_id', 'path', 'content_type', 'expires_at', 'created_at']) &&
-    hasIntegerFields(value, [
+    hasOptionalStringFields(value, [
+      'session_id',
+      'path',
+      'content_type',
+      'expires_at',
+      'created_at',
+    ]) &&
+    hasOptionalIntegerFields(value, [
       'total_size',
       'part_size',
       'total_parts',
       'parts_uploaded',
       'bytes_uploaded',
     ]) &&
-    isUploadStatus(value['status'])
+    (!Object.hasOwn(value, 'status') || isUploadStatus(value['status']))
   );
 }
 
@@ -150,7 +159,7 @@ export function isUploadSessionStatus(
   return (
     isRecord(value) &&
     hasUploadStatusCore(value) &&
-    Array.isArray(value['parts']) &&
-    value['parts'].every(isUploadPart)
+    (!Object.hasOwn(value, 'parts') ||
+      (Array.isArray(value['parts']) && value['parts'].every(isUploadPart)))
   );
 }
