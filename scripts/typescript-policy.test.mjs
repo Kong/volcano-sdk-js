@@ -119,7 +119,7 @@ function requireAllowedComment(path, comment) {
     return;
   }
   const forbidden =
-    /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|istanbul ignore|c8 ignore|nyc ignore/;
+    /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|(?:istanbul|[cv]8|nyc) ignore|Stryker (?:disable|restore)|prettier-ignore/;
   assert.doesNotMatch(comment, forbidden, `${path} suppresses a quality check`);
   if (path.startsWith('test/types/') && comment.includes('@ts-expect-error')) {
     assert.match(
@@ -302,6 +302,17 @@ test('excluded new code and weakened complexity fail policy validation', async (
     ),
     /weakens complexity/,
   );
+});
+
+test('mutation, coverage, and formatting suppression comments fail policy validation', () => {
+  for (const comment of [
+    '// Stryker disable all',
+    '// Stryker disable next-line EqualityOperator',
+    '/* v8 ignore next */',
+    '// prettier-ignore',
+  ]) {
+    assert.throws(() => requireUnsuppressed('src/new.ts', comment));
+  }
 });
 
 async function lintFixture(source, parent) {
