@@ -37,6 +37,20 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.clear();
     });
 
+    it.each(['', 42])('uses stored credentials when an explicit token is %p', (accessToken) => {
+      window.localStorage.setItem('volcano_access_token', 'stored-access');
+      window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
+      const sdk: unknown = Reflect.construct(VolcanoAuth, [
+        { anonKey: 'ak-test-key', accessToken },
+      ]);
+      if (!(sdk instanceof VolcanoAuth)) {
+        throw new TypeError('Expected a VolcanoAuth instance');
+      }
+
+      expect(sdk.accessToken).toBe('stored-access');
+      expect(sdk.refreshToken).toBe('stored-refresh');
+    });
+
     it('adopts the session from the URL fragment at construction, persists it, and strips the hash', () => {
       seedNonce();
       window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
@@ -259,6 +273,16 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.clear();
     });
 
+    it('generates a random state nonce and stores it without a redirect URL by default', () => {
+      const sdk = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
+      const nonce = sdk._generateAuthStateNonce();
+
+      expect(nonce).toMatch(/^[\da-f]{32}$/);
+      sdk._storeAuthState(nonce);
+      expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonce);
+      expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBeNull();
+    });
+
     it('getHostedAuthUrl stores a nonce and includes it as state with anon_key', () => {
       // anonKey must be a JWT carrying project_id for projectId derivation.
       const anonKey = testAccessToken('11111111-1111-1111-1111-111111111111');
@@ -332,6 +356,40 @@ describe('VolcanoAuth', () => {
     afterEach(() => {
       window.history.replaceState(null, '', '/');
       window.sessionStorage.clear();
+    });
+
+    it('exchanges a callback when an empty explicit token supplies no session', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          access_token: 'oauth-access',
+          refresh_token: 'oauth-refresh',
+          user: { id: 'oauth-user', email: 'oauth@example.test', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
+
+      const sdk = new VolcanoAuth({ anonKey: 'ak-test-key', accessToken: '' });
+      await within(sdk._completeOAuthExchange(), 'empty-token OAuth exchange');
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(sdk.accessToken).toBe('oauth-access');
+      expect(window.location.search).toBe('');
+    });
+
+    it('leaves a callback untouched when an explicit credential already owns the session', async () => {
+      window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
+      window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
+      window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
+
+      const sdk = new VolcanoAuth({ anonKey: 'ak-test-key', accessToken: 'server-access' });
+      await within(sdk._completeOAuthExchange(), 'explicit-token OAuth bypass');
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sdk.accessToken).toBe('server-access');
+      expect(window.location.search).toBe('?code=one-time-code&state=oauth-nonce');
     });
 
     it('discards a successful code exchange after another session wins', async () => {

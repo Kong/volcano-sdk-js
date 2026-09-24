@@ -87,6 +87,12 @@ describe('VolcanoAuth', () => {
       }).toThrow('anonKey is required');
     });
 
+    it('rejects an explicitly empty anon key', () => {
+      expect(() => new VolcanoAuth({ anonKey: '' })).toThrow(
+        'anonKey is required. Get your anon key from project settings.',
+      );
+    });
+
     it('should throw error if service key used in browser', () => {
       Object.defineProperty(globalThis, 'window', {
         configurable: true,
@@ -99,7 +105,13 @@ describe('VolcanoAuth', () => {
               apiUrl: 'test',
               anonKey: 'sk-service-key',
             }),
-        ).toThrow('Service keys (sk-*) cannot be used in client-side code');
+        ).toThrow(
+          '[VOLCANO SECURITY ERROR] Service keys (sk-*) cannot be used in client-side code. ' +
+            'Service keys bypass Row Level Security and expose your database to unauthorized access. ' +
+            'Use an anon key (ak-*) for browser/client-side applications. ' +
+            'Service keys should only be used in secure server-side environments. ' +
+            'See: https://docs.volcano.hosting/security/keys',
+        );
       } finally {
         Reflect.deleteProperty(globalThis, 'window');
       }
