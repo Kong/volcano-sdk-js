@@ -11,9 +11,10 @@ test('CI starts every required mutation shard', () => {
   assert.ok(environment);
   assert.equal(Number(environment[1]), mutationShardCount);
   assert.match(workflow, /name: SDK Node 22 mutation shard/);
-  assert.match(workflow, /node-version: '22'/);
+  assert.equal(readFileSync('.node-version', 'utf8').trim(), '22.23.3');
+  assert.match(workflow, /node-version-file: '\.node-version'/);
   assert.match(workflow, /name: SDK Node 20 lint, tests, and build/);
-  assert.match(workflow, /node-version: '20'/);
+  assert.match(workflow, /node-version: '20\.20\.2'/);
   assert.match(workflow, /run: pnpm quality:checks/);
   assert.match(workflow, /needs: \[sdk, sdk-node20\]/);
   assert.doesNotMatch(workflow, /node-version: \['20', '22'\]/);

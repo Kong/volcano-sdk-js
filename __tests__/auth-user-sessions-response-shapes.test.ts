@@ -86,14 +86,14 @@ test.each([
 });
 
 test.each([
-  ['total', -1],
-  ['page', 0],
-  ['limit', 0],
+  ['total', '1'],
+  ['page', null],
+  ['limit', Number.NaN],
   ['total_pages', 1.5],
 ] as const)('rejects invalid pagination %s: %p', async (name, value) => {
   const data = { ...response([session]), [name]: value };
   await expect(getSessions(hostWith(data), {})).rejects.toThrow(
-    `Auth sessions ${name} must be an integer of at least ${String(name === 'page' || name === 'limit' ? 1 : 0)}`,
+    `Auth sessions ${name} must be an integer`,
   );
 });
 
@@ -120,3 +120,13 @@ test.each(['sessions', 'total', 'page', 'limit', 'total_pages'])(
     });
   },
 );
+
+test.each([
+  ['total', -1],
+  ['page', 0],
+  ['limit', 0],
+  ['total_pages', -1],
+] as const)('preserves integer pagination %s without inventing bounds', async (name, value) => {
+  const data = { ...response([session]), [name]: value };
+  await expect(getSessions(hostWith(data), {})).resolves.toEqual({ ...data, error: null });
+});

@@ -98,6 +98,12 @@ describe('durable.get / durable.list / durable.stop', () => {
       status: 200,
       error: null,
     });
+    expect(transport.listDurableExecutions).toHaveBeenCalledWith(
+      'proj-1',
+      'order-pipeline',
+      {},
+      expect.objectContaining({ volcanoAuthorization: 'session', volcanoClient: volcano }),
+    );
     // Strict, because a key carrying undefined is a query parameter the caller
     // never asked for.
     expect(transport.listDurableExecutions.mock.calls[0]?.[2]).toStrictEqual({});
@@ -365,9 +371,11 @@ describe('durable owner operations over the wire', () => {
   test('carries list filters as query parameters', async () => {
     await realClient().durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 5 });
 
-    expect(jest.mocked(globalThis.fetch).mock.calls[0]?.[0]).toBe(
+    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    expect(url).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions?status=running&limit=5',
     );
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
 
   test('posts a stop to the execution', async () => {
@@ -378,5 +386,6 @@ describe('durable owner operations over the wire', () => {
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop',
     );
     expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
 });

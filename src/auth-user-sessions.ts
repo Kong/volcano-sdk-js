@@ -83,13 +83,13 @@ function sessionsField(value: unknown): AuthSession[] | undefined {
   return sessions;
 }
 
-function integerField(value: unknown, name: string, minimum: number): number | undefined {
+function integerField(value: unknown, name: string): number | undefined {
   const field = requiredField(value, name);
   if (field === undefined) {
     return undefined;
   }
-  if (!Number.isInteger(field) || Number(field) < minimum) {
-    throw new TypeError(`Auth sessions ${name} must be an integer of at least ${String(minimum)}`);
+  if (!Number.isInteger(field)) {
+    throw new TypeError(`Auth sessions ${name} must be an integer`);
   }
   return Number(field);
 }
@@ -127,10 +127,10 @@ export async function getSessions(
   }
   return {
     sessions: sessionsField(result.data),
-    total: integerField(result.data, 'total', 0),
-    page: integerField(result.data, 'page', 1),
-    limit: integerField(result.data, 'limit', 1),
-    total_pages: integerField(result.data, 'total_pages', 0),
+    total: integerField(result.data, 'total'),
+    page: integerField(result.data, 'page'),
+    limit: integerField(result.data, 'limit'),
+    total_pages: integerField(result.data, 'total_pages'),
     error: null,
   };
 }

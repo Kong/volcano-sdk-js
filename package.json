@@ -71,7 +71,7 @@
     "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "pnpm build && eslint . --fix && pnpm format",
     "test": "pnpm build && jest",
-    "test:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json",
+    "test:types": "pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json",
     "test:package": "pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz",
     "test:watch": "pnpm build && jest --watch",
     "test:coverage": "pnpm build && jest --coverage",

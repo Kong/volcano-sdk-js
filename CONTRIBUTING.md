@@ -4,7 +4,7 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 
 ## Local Prerequisites
 
-- Node.js 20 or newer.
+- Node.js 22.23.3 from `.node-version` for development. The package supports Node.js 20 or newer.
 - pnpm 10.34.1.
 
 ## Common Workflows
@@ -12,6 +12,7 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 | Goal                            | Command                          |
 | ------------------------------- | -------------------------------- |
 | Install dependencies            | `pnpm install --frozen-lockfile` |
+| Run the complete quality gate   | `pnpm quality`                   |
 | Run linting                     | `pnpm lint`                      |
 | Run unit tests                  | `pnpm test`                      |
 | Regenerate API types            | `pnpm generate:openapi`          |
@@ -39,7 +40,7 @@ server-backed SDK integration tests.
 
 ## Package Structure
 
-- `src/index.ts` contains the main SDK client.
+- `src/index.ts` declares public exports; `src/volcano-auth.ts` composes the SDK client.
 - `src/realtime.ts` contains the realtime WebSocket client.
 - `src/next/middleware.ts` contains Next.js middleware helpers.
 - TypeScript declarations are emitted from `src/**/*.ts` during `pnpm build`.

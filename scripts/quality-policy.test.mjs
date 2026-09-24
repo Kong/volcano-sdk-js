@@ -17,7 +17,8 @@ const requiredTasks = {
   'check:openapi': 'pnpm generate:openapi && node scripts/check-openapi.mjs',
   'generate:openapi':
     'node scripts/clean-openapi.mjs && orval --config orval.config.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write && tsc -p tsconfig.generated.json',
-  'test:types': 'tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
+  'test:types':
+    'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
   'test:tooling': 'node --test --test-concurrency=1 scripts/*.test.mjs',
   test: 'pnpm build && jest',
   'test:typed-runtime': 'pnpm build && jest --config jest.typed.config.cjs',
