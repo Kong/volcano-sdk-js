@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
-// Small, mutation-dense modules must also split across CI jobs.
+// Stryker accepts file/line ranges but has no native CI shard selector.
+// Split small, mutation-dense modules without cutting through syntax nodes.
 const MAX_SHARD_LINES = 80;
 export const mutationShardCount = 16;
 function handwrittenRuntime(path) {
