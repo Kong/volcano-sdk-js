@@ -97,7 +97,7 @@ function engineContext(value: unknown): EngineContext {
 }
 
 function optionEntries(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? { ...value } : {};
+  return Array.isArray(value) ? {} : Object.assign({}, value);
 }
 
 function namedFunction<Run extends (...args: never[]) => unknown, Options extends object>(

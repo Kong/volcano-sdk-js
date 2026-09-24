@@ -3,13 +3,14 @@
   "workspaces": {
     ".": {
       "entry": [
-        "src/index.js!",
+        "src/index.ts!",
         "src/realtime.ts!",
         "src/durable.ts!",
         "src/next/middleware.ts!",
         "__tests__/**/*.test.{js,ts}",
         "__tests__/integration/**/*.test.{js,ts}",
         "__tests__/integration/setup.ts",
+        "__tests__/browser-environment.cjs",
         "__tests__/node-environment.cjs",
         "scripts/*.test.mjs",
         "test/types/**/*.ts",
@@ -19,12 +20,12 @@
         "src/**/*.{js,ts}!",
         "!src/generated/model/**",
         "!src/generated/client.ts",
-        "!src/generated/volcano-fetch.ts",
-        "!src/generated-runtime/model/**",
+        "!src/generated-runtime/**",
         "__tests__/**/*.{js,ts,cjs}",
         "scripts/**/*.{mjs,cjs}",
         "test/types/**/*.ts",
-        "examples/durable-order-pipeline/volcano/functions/**/*.js"
+        "examples/durable-order-pipeline/volcano/functions/**/*.js",
+        "test/fixtures/**/*.d.ts"
       ]
     },
     "examples/nextjs-notes-app": {

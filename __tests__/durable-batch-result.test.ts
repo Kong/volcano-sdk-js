@@ -50,3 +50,24 @@ test('omits a non-string completion reason', () => {
 
   expect(batchResult(batch).completionReason).toBeUndefined();
 });
+
+test.each([
+  ['ALL_COMPLETED', 'all_completed'],
+  ['MIN_SUCCESSFUL_REACHED', 'min_successful_reached'],
+  ['FAILURE_TOLERANCE_EXCEEDED', 'failure_tolerance_exceeded'],
+  ['CUSTOM_COMPLETION_SUCCEEDED', 'custom_completion_succeeded'],
+  ['CUSTOM_COMPLETION_FAILED', 'custom_completion_failed'],
+  ['UNKNOWN', undefined],
+] as const)('maps engine completion reason %s', (completionReason, expected) => {
+  const batch: EngineBatch<never> = {
+    all: [],
+    getResults: () => [],
+    getErrors: () => [],
+    successCount: 0,
+    failureCount: 0,
+    completionReason,
+    throwIfError: jest.fn(),
+  };
+
+  expect(batchResult(batch).completionReason).toBe(expected);
+});

@@ -20,7 +20,7 @@ import {
 } from '../src/auth-account.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
-import { VolcanoAuth } from '../src/index.js';
+import { VolcanoAuth } from '../src/index.ts';
 
 const user = { id: 'user-1', email: 'user@example.com', status: 'active' } as const;
 const credentials = { email: 'user@example.com', password: 'password' };
@@ -60,7 +60,7 @@ function fixture(): AuthAccountHost {
           headers: new Headers(),
         }),
     },
-    _generatedOptions: () => ({}),
+    _generatedOptions: (mode) => ({ volcanoAuthorization: mode }),
     _anonFetch: () => Promise.resolve({ ok: true, status: 200, data: {}, error: null }),
     _authFetchWithContext: () =>
       Promise.resolve({
@@ -103,6 +103,16 @@ test('signup with required confirmation never signs in and preserves absent mess
   expect(signInSpy).not.toHaveBeenCalled();
 });
 
+test('sign-in uses anonymous credential scope even when a session exists', async () => {
+  const host = fixture();
+  host.accessToken = 'existing-session';
+  const signin = jest.spyOn(host._transport, 'authSignin');
+
+  await signIn(host, credentials);
+
+  expect(signin).toHaveBeenCalledWith(credentials, { volcanoAuthorization: 'anon' });
+});
+
 test('sign-in normalizes a primitive transport rejection', async () => {
   const host = fixture();
   host._transport.authSignin = jest
@@ -128,6 +138,33 @@ test('sign-in refuses a successful custom transport without a session payload', 
   await expect(signIn(host, credentials)).rejects.toThrow('Sign in returned no session');
 });
 
+test('sign-in preserves an omitted cookie refresh token without inventing credentials', async () => {
+  const host = fixture();
+  const adopt = jest.fn<AuthAccountHost['_setSession']>(() => true);
+  host._setSession = adopt;
+  host._transport.authSignin = () =>
+    Promise.resolve({
+      data: {
+        access_token: 'cookie-access',
+        token_type: 'Bearer',
+        expires_in: 3600,
+        user,
+      },
+      status: 200,
+      headers: new Headers(),
+    });
+
+  expect(await signIn(host, credentials)).toEqual({
+    user,
+    session: { access_token: 'cookie-access', refresh_token: undefined, expires_in: 3600 },
+    error: null,
+  });
+  expect(adopt).toHaveBeenCalledWith(
+    expect.objectContaining({ access_token: 'cookie-access', user }),
+    0,
+  );
+});
+
 test('getUser rejects a malformed successful response before adopting a user', async () => {
   const host = fixture();
   host._authFetchWithContext = () =>
@@ -139,6 +176,27 @@ test('getUser rejects a malformed successful response before adopting a user', a
   host._notifyAuthCallbacks = notify;
 
   await expect(getUser(host)).rejects.toThrow('Auth response must be an object');
+  expect(notify).not.toHaveBeenCalled();
+});
+
+test.each([
+  [{ id: 'user-1' }, 'Auth user email must be a string'],
+  [
+    { id: 'user-1', email: 'user@example.com', status: null },
+    'Auth user status must be active, banned, or deleted',
+  ],
+])('getUser rejects incomplete wire users without mutating state', async (candidate, message) => {
+  const host = fixture();
+  const notify = jest.fn<AuthAccountHost['_notifyAuthCallbacks']>();
+  host._notifyAuthCallbacks = notify;
+  host._authFetchWithContext = () =>
+    Promise.resolve({
+      result: { ok: true, status: 200, data: { user: candidate }, error: null },
+      context,
+    });
+
+  await expect(getUser(host)).rejects.toThrow(message);
+  expect(host.currentUser).toBeNull();
   expect(notify).not.toHaveBeenCalled();
 });
 
@@ -195,6 +253,21 @@ test('signup failure reports no confirmation or session and never signs in', asy
   expect(signInSpy).not.toHaveBeenCalled();
 });
 
+test('signup refuses a malformed acknowledgement instead of coercing confirmation', async () => {
+  const host = fixture();
+  host._anonFetch = () =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      data: { confirmation_required: 'false', message: 'created' },
+      error: null,
+    });
+
+  await expect(signUp(host, credentials)).rejects.toThrow(
+    'Auth response confirmation_required must be a boolean',
+  );
+});
+
 test('sign-in sends exact credentials and adopts the returned session generation', async () => {
   const host = fixture();
   host._sessionGeneration = 4;
@@ -205,7 +278,7 @@ test('sign-in sends exact credentials and adopts the returned session generation
 
   const result = await signIn(host, credentials);
 
-  expect(transport).toHaveBeenCalledWith(credentials, {});
+  expect(transport).toHaveBeenCalledWith(credentials, { volcanoAuthorization: 'anon' });
   expect(adopt).toHaveBeenCalledWith(
     expect.objectContaining({ access_token: 'access', refresh_token: 'refresh', user }),
     4,
@@ -219,7 +292,7 @@ test('sign-in sends exact credentials and adopts the returned session generation
 
 test('getSession returns independent user data and no session without an access token', async () => {
   const host = fixture();
-  host.currentUser = { id: 'user-1', metadata: { team: 'Volcano' } };
+  host.currentUser = { ...user, user_metadata: { team: 'Volcano' } };
   host.refreshToken = 'refresh';
 
   expect(await getSession(host)).toEqual({ data: { session: null }, error: null });
@@ -230,7 +303,7 @@ test('getSession returns independent user data and no session without an access 
   expect(result.data.session).toEqual({
     access_token: 'access',
     refresh_token: 'refresh',
-    user: { id: 'user-1', metadata: { team: 'Volcano' } },
+    user: { ...user, user_metadata: { team: 'Volcano' } },
   });
   expect(result.data.session?.user).not.toBe(host.currentUser);
   host.currentUser = null;
@@ -238,9 +311,17 @@ test('getSession returns independent user data and no session without an access 
   expect(withoutUser.data.session?.user).toBeNull();
 });
 
+test('getSession rejects corrupted in-memory user data before exposing it', () => {
+  const host = fixture();
+  host.accessToken = 'access';
+  Reflect.set(host, 'currentUser', { id: 'user-1', email: 'user@example.com', status: null });
+
+  expect(() => getSession(host)).toThrow('Auth user status must be active, banned, or deleted');
+});
+
 test('setSession adopts only a validated clone', async () => {
   const host = fixture();
-  const session = { access_token: 'access', refresh_token: 'refresh', user: { id: 'user-1' } };
+  const session = { access_token: 'access', refresh_token: 'refresh', user };
   const adopt = jest.fn<AuthAccountHost['_adoptSessionInMemory']>();
   host._adoptSessionInMemory = adopt;
 
@@ -249,6 +330,26 @@ test('setSession adopts only a validated clone', async () => {
   expect(adopt).toHaveBeenCalledWith(session);
   expect(adopt.mock.calls[0]?.[0]).not.toBe(session);
   expect(adopt.mock.calls[0]?.[0].user).not.toBe(session.user);
+});
+
+test.each([
+  [{ id: 'user-1' }, 'Auth user email must be a string'],
+  [
+    { id: 'user-1', email: 'user@example.com', status: null },
+    'Auth user status must be active, banned, or deleted',
+  ],
+])('setSession rejects an incomplete user before adoption', async (candidate, message) => {
+  const host = fixture();
+  const adopt = jest.fn<AuthAccountHost['_adoptSessionInMemory']>();
+  host._adoptSessionInMemory = adopt;
+
+  expect(
+    await setSession(host, { access_token: 'access', refresh_token: 'refresh', user: candidate }),
+  ).toEqual({
+    data: { session: null },
+    error: new TypeError(message),
+  });
+  expect(adopt).not.toHaveBeenCalled();
 });
 
 test('setSession rejects an uncloneable session without adopting it', async () => {
@@ -341,6 +442,16 @@ test('anonymous and email actions send exact public auth requests', async () => 
   ]);
 });
 
+test('message endpoints reject non-string acknowledgements', async () => {
+  const host = fixture();
+  host._anonFetch = () =>
+    Promise.resolve({ ok: true, status: 200, data: { message: 123 }, error: null });
+
+  await expect(confirmEmail(host, 'confirmation')).rejects.toThrow(
+    'Auth response message must be a string',
+  );
+});
+
 test('user and email-change actions send exact authenticated requests', async () => {
   const host = fixture();
   const calls: { path: string; options: RequestInit | undefined }[] = [];
@@ -403,4 +514,22 @@ test('user and email-change actions send exact authenticated requests', async ()
     },
     { path: '/auth/user/cancel-email-change', options: { method: 'DELETE' } },
   ]);
+});
+
+test('email-change response rejects a non-string token before returning it', async () => {
+  const host = fixture();
+  host._authFetchWithContext = () =>
+    Promise.resolve({
+      result: {
+        ok: true,
+        status: 200,
+        data: { message: 'sent', new_email: 'new@example.com', email_change_token: 42 },
+        error: null,
+      },
+      context,
+    });
+
+  await expect(requestEmailChange(host, 'new@example.com')).rejects.toThrow(
+    'Auth response email_change_token must be a string',
+  );
 });

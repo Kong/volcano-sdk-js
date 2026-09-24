@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { VolcanoClient } from '../src/index.js';
+import { VolcanoClient } from '../src/index.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 const execution = {
@@ -49,6 +49,28 @@ function clientWithTransport(overrides: Partial<DurableTransport> = {}) {
 }
 
 describe('durable.get / durable.list / durable.stop', () => {
+  test('rejects malformed successful execution and page payloads', async () => {
+    const { volcano } = clientWithTransport({
+      getDurableExecution: jest
+        .fn<TransportOperation>()
+        .mockResolvedValue({ data: { ...execution, status: 'queued' }, status: 200 }),
+      listDurableExecutions: jest
+        .fn<TransportOperation>()
+        .mockResolvedValue({ data: { ...page, has_more: 'no' }, status: 200 }),
+    });
+
+    await expect(volcano.durable.get('proj-1', 'orders', 'exec-1')).resolves.toMatchObject({
+      data: null,
+      status: null,
+      error: new TypeError('Invalid durable response: Failed to read durable execution'),
+    });
+    await expect(volcano.durable.list('proj-1', 'orders')).resolves.toMatchObject({
+      data: null,
+      status: null,
+      error: expect.any(TypeError),
+    });
+  });
+
   test('reads an execution with the project owner’s credential', async () => {
     const { volcano, transport } = clientWithTransport();
 
@@ -76,6 +98,12 @@ describe('durable.get / durable.list / durable.stop', () => {
       status: 200,
       error: null,
     });
+    expect(transport.listDurableExecutions).toHaveBeenCalledWith(
+      'proj-1',
+      'order-pipeline',
+      {},
+      expect.objectContaining({ volcanoAuthorization: 'session', volcanoClient: volcano }),
+    );
     // Strict, because a key carrying undefined is a query parameter the caller
     // never asked for.
     expect(transport.listDurableExecutions.mock.calls[0]?.[2]).toStrictEqual({});
@@ -343,9 +371,11 @@ describe('durable owner operations over the wire', () => {
   test('carries list filters as query parameters', async () => {
     await realClient().durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 5 });
 
-    expect(jest.mocked(globalThis.fetch).mock.calls[0]?.[0]).toBe(
+    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    expect(url).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions?status=running&limit=5',
     );
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
 
   test('posts a stop to the execution', async () => {
@@ -356,5 +386,6 @@ describe('durable owner operations over the wire', () => {
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop',
     );
     expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
 });

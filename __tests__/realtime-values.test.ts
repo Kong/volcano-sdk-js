@@ -82,6 +82,7 @@ describe('untrusted realtime payloads', () => {
     expect(isPublicationContext({ offset: 1 })).toBe(false);
     expect(isPublicationContext({ data: 'hello', offset: 'one' })).toBe(false);
     expect(isPublicationContext({ data: 'hello', tags: { project: 2 } })).toBe(false);
+    expect(isPublicationContext({ data: 'hello', tags: { project: 'p', offset: 2 } })).toBe(false);
     expect(isPublicationContext({ data: 'hello', offset: 0, tags: { project: 'p' } })).toBe(true);
   });
 
@@ -102,8 +103,8 @@ describe('untrusted realtime payloads', () => {
       message: 'lost',
       code: 4,
     });
-    expect(errorContext({ error: 'lost', message: 3, code: '4' })).toEqual({ error: 'lost' });
-    expect(errorContext({ message: 'outer' })).toEqual({ message: 'outer' });
+    expect(errorContext({ error: 'lost', message: 3, code: '4' })).toStrictEqual({ error: 'lost' });
+    expect(errorContext({ message: 'outer' })).toStrictEqual({ message: 'outer' });
     const transportFailure = { code: 7, message: 'connection refused' };
     expect(errorContext({ type: 'connect', error: transportFailure })).toEqual({
       error: transportFailure,
@@ -125,7 +126,7 @@ describe('untrusted realtime payloads', () => {
       error: { code: 3, message: false },
       code: 3,
     });
-    expect(errorContext({ error: null })).toEqual({ error: null });
+    expect(errorContext({ error: null })).toStrictEqual({ error: null });
   });
 
   test('validates presence state and optional fields', () => {

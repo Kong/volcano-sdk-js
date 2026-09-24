@@ -13,7 +13,7 @@ import {
   setSession,
 } from '../src/auth-session-state.ts';
 
-const user = { id: 'user-1', email: 'user@example.com' };
+const user = { id: 'user-1', email: 'user@example.com', status: 'active' } as const;
 const nextSession = { access_token: 'new-access', refresh_token: 'new-refresh', user };
 
 function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> } {
@@ -142,7 +142,7 @@ test('refresh rejects credentials for a different user without replacing the cur
   const context = captureAuthContext(host);
 
   expect(() => {
-    setRefreshedSession(host, { ...nextSession, user: { id: 'user-2' } }, context);
+    setRefreshedSession(host, { ...nextSession, user: { ...user, id: 'user-2' } }, context);
   }).toThrow('Refreshed session belongs to a different user');
   expect(host.accessToken).toBe('old-access');
   expect(storage.get('volcano_refresh_token')).toBe('old-refresh');

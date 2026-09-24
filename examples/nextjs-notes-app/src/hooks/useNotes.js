@@ -24,6 +24,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { volcano } from '@/lib/volcano';
 
+function addCreatedNote(data, setNotes) {
+  const newNote = data?.[0];
+  if (newNote) {
+    setNotes((previous) => [newNote, ...previous]);
+  }
+  return newNote;
+}
+
 // ---------------------------------------------------------------------------
 // HOOK DEFINITION
 // ---------------------------------------------------------------------------
@@ -158,12 +166,8 @@ export function useNotes() {
           return { note: null, error: insertError };
         }
 
-        const newNote = data?.[0];
-
         // Optimistically add to local state
-        if (newNote) {
-          setNotes((prev) => [newNote, ...prev]);
-        }
+        const newNote = addCreatedNote(data, setNotes);
 
         return { note: newNote, error: null };
       } catch (err) {

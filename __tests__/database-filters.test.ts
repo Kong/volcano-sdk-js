@@ -1,18 +1,14 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import fc from 'fast-check';
-import {
-  type DatabaseFilter,
-  FilterMixin,
-  type FilterTarget,
-  type FilterValue,
-} from '../src/database-filters.ts';
+import { FilterBuilder, type FilterValue } from '../src/database-filters.ts';
 
-type Builder = FilterTarget & typeof FilterMixin & { table: string };
+class Builder extends FilterBuilder {
+  readonly table = 'messages';
+}
 
 function builder(): Builder {
-  const filters: DatabaseFilter[] = [];
-  return Object.assign({ filters, table: 'messages' }, FilterMixin);
+  return new Builder();
 }
 
 const filterValue = fc.oneof(

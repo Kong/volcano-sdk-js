@@ -15,15 +15,27 @@ const sdkOperations = new Set([
 
 const runtimeTag = 'Volcano SDK Runtime';
 
+function markRuntimeOperation(operation) {
+  if (!sdkOperations.has(operation?.operationId)) {
+    return false;
+  }
+  operation.tags = [runtimeTag];
+  return true;
+}
+
+function runtimePathItems(document) {
+  return Object.values(document.paths ?? {});
+}
+
 // Orval filters endpoints by tag; SDK operations share their original tags with
 // unrelated API routes. Mark the runtime set before Orval selects its schemas.
 const selectRuntimeOperations = defineTransformer((document) => {
   const found = new Set();
-  for (const pathItem of Object.values(document.paths ?? {})) {
+  for (const pathItem of runtimePathItems(document)) {
     for (const operation of Object.values(pathItem)) {
-      if (!sdkOperations.has(operation?.operationId)) continue;
-      operation.tags = [runtimeTag];
-      found.add(operation.operationId);
+      if (markRuntimeOperation(operation)) {
+        found.add(operation.operationId);
+      }
     }
   }
   if (found.size !== sdkOperations.size) {
@@ -54,7 +66,7 @@ export default defineConfig({
         },
         mutator: {
           name: 'volcanoFetch',
-          path: './src/generated/volcano-fetch.ts',
+          path: './src/volcano-fetch.ts',
         },
         operations: {
           uploadStorageObject: {

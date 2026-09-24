@@ -9,7 +9,7 @@ interface ResolutionError extends Error {
 }
 
 interface ResolveResponse {
-  ok: boolean;
+  ok?: boolean;
   status: number | null;
   data: unknown;
   error: ResolutionError | null;
@@ -30,6 +30,29 @@ export interface ResolutionOutcome {
   status: number | null;
 }
 
+export function isResolutionOutcome(value: unknown): value is ResolutionOutcome {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    validResolvedId(value['functionId']) &&
+    validResolvedError(value['error']) &&
+    validResolvedStatus(value['status'])
+  );
+}
+
+function validResolvedId(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function validResolvedError(value: unknown): value is Error | null {
+  return value instanceof Error || value === null;
+}
+
+function validResolvedStatus(value: unknown): value is number | null {
+  return typeof value === 'number' || value === null;
+}
+
 export async function resolveFunctionByHttp(
   client: ResolutionClient,
   hostLabel: string,
@@ -41,7 +64,7 @@ export async function resolveFunctionByHttp(
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!result.ok) {
+  if (result.ok !== true) {
     return failedResolution(client._functionResolveState, cacheKey, result);
   }
   return successfulResolution(client._functionResolveState, cacheKey, result);

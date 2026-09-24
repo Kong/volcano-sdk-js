@@ -1,8 +1,6 @@
 /** Decode with the available browser or Node implementation. */
 export function decodeBase64Url(value: string): string {
-  const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
-  const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
-  const base64 = normalized + padding;
+  const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
   if (typeof atob === 'function') {
     return atob(base64);
   }
@@ -29,27 +27,32 @@ export function extractRequiredProjectIdFromToken(
 
 // Session claims constrain refresh continuity; they do not authenticate identity.
 export function extractSessionIdFromToken(token: unknown): string | null {
-  if (typeof token !== 'string' || token === '') {
+  if (typeof token !== 'string') {
     return null;
   }
-  const encoded = encodedPayload(token);
-  if (encoded === null) {
+  const parsed = parseSessionPayload(token);
+  return parsed === null ? null : normalizedSessionId(parsed.payload);
+}
+
+function parseSessionPayload(token: string): { payload: unknown } | null {
+  const parts = token.split('.');
+  if (!hasThreeSegments(parts)) {
     return null;
   }
   try {
-    const payload: unknown = JSON.parse(decodeBase64Url(encoded));
-    return normalizedSessionId(payload);
+    return { payload: JSON.parse(decodeBase64Url(parts[1])) };
   } catch {
     return null;
   }
 }
 
 function encodedPayload(token: string): string | null {
-  const [, payload, signature, ...extra] = token.split('.');
-  if (payload === undefined || signature === undefined || extra.length > 0) {
-    return null;
-  }
-  return payload;
+  const parts = token.split('.');
+  return hasThreeSegments(parts) ? parts[1] : null;
+}
+
+function hasThreeSegments(parts: string[]): parts is [string, string, string] {
+  return parts.length === 3;
 }
 
 function projectPayload(encoded: string, tokenName: string): unknown {

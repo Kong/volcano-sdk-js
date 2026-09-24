@@ -1,7 +1,13 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
+import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
-import type { CompleteSessionFields } from './auth-validation.ts';
+import {
+  assertAuthTokenResponse,
+  type AuthTokenFields,
+  type CompleteSessionFields,
+} from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
+import type { Session, User } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
 interface RequestBase {
@@ -14,22 +20,15 @@ interface SuccessfulRequest extends RequestBase {
   error: null;
 }
 
-interface FailedRequest extends RequestBase {
-  ok: false;
-  error: Error;
-}
-
-type RequestResult = SuccessfulRequest | FailedRequest;
-
 export interface SuccessfulRefresh extends SuccessfulRequest {
-  data: CompleteSessionFields;
+  data: CompleteSessionFields & AuthTokenFields;
 }
 
-export type FailedRefresh = FailedRequest;
+export type FailedRefresh = RequestFailure;
 
 export type RefreshResult = SuccessfulRefresh | FailedRefresh;
 export interface SignOutResult {
-  error: unknown;
+  error: Error | null;
 }
 
 export interface AuthContext {
@@ -42,8 +41,8 @@ export interface AuthContext {
 
 export interface AuthLifecycleHost {
   readonly refreshToken: string | null;
-  readonly currentUser: { id: string } | null;
-  _oauthExchangeError: unknown;
+  readonly currentUser: User | null;
+  _oauthExchangeError: Error | null;
   _oauthExchangePromise: Promise<boolean> | null;
   _completeOAuthExchange(): Promise<void>;
   _captureAuthContext(): AuthContext;
@@ -118,7 +117,7 @@ async function logoutError(
 }
 
 function assertUsablePreceding(preceding: PrecedingRefresh, verified: boolean): void {
-  if (preceding !== null && !preceding.ok && !verified) {
+  if (preceding !== null && preceding.ok !== true && !verified) {
     throw preceding.error;
   }
 }
@@ -126,7 +125,7 @@ function assertUsablePreceding(preceding: PrecedingRefresh, verified: boolean): 
 function finishSignOut(
   host: AuthLifecycleHost,
   context: AuthContext,
-  error: unknown,
+  error: Error | null,
 ): SignOutResult {
   const hasSessionId = extractSessionIdFromToken(context.accessToken) !== null;
   const cleared = hasSessionId
@@ -153,7 +152,11 @@ export async function signOutCaptured(
   } catch (reason) {
     error = normalizedError(reason, 'Session revocation failed');
   }
-  return finishSignOut(host, context, error);
+  return finishSignOut(
+    host,
+    context,
+    error === null ? null : normalizedError(error, 'Sign out failed'),
+  );
 }
 
 function removeSession(host: AuthLifecycleHost, path: string, credential: string | null) {
@@ -180,7 +183,7 @@ export async function revokeAccessSession(
     return previousFailure(preceding, result.error);
   }
   const refreshed = await host._fetchSessionRefresh(context);
-  if (!refreshed.ok) {
+  if (refreshed.ok !== true) {
     return refreshed.error;
   }
   result = await removeSession(host, path, refreshed.data.access_token);
@@ -198,15 +201,12 @@ export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshRe
   if (Boolean(exchangeError) && !hasToken(host.refreshToken)) {
     return { session: null, error: exchangeError };
   }
-  if (!hasToken(host.refreshToken)) {
-    return { session: null, error: new Error('No refresh token') };
-  }
   return refreshSessionForContext(host, host._captureAuthContext());
 }
 
 interface RefreshResponse {
-  session: { access_token: string; refresh_token: string; expires_in: unknown } | null;
-  error: unknown;
+  session: Session | null;
+  error: Error | null;
 }
 
 export async function refreshSessionForContext(
@@ -225,7 +225,7 @@ export async function refreshSessionForContext(
   try {
     validateRefreshSource(context);
   } catch (error) {
-    return { session: null, error };
+    return { session: null, error: normalizedError(error, 'Refresh failed') };
   }
   return performSessionRefresh(host, context);
 }
@@ -240,7 +240,7 @@ export async function fetchSessionRefresh(
     method: 'POST',
     body: JSON.stringify({ refresh_token: context.refreshToken }),
   });
-  if (result.ok) {
+  if (result.ok === true) {
     validateSuccessfulRefresh(result, context, expectedUserId(host, context));
     context.operations.verifyPair(result.data);
     return result;
@@ -260,11 +260,15 @@ function validateSuccessfulRefresh(
   context: AuthContext,
   userId: string | null | undefined,
 ): asserts result is SuccessfulRefresh {
+  assertAuthTokenResponse(result.data);
   validateSessionContinuation(result.data, context, userId);
 }
 
-function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string | null | undefined {
-  return host._isAuthContextCurrent(context) ? host.currentUser?.id : context.userId;
+function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string | null {
+  if (!host._isAuthContextCurrent(context)) {
+    return context.userId;
+  }
+  return host.currentUser?.id ?? null;
 }
 
 async function refreshResult(
@@ -273,7 +277,7 @@ async function refreshResult(
 ): Promise<RefreshResult> {
   const result = await host._fetchSessionRefresh(context);
   if (context.operations.signingOut === null) {
-    if (result.ok) {
+    if (result.ok === true) {
       host._setRefreshedSession(result.data, context);
     } else if (result.status === 401 || result.status === 403) {
       context.operations.refreshClearedSession = host._clearSession(context);
@@ -287,7 +291,7 @@ function settledRefresh(
   context: AuthContext,
   result: RefreshResult,
 ): RefreshResponse {
-  if (!result.ok) {
+  if (result.ok !== true) {
     return { session: null, error: result.error };
   }
   if (!host._isAuthContextCurrent(context) || context.operations.signingOut !== null) {
@@ -297,7 +301,7 @@ function settledRefresh(
     session: {
       access_token: result.data.access_token,
       refresh_token: result.data.refresh_token,
-      expires_in: Reflect.get(result.data, 'expires_in'),
+      expires_in: result.data.expires_in,
     },
     error: null,
   };

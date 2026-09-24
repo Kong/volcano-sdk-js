@@ -7,49 +7,47 @@ export type DatabaseFilter =
   | { column: string; operator: 'is'; value: null | boolean }
   | { column: string; operator: 'in'; value: FilterValue[] };
 
-export interface FilterTarget {
-  filters: DatabaseFilter[];
-}
+export class FilterBuilder {
+  readonly filters: DatabaseFilter[] = [];
 
-export const FilterMixin = {
-  eq<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  eq(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'eq', value });
     return this;
-  },
-  neq<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  }
+  neq(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'neq', value });
     return this;
-  },
-  gt<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  }
+  gt(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'gt', value });
     return this;
-  },
-  gte<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  }
+  gte(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'gte', value });
     return this;
-  },
-  lt<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  }
+  lt(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'lt', value });
     return this;
-  },
-  lte<T extends FilterTarget>(this: T, column: string, value: FilterValue): T {
+  }
+  lte(column: string, value: FilterValue): this {
     this.filters.push({ column, operator: 'lte', value });
     return this;
-  },
-  like<T extends FilterTarget>(this: T, column: string, pattern: string): T {
+  }
+  like(column: string, pattern: string): this {
     this.filters.push({ column, operator: 'like', value: pattern });
     return this;
-  },
-  ilike<T extends FilterTarget>(this: T, column: string, pattern: string): T {
+  }
+  ilike(column: string, pattern: string): this {
     this.filters.push({ column, operator: 'ilike', value: pattern });
     return this;
-  },
-  is<T extends FilterTarget>(this: T, column: string, value: null | boolean): T {
+  }
+  is(column: string, value: null | boolean): this {
     this.filters.push({ column, operator: 'is', value });
     return this;
-  },
-  in<T extends FilterTarget>(this: T, column: string, values: FilterValue[]): T {
+  }
+  in(column: string, values: FilterValue[]): this {
     this.filters.push({ column, operator: 'in', value: values });
     return this;
-  },
-};
+  }
+}

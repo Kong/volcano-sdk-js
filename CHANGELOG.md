@@ -4,6 +4,13 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Generate public declarations from the TypeScript implementation. Nine response
+  types now represent optional or nullable values already returned at runtime;
+  strict consumers may need additional presence checks. See
+  [TypeScript compatibility](./docs/typescript-compatibility.md).
+
 ### Added
 
 - `@volcano.dev/sdk/durable` for authoring durable functions: `durable(handler)`

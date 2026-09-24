@@ -1,7 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import type { operations } from '../src/generated/openapi.d.ts';
-import { VolcanoAuth, VolcanoClient } from '../src/index.js';
+import { VolcanoAuth, VolcanoClient } from '../src/index.ts';
 
 function requestAt(index: number): { url: string; options: RequestInit } {
   const call = jest.mocked(globalThis.fetch).mock.calls[index];

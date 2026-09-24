@@ -6,6 +6,16 @@ import {
 } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { functionInvokeResult, functionWasDispatched } from './function-invocation-response.ts';
+import type { FunctionError } from './sdk-public-types.ts';
+
+export interface FunctionInvokeResponse<TResult = unknown> {
+  data: TResult | string | null;
+  status: number | null;
+  headers: Record<string, string>;
+  version: string | null;
+  /** Platform failures are errors; non-2xx function responses remain data. */
+  error: FunctionError | null;
+}
 
 export interface FunctionInvocationResult {
   data: unknown;

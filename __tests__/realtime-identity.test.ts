@@ -73,8 +73,20 @@ test.each([[{ project_id: 'other', sub: 'user' }], [{ project_id: 'project', sub
 test('never equates a user identity with a credential identity in either direction', () => {
   const user = recoveryIdentity(token({ project_id: 'project', sub: 'user' }));
   const credential = recoveryIdentity('service-key');
+  const absentToken = new Map<string, unknown>().get('missing');
   expect(sameRecoveryIdentity(user, credential)).toBe(false);
   expect(sameRecoveryIdentity(credential, user)).toBe(false);
+  expect(sameRecoveryIdentity(user, recoveryIdentity(absentToken))).toBe(false);
+  expect(sameRecoveryIdentity(recoveryIdentity(absentToken), user)).toBe(false);
+});
+
+test('uses the identity kind even when a credential has user-shaped extra fields', () => {
+  const user = recoveryIdentity(token({ project_id: 'project', sub: 'user' }));
+  const credentialWithFields: Parameters<typeof sameRecoveryIdentity>[1] & {
+    projectId: string;
+    subject: string;
+  } = { kind: 'credential', token: 'service-key', projectId: 'project', subject: 'user' };
+  expect(sameRecoveryIdentity(user, credentialWithFields)).toBe(false);
 });
 
 test('compares fallback credentials by strict identity', () => {

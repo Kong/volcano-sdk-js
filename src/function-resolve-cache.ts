@@ -10,6 +10,61 @@ export interface FunctionResolveState {
   lastPruneAtMs: number;
 }
 
+export interface CachedFunctionResolution {
+  functionId: string | null;
+  invokeUrl?: unknown;
+  error: string | null;
+  errorMetadata?: Record<string, unknown>;
+  expiresAt: number;
+}
+
+export function cachedFunctionResolution(value: unknown): CachedFunctionResolution | null {
+  if (!isCachedResolution(value)) {
+    return null;
+  }
+  const metadata = value.errorMetadata;
+  return {
+    expiresAt: value.expiresAt,
+    functionId: value.functionId,
+    error: value.error,
+    ...('invokeUrl' in value ? { invokeUrl: value['invokeUrl'] } : {}),
+    ...(metadata === undefined ? {} : { errorMetadata: metadata }),
+  };
+}
+
+function isCachedResolution(value: unknown): value is Record<string, unknown> & {
+  expiresAt: number;
+  functionId: string | null;
+  error: string | null;
+  errorMetadata?: Record<string, unknown>;
+} {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value['expiresAt'] === 'number' &&
+    validCacheId(value['functionId']) &&
+    validCacheError(value['error']) &&
+    validCacheMetadata(value['errorMetadata'])
+  );
+}
+
+function validCacheMetadata(value: unknown): value is Record<string, unknown> | undefined {
+  return value === undefined || isRecord(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validCacheId(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function validCacheError(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
 declare global {
   // The V1 key shares resolution across SDK copies in one JavaScript realm.
   var __VOLCANO_SDK_FUNCTION_RESOLVE_STATE_V1__: FunctionResolveState | undefined;
@@ -82,12 +137,8 @@ function removeExpiredEntries(state: FunctionResolveState, nowMs: number): [stri
 }
 
 function removeOverflowEntries(state: FunctionResolveState, retained: [string, number][]): void {
-  if (retained.length <= state.maxEntries) {
-    return;
-  }
-
   retained.sort((a, b) => a[1] - b[1]);
-  const overflowCount = retained.length - state.maxEntries;
+  const overflowCount = Math.max(0, retained.length - state.maxEntries);
   for (const [key] of retained.slice(0, overflowCount)) {
     state.cache.delete(key);
   }
