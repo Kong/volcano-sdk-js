@@ -418,6 +418,7 @@ export interface Functions {
    * }
    * ```
    */
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve published caller-specified payload and result types.
   invoke<TPayload = JsonValue, TResult = unknown>(
     functionName: string,
     payload?: TPayload,
@@ -452,6 +453,7 @@ export interface Durable {
    * }
    * ```
    */
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve the published caller-specified input type.
   start<TInput = JsonValue>(
     functionName: string,
     input?: TInput,

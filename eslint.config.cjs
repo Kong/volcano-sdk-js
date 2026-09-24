@@ -291,8 +291,8 @@ module.exports = [
   },
   {
     files: ['src/sdk-public-types.ts'],
-    rules: {
-      '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+    linterOptions: {
+      noInlineConfig: false,
     },
   },
 ];
