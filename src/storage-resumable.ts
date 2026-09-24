@@ -113,11 +113,11 @@ function requiredPartSize(value: object): number {
 }
 
 function validCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return Number.isInteger(value) && Number(value) >= 0;
 }
 
 function validPartSize(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+  return Number.isInteger(value) && Number(value) > 0;
 }
 
 async function uploadParts(
