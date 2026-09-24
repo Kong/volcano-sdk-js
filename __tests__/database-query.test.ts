@@ -106,6 +106,23 @@ test('keeps a bare SELECT body and derives its count from rows', async () => {
   );
 });
 
+test('a new builder defaults to all columns and a later wildcard clears an earlier projection', async () => {
+  const { client, query } = fixture({ data: [] });
+  await new QueryBuilder(client, 'records', 'db').execute();
+  expect(query).toHaveBeenLastCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
+
+  await new QueryBuilder(client, 'records', 'db').select('id').select('*').execute();
+  expect(query).toHaveBeenLastCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
+});
+
 test('accepts an array projection and defaults order to ascending', async () => {
   const { client, query } = fixture({ data: [], count: 0 });
   const columns = ['id', 'title'];
@@ -161,17 +178,20 @@ test.each([null, ''])('rejects an absent database: %p', async (databaseName) => 
   expect(query).not.toHaveBeenCalled();
 });
 
-test.each([null, 12, {}, { data: null }])(
-  'rejects a malformed SELECT payload: %p',
-  async (payload) => {
-    const { client } = fixture(payload);
-    const builder = new QueryBuilder(client, 'records', 'db');
-    const result = await builder.execute();
-    expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(TypeError);
-    expect(result.count).toBe(0);
-  },
-);
+test.each([
+  [null, 'Query response is not an object'],
+  [12, 'Query response is not an object'],
+  [{}, 'Query response has no rows'],
+  [{ data: null }, 'Query response has no rows'],
+] as const)('rejects a malformed SELECT payload: %p', async (payload, expectedMessage) => {
+  const { client } = fixture(payload);
+  const builder = new QueryBuilder(client, 'records', 'db');
+  const result = await builder.execute();
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(TypeError);
+  expect(result.error?.message).toBe(expectedMessage);
+  expect(result.count).toBe(0);
+});
 
 test.each([undefined, 0, 'bad'])(
   'uses row count for absent or invalid counts: %p',
