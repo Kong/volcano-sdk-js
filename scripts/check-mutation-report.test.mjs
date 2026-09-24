@@ -36,8 +36,7 @@ test('rejects incomplete file results', () => {
   ]);
 });
 
-test('the full audit accepts historical survivors but rejects incomplete reports', () => {
-  assert.equal(mutationGateFailed(reportWith('Survived'), true), false);
+test('the full mutation gate rejects survivors and incomplete reports', () => {
   assert.equal(mutationGateFailed(reportWith('Survived')), true);
   for (const report of [
     {},
@@ -45,7 +44,7 @@ test('the full audit accepts historical survivors but rejects incomplete reports
     { files: { 'src/example.ts': {} } },
     { files: { 'src/example.ts': { mutants: [] } } },
   ]) {
-    assert.equal(mutationGateFailed(report, true), true);
+    assert.equal(mutationGateFailed(report), true);
   }
 });
 

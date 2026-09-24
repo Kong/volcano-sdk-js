@@ -6,11 +6,14 @@ function git(...args) {
 }
 
 function mutantCount(patterns) {
-  const run = spawnSync(
-    './node_modules/.bin/stryker',
-    ['run', '--dryRunOnly', '--mutate', patterns.join(',')],
-    { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 },
-  );
+  const args = ['run', '--dryRunOnly'];
+  if (patterns.length > 0) {
+    args.push('--mutate', patterns.join(','));
+  }
+  const run = spawnSync('./node_modules/.bin/stryker', args, {
+    encoding: 'utf8',
+    maxBuffer: 20 * 1024 * 1024,
+  });
   if (run.status !== 0) {
     process.stderr.write(run.stdout || '');
     process.stderr.write(run.stderr || '');
@@ -23,31 +26,11 @@ function mutantCount(patterns) {
   return Number(count[1]);
 }
 
-const base = process.env.MUTATION_BASE_REF ?? 'origin/main';
-git('rev-parse', '--verify', base);
-const committedDiff = git(
-  'diff',
-  '--no-ext-diff',
-  '--no-renames',
-  '--unified=0',
-  `${base}...HEAD`,
-  '--',
-  'src',
-);
-const workingDiff = git(
-  'diff',
-  '--no-ext-diff',
-  '--no-renames',
-  '--unified=0',
-  'HEAD',
-  '--',
-  'src',
-);
-const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src')
+const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src')
   .split('\n')
   .filter(Boolean);
-const patterns = mutationPatterns(committedDiff, workingDiff, untracked);
-const expected = mutantCount(patterns);
+const patterns = mutationPatterns(paths);
+const expected = mutantCount([]);
 const counts = Array.from({ length: mutationShardCount }, (_, index) =>
   mutantCount(shardMutationPatterns(patterns, index, mutationShardCount)),
 );

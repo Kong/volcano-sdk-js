@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-export function mutationReportFindings(report) {
+function mutationReportFindings(report) {
   const files = report?.files;
   if (files === null || typeof files !== 'object' || Array.isArray(files)) {
     return { integrity: ['Missing mutation report files'], outcomes: [] };
@@ -37,12 +37,12 @@ export function mutationReportProblems(report) {
   return [...findings.integrity, ...findings.outcomes];
 }
 
-export function mutationGateFailed(report, audit = false) {
+export function mutationGateFailed(report) {
   const findings = mutationReportFindings(report);
-  return findings.integrity.length > 0 || (!audit && findings.outcomes.length > 0);
+  return findings.integrity.length > 0 || findings.outcomes.length > 0;
 }
 
-export function mutationStatusCounts(report) {
+function mutationStatusCounts(report) {
   const counts = new Map();
   for (const file of Object.values(report?.files ?? {})) {
     if (!Array.isArray(file?.mutants)) {
@@ -75,7 +75,7 @@ async function main() {
     if (problems.length > 25) {
       console.error(`... and ${String(problems.length - 25)} more; inspect ${path}`);
     }
-    if (mutationGateFailed(report, process.argv[2] === '--audit')) {
+    if (mutationGateFailed(report)) {
       process.exitCode = 1;
     }
     return;
