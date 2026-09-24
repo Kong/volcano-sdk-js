@@ -460,6 +460,16 @@ test('presence refresh tolerates absent client, absent subscription and query fa
     expect(client.presenceCalls).toEqual([]);
 
     state.client = client;
+    state._realtime = {
+      getClient() {
+        throw new Error('client registry unavailable');
+      },
+    };
+    await client.subscription.emit('subscribed', {});
+    await jest.advanceTimersByTimeAsync(150);
+    expect(client.presenceCalls).toEqual([]);
+
+    state._realtime = { getClient: () => state.client };
     await client.subscription.emit('subscribed', {});
     state._subscription = null;
     await jest.advanceTimersByTimeAsync(150);

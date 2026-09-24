@@ -139,12 +139,18 @@ function applyPresenceSnapshot(
 
 async function refreshPresence(state: ChannelLifecycleState, version: number): Promise<void> {
   state._presenceTimeoutId = null;
+  let client: ChannelClient | null;
   try {
-    const client = state._realtime.getClient();
-    if (state._subscription === null) {
-      return;
-    }
-    applyPresenceSnapshot(state, await client?.presence(state._name), version);
+    client = state._realtime.getClient();
+  } catch {
+    return;
+  }
+  if (client === null || state._subscription === null) {
+    return;
+  }
+  const presence = client.presence.bind(client);
+  try {
+    applyPresenceSnapshot(state, await presence(state._name), version);
   } catch {
     // A presence snapshot is best effort; later events still update state.
   }
@@ -279,8 +285,9 @@ function removeSubscription(state: ChannelLifecycleState, subscription: ChannelS
   if (client === null) {
     return;
   }
+  const remove = client.removeSubscription.bind(client);
   try {
-    client.removeSubscription(subscription);
+    remove(subscription);
   } catch {
     // The client may already have removed this subscription.
   }
