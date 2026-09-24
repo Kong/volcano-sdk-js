@@ -23,80 +23,73 @@
  */
 
 // Load .env file if present
-try {
-  require('dotenv').config({ path: require('node:path').resolve(__dirname, '../../../.env') });
-} catch {
-  // dotenv not installed
-}
+import path from 'node:path';
+import { config as loadEnv } from 'dotenv';
+import { type Client, Client as PostgresClient } from 'pg';
+import { type Session, type User, VolcanoAuth } from '../../src/index.js';
+import { type RealtimeChannel, VolcanoRealtime } from '../../src/realtime.ts';
+import {
+  integrationUrl,
+  isRecord,
+  managementFetch,
+  platformFetch as requestPlatform,
+  requiredString,
+} from './http.ts';
 
-const { VolcanoAuth } = require('../../src/index.js');
-const { VolcanoRealtime } = require('../../src/realtime.ts');
+loadEnv({ path: path.resolve(__dirname, '../../../.env') });
 
-const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
-const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
-const REALTIME_URL = process.env.VOLCANO_REALTIME_URL || API_URL;
+const API_URL = integrationUrl('VOLCANO_API_URL', 'http://localhost:8000');
+const MGMT_URL = integrationUrl('VOLCANO_MGMT_URL', 'http://localhost:8001');
+const REALTIME_URL = integrationUrl('VOLCANO_REALTIME_URL', API_URL);
 
 // Helper functions
-async function mgmtFetch(path, options = {}) {
-  const response = await fetch(`${MGMT_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      `Management API error: ${response.status} - ${error.error || JSON.stringify(error)}`,
-    );
-  }
-  if (response.status === 204) return null;
-  return response.json();
+async function mgmtFetch(route: string, options: RequestInit = {}): Promise<unknown> {
+  return managementFetch(MGMT_URL, route, options);
 }
 
-async function platformFetch(path, token, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      `Platform API error: ${response.status} - ${error.error || JSON.stringify(error)}`,
-    );
-  }
-  if (response.status === 204) return null;
-  return response.json();
+async function platformFetch(
+  route: string,
+  token: string,
+  options: RequestInit = {},
+): Promise<unknown> {
+  return requestPlatform(API_URL, route, token, options);
+}
+
+function resource(value: unknown): { id: string } {
+  return { id: requiredString(value, 'id') };
+}
+
+function databaseResource(value: unknown): { id: string; name: string } {
+  return { id: requiredString(value, 'id'), name: requiredString(value, 'name') };
 }
 
 // Global database client for SQL execution
-let dbClient = null;
+let dbClient: Client | null = null;
 
-async function initDbClient(connectionString) {
-  if (dbClient) return;
-  const { Client } = await import('pg');
-  let connStr = connectionString.replace('sslmode=require', 'sslmode=no-verify');
-  dbClient = new Client({ connectionString: connStr });
+async function initDbClient(connectionString: string): Promise<void> {
+  if (dbClient !== null) {
+    return;
+  }
+  const connStr = connectionString.replace('sslmode=require', 'sslmode=no-verify');
+  dbClient = new PostgresClient({ connectionString: connStr });
   await dbClient.connect();
 }
 
-async function closeDbClient() {
-  if (dbClient) {
+async function closeDbClient(): Promise<void> {
+  if (dbClient !== null) {
     await dbClient.end();
     dbClient = null;
   }
 }
 
-async function executeSql(sql) {
-  if (!dbClient) {
+async function executeSql(sql: string): Promise<void> {
+  if (dbClient === null) {
     throw new Error('Database client not initialized. Call initDbClient first.');
   }
   // Remove SQL comments first (both -- and /* */ style)
-  let cleanSql = sql
-    .replace(/--[^\n]*/g, '') // Remove -- comments
-    .replace(/\/\*[\s\S]*?\*\//g, ''); // Remove /* */ comments
+  const cleanSql = sql
+    .replaceAll(/--[^\n]*/g, '') // Remove -- comments
+    .replaceAll(/\/\*[\s\S]*?\*\//g, ''); // Remove /* */ comments
 
   // Split SQL into individual statements and execute separately
   // The pg client doesn't support multiple statements in prepared statements
@@ -111,158 +104,37 @@ async function executeSql(sql) {
 }
 
 // Utility to wait for condition with timeout
-async function waitFor(condition, timeout = 5000, interval = 100) {
+async function waitFor(
+  condition: () => boolean | Promise<boolean>,
+  timeout = 5000,
+  interval = 100,
+): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    if (await condition()) return true;
+    if (await condition()) {
+      return true;
+    }
     await new Promise((r) => setTimeout(r, interval));
   }
   return false;
 }
 
-describe('Realtime Capabilities E2E Tests', () => {
-  // Test infrastructure
-  let platformUser;
-  let platformToken;
-  let project;
-  let anonKey;
-  let database;
-
-  // Auth users for multi-user testing
-  let userAlice;
-  let sessionAlice;
-  let userBob;
-  let sessionBob;
-
-  // Volcano SDK instance
-  let volcano;
-
-  const cleanupFns = [];
-
-  // ============================================================
-  // SETUP
-  // ============================================================
-  beforeAll(async () => {
-    console.log('\n' + '='.repeat(60));
-    console.log('  Realtime Capabilities E2E Tests');
-    console.log('='.repeat(60) + '\n');
-
-    // 1. Verify server is running
-    try {
-      const health = await fetch(`${API_URL}/health`);
-      if (!health.ok) throw new Error('Health check failed');
-      console.log('[ok] Volcano API server is running');
-    } catch {
-      throw new Error(
-        `Volcano API server is not running at ${API_URL}. Please start with: make run`,
-      );
+async function checkServer(): Promise<void> {
+  // 1. Verify server is running
+  try {
+    const health = await fetch(`${API_URL}/health`);
+    if (!health.ok) {
+      throw new Error('Health check failed');
     }
+    console.log('[ok] Volcano API server is running');
+  } catch {
+    throw new Error(`Volcano API server is not running at ${API_URL}. Please start with: make run`);
+  }
+}
 
-    // 2. Create platform user
-    platformUser = await mgmtFetch('/users', {
-      method: 'POST',
-      body: JSON.stringify({
-        id: `realtime-capabilities-${Date.now()}`,
-        name: 'Realtime Capabilities Test User',
-      }),
-    });
-    cleanupFns.push(async () => {
-      await mgmtFetch(`/users/${platformUser.id}`, { method: 'DELETE' }).catch(() => {});
-    });
-    console.log(`[ok] Created platform user: ${platformUser.id}`);
-
-    // 3. Create platform token
-    const tokenResponse = await mgmtFetch(`/users/${platformUser.id}/tokens`, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'realtime-capabilities-test-token' }),
-    });
-    platformToken = tokenResponse.token;
-    console.log('[ok] Created platform token');
-
-    // 4. Create project
-    project = await platformFetch('/projects', platformToken, {
-      method: 'POST',
-      body: JSON.stringify({ name: `capabilities-${Date.now()}` }),
-    });
-    cleanupFns.push(async () => {
-      await platformFetch(`/projects/${project.id}`, platformToken, { method: 'DELETE' }).catch(
-        () => {},
-      );
-    });
-    console.log(`[ok] Created project: ${project.id}`);
-
-    // 5. Create anon key using project ID to guarantee uniqueness
-    // Include realtime permissions for WebSocket tests
-    const anonKeyResponse = await platformFetch(
-      `/projects/${project.id}/anon-keys`,
-      platformToken,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          name: `capabilities-key-${project.id.slice(0, 8)}`,
-          permissions: [
-            'auth.signup',
-            'auth.signin',
-            'auth.refresh',
-            'auth.logout',
-            'realtime.connect',
-            'realtime.subscribe',
-            'realtime.publish',
-          ],
-        }),
-      },
-    );
-    anonKey = anonKeyResponse.key_value;
-    console.log('[ok] Created anon key');
-
-    // 6. Create database
-    database = await platformFetch(`/projects/${project.id}/databases`, platformToken, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: `realtime_capabilities_db_${Date.now()}`,
-        region: 'aws-us-east-1',
-        pg_version: '16',
-      }),
-    });
-    console.log(`[ok] Created database: ${database.id}`);
-
-    // 7. Wait for database to be ready
-    console.log('  Waiting for database to be ready...');
-    let dbReady = false;
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const dbStatus = await platformFetch(
-          `/projects/${project.id}/databases/${database.name}`,
-          platformToken,
-        );
-        if (dbStatus.status === 'active') {
-          dbReady = true;
-          break;
-        }
-      } catch {
-        // DB might not be ready yet
-      }
-    }
-    if (!dbReady) {
-      throw new Error('Database did not become ready in time (2 minutes)');
-    }
-    console.log('[ok] Database is ready');
-
-    // 7.5. Get database with connection string and init client
-    const dbWithConn = await platformFetch(
-      `/projects/${project.id}/databases/${database.name}`,
-      platformToken,
-    );
-    if (dbWithConn.connection_string) {
-      await initDbClient(dbWithConn.connection_string);
-      console.log('[ok] Database client initialized');
-    } else {
-      throw new Error('Database has no connection_string');
-    }
-
-    // 8. Create test tables with RLS
-    await executeSql(`
+async function createTables(): Promise<void> {
+  // 8. Create test tables with RLS
+  await executeSql(`
       -- Messages table for broadcast/persistence testing
       CREATE TABLE IF NOT EXISTS messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -331,8 +203,152 @@ describe('Realtime Capabilities E2E Tests', () => {
       
       GRANT ALL ON documents TO authenticated;
     `);
-    console.log('[ok] Created test tables with RLS policies');
+  console.log('[ok] Created test tables with RLS policies');
+}
 
+describe('Realtime Capabilities E2E Tests', () => {
+  // Test infrastructure
+  let platformUser: { id: string };
+  let platformToken: string;
+  let project: { id: string };
+  let anonKey: string;
+  let database: { id: string; name: string };
+
+  // Auth users for multi-user testing
+  let userAlice: User;
+  let sessionAlice: Session;
+  let userBob: User;
+  let sessionBob: Session;
+
+  // Volcano SDK instance
+  let volcano: VolcanoAuth;
+
+  const cleanupFns: (() => Promise<void>)[] = [];
+
+  // ============================================================
+  // SETUP
+  // ============================================================
+
+  async function createResources(): Promise<void> {
+    // 2. Create platform user
+    platformUser = resource(
+      await mgmtFetch('/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: `realtime-capabilities-${Date.now().toString()}`,
+          name: 'Realtime Capabilities Test User',
+        }),
+      }),
+    );
+    cleanupFns.push(async () => {
+      await mgmtFetch(`/users/${platformUser.id}`, { method: 'DELETE' }).catch(() => null);
+    });
+    console.log(`[ok] Created platform user: ${platformUser.id}`);
+
+    // 3. Create platform token
+    const tokenResponse = await mgmtFetch(`/users/${platformUser.id}/tokens`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'realtime-capabilities-test-token' }),
+    });
+    platformToken = requiredString(tokenResponse, 'token');
+    console.log('[ok] Created platform token');
+
+    // 4. Create project
+    project = resource(
+      await platformFetch('/projects', platformToken, {
+        method: 'POST',
+        body: JSON.stringify({ name: `capabilities-${Date.now().toString()}` }),
+      }),
+    );
+    cleanupFns.push(async () => {
+      await platformFetch(`/projects/${project.id}`, platformToken, { method: 'DELETE' }).catch(
+        () => null,
+      );
+    });
+    console.log(`[ok] Created project: ${project.id}`);
+
+    // 5. Create anon key using project ID to guarantee uniqueness
+    // Include realtime permissions for WebSocket tests
+    const anonKeyResponse = await platformFetch(
+      `/projects/${project.id}/anon-keys`,
+      platformToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          name: `capabilities-key-${project.id.slice(0, 8)}`,
+          permissions: [
+            'auth.signup',
+            'auth.signin',
+            'auth.refresh',
+            'auth.logout',
+            'realtime.connect',
+            'realtime.subscribe',
+            'realtime.publish',
+          ],
+        }),
+      },
+    );
+    anonKey = requiredString(anonKeyResponse, 'key_value');
+    console.log('[ok] Created anon key');
+
+    // 6. Create database
+    database = databaseResource(
+      await platformFetch(`/projects/${project.id}/databases`, platformToken, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: `realtime_capabilities_db_${Date.now().toString()}`,
+          region: 'aws-us-east-1',
+          pg_version: '16',
+        }),
+      }),
+    );
+    console.log(`[ok] Created database: ${database.id}`);
+  }
+
+  async function connectDatabase(): Promise<void> {
+    // 7. Wait for database to be ready
+    console.log('  Waiting for database to be ready...');
+    let dbReady = false;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (await databaseIsActive()) {
+        dbReady = true;
+        break;
+      }
+    }
+    if (!dbReady) {
+      throw new Error('Database did not become ready in time (2 minutes)');
+    }
+    console.log('[ok] Database is ready');
+  }
+
+  async function databaseIsActive(): Promise<boolean> {
+    try {
+      const status = await platformFetch(
+        `/projects/${project.id}/databases/${database.name}`,
+        platformToken,
+      );
+      return isRecord(status) && status['status'] === 'active';
+    } catch {
+      return false;
+    }
+  }
+
+  async function initializeDatabaseClient(): Promise<void> {
+    // 7.5. Get database with connection string and init client
+    const dbWithConn = await platformFetch(
+      `/projects/${project.id}/databases/${database.name}`,
+      platformToken,
+    );
+    if (isRecord(dbWithConn) && typeof dbWithConn['connection_string'] === 'string') {
+      await initDbClient(dbWithConn['connection_string']);
+      console.log('[ok] Database client initialized');
+    } else {
+      throw new Error('Database has no connection_string');
+    }
+  }
+
+  async function startRealtimeUsers(): Promise<void> {
     // 9. Enable realtime for the project
     await platformFetch(`/projects/${project.id}/realtime/config`, platformToken, {
       method: 'PUT',
@@ -348,31 +364,52 @@ describe('Realtime Capabilities E2E Tests', () => {
     // 10. Initialize SDK
     volcano = new VolcanoAuth({ apiUrl: API_URL, anonKey });
     console.log('[ok] Initialized Volcano SDK');
+  }
 
+  async function createUsers(): Promise<void> {
     // 11. Create two auth users: Alice and Bob
     const timestamp = Date.now();
-    const password = 'TestPassword123!';
-
-    const aliceSignUp = await volcano.auth.signUp({
-      email: `alice-rt-${timestamp}@example.com`,
-      password,
-      signInWhenAllowed: true,
-    });
-    if (aliceSignUp.error) throw new Error(`Failed to create Alice: ${aliceSignUp.error.message}`);
-    userAlice = aliceSignUp.user;
-    sessionAlice = aliceSignUp.session;
+    ({ user: userAlice, session: sessionAlice } = await signupRealtimeUser(
+      'Alice',
+      `alice-rt-${timestamp.toString()}@example.com`,
+    ));
     console.log(`[ok] Created auth user Alice: ${userAlice.email}`);
+    ({ user: userBob, session: sessionBob } = await signupRealtimeUser(
+      'Bob',
+      `bob-rt-${timestamp.toString()}@example.com`,
+    ));
+    console.log(`[ok] Created auth user Bob: ${userBob.email}`);
+  }
 
-    const bobSignUp = await volcano.auth.signUp({
-      email: `bob-rt-${timestamp}@example.com`,
-      password,
+  async function signupRealtimeUser(
+    label: string,
+    email: string,
+  ): Promise<{ user: User; session: Session }> {
+    const result = await volcano.auth.signUp({
+      email,
+      password: 'TestPassword123!',
       signInWhenAllowed: true,
     });
-    if (bobSignUp.error) throw new Error(`Failed to create Bob: ${bobSignUp.error.message}`);
-    userBob = bobSignUp.user;
-    sessionBob = bobSignUp.session;
-    console.log(`[ok] Created auth user Bob: ${userBob.email}`);
+    if (result.error !== null) {
+      throw new Error(`Failed to create ${label}: ${result.error.message}`);
+    }
+    if (result.user === null || result.session === null) {
+      throw new Error(`${label} signup returned no user session`);
+    }
+    return { user: result.user, session: result.session };
+  }
 
+  beforeAll(async () => {
+    console.log(`\n${'='.repeat(60)}`);
+    console.log('  Realtime Capabilities E2E Tests');
+    console.log(`${'='.repeat(60)}\n`);
+    await checkServer();
+    await createResources();
+    await connectDatabase();
+    await initializeDatabaseClient();
+    await createTables();
+    await startRealtimeUsers();
+    await createUsers();
     console.log('\n--- Setup complete ---\n');
   }, 180000); // 3 minute timeout for setup
 
@@ -380,7 +417,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     console.log('\n--- Cleaning up ---');
     // Close database client first
     await closeDbClient();
-    for (const cleanupFn of cleanupFns.reverse()) {
+    for (const cleanupFn of [...cleanupFns].reverse()) {
       try {
         await cleanupFn();
       } catch {}
@@ -494,7 +531,7 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 2. BROADCAST CHANNELS
   // ============================================================
   describe('2. Broadcast Channels', () => {
-    let realtime;
+    let realtime: VolcanoRealtime;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
@@ -506,7 +543,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtime?.disconnect();
+      realtime.disconnect();
     });
 
     test('2.1 subscribes to broadcast channel', async () => {
@@ -535,7 +572,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('2.4 can listen to specific events', async () => {
       const channel = realtime.channel('broadcast-events');
 
-      const received = [];
+      const received: unknown[] = [];
       channel.on('chat', (data) => received.push({ type: 'chat', data }));
       channel.on('typing', (data) => received.push({ type: 'typing', data }));
 
@@ -556,7 +593,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('2.5 can listen to all events with wildcard', async () => {
       const channel = realtime.channel('broadcast-wildcard');
 
-      const received = [];
+      const received: unknown[] = [];
       channel.on('*', (data) => received.push(data));
 
       await channel.subscribe();
@@ -577,7 +614,7 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       channel.unsubscribe();
       expect(channel._subscription).not.toBeNull();
-      expect(channel._subscription.state).toBe('unsubscribed');
+      expect(channel._subscription?.state).toBe('unsubscribed');
     });
 
     test('2.7 send fails if not subscribed', async () => {
@@ -599,8 +636,8 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 3. TWO-USER BROADCAST (Alice & Bob)
   // ============================================================
   describe('3. Two-User Broadcast', () => {
-    let realtimeAlice;
-    let realtimeBob;
+    let realtimeAlice: VolcanoRealtime;
+    let realtimeBob: VolcanoRealtime;
 
     beforeAll(async () => {
       realtimeAlice = new VolcanoRealtime({
@@ -619,15 +656,15 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtimeAlice?.disconnect();
-      realtimeBob?.disconnect();
+      realtimeAlice.disconnect();
+      realtimeBob.disconnect();
     });
 
     test('3.1 Bob receives message from Alice', async () => {
       const aliceChannel = realtimeAlice.channel('chat-room-1');
       const bobChannel = realtimeBob.channel('chat-room-1');
 
-      const bobMessages = [];
+      const bobMessages: unknown[] = [];
       bobChannel.on('message', (data) => bobMessages.push(data));
 
       await aliceChannel.subscribe();
@@ -641,7 +678,9 @@ describe('Realtime Capabilities E2E Tests', () => {
       // Wait for message to arrive
       await waitFor(() => bobMessages.length > 0, 3000);
 
-      expect(bobMessages.some((m) => m.text === 'Hello Bob!' && m.from === 'Alice')).toBe(true);
+      expect(
+        bobMessages.some((m) => isRecord(m) && m['text'] === 'Hello Bob!' && m['from'] === 'Alice'),
+      ).toBe(true);
 
       aliceChannel.unsubscribe();
       bobChannel.unsubscribe();
@@ -651,7 +690,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const aliceChannel = realtimeAlice.channel('chat-room-2');
       const bobChannel = realtimeBob.channel('chat-room-2');
 
-      const aliceMessages = [];
+      const aliceMessages: unknown[] = [];
       aliceChannel.on('message', (data) => aliceMessages.push(data));
 
       await aliceChannel.subscribe();
@@ -664,7 +703,11 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       await waitFor(() => aliceMessages.length > 0, 3000);
 
-      expect(aliceMessages.some((m) => m.text === 'Hello Alice!' && m.from === 'Bob')).toBe(true);
+      expect(
+        aliceMessages.some(
+          (m) => isRecord(m) && m['text'] === 'Hello Alice!' && m['from'] === 'Bob',
+        ),
+      ).toBe(true);
 
       aliceChannel.unsubscribe();
       bobChannel.unsubscribe();
@@ -674,7 +717,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const aliceChannel = realtimeAlice.channel('chat-room-3');
       const bobChannel = realtimeBob.channel('chat-room-3');
 
-      const bobMessages = [];
+      const bobMessages: unknown[] = [];
       bobChannel.on('message', (data) => bobMessages.push(data));
 
       await aliceChannel.subscribe();
@@ -701,7 +744,7 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 4. PRESENCE CHANNELS
   // ============================================================
   describe('4. Presence Channels', () => {
-    let realtime;
+    let realtime: VolcanoRealtime;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
@@ -713,7 +756,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtime?.disconnect();
+      realtime.disconnect();
     });
 
     test('4.1 subscribes to presence channel', async () => {
@@ -770,7 +813,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('4.6 can listen for join events', async () => {
       const channel = realtime.channel('lobby-join', { type: 'presence' });
 
-      const joins = [];
+      const joins: unknown[] = [];
       channel.on('join', (info) => joins.push(info));
 
       await channel.subscribe();
@@ -783,7 +826,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('4.7 can listen for leave events', async () => {
       const channel = realtime.channel('lobby-leave', { type: 'presence' });
 
-      const leaves = [];
+      const leaves: unknown[] = [];
       channel.on('leave', (info) => leaves.push(info));
 
       await channel.subscribe();
@@ -807,8 +850,8 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 5. TWO-USER PRESENCE (Alice & Bob)
   // ============================================================
   describe('5. Two-User Presence', () => {
-    let realtimeAlice;
-    let realtimeBob;
+    let realtimeAlice: VolcanoRealtime;
+    let realtimeBob: VolcanoRealtime;
 
     beforeAll(async () => {
       realtimeAlice = new VolcanoRealtime({
@@ -827,8 +870,8 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtimeAlice?.disconnect();
-      realtimeBob?.disconnect();
+      realtimeAlice.disconnect();
+      realtimeBob.disconnect();
     });
 
     test('5.1 Alice and Bob can both join presence channel', async () => {
@@ -858,7 +901,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const aliceChannel = realtimeAlice.channel('shared-lobby-2', { type: 'presence' });
       const bobChannel = realtimeBob.channel('shared-lobby-2', { type: 'presence' });
 
-      const aliceJoinEvents = [];
+      const aliceJoinEvents: unknown[] = [];
       aliceChannel.on('join', (info) => aliceJoinEvents.push(info));
 
       await aliceChannel.subscribe();
@@ -885,7 +928,7 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 6. POSTGRES CHANGES
   // ============================================================
   describe('6. Postgres Changes', () => {
-    let realtime;
+    let realtime: VolcanoRealtime;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
@@ -897,7 +940,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtime?.disconnect();
+      realtime.disconnect();
     });
 
     test('6.1 subscribes to postgres channel', async () => {
@@ -917,7 +960,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('6.3 onPostgresChanges registers callback for INSERT', async () => {
       const channel = realtime.channel('public:notes', { type: 'postgres' });
 
-      const inserts = [];
+      const inserts: unknown[] = [];
       channel.onPostgresChanges('INSERT', 'public', 'notes', (data) => inserts.push(data));
 
       await channel.subscribe();
@@ -931,7 +974,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('6.4 onPostgresChanges registers callback for UPDATE', async () => {
       const channel = realtime.channel('public:notes', { type: 'postgres' });
 
-      const updates = [];
+      const updates: unknown[] = [];
       channel.onPostgresChanges('UPDATE', 'public', 'notes', (data) => updates.push(data));
 
       await channel.subscribe();
@@ -942,7 +985,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('6.5 onPostgresChanges registers callback for DELETE', async () => {
       const channel = realtime.channel('public:notes', { type: 'postgres' });
 
-      const deletes = [];
+      const deletes: unknown[] = [];
       channel.onPostgresChanges('DELETE', 'public', 'notes', (data) => deletes.push(data));
 
       await channel.subscribe();
@@ -953,7 +996,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('6.6 onPostgresChanges with wildcard * event', async () => {
       const channel = realtime.channel('public:notes', { type: 'postgres' });
 
-      const changes = [];
+      const changes: unknown[] = [];
       channel.onPostgresChanges('*', 'public', 'notes', (data) => changes.push(data));
 
       await channel.subscribe();
@@ -966,7 +1009,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       await broadcastChannel.subscribe();
 
       expect(() => {
-        broadcastChannel.onPostgresChanges('INSERT', 'public', 'notes', () => {});
+        broadcastChannel.onPostgresChanges('INSERT', 'public', 'notes', () => null);
       }).toThrow('postgres');
 
       broadcastChannel.unsubscribe();
@@ -977,8 +1020,8 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 7. POSTGRES CHANGES WITH RLS (Alice & Bob)
   // ============================================================
   describe('7. Postgres Changes with RLS', () => {
-    let realtimeAlice;
-    let realtimeBob;
+    let realtimeAlice: VolcanoRealtime;
+    let realtimeBob: VolcanoRealtime;
 
     beforeAll(async () => {
       realtimeAlice = new VolcanoRealtime({
@@ -997,14 +1040,14 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtimeAlice?.disconnect();
-      realtimeBob?.disconnect();
+      realtimeAlice.disconnect();
+      realtimeBob.disconnect();
     });
 
     test('7.1 Alice receives her own note inserts', async () => {
       const channel = realtimeAlice.channel('public:notes', { type: 'postgres' });
 
-      const changes = [];
+      const changes: unknown[] = [];
       channel.onPostgresChanges('INSERT', 'public', 'notes', (data) => {
         changes.push(data);
       });
@@ -1023,7 +1066,10 @@ describe('Realtime Capabilities E2E Tests', () => {
       // Alice must actually RECEIVE her own insert (VOL-522: the SDK previously
       // dropped per-user postgres channel publications, so this never fired).
       expect(changes.length).toBeGreaterThan(0);
-      expect(changes[0].eventType || changes[0].type).toBe('INSERT');
+      const firstChange = changes[0];
+      expect(
+        isRecord(firstChange) ? (firstChange['eventType'] ?? firstChange['type']) : undefined,
+      ).toBe('INSERT');
 
       channel.unsubscribe();
     });
@@ -1032,8 +1078,8 @@ describe('Realtime Capabilities E2E Tests', () => {
       const aliceChannel = realtimeAlice.channel('public:notes', { type: 'postgres' });
       const bobChannel = realtimeBob.channel('public:notes', { type: 'postgres' });
 
-      const aliceChanges = [];
-      const bobChanges = [];
+      const aliceChanges: unknown[] = [];
+      const bobChanges: unknown[] = [];
 
       aliceChannel.onPostgresChanges('INSERT', 'public', 'notes', (data) => {
         aliceChanges.push(data);
@@ -1055,11 +1101,17 @@ describe('Realtime Capabilities E2E Tests', () => {
       await new Promise((r) => setTimeout(r, 2000));
 
       // CRITICAL: Bob should NOT have received Alice's private note
-      const bobSawAliceNote = bobChanges.some(
-        (c) =>
-          c.record?.title === 'Alice Secret' || c.record?.content === 'Bob should not see this',
-      );
+      const bobSawAliceNote = bobChanges.some((c) => {
+        if (!isRecord(c) || !isRecord(c['record'])) {
+          return false;
+        }
+        return (
+          c['record']['title'] === 'Alice Secret' ||
+          c['record']['content'] === 'Bob should not see this'
+        );
+      });
 
+      expect(aliceChanges.length).toBeGreaterThan(0);
       expect(bobSawAliceNote).toBe(false);
 
       aliceChannel.unsubscribe();
@@ -1069,7 +1121,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('7.3 Users receive their own note updates', async () => {
       const channel = realtimeAlice.channel('public:notes', { type: 'postgres' });
 
-      const changes = [];
+      const changes: unknown[] = [];
       channel.onPostgresChanges('UPDATE', 'public', 'notes', (data) => {
         changes.push(data);
       });
@@ -1092,8 +1144,15 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       await new Promise((r) => setTimeout(r, 2000));
 
-      // Test passes if subscription works
-      expect(channel._subscription).not.toBeNull();
+      expect(await waitFor(() => changes.length > 0, 5000)).toBe(true);
+      expect(
+        changes.some(
+          (change) =>
+            isRecord(change) &&
+            isRecord(change['record']) &&
+            change['record']['title'] === 'Updated',
+        ),
+      ).toBe(true);
 
       channel.unsubscribe();
     });
@@ -1101,7 +1160,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     test('7.4 Users receive their own note deletes', async () => {
       const channel = realtimeAlice.channel('public:notes', { type: 'postgres' });
 
-      const changes = [];
+      const changes: unknown[] = [];
       channel.onPostgresChanges('DELETE', 'public', 'notes', (data) => {
         changes.push(data);
       });
@@ -1122,7 +1181,8 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       await new Promise((r) => setTimeout(r, 2000));
 
-      expect(channel._subscription).not.toBeNull();
+      expect(await waitFor(() => changes.length > 0, 5000)).toBe(true);
+      expect(changes.some((change) => isRecord(change) && change['type'] === 'DELETE')).toBe(true);
 
       channel.unsubscribe();
     });
@@ -1132,7 +1192,7 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 8. MULTIPLE CHANNELS
   // ============================================================
   describe('8. Multiple Channels', () => {
-    let realtime;
+    let realtime: VolcanoRealtime;
 
     beforeAll(async () => {
       realtime = new VolcanoRealtime({
@@ -1144,13 +1204,13 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtime?.disconnect();
+      realtime.disconnect();
     });
 
     test('8.1 can subscribe to multiple broadcast channels', async () => {
-      const channels = [];
+      const channels: RealtimeChannel[] = [];
       for (let i = 0; i < 5; i++) {
-        const ch = realtime.channel(`multi-broadcast-${i}`);
+        const ch = realtime.channel(`multi-broadcast-${i.toString()}`);
         channels.push(ch);
       }
 
@@ -1158,7 +1218,9 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       expect(realtime._channels.size).toBe(5);
 
-      channels.forEach((ch) => ch.unsubscribe());
+      channels.forEach((ch) => {
+        ch.unsubscribe();
+      });
     });
 
     test('8.2 can subscribe to different channel types simultaneously', async () => {
@@ -1186,7 +1248,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       realtime.removeAllChannels();
 
       for (let i = 0; i < 3; i++) {
-        const ch = realtime.channel(`to-remove-${i}`);
+        const ch = realtime.channel(`to-remove-${i.toString()}`);
         await ch.subscribe();
       }
 
@@ -1209,20 +1271,22 @@ describe('Realtime Capabilities E2E Tests', () => {
   // 9. PROJECT ISOLATION (Cross-Project Security)
   // ============================================================
   describe('9. Project Isolation', () => {
-    let otherProject;
-    let otherAnonKey;
-    let realtime;
+    let otherProject: { id: string };
+    let otherAnonKey: string;
+    let realtime: VolcanoRealtime;
 
     beforeAll(async () => {
       // Create another project with unique name
-      otherProject = await platformFetch('/projects', platformToken, {
-        method: 'POST',
-        body: JSON.stringify({ name: `other-isolation-${Date.now()}` }),
-      });
+      otherProject = resource(
+        await platformFetch('/projects', platformToken, {
+          method: 'POST',
+          body: JSON.stringify({ name: `other-isolation-${Date.now().toString()}` }),
+        }),
+      );
       cleanupFns.push(async () => {
         await platformFetch(`/projects/${otherProject.id}`, platformToken, {
           method: 'DELETE',
-        }).catch(() => {});
+        }).catch(() => null);
       });
 
       // Create anon key for other project using project ID for uniqueness
@@ -1245,7 +1309,7 @@ describe('Realtime Capabilities E2E Tests', () => {
           }),
         },
       );
-      otherAnonKey = otherAnonKeyResponse.key_value;
+      otherAnonKey = requiredString(otherAnonKeyResponse, 'key_value');
 
       // Enable realtime for other project
       await platformFetch(`/projects/${otherProject.id}/realtime/config`, platformToken, {
@@ -1263,7 +1327,7 @@ describe('Realtime Capabilities E2E Tests', () => {
     });
 
     afterAll(() => {
-      realtime?.disconnect();
+      realtime.disconnect();
     });
 
     test('9.1 cannot access channels from another project', async () => {
@@ -1286,13 +1350,16 @@ describe('Realtime Capabilities E2E Tests', () => {
       const timestamp = Date.now();
 
       const signUpResult = await otherVolcano.auth.signUp({
-        email: `isolation-test-${timestamp}@example.com`,
+        email: `isolation-test-${timestamp.toString()}@example.com`,
         password: 'TestPassword123!',
         signInWhenAllowed: true,
       });
 
-      if (signUpResult.error) {
+      if (signUpResult.error !== null) {
         throw new Error(`Failed to create user in other project: ${signUpResult.error.message}`);
+      }
+      if (signUpResult.session === null) {
+        throw new Error('Other project signup returned no session');
       }
 
       const otherRealtime = new VolcanoRealtime({
@@ -1306,8 +1373,8 @@ describe('Realtime Capabilities E2E Tests', () => {
       const mainChannel = realtime.channel('isolation-chat');
       const otherChannel = otherRealtime.channel('isolation-chat');
 
-      const mainMessages = [];
-      const otherMessages = [];
+      const mainMessages: unknown[] = [];
+      const otherMessages: unknown[] = [];
 
       mainChannel.on('message', (d) => mainMessages.push(d));
       otherChannel.on('message', (d) => otherMessages.push(d));
@@ -1326,7 +1393,7 @@ describe('Realtime Capabilities E2E Tests', () => {
 
       // Other project should NOT receive main project's message
       const otherReceivedMainMessage = otherMessages.some(
-        (m) => m.text === 'From main project' || m.secret === 'main-secret',
+        (m) => isRecord(m) && (m['text'] === 'From main project' || m['secret'] === 'main-secret'),
       );
 
       // Log debug info if isolation fails
@@ -1352,23 +1419,15 @@ describe('Realtime Capabilities E2E Tests', () => {
   // ============================================================
   describe('10. Error Handling', () => {
     test('10.1 throws on connect without apiUrl', () => {
-      expect(
-        () =>
-          new VolcanoRealtime({
-            anonKey: 'test',
-            accessToken: 'test',
-          }),
-      ).toThrow('apiUrl');
+      const config = { apiUrl: REALTIME_URL, anonKey: 'test', accessToken: 'test' };
+      Reflect.deleteProperty(config, 'apiUrl');
+      expect(() => new VolcanoRealtime(config)).toThrow('apiUrl');
     });
 
     test('10.2 throws on connect without anonKey', () => {
-      expect(
-        () =>
-          new VolcanoRealtime({
-            apiUrl: REALTIME_URL,
-            accessToken: 'test',
-          }),
-      ).toThrow('anonKey');
+      const config = { apiUrl: REALTIME_URL, anonKey: 'test', accessToken: 'test' };
+      Reflect.deleteProperty(config, 'anonKey');
+      expect(() => new VolcanoRealtime(config)).toThrow('anonKey');
     });
 
     test('10.3 onError callback is registered', async () => {
@@ -1439,16 +1498,16 @@ describe('Realtime Capabilities E2E Tests', () => {
       realtime.disconnect();
     });
 
-    test('11.5 callback unsubscribe functions work', async () => {
+    test('11.5 callback unsubscribe functions work', () => {
       const realtime = new VolcanoRealtime({
         apiUrl: REALTIME_URL,
         anonKey,
         accessToken: sessionAlice.access_token,
       });
 
-      const unsub1 = realtime.onConnect(() => {});
-      const unsub2 = realtime.onDisconnect(() => {});
-      const unsub3 = realtime.onError(() => {});
+      const unsub1 = realtime.onConnect(() => null);
+      const unsub2 = realtime.onDisconnect(() => null);
+      const unsub3 = realtime.onError(() => null);
 
       expect(realtime._onConnect).toHaveLength(1);
       expect(realtime._onDisconnect).toHaveLength(1);
@@ -1474,7 +1533,7 @@ describe('Realtime Capabilities E2E Tests', () => {
       const channel = realtime.channel('callback-test');
       await channel.subscribe();
 
-      const unsub = channel.on('test', () => {});
+      const unsub = channel.on('test', () => null);
 
       expect(channel._callbacks.get('test')).toHaveLength(1);
 
