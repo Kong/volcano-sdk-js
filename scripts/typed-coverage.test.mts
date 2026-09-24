@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { record } from './values.mts';
 
 const require = createRequire(import.meta.url);
-const config = require('../jest.typed.config.cjs');
+const config = record(require('../jest.typed.config.cjs'));
 const jest = require.resolve('jest/bin/jest');
 const babel = fileURLToPath(new URL('../babel.config.js', import.meta.url));
 const reporter = fileURLToPath(new URL('jest-completeness.cjs', import.meta.url));
@@ -21,7 +22,9 @@ const assertions = `
   });
 `;
 
-async function runCoverage(files = {}) {
+async function runCoverage(
+  files: Record<string, string> = {},
+): Promise<SpawnSyncReturns<string> & { coverage: Record<string, unknown> }> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-typed-coverage-'));
   try {
     for (const [name, contents] of Object.entries({
@@ -52,8 +55,8 @@ async function runCoverage(files = {}) {
     );
     assert.equal(result.error, undefined);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
-    const coverage = JSON.parse(
-      await readFile(join(directory, 'coverage/coverage-final.json'), 'utf8'),
+    const coverage = record(
+      JSON.parse(await readFile(join(directory, 'coverage/coverage-final.json'), 'utf8')),
     );
     return { ...result, coverage };
   } finally {
@@ -61,13 +64,13 @@ async function runCoverage(files = {}) {
   }
 }
 
-test('typed coverage accepts a fully exercised runtime module', async () => {
+await test('typed coverage accepts a fully exercised runtime module', async () => {
   const result = await runCoverage();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(Object.keys(result.coverage).length, 1);
 });
 
-test('typed coverage rejects a new runtime module that no test imports', async () => {
+await test('typed coverage rejects a new runtime module that no test imports', async () => {
   const result = await runCoverage({
     'src/new-module.ts': 'export function missed(): number { return 1; }',
   });
@@ -76,7 +79,7 @@ test('typed coverage rejects a new runtime module that no test imports', async (
   assert.equal(Object.keys(result.coverage).length, 2);
 });
 
-test('typed coverage rejects an unexercised branch', async () => {
+await test('typed coverage rejects an unexercised branch', async () => {
   const result = await runCoverage({
     '__tests__/value.test.ts': assertions.replace('expect(value(false)).toBe(2);', ''),
   });
@@ -84,7 +87,7 @@ test('typed coverage rejects an unexercised branch', async () => {
   assert.match(result.stderr, /coverage threshold for branches.*not met/);
 });
 
-test('typed coverage rejects 99 percent function coverage with every line covered', async () => {
+await test('typed coverage rejects 99 percent function coverage with every line covered', async () => {
   const functions = Array.from({ length: 100 }, () => '() => {}').join(',');
   const result = await runCoverage({
     'src/functions.ts': `export const operations = [${functions}];`,
@@ -101,7 +104,7 @@ test('typed coverage rejects 99 percent function coverage with every line covere
   assert.doesNotMatch(result.stderr, /coverage threshold for (lines|statements|branches)/);
 });
 
-test('typed coverage excludes generated output and declarations', async () => {
+await test('typed coverage excludes generated output and declarations', async () => {
   const result = await runCoverage({
     'src/generated/client.ts': 'export function generated(): number { return 1; }',
     'src/public.d.ts': 'export declare const publicValue: number;',
@@ -110,7 +113,7 @@ test('typed coverage excludes generated output and declarations', async () => {
   assert.equal(Object.keys(result.coverage).length, 1);
 });
 
-test('typed coverage discovers a newly added test without a task-list edit', async () => {
+await test('typed coverage discovers a newly added test without a task-list edit', async () => {
   const result = await runCoverage({
     '__tests__/new.test.ts': "test('new failure', () => { expect(true).toBe(false); });",
   });

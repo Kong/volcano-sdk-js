@@ -16,7 +16,7 @@ The release-triggered workflow builds after the GitHub release is published, the
 After publication, verify the registry's package identity and version, digest/provenance where available, clean installation, and the documented quickstart against the approved platform revision.
 Record the workflow URL and registry URL. Source-main tests alone do not prove the published artifact contains that source.
 
-Both PR CI and the release build run `node scripts/test-package-quickstart.mjs package/*.tgz`.
+Both PR CI and the release build run `node .quality-tools/test-package-quickstart.mjs package/*.tgz`.
 The check installs that tarball outside the checkout without install scripts or publisher credentials,
 then executes the unchanged getting-started example against synthetic local auth responses.
 It checks sign-in, profile retrieval and logout and records the unchanged tarball's SHA256.

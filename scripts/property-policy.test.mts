@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { transformFileAsync } from '@babel/core';
+import { assertionResults, failureMessages } from './jest-results.mts';
+import { record } from './values.mts';
 
 const require = createRequire(import.meta.url);
 const jest = require.resolve('jest/bin/jest');
@@ -18,11 +20,11 @@ const optionsFile = fileURLToPath(
 const configFile = fileURLToPath(new URL('../babel.config.js', import.meta.url));
 const prepareReports = fileURLToPath(new URL('prepare-test-reports.mjs', import.meta.url));
 
-test('a failing property fails Jest and preserves its seed and minimized counterexample', async () => {
+await test('a failing property fails Jest and preserves its seed and minimized counterexample', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-property-policy-'));
   try {
     const compiled = await transformFileAsync(optionsFile, { configFile });
-    assert.equal(typeof compiled.code, 'string');
+    assert.ok(compiled !== null && typeof compiled.code === 'string');
     await writeFile(join(directory, 'property-options.js'), compiled.code);
     await writeFile(
       join(directory, 'property.test.js'),
@@ -65,10 +67,10 @@ test('a failing property fails Jest and preserves its seed and minimized counter
     );
     assert.equal(result.error, undefined);
     assert.equal(result.status, 1, result.stderr);
-    const results = JSON.parse(await readFile(report, 'utf8'));
-    assert.equal(results.numFailedTests, 1);
-    assert.equal(results.numPendingTests, 0);
-    const failure = results.testResults[0].assertionResults[0].failureMessages.join('\n');
+    const results = record(JSON.parse(await readFile(report, 'utf8')));
+    assert.equal(results['numFailedTests'], 1);
+    assert.equal(results['numPendingTests'], 0);
+    const failure = failureMessages(assertionResults(results)[0]);
     assert.match(failure, /seed: 12345/);
     assert.match(failure, /Counterexample: \[0\]/);
     assert.match(failure, /path: "/);

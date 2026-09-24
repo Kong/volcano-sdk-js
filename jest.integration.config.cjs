@@ -5,5 +5,5 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.stryker-tmp/'],
   modulePathIgnorePatterns: ['<rootDir>/.stryker-tmp/'],
   setupFilesAfterEnv: ['<rootDir>/__tests__/integration/setup.ts'],
-  reporters: ['default', '<rootDir>/scripts/jest-completeness.cjs'],
+  reporters: ['default', '<rootDir>/.quality-tools/jest-completeness.cjs'],
 };

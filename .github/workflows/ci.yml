@@ -29,13 +29,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.34.1
+
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Validate the canonical task graph independently
-        run: node --test scripts/quality-policy.test.mjs
+        run: |
+          pnpm exec tsc -p tsconfig.tooling.json
+          node --test --test-reporter=tap --test-reporter=./.quality-tools/node-completeness.mjs --test-reporter-destination=stdout --test-reporter-destination=stdout .quality-tools/quality-policy.test.mjs
 
   actions:
     name: GitHub Actions Lint
@@ -215,7 +226,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify Stryker shard inventory
-        run: pnpm build && node scripts/verify-mutation-shards.mjs
+        run: pnpm build && node .quality-tools/verify-mutation-shards.mjs
 
   quality:
     name: Quality Gate

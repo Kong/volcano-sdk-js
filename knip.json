@@ -12,9 +12,21 @@
         "__tests__/integration/setup.ts",
         "__tests__/browser-environment.cjs",
         "__tests__/node-environment.cjs",
-        "scripts/*.test.mjs",
+        "scripts/*.test.mts",
         "test/types/**/*.ts",
-        "examples/durable-order-pipeline/volcano/functions/*/index.js"
+        "examples/durable-order-pipeline/volcano/functions/*/index.js",
+        "scripts/prepare-test-reports.mts",
+        "scripts/check-openapi.mts",
+        "scripts/run-mutation.mts",
+        "scripts/verify-mutation-shards.mts",
+        "scripts/clean-openapi.mts",
+        "scripts/audit-dependencies.mts",
+        "scripts/copy-types.mts",
+        "scripts/jest-completeness.cts",
+        "scripts/check-mutation-report.mts",
+        "scripts/node-environment.cts",
+        "scripts/browser-environment.cts",
+        "scripts/node-completeness.mts"
       ],
       "project": [
         "src/**/*.{js,ts}!",
@@ -22,7 +34,7 @@
         "!src/generated/client.ts",
         "!src/generated-runtime/**",
         "__tests__/**/*.{js,ts,cjs}",
-        "scripts/**/*.{mjs,cjs}",
+        "scripts/**/*.{mts,cts}",
         "test/types/**/*.ts",
         "examples/durable-order-pipeline/volcano/functions/**/*.js",
         "test/fixtures/**/*.d.ts"

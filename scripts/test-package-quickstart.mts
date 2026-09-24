@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -11,8 +11,8 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const [artifact, ...extra] = process.argv.slice(2);
 assert.ok(
-  artifact && extra.length === 0,
-  'Usage: node scripts/test-package-quickstart.mjs <tarball>',
+  artifact !== undefined && artifact !== '' && extra.length === 0,
+  'Usage: node .quality-tools/test-package-quickstart.mjs <tarball>',
 );
 const tarball = resolve(artifact);
 const digest = createHash('sha256')
@@ -22,7 +22,8 @@ const document = await readFile(new URL('../docs/getting-started.md', import.met
 const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /)[0];
 const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/g) ?? [])];
 assert.equal(examples.length, 1, 'Expected one complete documented quickstart');
-const quickstart = examples[0][1];
+const quickstart = examples[0]?.[1];
+assert.ok(quickstart !== undefined);
 
 const user = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -39,18 +40,15 @@ const session = {
   expires_in: 3600,
   user,
 };
-const requests = [];
-const failures = [];
+const requests: string[] = [];
+const failures: unknown[] = [];
 
-async function respond(request, response) {
-  requests.push(`${request.method} ${request.url}`);
-  const chunks = [];
-  for await (const chunk of request) {
-    chunks.push(chunk);
-  }
-  const body = Buffer.concat(chunks).toString();
+async function respond(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const key = `${String(request.method)} ${String(request.url)}`;
+  requests.push(key);
+  const body = await readBody(request);
   response.setHeader('Content-Type', 'application/json');
-  switch (`${request.method} ${request.url}`) {
+  switch (key) {
     case 'POST /auth/signin': {
       assert.equal(request.headers.authorization, 'Bearer synthetic-anon');
       assert.deepEqual(JSON.parse(body), credentials);
@@ -74,8 +72,18 @@ async function respond(request, response) {
   }
 }
 
+async function readBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  const stream: AsyncIterable<unknown> = request;
+  for await (const chunk of stream) {
+    assert.ok(Buffer.isBuffer(chunk));
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString();
+}
+
 const server = createServer((request, response) => {
-  respond(request, response).catch((error) => {
+  respond(request, response).catch((error: unknown) => {
     failures.push(error);
     response.writeHead(500).end();
   });
@@ -84,7 +92,7 @@ const directory = await mkdtemp(join(tmpdir(), 'volcano-package-quickstart-'));
 try {
   // Keep the install outside the checkout and omit publisher credentials and hooks.
   const env = {
-    PATH: process.env.PATH,
+    PATH: process.env['PATH'],
     HOME: directory,
     NPM_CONFIG_CACHE: join(directory, '.npm-cache'),
     NPM_CONFIG_USERCONFIG: join(directory, '.npmrc'),
@@ -156,12 +164,14 @@ for (const entrypoint of [{ createServerClient, getTokenFromRequest, withAuth },
   await writeFile(join(directory, 'quickstart.mjs'), quickstart);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address !== null && typeof address === 'object');
   const result = await run(process.execPath, ['quickstart.mjs'], {
     cwd: directory,
     timeout: 30_000,
     env: {
       ...env,
-      VOLCANO_API_URL: `http://127.0.0.1:${server.address().port}`,
+      VOLCANO_API_URL: `http://127.0.0.1:${String(address.port)}`,
       VOLCANO_ANON_KEY: 'synthetic-anon',
       VOLCANO_USER_EMAIL: credentials.email,
       VOLCANO_USER_PASSWORD: credentials.password,

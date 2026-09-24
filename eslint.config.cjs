@@ -26,7 +26,12 @@ const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
 const testSupportFiles = ['__tests__/**/*.cjs'];
-const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/**/*.ts'];
+const typescriptFiles = [
+  'src/**/!(*.d).ts',
+  '__tests__/**/*.ts',
+  'test/types/**/*.ts',
+  'scripts/**/*.{mts,cts}',
+];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
 const moduleScriptFiles = ['scripts/**/*.mjs', '*.config.mjs'];
@@ -69,6 +74,7 @@ module.exports = [
   {
     ignores: [
       'coverage/**',
+      '.quality-tools/**',
       'dist/**',
       'node_modules/**',
       '.stryker-tmp/**',
@@ -105,7 +111,9 @@ module.exports = [
     settings: {
       'import-x/resolver-next': [
         createTypeScriptImportResolver({ project: './tsconfig.eslint.json' }),
-        importPlugin.createNodeResolver({ extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'] }),
+        importPlugin.createNodeResolver({
+          extensions: ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '.d.ts'],
+        }),
       ],
     },
   },
@@ -273,7 +281,7 @@ module.exports = [
     languageOptions: {
       sourceType: 'module',
       parserOptions: {
-        project: ['./tsconfig.json', './tsconfig.consumer.json'],
+        project: ['./tsconfig.json', './tsconfig.consumer.json', './tsconfig.tooling.json'],
         tsconfigRootDir: __dirname,
       },
     },
@@ -298,6 +306,22 @@ module.exports = [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/explicit-module-boundary-types': 'error',
+    },
+  },
+  {
+    files: ['scripts/**/*.test.mts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'MemberExpression[property.name=/^(skip|only|todo|runOnly)$/]',
+          message: 'Every tooling test must run without focus, skipping, or pending cases.',
+        },
+        {
+          selector: 'Property[key.name=/^(skip|only|todo)$/]',
+          message: 'Every tooling test must run without focus, skipping, or pending cases.',
+        },
+      ],
     },
   },
   {

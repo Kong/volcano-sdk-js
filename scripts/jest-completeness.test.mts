@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
+import { array, stringValue } from './values.mts';
 
 const jest = fileURLToPath(new URL('../node_modules/jest/bin/jest.js', import.meta.url));
 const reporter = fileURLToPath(new URL('jest-completeness.cjs', import.meta.url));
 const passing = "test('passes', () => expect(1).toBe(1));";
 
-async function runFixture(source, extraArguments = []) {
+async function runFixture(
+  source: string | undefined,
+  extraArguments: readonly string[] = [],
+): Promise<SpawnSyncReturns<string>> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-jest-policy-'));
   try {
     if (source !== undefined) {
@@ -39,13 +43,13 @@ async function runFixture(source, extraArguments = []) {
   }
 }
 
-test('accepts a complete passing Jest run', async () => {
+await test('accepts a complete passing Jest run', async () => {
   const result = await runFixture(passing);
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stderr);
 });
 
-const incompleteRuns = [
+const incompleteRuns: [string, string][] = [
   ['a skipped test', `${passing} test.skip('skipped', () => {});`],
   ['a skipped suite', `${passing} describe.skip('skipped', () => { ${passing} });`],
   ['a todo test', `${passing} test.todo('todo');`],
@@ -57,7 +61,7 @@ const incompleteRuns = [
 ];
 
 for (const [name, source] of incompleteRuns) {
-  test(`rejects ${name}`, async () => {
+  await test(`rejects ${name}`, async () => {
     const result = await runFixture(source);
     assert.equal(result.error, undefined);
     assert.equal(result.status, 1, result.stderr);
@@ -65,21 +69,21 @@ for (const [name, source] of incompleteRuns) {
   });
 }
 
-test('rejects empty discovery even with passWithNoTests', async () => {
+await test('rejects empty discovery even with passWithNoTests', async () => {
   const result = await runFixture(undefined, ['--passWithNoTests']);
   assert.equal(result.error, undefined);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /Incomplete test run:/);
 });
 
-test('preserves a real assertion failure', async () => {
+await test('preserves a real assertion failure', async () => {
   const result = await runFixture("test('fails', () => expect(1).toBe(2));");
   assert.equal(result.error, undefined);
   assert.equal(result.status, 1);
   assert.doesNotMatch(result.stderr, /Incomplete test run:/);
 });
 
-test('allows test-name selection without counting filtered tests as skips', async () => {
+await test('allows test-name selection without counting filtered tests as skips', async () => {
   const result = await runFixture(`${passing} test('filtered', () => expect(1).toBe(2));`, [
     '--testNamePattern=PASSES',
   ]);
@@ -87,7 +91,7 @@ test('allows test-name selection without counting filtered tests as skips', asyn
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('rejects an explicitly skipped test that matches the name selection', async () => {
+await test('rejects an explicitly skipped test that matches the name selection', async () => {
   const result = await runFixture(`${passing} test.skip('selected', () => {});`, [
     '--testNamePattern=selected',
   ]);
@@ -96,14 +100,14 @@ test('rejects an explicitly skipped test that matches the name selection', async
   assert.match(result.stderr, /Incomplete test run:/);
 });
 
-test('rejects a name selection that runs no tests', async () => {
+await test('rejects a name selection that runs no tests', async () => {
   const result = await runFixture(passing, ['--testNamePattern=missing']);
   assert.equal(result.error, undefined);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /Incomplete test run:/);
 });
 
-const forbiddenSources = [
+const forbiddenSources: [string, string][] = [
   ["test.only('focused', () => expect(1).toBe(1));", 'jest/no-focused-tests'],
   [
     "describe.only('focused', () => { test('works', () => expect(1).toBe(1)); });",
@@ -115,7 +119,7 @@ const forbiddenSources = [
 ];
 
 for (const [source, rule] of forbiddenSources) {
-  test(`lint rejects ${source}`, async () => {
+  await test(`lint rejects ${source}`, async () => {
     const eslint = new ESLint();
     const results = await eslint.lintText(source, {
       filePath: '__tests__/quality-negative.test.js',
@@ -124,19 +128,23 @@ for (const [source, rule] of forbiddenSources) {
   });
 }
 
-test('the integration entrypoint discovers server-backed suites', () => {
-  const packageManager = process.env.npm_execpath;
-  assert.ok(packageManager, 'Run tooling tests through pnpm test:tooling.');
+await test('the integration entrypoint discovers server-backed suites', () => {
+  const packageManager = process.env['npm_execpath'];
+  assert.ok(
+    packageManager !== undefined && packageManager !== '',
+    'Run tooling tests through pnpm test:tooling.',
+  );
   const result = spawnSync(
     process.execPath,
     [packageManager, 'test:integration', '--listTests', '--json', '--runInBand'],
-    { encoding: 'utf8', timeout: 15_000 },
+    // The public entrypoint compiles tooling and every SDK bundle before discovery.
+    { encoding: 'utf8', timeout: 60_000 },
   );
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stderr);
   const discovery = result.stdout.trim().split('\n').at(-1);
-  assert.ok(discovery);
-  const paths = JSON.parse(discovery);
+  assert.ok(discovery !== undefined && discovery !== '');
+  const paths = array(JSON.parse(discovery)).map((value) => stringValue(value));
   assert.equal(paths.length, 6);
   assert.ok(paths.every((path) => path.includes('/__tests__/integration/')));
 });
