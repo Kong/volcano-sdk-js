@@ -71,7 +71,7 @@
     "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
     "lint:fix": "pnpm build && eslint . --fix && pnpm format",
     "test": "pnpm build && jest",
-    "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --allowImportingTsExtensions --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.ts src/durable-runtime-peer.d.ts test/types/auth-contract.ts test/types/database-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts",
+    "test:types": "tsc --noEmit -p tsconfig.json && tsc --ignoreConfig --noEmit --allowImportingTsExtensions --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts src/durable.ts src/durable-runtime-peer.d.ts test/types/auth-contract.ts test/types/database-contract.ts test/types/durable-contract.ts test/types/openapi-contract.ts test/types/sandbox-contract.ts",
     "test:package": "pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz",
     "test:watch": "pnpm build && jest --watch",
     "test:coverage": "pnpm build && jest --coverage",

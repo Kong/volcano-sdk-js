@@ -92,3 +92,5 @@ Realtime support is included with the SDK and is available from
 ## License
 
 Apache License 2.0 - see [LICENSE](https://github.com/Kong/volcano-sdk-js/blob/main/LICENSE) for details.
+
+- [Sandboxes](sandboxes.md): isolated commands, sessions, files, and HTTP access.

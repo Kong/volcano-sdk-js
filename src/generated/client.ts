@@ -11,20 +11,46 @@ import type {
   AuthSigninBody,
   AuthTokenResponse,
   BandwidthCapExceededResponse,
+  CreateSandboxSessionRequest,
+  CreateSandboxTemplateRequest,
   DatabaseQueryCapExceededResponse,
   DatabaseQueryResult,
   DatabaseSelectRequest,
   DurableExecution,
   Error,
   ListDurableExecutionsParams,
+  ListSandboxSessionsParams,
+  ListSandboxesParams,
   PaginatedDurableExecutions,
   ProjectLockLease,
   ProjectLockLeaseRequest,
+  SandboxAccess,
+  SandboxAccessRequest,
+  SandboxCommandRequest,
+  SandboxCommandResult,
+  SandboxExecutionRequest,
+  SandboxExecutionResult,
+  SandboxFileReadRequest,
+  SandboxFileResult,
+  SandboxFileWriteRequest,
+  SandboxPresetList,
+  SandboxSession,
+  SandboxSessionPage,
+  SandboxSubjectGrantRequest,
+  SandboxTemplate,
+  SandboxTemplatePage,
   UploadSessionStatusResponse,
   UploadStorageObjectBodyOne
 } from './model';
 
 import { volcanoFetch } from './volcano-fetch';
+export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
+export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
+export type HTTPStatusCode3xx = 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308;
+export type HTTPStatusCode4xx = 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 419 | 420 | 421 | 422 | 423 | 424 | 426 | 428 | 429 | 431 | 451;
+export type HTTPStatusCode5xx = 500 | 501 | 502 | 503 | 504 | 505 | 507 | 511;
+export type HTTPStatusCodes = HTTPStatusCode1xx | HTTPStatusCode2xx | HTTPStatusCode3xx | HTTPStatusCode4xx | HTTPStatusCode5xx;
+
 export type startDurableExecutionFromApplicationResponse202 = {
   data: DurableExecution
   status: 202
@@ -758,5 +784,861 @@ export const downloadStorageObject = async (bucketName: string,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listSandboxPresetsResponse200 = {
+  data: SandboxPresetList
+  status: 200
+}
+
+export type listSandboxPresetsResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type listSandboxPresetsResponseSuccess = (listSandboxPresetsResponse200) & {
+  headers: Headers;
+};
+export type listSandboxPresetsResponseError = (listSandboxPresetsResponseDefault) & {
+  headers: Headers;
+};
+
+export type listSandboxPresetsResponse = (listSandboxPresetsResponseSuccess | listSandboxPresetsResponseError)
+
+export const getListSandboxPresetsUrl = () => {
+
+
+
+
+  return `/sandboxes/presets`
+}
+
+/**
+ * @summary List available sandbox presets
+ */
+export const listSandboxPresets = async ( options?: Parameters<typeof volcanoFetch>[1]): Promise<listSandboxPresetsResponse> => {
+
+  return volcanoFetch<listSandboxPresetsResponse>(getListSandboxPresetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listSandboxesResponse200 = {
+  data: SandboxTemplatePage
+  status: 200
+}
+
+export type listSandboxesResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type listSandboxesResponseSuccess = (listSandboxesResponse200) & {
+  headers: Headers;
+};
+export type listSandboxesResponseError = (listSandboxesResponseDefault) & {
+  headers: Headers;
+};
+
+export type listSandboxesResponse = (listSandboxesResponseSuccess | listSandboxesResponseError)
+
+export const getListSandboxesUrl = (id: string,
+    params?: ListSandboxesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes?${stringifiedParams}` : `/projects/${id}/sandboxes`
+}
+
+/**
+ * @summary List sandbox templates
+ */
+export const listSandboxes = async (id: string,
+    params?: ListSandboxesParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listSandboxesResponse> => {
+
+  return volcanoFetch<listSandboxesResponse>(getListSandboxesUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createSandboxResponse201 = {
+  data: SandboxTemplate
+  status: 201
+}
+
+export type createSandboxResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type createSandboxResponseSuccess = (createSandboxResponse201) & {
+  headers: Headers;
+};
+export type createSandboxResponseError = (createSandboxResponseDefault) & {
+  headers: Headers;
+};
+
+export type createSandboxResponse = (createSandboxResponseSuccess | createSandboxResponseError)
+
+export const getCreateSandboxUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes`
+}
+
+/**
+ * @summary Create a sandbox template from a verified preset
+ */
+export const createSandbox = async (id: string,
+    createSandboxTemplateRequest: CreateSandboxTemplateRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createSandboxResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createSandboxResponse>(getCreateSandboxUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSandboxTemplateRequest)
+  }
+);}
+
+
+
+export type getSandboxResponse200 = {
+  data: SandboxTemplate
+  status: 200
+}
+
+export type getSandboxResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type getSandboxResponseSuccess = (getSandboxResponse200) & {
+  headers: Headers;
+};
+export type getSandboxResponseError = (getSandboxResponseDefault) & {
+  headers: Headers;
+};
+
+export type getSandboxResponse = (getSandboxResponseSuccess | getSandboxResponseError)
+
+export const getGetSandboxUrl = (id: string,
+    sandboxId: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes/${sandboxId}`
+}
+
+/**
+ * @summary Get a sandbox template
+ */
+export const getSandbox = async (id: string,
+    sandboxId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getSandboxResponse> => {
+
+  return volcanoFetch<getSandboxResponse>(getGetSandboxUrl(id,sandboxId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteSandboxResponse202 = {
+  data: void
+  status: 202
+}
+
+export type deleteSandboxResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 202>
+}
+
+export type deleteSandboxResponseSuccess = (deleteSandboxResponse202) & {
+  headers: Headers;
+};
+export type deleteSandboxResponseError = (deleteSandboxResponseDefault) & {
+  headers: Headers;
+};
+
+export type deleteSandboxResponse = (deleteSandboxResponseSuccess | deleteSandboxResponseError)
+
+export const getDeleteSandboxUrl = (id: string,
+    sandboxId: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes/${sandboxId}`
+}
+
+/**
+ * @summary Retire a template and terminate its sessions
+ */
+export const deleteSandbox = async (id: string,
+    sandboxId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<deleteSandboxResponse> => {
+
+  return volcanoFetch<deleteSandboxResponse>(getDeleteSandboxUrl(id,sandboxId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listSandboxSessionsResponse200 = {
+  data: SandboxSessionPage
+  status: 200
+}
+
+export type listSandboxSessionsResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type listSandboxSessionsResponseSuccess = (listSandboxSessionsResponse200) & {
+  headers: Headers;
+};
+export type listSandboxSessionsResponseError = (listSandboxSessionsResponseDefault) & {
+  headers: Headers;
+};
+
+export type listSandboxSessionsResponse = (listSandboxSessionsResponseSuccess | listSandboxSessionsResponseError)
+
+export const getListSandboxSessionsUrl = (id: string,
+    params?: ListSandboxSessionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/sandbox-sessions?${stringifiedParams}` : `/projects/${id}/sandbox-sessions`
+}
+
+/**
+ * @summary List project sandbox sessions
+ */
+export const listSandboxSessions = async (id: string,
+    params?: ListSandboxSessionsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listSandboxSessionsResponse> => {
+
+  return volcanoFetch<listSandboxSessionsResponse>(getListSandboxSessionsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createSandboxSessionResponse201 = {
+  data: SandboxSession
+  status: 201
+}
+
+export type createSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 201>
+}
+
+export type createSandboxSessionResponseSuccess = (createSandboxSessionResponse201) & {
+  headers: Headers;
+};
+export type createSandboxSessionResponseError = (createSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type createSandboxSessionResponse = (createSandboxSessionResponseSuccess | createSandboxSessionResponseError)
+
+export const getCreateSandboxSessionUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/sandbox-sessions`
+}
+
+/**
+ * @summary Start a sandbox session
+ */
+export const createSandboxSession = async (id: string,
+    createSandboxSessionRequest: CreateSandboxSessionRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createSandboxSessionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createSandboxSessionResponse>(getCreateSandboxSessionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSandboxSessionRequest)
+  }
+);}
+
+
+
+export type executeSandboxResponse200 = {
+  data: SandboxExecutionResult
+  status: 200
+}
+
+export type executeSandboxResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type executeSandboxResponseSuccess = (executeSandboxResponse200) & {
+  headers: Headers;
+};
+export type executeSandboxResponseError = (executeSandboxResponseDefault) & {
+  headers: Headers;
+};
+
+export type executeSandboxResponse = (executeSandboxResponseSuccess | executeSandboxResponseError)
+
+export const getExecuteSandboxUrl = (id: string,) => {
+
+
+
+
+  return `/projects/${id}/sandbox-executions`
+}
+
+/**
+ * @summary Execute once and return after confirmed termination
+ */
+export const executeSandbox = async (id: string,
+    sandboxExecutionRequest: SandboxExecutionRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<executeSandboxResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<executeSandboxResponse>(getExecuteSandboxUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxExecutionRequest)
+  }
+);}
+
+
+
+export type getSandboxSessionResponse200 = {
+  data: SandboxSession
+  status: 200
+}
+
+export type getSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type getSandboxSessionResponseSuccess = (getSandboxSessionResponse200) & {
+  headers: Headers;
+};
+export type getSandboxSessionResponseError = (getSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type getSandboxSessionResponse = (getSandboxSessionResponseSuccess | getSandboxSessionResponseError)
+
+export const getGetSandboxSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}`
+}
+
+/**
+ * @summary Get a sandbox session
+ */
+export const getSandboxSession = async (sessionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getSandboxSessionResponse> => {
+
+  return volcanoFetch<getSandboxSessionResponse>(getGetSandboxSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type terminateSandboxSessionResponse202 = {
+  data: SandboxSession
+  status: 202
+}
+
+export type terminateSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 202>
+}
+
+export type terminateSandboxSessionResponseSuccess = (terminateSandboxSessionResponse202) & {
+  headers: Headers;
+};
+export type terminateSandboxSessionResponseError = (terminateSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type terminateSandboxSessionResponse = (terminateSandboxSessionResponseSuccess | terminateSandboxSessionResponseError)
+
+export const getTerminateSandboxSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}`
+}
+
+/**
+ * @summary Request sandbox termination
+ */
+export const terminateSandboxSession = async (sessionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<terminateSandboxSessionResponse> => {
+
+  return volcanoFetch<terminateSandboxSessionResponse>(getTerminateSandboxSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type suspendSandboxSessionResponse202 = {
+  data: SandboxSession
+  status: 202
+}
+
+export type suspendSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 202>
+}
+
+export type suspendSandboxSessionResponseSuccess = (suspendSandboxSessionResponse202) & {
+  headers: Headers;
+};
+export type suspendSandboxSessionResponseError = (suspendSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type suspendSandboxSessionResponse = (suspendSandboxSessionResponseSuccess | suspendSandboxSessionResponseError)
+
+export const getSuspendSandboxSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/suspend`
+}
+
+/**
+ * @summary Suspend a sandbox session
+ */
+export const suspendSandboxSession = async (sessionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<suspendSandboxSessionResponse> => {
+
+  return volcanoFetch<suspendSandboxSessionResponse>(getSuspendSandboxSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type resumeSandboxSessionResponse202 = {
+  data: SandboxSession
+  status: 202
+}
+
+export type resumeSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 202>
+}
+
+export type resumeSandboxSessionResponseSuccess = (resumeSandboxSessionResponse202) & {
+  headers: Headers;
+};
+export type resumeSandboxSessionResponseError = (resumeSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type resumeSandboxSessionResponse = (resumeSandboxSessionResponseSuccess | resumeSandboxSessionResponseError)
+
+export const getResumeSandboxSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/resume`
+}
+
+/**
+ * @summary Resume a sandbox session
+ */
+export const resumeSandboxSession = async (sessionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<resumeSandboxSessionResponse> => {
+
+  return volcanoFetch<resumeSandboxSessionResponse>(getResumeSandboxSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type executeSandboxSessionResponse200 = {
+  data: SandboxCommandResult
+  status: 200
+}
+
+export type executeSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type executeSandboxSessionResponseSuccess = (executeSandboxSessionResponse200) & {
+  headers: Headers;
+};
+export type executeSandboxSessionResponseError = (executeSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type executeSandboxSessionResponse = (executeSandboxSessionResponseSuccess | executeSandboxSessionResponseError)
+
+export const getExecuteSandboxSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/exec`
+}
+
+/**
+ * @summary Execute a command within a session
+ */
+export const executeSandboxSession = async (sessionId: string,
+    sandboxCommandRequest: SandboxCommandRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<executeSandboxSessionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<executeSandboxSessionResponse>(getExecuteSandboxSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxCommandRequest)
+  }
+);}
+
+
+
+export type readSandboxSessionFileResponse200 = {
+  data: SandboxFileResult
+  status: 200
+}
+
+export type readSandboxSessionFileResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type readSandboxSessionFileResponseSuccess = (readSandboxSessionFileResponse200) & {
+  headers: Headers;
+};
+export type readSandboxSessionFileResponseError = (readSandboxSessionFileResponseDefault) & {
+  headers: Headers;
+};
+
+export type readSandboxSessionFileResponse = (readSandboxSessionFileResponseSuccess | readSandboxSessionFileResponseError)
+
+export const getReadSandboxSessionFileUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/files/read`
+}
+
+/**
+ * @summary Read a workspace file
+ */
+export const readSandboxSessionFile = async (sessionId: string,
+    sandboxFileReadRequest: SandboxFileReadRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<readSandboxSessionFileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<readSandboxSessionFileResponse>(getReadSandboxSessionFileUrl(sessionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxFileReadRequest)
+  }
+);}
+
+
+
+export type writeSandboxSessionFileResponse204 = {
+  data: void
+  status: 204
+}
+
+export type writeSandboxSessionFileResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type writeSandboxSessionFileResponseSuccess = (writeSandboxSessionFileResponse204) & {
+  headers: Headers;
+};
+export type writeSandboxSessionFileResponseError = (writeSandboxSessionFileResponseDefault) & {
+  headers: Headers;
+};
+
+export type writeSandboxSessionFileResponse = (writeSandboxSessionFileResponseSuccess | writeSandboxSessionFileResponseError)
+
+export const getWriteSandboxSessionFileUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/files/write`
+}
+
+/**
+ * @summary Write a workspace file
+ */
+export const writeSandboxSessionFile = async (sessionId: string,
+    sandboxFileWriteRequest: SandboxFileWriteRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<writeSandboxSessionFileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<writeSandboxSessionFileResponse>(getWriteSandboxSessionFileUrl(sessionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxFileWriteRequest)
+  }
+);}
+
+
+
+export type grantSandboxSessionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type grantSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type grantSandboxSessionResponseSuccess = (grantSandboxSessionResponse204) & {
+  headers: Headers;
+};
+export type grantSandboxSessionResponseError = (grantSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type grantSandboxSessionResponse = (grantSandboxSessionResponseSuccess | grantSandboxSessionResponseError)
+
+export const getGrantSandboxSessionUrl = (sessionId: string,
+    subjectId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/grants/${subjectId}`
+}
+
+/**
+ * @summary Authorize an authenticated project user for this session
+ */
+export const grantSandboxSession = async (sessionId: string,
+    subjectId: string,
+    sandboxSubjectGrantRequest: SandboxSubjectGrantRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<grantSandboxSessionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<grantSandboxSessionResponse>(getGrantSandboxSessionUrl(sessionId,subjectId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxSubjectGrantRequest)
+  }
+);}
+
+
+
+export type revokeSandboxSessionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokeSandboxSessionResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 204>
+}
+
+export type revokeSandboxSessionResponseSuccess = (revokeSandboxSessionResponse204) & {
+  headers: Headers;
+};
+export type revokeSandboxSessionResponseError = (revokeSandboxSessionResponseDefault) & {
+  headers: Headers;
+};
+
+export type revokeSandboxSessionResponse = (revokeSandboxSessionResponseSuccess | revokeSandboxSessionResponseError)
+
+export const getRevokeSandboxSessionUrl = (sessionId: string,
+    subjectId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/grants/${subjectId}`
+}
+
+/**
+ * @summary Revoke a project user session grant
+ */
+export const revokeSandboxSession = async (sessionId: string,
+    subjectId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<revokeSandboxSessionResponse> => {
+
+  return volcanoFetch<revokeSandboxSessionResponse>(getRevokeSandboxSessionUrl(sessionId,subjectId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type createSandboxSessionAccessResponse200 = {
+  data: SandboxAccess
+  status: 200
+}
+
+export type createSandboxSessionAccessResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type createSandboxSessionAccessResponseSuccess = (createSandboxSessionAccessResponse200) & {
+  headers: Headers;
+};
+export type createSandboxSessionAccessResponseError = (createSandboxSessionAccessResponseDefault) & {
+  headers: Headers;
+};
+
+export type createSandboxSessionAccessResponse = (createSandboxSessionAccessResponseSuccess | createSandboxSessionAccessResponseError)
+
+export const getCreateSandboxSessionAccessUrl = (sessionId: string,) => {
+
+
+
+
+  return `/sandbox-sessions/${sessionId}/access`
+}
+
+/**
+ * @summary Issue a short-lived port-scoped access credential
+ */
+export const createSandboxSessionAccess = async (sessionId: string,
+    sandboxAccessRequest: SandboxAccessRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<createSandboxSessionAccessResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return volcanoFetch<createSandboxSessionAccessResponse>(getCreateSandboxSessionAccessUrl(sessionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sandboxAccessRequest)
   }
 );}

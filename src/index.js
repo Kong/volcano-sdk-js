@@ -112,6 +112,7 @@ import {
 } from './generated-runtime/client.js';
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
+import { SandboxesApi } from './sandboxes.ts';
 import { StorageFileApi } from './storage-file.ts';
 
 /**
@@ -311,6 +312,7 @@ class VolcanoAuth {
     };
 
     this.locks = new ProjectLocksApi(this);
+    this.sandboxes = new SandboxesApi(this);
   }
 
   // ========================================================================
