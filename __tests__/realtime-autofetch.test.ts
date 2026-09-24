@@ -43,6 +43,26 @@ describe('Realtime Auto-Fetch', () => {
   });
 
   describe('constructor', () => {
+    test('keeps same-named channels in separate project clients', () => {
+      const first = new VolcanoRealtime({
+        apiUrl: 'https://api.example.com',
+        anonKey: 'project1.key',
+      });
+      const second = new VolcanoRealtime({
+        apiUrl: 'https://api.example.com',
+        anonKey: 'project2.key',
+      });
+      const firstChannel = first.channel('public:users', { type: 'postgres' });
+      const secondChannel = second.channel('public:users', { type: 'postgres' });
+
+      expect(firstChannel.name).toBe('postgres:public:users');
+      expect(secondChannel.name).toBe('postgres:public:users');
+      expect(firstChannel._realtime).not.toBe(secondChannel._realtime);
+
+      first.disconnect();
+      second.disconnect();
+    });
+
     test('stores volcanoClient when provided', () => {
       const { client: mockClient } = createMockVolcanoClient();
       const rt = new VolcanoRealtime({
