@@ -36,7 +36,10 @@ test.each([
 });
 
 test('preserves an OAuth link response without the optional authorization URL', async () => {
-  await expect(linkOAuthProvider(hostWith({}), 'google')).resolves.toEqual({ data: {}, error: null });
+  await expect(linkOAuthProvider(hostWith({}), 'google')).resolves.toEqual({
+    data: {},
+    error: null,
+  });
 });
 
 test('treats a null OAuth providers field as an empty collection', async () => {
@@ -77,15 +80,12 @@ test.each([
   );
 });
 
-test.each([null, 3.5, '120'])(
-  'rejects non-integer OAuth token expiry: %p',
-  async (expiresIn) => {
-    const data = { message: 'ready', provider: 'google', expires_in: expiresIn };
-    await expect(getOAuthProviderToken(hostWith(data), 'google')).rejects.toThrow(
-      'OAuth token expires_in must be an integer',
-    );
-  },
-);
+test.each([null, 3.5, '120'])('rejects non-integer OAuth token expiry: %p', async (expiresIn) => {
+  const data = { message: 'ready', provider: 'google', expires_in: expiresIn };
+  await expect(getOAuthProviderToken(hostWith(data), 'google')).rejects.toThrow(
+    'OAuth token expires_in must be an integer',
+  );
+});
 
 test('preserves absent optional OAuth token status fields', async () => {
   await expect(getOAuthProviderToken(hostWith({}), 'google')).resolves.toEqual({
