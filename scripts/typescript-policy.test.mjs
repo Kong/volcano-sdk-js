@@ -147,11 +147,18 @@ function requireNextRules(config, path) {
 function requireNoNestedConfigs(files) {
   const names = [
     '.eslintrc',
+    '.eslintignore',
     'eslint.config.',
     '.prettierrc',
     'prettier.config.',
     '.prettierignore',
     '.editorconfig',
+    '.babelrc',
+    'babel.config.',
+    'knip.',
+    'stryker.config.',
+    '.nycrc',
+    '.c8rc',
     'jest.',
     'tsconfig.',
   ];
@@ -254,6 +261,7 @@ test('lowered coverage and suppression comments fail policy validation', () => {
     requireUnsuppressed('test/types/invalid.ts', '// @ts-expect-error\ninvalid();'),
   );
   assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']));
+  assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.babelrc']));
 });
 
 test('a nested manifest cannot replace the root formatter configuration', async () => {
