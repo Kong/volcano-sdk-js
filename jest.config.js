@@ -5,7 +5,7 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.{js,ts}'],
   // Type-check against generated TypeScript while exercising the built SDK artifact.
   moduleNameMapper: {
-    '^\\.\\./src/generated/client\\.ts$': '<rootDir>/src/generated-runtime/client.js',
+    '^\\.\\./src/generated/client\\.ts$': '<rootDir>/src/generated-runtime/generated/client.js',
   },
   // The integration suite under __tests__/integration requires a live Volcano
   // server and is run by the volcano-hosting harness (scripts/ci/run-sdk-integration-tests.sh

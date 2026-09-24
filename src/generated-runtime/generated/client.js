@@ -1,4 +1,4 @@
-import { volcanoFetch } from './volcano-fetch';
+import { volcanoFetch } from '../volcano-fetch';
 export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
     return `/durable-functions/${functionId}/executions`;
 };

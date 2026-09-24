@@ -66,7 +66,7 @@ export default defineConfig({
         },
         mutator: {
           name: 'volcanoFetch',
-          path: './src/generated/volcano-fetch.ts',
+          path: './src/volcano-fetch.ts',
         },
         operations: {
           uploadStorageObject: {

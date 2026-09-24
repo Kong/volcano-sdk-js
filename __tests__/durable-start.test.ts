@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import type { VolcanoRequestInit } from '../src/generated/volcano-fetch.ts';
 import { type VolcanoAuthConfig, VolcanoClient } from '../src/index.js';
+import type { VolcanoRequestInit } from '../src/volcano-fetch.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 const execution = {

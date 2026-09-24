@@ -20,7 +20,6 @@
         "src/**/*.{js,ts}!",
         "!src/generated/model/**",
         "!src/generated/client.ts",
-        "!src/generated/volcano-fetch.ts",
         "!src/generated-runtime/**",
         "__tests__/**/*.{js,ts,cjs}",
         "scripts/**/*.{mjs,cjs}",

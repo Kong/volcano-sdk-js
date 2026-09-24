@@ -1,7 +1,7 @@
 import { errorResult } from './api-errors.ts';
 import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
 import { getQueryDatabaseSelectUrl } from './generated/client.ts';
-import { volcanoFetch, type VolcanoRequestInit } from './generated/volcano-fetch.ts';
+import { volcanoFetch, type VolcanoRequestInit } from './volcano-fetch.ts';
 
 export interface SelectRequest {
   table: string;
