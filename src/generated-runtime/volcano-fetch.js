@@ -58,5 +58,6 @@ export async function volcanoFetch(path, options) {
     if (!response.ok) {
         throw responseError(response, data);
     }
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.
     return { data, status: response.status, headers: response.headers };
 }

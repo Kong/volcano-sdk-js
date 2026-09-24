@@ -306,4 +306,10 @@ module.exports = [
       '@typescript-eslint/no-unnecessary-type-parameters': 'off',
     },
   },
+  {
+    files: ['src/volcano-fetch.ts'],
+    linterOptions: {
+      noInlineConfig: false,
+    },
+  },
 ];

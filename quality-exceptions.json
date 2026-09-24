@@ -10,5 +10,17 @@
     "scope": "src/sdk-public-types.ts:Durable.start<TInput>",
     "rationale": "Preserves the published caller-specified durable input type parameter.",
     "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options."
+  },
+  {
+    "rule": "@typescript-eslint/consistent-type-assertions",
+    "scope": "src/volcano-fetch.ts:volcanoFetch:return",
+    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
+    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+  },
+  {
+    "rule": "@typescript-eslint/no-unsafe-type-assertion",
+    "scope": "src/volcano-fetch.ts:volcanoFetch:return",
+    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
+    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
   }
 ]
