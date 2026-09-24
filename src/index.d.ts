@@ -433,11 +433,11 @@ export interface Durable {
   /**
    * Start a durable execution and get back a handle to it.
    *
-   * A durable function is never invoked synchronously: it can run for hours, so
+   * A durable function is never invoked synchronously: it can run for up to 366 days, so
    * the platform accepts the start and answers with an execution to poll.
    * Starting is the only durable operation an application credential may
    * perform — reading a result or stopping an execution needs the project
-   * owner's token, so poll from your own backend or with the CLI.
+   * owner's platform user token, so poll from your own backend or with the CLI.
    *
    * @param functionName - Durable function name, or its id.
    * @param input - JSON-serializable input handed to the function.
@@ -452,7 +452,7 @@ export interface Durable {
    *   { order_id: orderId },
    *   { executionName: `order-${orderId}` },
    * );
-   * if (!error) {
+   * if (!error && data) {
    *   console.log(data.id, data.status); // 'running'
    * }
    * ```
@@ -472,14 +472,14 @@ export interface Durable {
    * Read an execution, including its `result` once it has succeeded. This is
    * how you find out how a started execution went.
    *
-   * Owner-scoped: it takes the project id and needs the project's token,
-   * because an execution is addressed by its id alone and an anon key is held
-   * by everyone who loads the page. Poll it from your backend, not a browser.
+   * Owner-scoped: it takes the project id and needs the project owner's
+   * platform user token. Auth-user sessions, anon keys, service keys, and
+   * project access tokens are rejected. Poll it from your backend, not a browser.
    *
    * @example
    * ```typescript
    * const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
-   * if (!error && data.status === 'succeeded') {
+   * if (!error && data?.status === 'succeeded') {
    *   console.log(data.result);
    * }
    * ```
