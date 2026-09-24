@@ -37,8 +37,8 @@ function fixture(accessToken: string | null = 'token'): Fixture {
     accessToken,
     _oauthExchangeError: null,
     _transport: { uploadStorageObject: upload, downloadStorageObject: download },
-    _generatedOptions(_mode, headers, responseType) {
-      return { headers, responseType };
+    _generatedOptions(mode, headers, responseType) {
+      return { volcanoAuthorization: mode, headers, responseType };
     },
     _completeOAuthExchange: () => Promise.resolve(),
     _captureAuthContext() {
@@ -124,7 +124,7 @@ test('uploads a File unchanged through the generated transport', async () => {
     'bucket',
     'folder/file.bin',
     { file },
-    expect.anything(),
+    expect.objectContaining({ volcanoAuthorization: 'session' }),
   );
 });
 
@@ -203,6 +203,7 @@ test('downloads binary data and forwards a range header', async () => {
   expect(given.download).toHaveBeenCalledWith('bucket', 'folder/file.bin', {
     headers: { Range: 'bytes=0-2' },
     responseType: 'blob',
+    volcanoAuthorization: 'session',
   });
 });
 
@@ -219,6 +220,7 @@ test('omits a falsy range while preserving JavaScript caller behavior', async ()
   expect(given.download).toHaveBeenCalledWith('bucket', 'file.bin', {
     headers: undefined,
     responseType: 'blob',
+    volcanoAuthorization: 'session',
   });
 });
 
