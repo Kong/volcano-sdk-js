@@ -46,7 +46,21 @@ async function deferRequest<Result>(invoke: () => Promise<Result>) {
     return response.promise;
   });
   const operation = invoke();
-  await within(started.promise, 'adoption request start');
+  const state = await within(
+    Promise.race([
+      started.promise.then(() => 'started' as const),
+      operation.then(
+        () => 'completed' as const,
+        (error: unknown) => {
+          throw error;
+        },
+      ),
+    ]),
+    'adoption request start',
+  );
+  if (state !== 'started') {
+    throw new Error('Adoption operation completed before the request started');
+  }
   return { operation, response };
 }
 

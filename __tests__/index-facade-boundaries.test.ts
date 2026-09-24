@@ -23,6 +23,45 @@ function client(
   return new VolcanoAuth({ anonKey: 'ak-test', accessToken: 'access', ...options });
 }
 
+describe('auth facade delegates', () => {
+  test('returns the HTTP response from the anonymous transport', async () => {
+    const sdk = client();
+    jest.mocked(globalThis.fetch).mockResolvedValue(Response.json({ ok: true }));
+
+    await expect(within(sdk._anonFetch('/probe'), 'anonymous transport')).resolves.toMatchObject({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+      error: null,
+    });
+  });
+
+  test('captures and compares the current session generation', () => {
+    const sdk = client({ refreshToken: 'refresh' });
+    const context = sdk._captureAuthContext();
+
+    expect(context.accessToken).toBe('access');
+    expect(context.refreshToken).toBe('refresh');
+    expect(sdk._isAuthContextCurrent(context)).toBe(true);
+    sdk._sessionGeneration += 1;
+    expect(sdk._isAuthContextCurrent(context)).toBe(false);
+  });
+
+  test('sets a validated session through the facade', () => {
+    const sdk = client();
+    const changed = sdk._setSession({
+      access_token: 'replacement-access',
+      refresh_token: 'replacement-refresh',
+      user: { id: 'user-1', email: 'user@example.test', status: 'active' },
+    });
+
+    expect(changed).toBe(true);
+    expect(sdk.accessToken).toBe('replacement-access');
+    expect(sdk.refreshToken).toBe('replacement-refresh');
+    expect(sdk.currentUser?.id).toBe('user-1');
+  });
+});
+
 describe('facade configuration boundaries', () => {
   test('normalizes the default and explicitly empty API URL', () => {
     expect(client().apiUrl).toBe('https://api.volcano.dev');
@@ -456,14 +495,17 @@ describe('shared function resolution boundary', () => {
       key,
       Promise.resolve({ functionId: null, error: new Error('expired'), status: 401 }),
     );
-    const refresh = jest.spyOn(sdk, '_refreshSessionForContext').mockImplementation(() => {
-      sdk.accessToken = newToken;
-      sdk.refreshToken = 'rotated';
-      return Promise.resolve({
-        session: { access_token: newToken, refresh_token: 'rotated', expires_in: 3600 },
-        error: null,
-      });
-    });
+    const refresh = jest
+      .spyOn(sdk, '_refreshSessionForContext')
+      .mockImplementationOnce(() => {
+        sdk.accessToken = newToken;
+        sdk.refreshToken = 'rotated';
+        return Promise.resolve({
+          session: { access_token: newToken, refresh_token: 'rotated', expires_in: 3600 },
+          error: null,
+        });
+      })
+      .mockRejectedValue(new Error('unexpected second refresh'));
     const fetch = jest.spyOn(sdk, '_anonFetch').mockResolvedValue({
       ok: true,
       status: 200,
@@ -478,6 +520,59 @@ describe('shared function resolution boundary', () => {
     });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('stops after a second resolver 401 without refreshing again', async () => {
+    const oldToken = testAccessToken();
+    const newToken = testAccessToken(undefined, { renewed: true });
+    const sdk = new VolcanoAuth({
+      anonKey: anonToken,
+      accessToken: oldToken,
+      refreshToken: 'refresh',
+    });
+    const key = functionResolveCacheKey(sdk.apiUrl, name, oldToken, false);
+    getSharedFunctionResolveState().inFlight.set(
+      key,
+      Promise.resolve({ functionId: null, error: new Error('expired'), status: 401 }),
+    );
+    const refresh = jest
+      .spyOn(sdk, '_refreshSessionForContext')
+      .mockImplementationOnce(() => {
+        sdk.accessToken = newToken;
+        sdk.refreshToken = 'rotated';
+        return Promise.resolve({
+          session: { access_token: newToken, refresh_token: 'rotated', expires_in: 3600 },
+          error: null,
+        });
+      })
+      .mockRejectedValue(new Error('unexpected second refresh'));
+    const fetch = jest.spyOn(sdk, '_anonFetch').mockResolvedValue({
+      ok: false,
+      status: 401,
+      data: null,
+      error: new Error('still unauthorized'),
+    });
+
+    await expect(within(resolveWith(sdk, oldToken, false), 'second resolver 401')).rejects.toThrow(
+      'still unauthorized',
+    );
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('the public test reset clears shared resolver state', () => {
+    const state = getSharedFunctionResolveState();
+    state.cache.set('cached', { functionId: 'f', error: null, expiresAt: Date.now() + 60_000 });
+    state.inFlight.set('pending', Promise.resolve({ functionId: 'f', error: null, status: 200 }));
+    state.maxEntries = 1;
+
+    VolcanoAuth.__resetFunctionResolveCacheForTests();
+
+    expect(VolcanoAuth.__getFunctionResolveCacheMetricsForTests()).toEqual({
+      cacheSize: 0,
+      inFlightSize: 0,
+      maxEntries: 1024,
+    });
   });
 
   test.each([null, ''])(
