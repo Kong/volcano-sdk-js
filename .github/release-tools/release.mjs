@@ -1,189 +1,168 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
-import { dispatchValidation } from './dispatch.mjs';
+import { execFileSync } from 'node:child_process';
 import { isReleasePR, requireReviewedRelease } from './source-policy.mjs';
-import { readCandidate, validateEvidence, requireCurrentValidation } from './evidence.mjs';
-import { hostingGitHub, sdkGitHub } from './github.mjs';
-import { checkReadiness } from './readiness.mjs';
+import {
+  readCandidate,
+  validateEvidence,
+  validateMergedCandidate,
+  latestValidationRun,
+} from './evidence.mjs';
+import { sdkGitHub } from './github.mjs';
 
 const repo = { owner: 'Kong', repo: 'volcano-sdk-js' };
-const hosting = { owner: 'Kong', repo: 'volcano-hosting' };
 const json = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const save = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 const output = (key, value) => appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 
-async function mergedRelease(github, sha) {
-  const prs = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
-    ...repo,
-    commit_sha: sha,
-    per_page: 100,
-  });
-  const matches = prs.filter(
-    (pr) => isReleasePR(pr) && pr.merged_at && pr.merge_commit_sha === sha,
-  );
-  if (matches.length !== 1)
-    throw new Error('source must be the merge commit of one reviewed Release Please PR');
-  const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: matches[0].number });
-  requireReviewedRelease(pr, sha);
-  return pr;
-}
-
 async function select() {
-  const event = json(process.env.GITHUB_EVENT_PATH);
+  if (process.env.GITHUB_REF !== 'refs/heads/main')
+    throw new Error('publication must run from main');
   const github = sdkGitHub();
-  let sha = process.env.GITHUB_SHA;
-  let mode = 'release';
-  let runID = process.env.GITHUB_RUN_ID;
-  let artifactID = '';
-  if (process.env.GITHUB_RUN_ATTEMPT !== '1')
-    throw new Error('dispatch recovery with the original candidate run; never rebuild a rerun');
-  if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
-    if (!isReleasePR(event.pull_request)) return output('selected', 'false');
-    mode = 'pr';
-    sha = event.pull_request.head.sha;
-  } else if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
-    if (process.env.GITHUB_REF !== 'refs/heads/main')
-      throw new Error('recovery must use the trusted main workflow');
-    runID = event.inputs.candidate_run_id;
-    if (!/^[1-9]\d*$/.test(runID))
-      throw new Error('recovery requires the original candidate run ID');
-    const { data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: runID });
-    if (
-      run.path !== '.github/workflows/publish.yml' ||
-      run.event !== 'push' ||
-      run.head_branch !== 'main' ||
-      run.run_attempt !== 1
-    )
-      throw new Error('invalid recovery build run');
-    sha = run.head_sha;
-    await mergedRelease(github, sha);
-    const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
-      ...repo,
-      run_id: runID,
-      per_page: 100,
-    });
-    const found = artifacts.filter(
-      (artifact) => artifact.name === 'sdk-candidate' && !artifact.expired,
-    );
-    if (found.length !== 1)
-      throw new Error('candidate artifact missing or expired; no rebuild is permitted');
-    artifactID = found[0].id;
+  const event = json(process.env.GITHUB_EVENT_PATH);
+  let number;
+  if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+    number = Number(event.inputs.pull_request);
+    if (!Number.isSafeInteger(number) || number < 1)
+      throw new Error('merged release PR number required');
   } else {
     const prs = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
       ...repo,
-      commit_sha: sha,
+      commit_sha: process.env.GITHUB_SHA,
       per_page: 100,
     });
-    if (!prs.some((pr) => isReleasePR(pr) && pr.merge_commit_sha === sha && pr.merged_at)) {
-      return output('selected', 'false');
-    }
-    await mergedRelease(github, sha);
+    const matches = prs.filter(
+      (pr) => isReleasePR(pr) && pr.merged_at && pr.merge_commit_sha === process.env.GITHUB_SHA,
+    );
+    if (matches.length === 0) return output('selected', 'false');
+    if (matches.length !== 1) throw new Error('ambiguous release merge');
+    number = matches[0].number;
   }
+  const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: number });
+  requireReviewedRelease(
+    pr,
+    process.env.GITHUB_EVENT_NAME === 'push' ? process.env.GITHUB_SHA : pr.merge_commit_sha,
+  );
+  const { data: runs } = await github.rest.actions.listWorkflowRuns({
+    ...repo,
+    workflow_id: 'production-compatibility.yml',
+    event: 'pull_request',
+    head_sha: pr.head.sha,
+    per_page: 1,
+  });
+  const runID = latestValidationRun(runs.workflow_runs);
   output('selected', 'true');
-  output('source_sha', sha);
-  output('mode', mode);
-  output('candidate_run_id', runID);
-  output('candidate_artifact_id', artifactID);
+  output('pull_request', number);
+  output('merge_sha', pr.merge_commit_sha);
+  output('compatibility_run_id', runID);
 }
 
 function manifest() {
-  const packageInfo = json('package.json');
-  if (packageInfo.version !== json('.release-please-manifest.json')['.'])
+  const info = json('package.json');
+  if (info.version !== json('.release-please-manifest.json')['.'])
     throw new Error('Release Please version mismatch');
   save('package/candidate.json', {
-    schema: 1,
+    schema: 2,
     repository: 'Kong/volcano-sdk-js',
     source_sha: process.env.SOURCE_SHA,
+    source_tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
+    pull_request: Number(process.env.RELEASE_PR),
     run_id: Number(process.env.GITHUB_RUN_ID),
-    run_attempt: 1,
-    version: packageInfo.version,
+    run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+    version: info.version,
     filename: 'sdk.tgz',
     sha256: createHash('sha256').update(readFileSync('package/sdk.tgz')).digest('hex'),
-    backend: json('backend-requirements.json'),
   });
 }
 
-async function validateSource(github, candidate, mode) {
-  if (mode === 'release') return mergedRelease(github, candidate.source_sha);
-  const event = json(process.env.GITHUB_EVENT_PATH);
-  const { data: pr } = await github.rest.pulls.get({
-    ...repo,
-    pull_number: event.pull_request.number,
-  });
-  if (!isReleasePR(pr) || pr.state !== 'open' || pr.head.sha !== candidate.source_sha) {
-    throw new Error('release PR changed; old acceptance cannot approve its new head');
-  }
-  return pr;
-}
-
-async function dispatchAndWait() {
-  const client = await hostingGitHub('write');
+function attest() {
   const candidate = readCandidate('package');
-  if (candidate.run_id !== Number(process.env.CANDIDATE_RUN))
-    throw new Error('candidate does not match the selected build run');
-  await validateSource(sdkGitHub(), candidate, process.env.RELEASE_MODE);
-  await dispatchValidation(
-    client,
-    process.env.CANDIDATE_RUN,
-    process.env.CANDIDATE_ARTIFACT,
-    (runID) => {
-      output('hosting_run_id', runID);
-      save('hosting-run.json', {
-        run_id: runID,
-        candidate_artifact_id: process.env.CANDIDATE_ARTIFACT,
-      });
-    },
-  );
+  const proof = json('acceptance/evidence.json');
+  const suite = json('.github/release-tools/hosting-tests.json');
+  const checkout = execFileSync('git', ['-C', 'hosting', 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  if (
+    candidate.source_sha !== process.env.SOURCE_SHA ||
+    candidate.run_id !== Number(process.env.CANDIDATE_RUN_ID) ||
+    proof.sdk?.sha256 !== candidate.sha256 ||
+    proof.sdk?.version !== candidate.version ||
+    suite.repository !== 'Kong/volcano-hosting' ||
+    proof.suite_sha !== suite.sha ||
+    checkout !== suite.sha ||
+    proof.target !== 'https://api.volcano.dev' ||
+    proof.acceptance !== 'success' ||
+    proof.cleanup !== 'success'
+  )
+    throw new Error('Hosting acceptance evidence does not match the selected candidate');
+  save('acceptance/evidence.json', {
+    ...proof,
+    package: candidate,
+    candidate_artifact_id: process.env.CANDIDATE_ARTIFACT_ID,
+    run_id: Number(process.env.GITHUB_RUN_ID),
+    run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+  });
 }
 
 async function evidence() {
-  const github = await hostingGitHub();
-  const candidate = readCandidate('package');
-  const runID = Number(process.env.HOSTING_RUN_ID);
-  const [{ data: run }, jobs] = await Promise.all([
-    github.rest.actions.getWorkflowRun({ ...hosting, run_id: runID }),
+  const github = sdkGitHub();
+  const proof = json('acceptance/evidence.json');
+  const [{ data: run }, { data: pr }, jobs, { data: runs }] = await Promise.all([
+    github.rest.actions.getWorkflowRun({ ...repo, run_id: process.env.COMPATIBILITY_RUN_ID }),
+    github.rest.pulls.get({ ...repo, pull_number: Number(process.env.RELEASE_PR) }),
     github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
-      ...hosting,
-      run_id: runID,
-      attempt_number: 1,
+      ...repo,
+      run_id: process.env.COMPATIBILITY_RUN_ID,
+      attempt_number: proof.run_attempt,
       per_page: 100,
     }),
+    github.rest.actions.listWorkflowRuns({
+      ...repo,
+      workflow_id: 'production-compatibility.yml',
+      event: 'pull_request',
+      head_sha: proof.package.source_sha,
+      per_page: 1,
+    }),
   ]);
-  validateEvidence(
-    json('acceptance/evidence.json'),
-    candidate,
-    process.env.CANDIDATE_ARTIFACT,
-    run,
-    jobs,
-  );
-  const { data: recent } = await github.rest.actions.listWorkflowRuns({
-    ...hosting,
-    workflow_id: 'staging-pipeline.yml',
-    branch: 'main',
-    per_page: 1,
+  if (latestValidationRun(runs.workflow_runs) !== run.id)
+    throw new Error('a newer compatibility run superseded the selected evidence');
+  validateEvidence(proof, run, jobs, json('.github/release-tools/hosting-tests.json').sha);
+  requireReviewedRelease(pr, process.env.MERGE_SHA);
+  const { data: merge } = await github.rest.git.getCommit({
+    ...repo,
+    commit_sha: pr.merge_commit_sha,
   });
-  requireCurrentValidation(run, recent.workflow_runs[0]);
-  for (const file of ['report.json', 'selection.json', 'staging-before.json', 'staging-after.json'])
-    json(path.join('acceptance', file));
-  await validateSource(sdkGitHub(), candidate, process.env.RELEASE_MODE);
+  validateMergedCandidate(pr, proof.package, merge.tree.sha);
+  const { data: artifact } = await github.rest.actions.getArtifact({
+    ...repo,
+    artifact_id: proof.candidate_artifact_id,
+  });
+  if (
+    artifact.expired ||
+    artifact.name !== 'sdk-candidate' ||
+    artifact.workflow_run?.id !== proof.package.run_id ||
+    artifact.workflow_run?.head_sha !== proof.package.source_sha
+  )
+    throw new Error('tested candidate artifact missing or changed');
+  if (process.argv[2] === 'candidate') {
+    output('candidate_artifact_id', proof.candidate_artifact_id);
+    output('candidate_run_id', proof.package.run_id);
+  } else if (JSON.stringify(readCandidate('package')) !== JSON.stringify(proof.package)) {
+    throw new Error('publication package differs from compatibility evidence');
+  }
 }
-
-async function readiness() {
-  const candidate = readCandidate('package');
-  await validateSource(sdkGitHub(), candidate, process.env.RELEASE_MODE);
-  save('production-readiness.json', await checkReadiness(await hostingGitHub(), candidate.backend));
-}
-
 async function release() {
   const github = sdkGitHub();
   const candidate = readCandidate('package');
-  const pr = await validateSource(github, candidate, 'release');
+  const { data: pr } = await github.rest.pulls.get({
+    ...repo,
+    pull_number: Number(process.env.RELEASE_PR),
+  });
+  requireReviewedRelease(pr, process.env.MERGE_SHA);
   const tag = `v${candidate.version}`;
   try {
     const { data: ref } = await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
-    if (ref.object.type !== 'commit' || ref.object.sha !== candidate.source_sha)
+    if (ref.object.type !== 'commit' || ref.object.sha !== pr.merge_commit_sha)
       throw new Error('existing tag source mismatch');
   } catch (error) {
     if (error.status !== 404) throw error;
@@ -196,13 +175,13 @@ async function release() {
   }
   if (existing) {
     const { data: ref } = await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
-    if (ref.object.sha !== candidate.source_sha || existing.draft || existing.prerelease)
+    if (ref.object.sha !== pr.merge_commit_sha || existing.draft || existing.prerelease)
       throw new Error('existing release identity mismatch');
   } else {
     await github.rest.repos.createRelease({
       ...repo,
       tag_name: tag,
-      target_commitish: candidate.source_sha,
+      target_commitish: pr.merge_commit_sha,
       name: tag,
       body: `${pr.body}\n\n[View ${tag} on npm](https://www.npmjs.com/package/@volcano.dev/sdk/v/${candidate.version})`,
       draft: false,
@@ -229,7 +208,7 @@ async function release() {
   });
 }
 
-const commands = { select, manifest, wait: dispatchAndWait, evidence, readiness, release };
+const commands = { select, manifest, attest, candidate: evidence, evidence, release };
 const command = commands[process.argv[2]];
 if (!command) throw new Error('unknown SDK release command');
 await command();

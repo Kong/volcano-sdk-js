@@ -34,7 +34,7 @@
       }
     },
     ".github/release-tools": {
-      "entry": ["release.mjs", "publish.mjs", "*.test.mjs"],
+      "entry": ["release.mjs", "publish.mjs", "compatibility.mjs", "*.test.mjs"],
       "project": ["*.mjs"]
     }
   }

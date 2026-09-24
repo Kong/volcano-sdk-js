@@ -5,8 +5,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { readCandidate } from './evidence.mjs';
-import { hostingGitHub } from './github.mjs';
-import { checkReadiness } from './readiness.mjs';
 
 const candidate = readCandidate('package');
 const npm = (args, options = {}) => execFileSync('npm', args, { encoding: 'utf8', ...options });
@@ -77,8 +75,6 @@ if (process.argv[2] === 'smoke') {
     if (!String(error.stderr).includes('E404')) throw error;
   }
   if (exists) checkRegistryBytes(mkdtempSync(path.join(tmpdir(), 'sdk-recovery-')));
-  // This is the final external read before npm. A later deployment is outside this snapshot's scope.
-  await checkReadiness(await hostingGitHub(), candidate.backend);
   readCandidate('package');
   if (!exists)
     npm(

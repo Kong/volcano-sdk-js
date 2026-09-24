@@ -13,7 +13,7 @@ export function requireReviewedRelease(pr, sha) {
     !pr.merged_at ||
     pr.merge_commit_sha !== sha ||
     !pr.merged_by ||
-    pr.merged_by.type === 'Bot' ||
+    pr.merged_by.type !== 'User' ||
     pr.auto_merge
   ) {
     throw new Error('a maintainer must deliberately merge this exact release PR source');

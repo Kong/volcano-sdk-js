@@ -66,7 +66,7 @@ test('Release Please preserves two release boundaries while a merged candidate i
     ...commits,
   ];
   assert.deepEqual(await (await manifest()).createPullRequests(), []);
-  // The SDK publisher creates this exact version/tag only after acceptance and readiness.
+  // The SDK publisher creates this exact version/tag only after production compatibility and a manual merge.
   releases = [{ tagName: 'v1.16.0', sha: firstMerge, notes: first.body.toString() }, ...releases];
   pending = [];
   const [second] = await (await manifest()).buildPullRequests();

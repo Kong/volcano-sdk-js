@@ -1,59 +1,52 @@
 # Release evidence and recovery
 
-The checked-in release and publish workflows own versioning and publication.
-This checklist does not authorize a release, a registry mutation or an environment approval.
-
 ## Reviewed release flow
 
-Release Please maintains the version/changelog PR; maintainers merge it deliberately.
-Ordinary changes can accumulate. Client-only fixes use the same release path.
-Update `backend-requirements.json` when any accumulated SDK change needs newer
-Hosting behavior. Its release and source SHA must identify an actually completed
-production deployment; a hotfix label cannot waive that requirement.
+Release Please maintains the version/changelog PR. Its **Production compatibility**
+check runs native checks, builds one candidate tarball and installs it in a fresh
+test directory. The workflow reads Hosting's `tests/sdk-contract` using the existing
+Kong app's Contents read credentials and a pinned commit, then runs those tests
+against `https://api.volcano.dev`. Missing results, unexpected skips and cleanup
+failures block the check.
 
-The current PR head runs native checks and Hosting-owned staging acceptance using
-an installed candidate tarball. A head update invalidates that evidence. After
-merge, `publish.yml` builds the final package once and runs full Hosting Staging
-Validation for those exact bytes. It then requires declared production readiness,
-rechecks it immediately before npm publication, creates the stable GitHub release,
-and checks registry installation in a job without publishing credentials.
+A maintainer manually merges the PR. `publish.yml` verifies the latest successful
+check, exact package hash and merged Git tree, then publishes the same tarball
+through npm trusted publishing. It creates the stable GitHub release/tag and runs
+a registry install smoke without publication credentials. Nothing builds after merge.
+Pending merged releases hold the next Release Please version until publication.
 
-This is staging acceptance plus declared production readiness, not direct testing
-against production. The latest production attempt must be successful and preserve
-the declared required source. A later failed, cancelled, or unfinished rollout
-blocks release. The deployment records do not attest current out-of-band settings
-or flags, and the final read does not lock out a rollout starting afterward.
+Compatibility is checked at test time. Rerun the check before merging if production
+changed. There are no cross-repository workflow calls, deployment callbacks or
+published acceptance-runner package. The Hosting source pin is in the compatibility
+workflow and `.github/release-tools/hosting-tests.json`; update both together.
 
-The original candidate artifact contains its source SHA, build run, version,
-backend declaration and SHA-256. Recovery uses `workflow_dispatch` with that
-original merged build run ID, repeats full Hosting validation, and reuses its
-files. Recovery runs tooling from the dispatch workflow revision on main; it never checks out the old candidate as executable tooling. No recovery rebuild occurs. A newer staging batch (including a queued batch)
-invalidates old evidence conservatively and requires another full validation. Expired/missing artifacts fail closed. If npm
-already contains the version, its tarball must match byte-for-byte.
+## Setup
 
-Pending merged Release Please PRs remain `autorelease: pending` until publication;
-new release PRs wait. After publication the SDK sets `autorelease: tagged`, creates
-the tag at the tested merge SHA and refreshes Release Please. The pinned Release
-Please library is exercised through two version/changelog cycles in release-tool
-tests, including an intervening held candidate. No SDK version allocator is added.
+- Make existing `KONG_GH_APP_ID` / `KONG_GH_APP_PRIVATE_KEY` available to this
+  repository. The job requests only Hosting Contents read. Release Please continues
+  using `VOLCANO_APP_ID` / `VOLCANO_APP_KEY`.
+- Deploy Hosting's fixture role and dedicated production test account credential.
+  Fixture creation and recovery use public APIs; SDK subprocesses receive only
+  scoped project credentials. Cleanup must pass before evidence is recorded.
+- Create `sdk-production-compatibility` with no reviewers or wait timer and allow
+  PR merge refs plus `main`. Keep `npm-production` restricted to `main` and npm's
+  trusted publisher bound to `publish.yml` and that environment.
+- Require **Production compatibility**, native checks and an up-to-date PR branch.
+  Disable release PR auto-merge. Manual merge is the release approval.
+- Run live acceptance and reconcile coverage before enabling publication. These
+  draft changes have not deployed infrastructure or performed that live proof.
 
-Before enabling the pilot, configure Hosting's dedicated staging fixture account,
-deploy the reviewed read-only production evidence role and staging fixture role,
-and verify GitHub App grants in both repositories. The SDK app needs Hosting
-Actions write and Contents read. Hosting needs SDK Actions/Contents/Pull requests
-read. Keep npm trusted publishing on this repository's `publish.yml` and
-`npm-production`; restrict that environment to main. Restrict the new
-`sdk-release-validation` environment to main and the exact Release Please branch.
-Require `SDK Release Gate` and native quality checks
-on release PRs. Confirm the real OIDC subjects before enabling the IAM trust.
+## Retry publication
 
-The workflow supports main releases. If a fix must exclude unreleased features,
-prepare a maintenance branch and review its release workflow/environment trust;
-do not introduce a bypass. Native checks and the legacy contract/live runners
-remain while Hosting validates migration coverage. Python/Ruby are a later pilot.
+Rerun the original PR compatibility workflow to refresh evidence; it reuses the
+candidate artifact. Dispatch **Publish SDK** with the merged PR number. Recovery
+uses tooling from main and never rebuilds an approved package. Missing/expired
+artifacts fail closed and require release-owner resolution. An existing npm version
+must match the tested tarball byte-for-byte. The registry smoke can be rerun alone.
 
-See Hosting's `docs/internal/guides/sdk-release-gate.md` for the rollout checklist,
-credential ownership, fixture recovery, coverage limits and unexecuted live proof.
+Native checks and legacy SDK contract/live runners remain until migration coverage
+is verified. Python/Ruby are outside this JavaScript pilot; CLI remains unchanged.
+See Hosting's `docs/internal/guides/sdk-release-gate.md` for account setup and recovery.
 
 ## Recover from a bad release
 
