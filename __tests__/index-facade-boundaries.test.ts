@@ -1,13 +1,12 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import type { RequestResult } from '../src/auth-request.ts';
-import { AuthRefreshDiscardedError } from '../src/errors.ts';
 import {
   clearSharedFunctionResolveStateForTests,
   functionResolveCacheKey,
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
-import { loadRealtime, VolcanoAuth } from '../src/index.ts';
+import { AuthRefreshDiscardedError, loadRealtime, VolcanoAuth } from '../src/index.ts';
 import type { User } from '../src/sdk-public-types.ts';
 import { deferred, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
