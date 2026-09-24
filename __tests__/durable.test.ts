@@ -120,6 +120,7 @@ const takeStagedBatch = (): EngineBatch<unknown> | null => {
 };
 
 const lastContext: { value?: RecordingContext } = {};
+let mockContextTransform: ((context: RecordingContext) => unknown) | undefined;
 
 const fakeContext = (): RecordingContext => {
   const context: RecordingContext = {
@@ -194,8 +195,10 @@ jest.mock(
   () => ({
     withDurableExecution:
       (handler: (input: unknown, context: unknown) => Promise<unknown>) =>
-      (event: { input: unknown }) =>
-        handler(event.input, fakeContext()),
+      (event: { input: unknown }) => {
+        const context = fakeContext();
+        return handler(event.input, mockContextTransform?.(context) ?? context);
+      },
     StepSemantics: fakeStepSemantics,
     createRetryStrategy(config: Record<string, unknown>) {
       engineCalls.push({
@@ -276,9 +279,30 @@ const shipped = (batch: EngineBatch<unknown>) => {
 beforeEach(() => {
   engineCalls.length = 0;
   stagedBatch = null;
+  mockContextTransform = undefined;
 });
 
 describe('durable()', () => {
+  it('rejects an engine logger missing a required method', async () => {
+    mockContextTransform = (context) => {
+      Reflect.deleteProperty(context.logger, 'warn');
+      return context;
+    };
+    await expect(run(() => Promise.resolve('unused'))).rejects.toThrow(
+      'The durable runtime did not provide a durable context',
+    );
+  });
+
+  it('rejects an engine context missing a required method', async () => {
+    mockContextTransform = (context) => {
+      Reflect.deleteProperty(context, 'waitForCondition');
+      return context;
+    };
+    await expect(run(() => Promise.resolve('unused'))).rejects.toThrow(
+      'The durable runtime did not provide a durable context',
+    );
+  });
+
   it('calls the handler with the execution input and a durable context', async () => {
     const result = await run(
       (input, ctx) => {
@@ -397,6 +421,21 @@ describe('ctx.step', () => {
 
     expect(configOf('step')).toEqual({});
   });
+
+  it.each(['invalid', Object.assign(['invalid'], { retry: false }), null])(
+    'ignores malformed step options: %p',
+    async (options) => {
+      await run((_input, ctx) => {
+        const result: unknown = Reflect.apply(ctx.step.bind(ctx), undefined, [
+          'charge',
+          () => Promise.resolve('ok'),
+          options,
+        ]);
+        return Promise.resolve(result);
+      });
+      expect(configOf('step')).toStrictEqual({});
+    },
+  );
 
   it('refuses a step with nothing to run', async () => {
     await expect(
