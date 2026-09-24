@@ -16,6 +16,21 @@ const require = createRequire(import.meta.url);
 const coverageConfig = require('../jest.typed.config.cjs');
 const manifest = require('../package.json');
 const nextRules = require('@next/eslint-plugin-next').flatConfig.coreWebVitals.rules;
+const approvedComments = new Map([
+  [
+    'src/sdk-public-types.ts',
+    new Set([
+      '// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve published caller-specified payload and result types.',
+      '// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve the published caller-specified input type.',
+    ]),
+  ],
+  [
+    'src/volcano-fetch.ts',
+    new Set([
+      '// eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.',
+    ]),
+  ],
+]);
 const requiredQualityCommands = [
   'pnpm run audit',
   'pnpm lint',
@@ -111,11 +126,7 @@ function requireUnsuppressed(path, source) {
 }
 
 function requireAllowedComment(path, comment) {
-  if (
-    path === 'src/volcano-fetch.ts' &&
-    comment ===
-      '// eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.'
-  ) {
+  if (approvedComments.get(path)?.has(comment) === true) {
     return;
   }
   const forbidden =
