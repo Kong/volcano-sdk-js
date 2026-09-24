@@ -16,6 +16,20 @@ const require = createRequire(import.meta.url);
 const coverageConfig = require('../jest.typed.config.cjs');
 const manifest = require('../package.json');
 const nextRules = require('@next/eslint-plugin-next').flatConfig.coreWebVitals.rules;
+const requiredQualityCommands = [
+  'pnpm run audit',
+  'pnpm lint',
+  'pnpm check:unused',
+  'pnpm check:openapi',
+  'pnpm test:types',
+  'pnpm test:tooling',
+  'node scripts/prepare-test-reports.mjs',
+  'pnpm test --ci --json --outputFile=reports/unit.json',
+  'pnpm test:typed-runtime',
+  'pnpm test:contract --listTests',
+  'pnpm test:quickstart',
+  'pnpm test:examples',
+];
 
 function trackedFiles() {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
@@ -77,6 +91,10 @@ function requireFullCoverage(config) {
     '!src/**/*.d.ts',
     '!src/generated/**',
   ]);
+}
+
+function requireQualityCommands(commands) {
+  assert.deepEqual(commands.split(' && '), requiredQualityCommands);
 }
 
 function requireUnsuppressed(path, source) {
@@ -181,7 +199,7 @@ test('tracked SDK code remains in native lint, type, test, and coverage gates', 
     assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
   }
   requireFullCoverage(coverageConfig);
-  assert.match(manifest.scripts['quality:checks'], /pnpm test:examples/);
+  requireQualityCommands(manifest.scripts['quality:checks']);
   assert.equal(manifest.scripts['format:check'], 'prettier . --config prettier.config.cjs --check');
   const discovered = new Set(
     ['jest.config.js', 'jest.integration.config.cjs', 'jest.contract.config.cjs'].flatMap(
@@ -215,6 +233,11 @@ test('tracked SDK code remains in native lint, type, test, and coverage gates', 
 test('lowered coverage and suppression comments fail policy validation', () => {
   assert.throws(() =>
     requireFullCoverage({ ...coverageConfig, coverageThreshold: { global: { branches: 99 } } }),
+  );
+  assert.throws(() =>
+    requireQualityCommands(
+      requiredQualityCommands.filter((item) => item !== 'pnpm test:typed-runtime').join(' && '),
+    ),
   );
   assert.throws(() => requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity'));
   assert.throws(() =>
