@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.js';
+import { requestOptions, sandboxResult } from '../src/sandbox-request.ts';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
@@ -177,4 +178,208 @@ test('rejects invalid selectors before issuing a request', async () => {
   const result = await client().sandboxes.create(projectId, { region: 'aws-us-east-1' });
   expect(result.error).toBeInstanceOf(TypeError);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('lists preset sizes and regions', async () => {
+  globalThis.fetch = jest
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      Response.json({ data: [{ id: 'node22', memory_mb: 1024, regions: ['aws-us-east-1'] }] }),
+    );
+  const observed1 = await client().sandboxes.presets();
+  expect(observed1).toEqual({
+    data: [{ id: 'node22', memoryMB: 1024, regions: ['aws-us-east-1'] }],
+    error: null,
+  });
+});
+
+test.each([
+  null,
+  { data: null },
+  { data: [{ regions: null }] },
+  { data: [{ id: 2, memory_mb: 1024, regions: [] }] },
+  { data: [{ id: 'node22', memory_mb: '1024', regions: [] }] },
+])('rejects malformed preset responses: %j', async (value) => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(value));
+  const observed2 = await client().sandboxes.presets();
+  expect(observed2.error).toBeInstanceOf(TypeError);
+});
+
+test('selects a template and forwards command limits and cancellation', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(snapshot));
+  globalThis.fetch = fetchMock;
+  const signal = new AbortController().signal;
+  const result = await client().sandboxes.create(projectId, {
+    sandboxId: requestId,
+    region: 'aws-us-east-1',
+    memoryMB: 2048,
+    signal,
+  });
+  expect(result.error).toBeNull();
+  expect(bodyJson(fetchMock.mock.calls[0])).toEqual({
+    sandbox_id: requestId,
+    region: 'aws-us-east-1',
+    memory_mb: 2048,
+  });
+  expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+  if (result.data === null) {
+    throw result.error;
+  }
+  fetchMock.mockResolvedValue(
+    Response.json({
+      stdout: 'ok',
+      stderr: '',
+      exit_code: 0,
+      timed_out: false,
+      stdout_truncated: true,
+      stderr_truncated: true,
+    }),
+  );
+  const observed3 = await result.data.exec('echo ok', {
+    timeoutSeconds: 5,
+    environment: { A: 'b' },
+  });
+  expect(observed3.data).toEqual({
+    stdout: 'ok',
+    stderr: '',
+    exitCode: 0,
+    timedOut: false,
+    stdoutTruncated: true,
+    stderrTruncated: true,
+  });
+  expect(bodyJson(fetchMock.mock.calls[1])).toEqual({
+    command: 'echo ok',
+    timeout_seconds: 5,
+    environment: { A: 'b' },
+  });
+});
+
+test('refreshes and resumes sessions and refuses changed identity', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(snapshot));
+  globalThis.fetch = fetchMock;
+  const result = await client().sandboxes.get(sessionId);
+  if (result.data === null) {
+    throw result.error;
+  }
+  fetchMock.mockResolvedValueOnce(Response.json({ ...snapshot, state: 'suspended' }));
+  const observed4 = await result.data.refresh();
+  expect(observed4.data).toMatchObject({ state: 'suspended' });
+  fetchMock.mockResolvedValueOnce(Response.json(snapshot));
+  const observed5 = await result.data.resume();
+  expect(observed5.data).toMatchObject({ state: 'running' });
+  expect(fetchMock.mock.calls[2]?.[0]).toBe(
+    `https://api.test.com/sandbox-sessions/${sessionId}/resume`,
+  );
+  fetchMock.mockResolvedValueOnce(Response.json({ ...snapshot, id: requestId }));
+  const observed6 = await result.data.refresh();
+  expect(observed6.error?.message).toBe('Sandbox session identity changed');
+});
+
+test('grants and revokes access for one auth user', async () => {
+  const fetchMock = jest
+    .fn<typeof fetch>()
+    .mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+  globalThis.fetch = fetchMock;
+  const api = client().sandboxes;
+  const observed7 = await api.grant(sessionId, requestId, snapshot.expires_at);
+  expect(observed7.error).toBeNull();
+  expect(bodyJson(fetchMock.mock.calls[0])).toEqual({ expires_at: snapshot.expires_at });
+  const observed8 = await api.revoke(sessionId, requestId);
+  expect(observed8.error).toBeNull();
+  expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('DELETE');
+  expect(fetchMock.mock.calls[1]?.[0]).toContain(requestId);
+});
+
+test('rejects invalid IDs before sending credentials', async () => {
+  const fetchMock = jest.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
+  const observed9 = await client().sandboxes.get('../other');
+  expect(observed9.error).toBeInstanceOf(TypeError);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test.each(['future-state', null])('rejects invalid session state %j', async (state) => {
+  globalThis.fetch = jest
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ ...snapshot, state }));
+  const observed10 = await client().sandboxes.get(sessionId);
+  expect(observed10.error).toBeInstanceOf(TypeError);
+});
+
+test('disposal of terminated sessions makes no request', async () => {
+  const fetchMock = jest
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ ...snapshot, state: 'terminated' }));
+  globalThis.fetch = fetchMock;
+  const result = await client().sandboxes.get(sessionId);
+  if (result.data === null) {
+    throw result.error;
+  }
+  await result.data[Symbol.asyncDispose]();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('disposal propagates failures and large file writes fail locally', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(snapshot));
+  globalThis.fetch = fetchMock;
+  const result = await client().sandboxes.get(sessionId);
+  if (result.data === null) {
+    throw result.error;
+  }
+  const observed11 = await result.data.files.write(
+    '/workspace/large',
+    new Uint8Array(8 * 1024 * 1024 + 1),
+  );
+  expect(observed11.error).toBeInstanceOf(RangeError);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fetchMock.mockResolvedValue(Response.json({ error: 'unavailable' }, { status: 503 }));
+  await expect(result.data[Symbol.asyncDispose]()).rejects.toMatchObject({ status: 503 });
+});
+
+test('rejects malformed command flags', async () => {
+  globalThis.fetch = jest
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ stdout: '', stderr: '', exit_code: 0, timed_out: 'false' }));
+  const observed12 = await client().sandboxes.exec(projectId, 'true', {
+    preset: 'node22',
+    region: 'aws-us-east-1',
+  });
+  expect(observed12.error).toBeInstanceOf(TypeError);
+});
+
+test('normalizes non-Error failures without exposing arbitrary values', async () => {
+  const observed13 = await sandboxResult(
+    jest.fn<() => Promise<void>>().mockRejectedValue('secret'),
+  );
+  expect(observed13).toEqual({ data: null, error: new Error('Sandbox request failed') });
+});
+test('default request options contain no mutation headers', () => {
+  const generated = jest
+    .fn<(mode: 'session', headers?: Record<string, string>) => object>()
+    .mockReturnValue({});
+  requestOptions({ _completeOAuthExchange: () => Promise.resolve(), _generatedOptions: generated });
+  expect(generated).toHaveBeenCalledWith('session', {});
+});
+test('session commands use default execution options', async () => {
+  const fetchMock = jest
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json(snapshot))
+    .mockResolvedValueOnce(
+      Response.json({
+        stdout: '',
+        stderr: '',
+        exit_code: 0,
+        timed_out: false,
+        stdout_truncated: false,
+        stderr_truncated: false,
+      }),
+    );
+  globalThis.fetch = fetchMock;
+  const result = await client().sandboxes.get(sessionId);
+  if (result.data === null) {
+    throw result.error;
+  }
+  const observed14 = await result.data.exec('true');
+  expect(observed14.error).toBeNull();
+  expect(bodyJson(fetchMock.mock.calls[1])).toEqual({ command: 'true' });
 });

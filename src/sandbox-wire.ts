@@ -107,9 +107,8 @@ export function presetsResult(value: unknown): SandboxPreset[] {
   });
 }
 export function decodeBytes(value: unknown): Uint8Array {
-  return Uint8Array.from(
-    atob(text(record(value)['data'])),
-    (character) => character.codePointAt(0) ?? 0,
+  return Uint8Array.from(atob(text(record(value)['data'])), (character) =>
+    Number(character.codePointAt(0)),
   );
 }
 export function encodeBytes(data: Uint8Array): string {
