@@ -103,7 +103,7 @@ module.exports = [
     },
     settings: {
       'import-x/resolver-next': [
-        createTypeScriptImportResolver({ project: './tsconfig.json' }),
+        createTypeScriptImportResolver({ project: './tsconfig.eslint.json' }),
         importPlugin.createNodeResolver({ extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'] }),
       ],
     },

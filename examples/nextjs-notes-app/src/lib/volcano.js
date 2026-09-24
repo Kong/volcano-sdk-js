@@ -27,16 +27,16 @@ import getConfig from 'next/config';
  */
 function getVolcanoConfig() {
   // Try runtime config first (supports command-line env vars)
-  const {
-    volcanoApiUrl,
-    volcanoAnonKey,
-    volcanoDatabaseName,
-  } = getConfig()?.publicRuntimeConfig ?? {};
+  const { volcanoApiUrl, volcanoAnonKey, volcanoDatabaseName } =
+    getConfig()?.publicRuntimeConfig ?? {};
 
   return {
     apiUrl: configuredValue(volcanoApiUrl, process.env.NEXT_PUBLIC_VOLCANO_API_URL),
     anonKey: configuredValue(volcanoAnonKey, process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY),
-    databaseName: configuredValue(volcanoDatabaseName, process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME),
+    databaseName: configuredValue(
+      volcanoDatabaseName,
+      process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME,
+    ),
   };
 }
 

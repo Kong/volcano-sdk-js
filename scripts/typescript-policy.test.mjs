@@ -6,11 +6,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
+import ts from 'typescript';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const eslint = join(root, 'node_modules/eslint/bin/eslint.js');
+const jest = join(root, 'node_modules/jest/bin/jest.js');
 const require = createRequire(import.meta.url);
 const coverageConfig = require('../jest.typed.config.cjs');
+const manifest = require('../package.json');
 
 function trackedFiles() {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
@@ -29,46 +32,160 @@ function handwrittenSource(files) {
   );
 }
 
+function maintainedCode(files) {
+  return files.filter(
+    (path) =>
+      /\.(?:[cm]?js|ts)$/.test(path) &&
+      !path.startsWith('src/generated/') &&
+      !path.startsWith('src/generated-runtime/'),
+  );
+}
+
+function typecheckedFiles(configPath) {
+  const path = join(root, configPath);
+  const config = ts.readConfigFile(path, ts.sys.readFile);
+  assert.equal(config.error, undefined, `${configPath} is invalid`);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, path);
+  assert.deepEqual(parsed.errors, [], `${configPath} has configuration errors`);
+  return new Set(parsed.fileNames);
+}
+
+function discoveredTests(configPath) {
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      [jest, '--listTests', '--json', '--runInBand', '--config', configPath],
+      {
+        cwd: root,
+        encoding: 'utf8',
+      },
+    ),
+  );
+}
+
+function requireFullCoverage(config) {
+  assert.deepEqual(config.coverageThreshold.global, {
+    branches: 100,
+    functions: 100,
+    lines: 100,
+    statements: 100,
+  });
+  assert.deepEqual(config.collectCoverageFrom, [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/generated/**',
+  ]);
+}
+
+function requireUnsuppressed(path, source) {
+  assert.equal(
+    source
+      .split('\n')
+      .some(
+        (line) =>
+          /^\s*(?:\/\/|\/\*|\*)/.test(line) &&
+          /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|@ts-expect-error|istanbul ignore|c8 ignore|nyc ignore/.test(
+            line,
+          ),
+      ),
+    false,
+    `${path} suppresses a quality check`,
+  );
+}
+
+async function requireLinted(checker, path) {
+  const absolute = join(root, path);
+  assert.equal(await checker.isPathIgnored(absolute), false, `${path} is ignored by ESLint`);
+  const config = await checker.calculateConfigForFile(absolute);
+  assert.ok(config, `${path} has no ESLint configuration`);
+  if (!path.endsWith('.d.ts')) {
+    assert.deepEqual(config.rules.complexity, [2, 5], `${path} weakens complexity`);
+  }
+}
+
+function requireNoNestedConfigs(files) {
+  const names = [
+    '.eslintrc',
+    'eslint.config.',
+    '.prettierrc',
+    'prettier.config.',
+    'jest.',
+    'tsconfig.',
+  ];
+  assert.deepEqual(
+    files.filter(
+      (path) =>
+        path.includes('/') && names.some((name) => path.split('/').at(-1)?.startsWith(name)),
+    ),
+    [],
+  );
+}
+
 test('tracked SDK code remains in native lint, type, test, and coverage gates', async () => {
   const files = trackedFiles();
   const runtime = handwrittenSource(files);
   const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
   assert.ok(runtime.length > 0);
   assert.ok(tests.some((path) => path.endsWith('.test.ts')));
-  const tsconfig = JSON.parse(await readFile(join(root, 'tsconfig.json'), 'utf8'));
-  assert.deepEqual(tsconfig.include, ['src/**/*.ts', '__tests__/**/*.ts']);
-  assert.deepEqual(tsconfig.exclude, ['src/generated', 'src/generated-runtime']);
-  assert.deepEqual(coverageConfig.collectCoverageFrom, [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/generated/**',
-  ]);
-  assert.deepEqual(coverageConfig.coverageThreshold.global, {
-    branches: 100,
-    functions: 100,
-    lines: 100,
-    statements: 100,
-  });
-  assert.deepEqual(coverageConfig.testMatch, ['**/__tests__/**/*.test.{js,ts}']);
+  const typechecked = typecheckedFiles('tsconfig.json');
+  for (const path of [
+    ...runtime,
+    ...tests,
+    ...files.filter((item) => item.startsWith('test/types/') && item.endsWith('.ts')),
+  ]) {
+    assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
+  }
+  requireFullCoverage(coverageConfig);
+  assert.match(manifest.scripts['quality:checks'], /pnpm test:examples/);
+  const discovered = new Set(
+    ['jest.config.js', 'jest.integration.config.cjs', 'jest.contract.config.cjs'].flatMap(
+      (config) => discoveredTests(config),
+    ),
+  );
+  for (const path of tests.filter((item) => item.endsWith('.test.ts'))) {
+    assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
+  }
   const checker = new ESLint();
-  for (const path of [...runtime, ...tests]) {
-    assert.equal(
-      await checker.isPathIgnored(join(root, path)),
-      false,
-      `${path} is ignored by ESLint`,
-    );
-    const source = await readFile(join(root, path), 'utf8');
-    assert.doesNotMatch(
-      source,
-      /eslint-(?:disable|enable)|@ts-(?:ignore|expect-error|nocheck)|(?:istanbul|c8|nyc) ignore/,
-      `${path} suppresses a quality check`,
-    );
+  for (const path of maintainedCode(files)) {
+    await requireLinted(checker, path);
+    if (!path.startsWith('test/types/')) {
+      requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
+    }
   }
   assert.deepEqual(
-    files.filter((path) =>
-      /^(?:src|__tests__)\/(?:.*\/)?(?:eslint\.config\.|\.eslintrc|tsconfig\.|jest\.)/.test(path),
+    files.filter(
+      (path) =>
+        path.startsWith('src/') &&
+        path.endsWith('.js') &&
+        !path.startsWith('src/generated-runtime/'),
     ),
-    [],
+    ['src/index.js'],
+  );
+  requireNoNestedConfigs(files);
+});
+
+test('lowered coverage and suppression comments fail policy validation', () => {
+  assert.throws(() =>
+    requireFullCoverage({ ...coverageConfig, coverageThreshold: { global: { branches: 99 } } }),
+  );
+  assert.throws(() => requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity'));
+  assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']));
+});
+
+test('excluded new code and weakened complexity fail policy validation', async () => {
+  await assert.rejects(
+    requireLinted({ isPathIgnored: async () => true }, 'src/new-module.ts'),
+    /ignored by ESLint/,
+  );
+  await assert.rejects(
+    requireLinted(
+      {
+        isPathIgnored: async () => false,
+        calculateConfigForFile: async () => ({ rules: { complexity: [2, 6] } }),
+      },
+      'src/new-module.ts',
+    ),
+    /weakens complexity/,
   );
 });
 

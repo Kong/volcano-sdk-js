@@ -10,8 +10,7 @@ const { VolcanoClient } = require('@volcano.dev/sdk');
 let client = null;
 
 function databaseSettings() {
-  const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY, VOLCANO_DATABASE } =
-    process.env;
+  const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY, VOLCANO_DATABASE } = process.env;
   if (!VOLCANO_API_URL || !VOLCANO_ANON_KEY || !VOLCANO_SERVICE_KEY) {
     throw new Error('set VOLCANO_API_URL, VOLCANO_ANON_KEY and VOLCANO_SERVICE_KEY');
   }

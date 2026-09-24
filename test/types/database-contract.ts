@@ -6,7 +6,9 @@ import {
   type QueryResult,
 } from '../../src/index.ts';
 
-interface ExistingOptions { userId?: string | null }
+interface ExistingOptions {
+  userId?: string | null;
+}
 type ExistingFunction = (base: string, options?: ExistingOptions) => string;
 
 declare const existingOptions: ExistingOptions;

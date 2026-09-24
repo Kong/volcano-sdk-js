@@ -1,4 +1,9 @@
-import { type BatchResult, durable,type DurableContext, type DurableStepScope } from '../../src/durable.js';
+import {
+  type BatchResult,
+  durable,
+  type DurableContext,
+  type DurableStepScope,
+} from '../../src/durable.js';
 
 interface OrderInput {
   order_id: number;

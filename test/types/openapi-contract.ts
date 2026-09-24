@@ -14,7 +14,12 @@ import {
   type UploadSessionStatusResponse,
   VolcanoSystemError,
 } from '../../src/index.ts';
-import type { PostgresChange, PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.ts';
+import type {
+  PostgresChange,
+  PresenceInfo,
+  PresenceState,
+  RealtimeChannel,
+} from '../../src/realtime.ts';
 
 type Assert<T extends true> = T;
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
@@ -47,7 +52,6 @@ async function adoptCurrentSession(): Promise<unknown> {
     user: session.user,
   });
 }
-
 
 type SignupBody = OpenAPIOperations['authSignup']['requestBody']['content']['application/json'];
 type SignupMetadata = NonNullable<SignupBody['user_metadata']>;
@@ -185,7 +189,6 @@ async function startDurableExecution(): Promise<unknown> {
   return handle;
 }
 
-
 // The owner-scoped half: reading, listing and stopping all answer the same
 // envelope, and a page carries the executions rather than a bare array.
 async function followDurableExecution(): Promise<unknown> {
@@ -199,7 +202,6 @@ async function followDurableExecution(): Promise<unknown> {
   const stopped = await durable.stop('proj-1', 'order-pipeline', 'exec-1');
   return { result, executions, more, status: stopped.status };
 }
-
 
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 interface LogSearchEventShape {
@@ -244,9 +246,7 @@ export type OpenApiContractChecks = [
 ];
 
 declare const refreshError: unknown;
-let refreshErrorFields:
-  | ['auth_refresh_discarded', 409, 'AuthRefreshDiscardedError']
-  | undefined;
+let refreshErrorFields: ['auth_refresh_discarded', 409, 'AuthRefreshDiscardedError'] | undefined;
 if (AuthRefreshDiscardedError.is(refreshError)) {
   const code: 'auth_refresh_discarded' = refreshError.code;
   const status: 409 = refreshError.status;
