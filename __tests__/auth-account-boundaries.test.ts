@@ -60,7 +60,7 @@ function fixture(): AuthAccountHost {
           headers: new Headers(),
         }),
     },
-    _generatedOptions: () => ({}),
+    _generatedOptions: (mode) => ({ volcanoAuthorization: mode }),
     _anonFetch: () => Promise.resolve({ ok: true, status: 200, data: {}, error: null }),
     _authFetchWithContext: () =>
       Promise.resolve({
@@ -101,6 +101,16 @@ test('signup with required confirmation never signs in and preserves absent mess
     error: null,
   });
   expect(signInSpy).not.toHaveBeenCalled();
+});
+
+test('sign-in uses anonymous credential scope even when a session exists', async () => {
+  const host = fixture();
+  host.accessToken = 'existing-session';
+  const signin = jest.spyOn(host._transport, 'authSignin');
+
+  await signIn(host, credentials);
+
+  expect(signin).toHaveBeenCalledWith(credentials, { volcanoAuthorization: 'anon' });
 });
 
 test('sign-in normalizes a primitive transport rejection', async () => {
@@ -268,7 +278,7 @@ test('sign-in sends exact credentials and adopts the returned session generation
 
   const result = await signIn(host, credentials);
 
-  expect(transport).toHaveBeenCalledWith(credentials, {});
+  expect(transport).toHaveBeenCalledWith(credentials, { volcanoAuthorization: 'anon' });
   expect(adopt).toHaveBeenCalledWith(
     expect.objectContaining({ access_token: 'access', refresh_token: 'refresh', user }),
     4,

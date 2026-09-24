@@ -20,7 +20,7 @@ function fixture(
     _oauthExchangeError: error,
     _transport: { queryDatabaseSelect: query },
     _completeOAuthExchange: () => Promise.resolve(),
-    _generatedOptions: () => ({ volcanoAuthorization: 'session' }),
+    _generatedOptions: (mode) => ({ volcanoAuthorization: mode }),
   };
   return { client, query };
 }
