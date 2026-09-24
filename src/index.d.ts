@@ -1173,15 +1173,17 @@ export interface SandboxRequestOptions {
   requestId?: string;
   signal?: AbortSignal;
 }
-export interface SandboxCreateOptions extends SandboxRequestOptions {
+export interface SandboxSelectionOptions extends SandboxRequestOptions {
   preset?: 'python3.12' | 'node22';
   sandboxId?: string;
   region: string;
   memoryMB?: 1024 | 2048;
+}
+export interface SandboxCreateOptions extends SandboxSelectionOptions {
   maxDurationSeconds?: number;
   idleTimeoutSeconds?: number;
 }
-export interface SandboxExecOptions extends SandboxCreateOptions {
+export interface SandboxExecOptions extends SandboxSelectionOptions {
   timeoutSeconds?: number;
   environment?: Record<string, string>;
 }
