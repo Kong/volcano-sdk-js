@@ -21,7 +21,7 @@ import {
   sandboxResult,
 } from './sandbox-request.ts';
 import { SandboxSessionHandle } from './sandbox-session.ts';
-import { createRequest, executionResult, presetsResult } from './sandbox-wire.ts';
+import { createRequest, executionResult, presetsResult, sessionRequest } from './sandbox-wire.ts';
 
 export class SandboxesApi implements Sandboxes {
   constructor(private readonly client: SandboxClient) {}
@@ -48,15 +48,7 @@ export class SandboxesApi implements Sandboxes {
   create(projectId: string, options: SandboxCreateOptions): ReturnType<Sandboxes['create']> {
     return sandboxResult(async () => {
       await this.client._completeOAuthExchange();
-      const body = {
-        ...createRequest(options),
-        ...(options.maxDurationSeconds === undefined
-          ? {}
-          : { max_duration_seconds: options.maxDurationSeconds }),
-        ...(options.idleTimeoutSeconds === undefined
-          ? {}
-          : { idle_timeout_seconds: options.idleTimeoutSeconds }),
-      };
+      const body = sessionRequest(options);
       const response = await createSandboxSession(
         pathId(projectId),
         body,

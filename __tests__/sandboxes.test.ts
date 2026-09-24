@@ -69,6 +69,11 @@ describe('Sandboxes facade', () => {
     const request = fetchMock.mock.calls[0];
     expect(request?.[0]).toBe(`https://api.test.com/projects/${projectId}/sandbox-executions`);
     expect(new Headers(request?.[1]?.headers).get('Idempotency-Key')).toBe(requestId);
+    expect(bodyJson(request)).toEqual({
+      command: 'exit 7',
+      preset: 'python3.12',
+      region: 'aws-us-east-1',
+    });
   });
   test('returns a session that refreshes state and controls the same id', async () => {
     const fetchMock = jest
@@ -89,6 +94,13 @@ describe('Sandboxes facade', () => {
       throw result.error;
     }
     expect(handle.id).toBe(sessionId);
+    expect(bodyJson(fetchMock.mock.calls[0])).toEqual({
+      preset: 'node22',
+      region: 'aws-us-east-1',
+    });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe(
+      requestId,
+    );
     const suspended = await handle.suspend();
     expect(suspended.error).toBeNull();
     expect(handle.state).toBe('suspended');
@@ -164,7 +176,9 @@ test('preserves binary files and returns a scoped HTTP credential', async () => 
   });
   const read = await result.data.files.read('/workspace/data');
   expect(read.data).toEqual(bytes);
+  expect(bodyJson(fetchMock.mock.calls[2])).toEqual({ path: '/workspace/data' });
   const access = await result.data.access(8080);
+  expect(bodyJson(fetchMock.mock.calls[3])).toEqual({ port: 8080 });
   expect(access.data).toEqual({
     url: 'https://session.example',
     token: 'scoped-token',
@@ -381,5 +395,8 @@ test('session commands use default execution options', async () => {
   }
   const observed14 = await result.data.exec('true');
   expect(observed14.error).toBeNull();
+  expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Idempotency-Key')).toMatch(
+    /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i,
+  );
   expect(bodyJson(fetchMock.mock.calls[1])).toEqual({ command: 'true' });
 });

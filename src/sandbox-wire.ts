@@ -20,10 +20,10 @@ export function text(value: unknown): string {
   return value;
 }
 function number(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (!Number.isFinite(value)) {
     throw new TypeError('Invalid Sandbox numeric field');
   }
-  return value;
+  return Number(value);
 }
 function flag(value: unknown): boolean {
   if (typeof value !== 'boolean') {
@@ -123,5 +123,19 @@ export function encodeBytes(data: Uint8Array): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function sessionRequest(
+  options: SandboxCreateOptions,
+): import('./generated/model/createSandboxSessionRequest.ts').CreateSandboxSessionRequest {
+  return {
+    ...createRequest(options),
+    ...(options.maxDurationSeconds === undefined
+      ? {}
+      : { max_duration_seconds: options.maxDurationSeconds }),
+    ...(options.idleTimeoutSeconds === undefined
+      ? {}
+      : { idle_timeout_seconds: options.idleTimeoutSeconds }),
+  };
 }
