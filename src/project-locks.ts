@@ -37,7 +37,10 @@ export interface LockClient {
   ): Promise<RequestResult>;
 }
 
-const CONTENTION_CODES = new Set(['lock_held', 'lock_ownership_lost']);
+const CONTENTION_CODES: ReadonlySet<unknown> = new Set(['lock_held', 'lock_ownership_lost']);
+type LockAttempt =
+  | { response: { data: unknown }; error: null }
+  | { response: null; error: ProjectLockError };
 
 export class ProjectLocksApi implements ProjectLocks {
   constructor(private readonly client: LockClient) {}
@@ -73,26 +76,32 @@ export class ProjectLocksApi implements ProjectLocks {
     key: string,
     ttl: number,
     requestOptions: unknown,
-  ): Promise<
-    { response: { data: unknown }; error: null } | { response: null; error: ProjectLockError }
-  > {
-    let requestError: ProjectLockError = new Error('Lock acquisition failed');
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await this.client._transport.acquireProjectLock(
-          encodeURIComponent(key),
-          { ttl_seconds: ttl },
-          requestOptions,
-        );
-        return { response, error: null };
-      } catch (error) {
-        requestError = error instanceof Error ? error : new Error('Lock acquisition failed');
-        if (!retryable(requestError)) {
-          break;
-        }
-      }
+  ): Promise<LockAttempt> {
+    const first = await this.acquireAttempt(key, ttl, requestOptions);
+    if (first.response !== null || !retryable(first.error)) {
+      return first;
     }
-    return { response: null, error: requestError };
+    return this.acquireAttempt(key, ttl, requestOptions);
+  }
+
+  private async acquireAttempt(
+    key: string,
+    ttl: number,
+    requestOptions: unknown,
+  ): Promise<LockAttempt> {
+    try {
+      const response = await this.client._transport.acquireProjectLock(
+        encodeURIComponent(key),
+        { ttl_seconds: ttl },
+        requestOptions,
+      );
+      return { response, error: null };
+    } catch (error) {
+      return {
+        response: null,
+        error: error instanceof Error ? error : new Error('Lock acquisition failed'),
+      };
+    }
   }
 
   async renew(
@@ -251,10 +260,8 @@ function optionalNumber(value: unknown, message: string): number | null {
 }
 
 function errorStatus(error: Error): number | null {
-  if (!('status' in error)) {
-    return null;
-  }
-  return typeof error.status === 'number' ? error.status : null;
+  const status: unknown = Reflect.get(error, 'status');
+  return typeof status === 'number' ? status : null;
 }
 
 function retryable(error: Error): boolean {
@@ -263,9 +270,9 @@ function retryable(error: Error): boolean {
 }
 
 function isContention(error: Error): boolean {
-  if (errorStatus(error) !== 409 || !('info' in error) || !isRecord(error.info)) {
+  const info: unknown = Reflect.get(error, 'info');
+  if (errorStatus(error) !== 409 || !isRecord(info)) {
     return false;
   }
-  const code = error.info['code'];
-  return typeof code === 'string' && CONTENTION_CODES.has(code);
+  return CONTENTION_CODES.has(info['code']);
 }
