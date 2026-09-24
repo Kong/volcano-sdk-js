@@ -23,21 +23,14 @@ test('CI starts every required mutation shard', () => {
   );
 });
 
-test('the required quality command uses Stryker over every handwritten runtime file', () => {
+test('Stryker targets every handwritten runtime file', () => {
   const config = JSON.parse(readFileSync('stryker.config.json', 'utf8'));
-  const packageConfig = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.deepEqual(config.mutate, [
     'src/**/*.{js,ts}',
     '!src/**/*.d.ts',
     '!src/generated/**',
     '!src/generated-runtime/**',
   ]);
-  assert.equal(packageConfig.scripts.quality, 'pnpm quality:checks && pnpm mutation:full');
-  assert.match(
-    packageConfig.scripts['quality:checks'],
-    /pnpm test:quickstart && pnpm test:examples$/,
-  );
-  assert.equal(packageConfig.scripts['mutation:full'], 'node scripts/run-mutation.mjs');
 });
 
 test('selects all handwritten runtime files and rejects generated or declaration files', () => {

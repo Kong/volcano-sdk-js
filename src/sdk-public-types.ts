@@ -1,4 +1,5 @@
 import type { FilterValue } from './database-filters';
+import type { FunctionInvokeResponse } from './function-invoke.ts';
 export type { FilterValue } from './database-filters';
 
 /**
@@ -413,14 +414,7 @@ export interface Functions {
   invoke<TPayload = JsonValue, TResult = unknown>(
     functionName: string,
     payload?: TPayload,
-  ): Promise<{
-    data: TResult | string | null;
-    status: number | null;
-    headers: Record<string, string>;
-    version: string | null;
-    /** Platform failures are errors; non-2xx function responses remain data. */
-    error: FunctionError | null;
-  }>;
+  ): Promise<FunctionInvokeResponse<TResult>>;
 }
 
 export interface Durable {
