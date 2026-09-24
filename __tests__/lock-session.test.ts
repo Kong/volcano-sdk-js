@@ -25,12 +25,20 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 function setup(
   ttl = 6,
   elapsed = 0,
+  random = (): number => 0.5,
 ): {
   session: LockSession;
   renew: ReturnType<typeof jest.fn<ProjectLocks['renew']>>;
   release: ReturnType<typeof jest.fn<ProjectLocks['release']>>;
 } {
-  const renew = jest.fn<ProjectLocks['renew']>().mockResolvedValue({ lease, error: null });
+  let renewalAttempts = 0;
+  const renew = jest.fn<ProjectLocks['renew']>().mockImplementation(() => {
+    renewalAttempts += 1;
+    if (renewalAttempts > 20) {
+      throw new Error('Renewal loop exceeded the test bound');
+    }
+    return Promise.resolve({ lease, error: null });
+  });
   const release = jest.fn<ProjectLocks['release']>().mockResolvedValue({ error: null });
   const session = new LockSession({
     locks: { renew, release },
@@ -38,18 +46,60 @@ function setup(
     ttl,
     lease,
     startedAt: { monotonic: -elapsed, wall: -elapsed },
-    random: () => 0.5,
+    random,
   });
   return { session, renew, release };
 }
 
 beforeEach(() => {
-  jest.useFakeTimers({ now: 0 });
+  jest.useFakeTimers({ now: 0, timerLimit: 100 });
 });
 afterEach(() => {
   expect(jest.getTimerCount()).toBe(0);
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+
+test('expiry timer fires at the server lease deadline', async () => {
+  const { session } = setup();
+  session.scheduleExpiry();
+  await jest.advanceTimersToNextTimerAsync();
+  expect(Date.now()).toBe(6000);
+  expect(session.failure).toEqual(new Error('lock lease expired before renewal completed'));
+  await session.cleanup();
+});
+
+test('renewal jitter shifts the next request while retaining the safety margin', () => {
+  const { session } = setup(6, 0, () => 0.75);
+  expect(session.renewalDelay()).toBe(2100);
+});
+
+test('an explicit expiry check aborts an expired lease', async () => {
+  const { session } = setup();
+  jest.advanceTimersByTime(6000);
+  session.checkExpiry();
+  expect(session.failure).toEqual(new Error('lock lease expired before renewal completed'));
+  await session.cleanup();
+});
+
+test('an exhausted renewal window fails closed without scheduling another retry', async () => {
+  const { session } = setup(6, 5000);
+  await session.waitToRenew();
+  expect(session.failure).toEqual(new Error('lock renewal returned no safe lease window'));
+  expect(jest.getTimerCount()).toBe(0);
+  await session.cleanup();
+});
+
+test('a completed renewal wait releases its wake callback and timer handle', async () => {
+  const { session } = setup();
+  const waiting = session.waitToRenew();
+  expect(session.wakeRenewal).not.toBeNull();
+  expect(session.renewalTimer).toBeDefined();
+  await jest.advanceTimersToNextTimerAsync();
+  await waiting;
+  expect(session.wakeRenewal).toBeNull();
+  expect(session.renewalTimer).toBeUndefined();
+  await session.cleanup();
 });
 
 test('returns callback data and releases the same ownership token', async () => {
@@ -100,6 +150,17 @@ test('does not call guarded work when preparatory renewal loses ownership', asyn
   expect(callback).not.toHaveBeenCalled();
 });
 
+test('rejects an already expired lease without trying to renew it', async () => {
+  const { session, renew } = setup(6, 6000);
+  const callback = jest.fn<() => string>();
+  await expect(session.run(callback)).resolves.toEqual({
+    data: null,
+    error: new Error('lock lease expired before renewal completed'),
+  });
+  expect(renew).not.toHaveBeenCalled();
+  expect(callback).not.toHaveBeenCalled();
+});
+
 test('rejects a renewal without a safe window before the absolute lifetime cap', async () => {
   const lifetime = 90 * 24 * 60 * 60;
   const { session } = setup(lifetime, lifetime * 1000 - 1000);
@@ -115,9 +176,18 @@ test('fails closed when a platform clock cannot provide a finite lease window', 
   const callback = jest.fn<() => string>();
   await expect(session.run(callback)).resolves.toEqual({
     data: null,
-    error: new Error('lock renewal returned no safe lease window'),
+    error: new Error('lock lease expired before renewal completed'),
   });
   expect(callback).not.toHaveBeenCalled();
+});
+
+test('an invalid clock reading cannot produce a renewal delay', async () => {
+  const { session } = setup();
+  jest.spyOn(performance, 'now').mockReturnValue(Number.NaN);
+  expect(session.renewalDelay()).toBe(0);
+  session.checkExpiry();
+  expect(session.failure).toEqual(new Error('lock lease expired before renewal completed'));
+  await session.cleanup();
 });
 
 test('renews periodically until guarded work completes', async () => {
@@ -128,6 +198,73 @@ test('renews periodically until guarded work completes', async () => {
   expect(renew).toHaveBeenCalledTimes(2);
   callback.resolve('done');
   await expect(running).resolves.toEqual({ data: 'done', error: null });
+});
+
+test('a successful renewal extends the expiry timer from the renewal start', async () => {
+  const { session } = setup();
+  session.scheduleExpiry();
+  jest.advanceTimersByTime(2000);
+  await session.renew();
+  await jest.advanceTimersByTimeAsync(4999);
+  expect(session.failure).toBeNull();
+  await jest.advanceTimersByTimeAsync(1001);
+  expect(session.failure).toEqual(new Error('lock lease expired before renewal completed'));
+  await session.cleanup();
+});
+
+test('a successful renewal arms expiry even without a prior timer', async () => {
+  const { session } = setup();
+  await expect(session.renew()).resolves.toBe(true);
+  expect(jest.getTimerCount()).toBe(1);
+  await jest.advanceTimersByTimeAsync(6000);
+  expect(session.failure).toEqual(new Error('lock lease expired before renewal completed'));
+  await session.cleanup();
+});
+
+test('ignores a renewal that finishes after cleanup', async () => {
+  const { session, renew } = setup();
+  const pending = deferred<Awaited<ReturnType<ProjectLocks['renew']>>>();
+  renew.mockReturnValue(pending.promise);
+  const renewing = session.renew();
+  await session.cleanup();
+  pending.resolve({ lease, error: null });
+  await renewing;
+  expect(session.clock.remaining()).toBe(6000);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('a failed renewal leaves no expiry timer after ownership loss', async () => {
+  const { session, renew } = setup();
+  const error = new Error('not owner');
+  renew.mockResolvedValue({ lease, error });
+  await session.renew();
+  expect(session.failure).toBe(error);
+  expect(jest.getTimerCount()).toBe(0);
+  await session.cleanup();
+});
+
+test('a renewal completed after lease loss does not reset the clock', async () => {
+  const { session, renew } = setup();
+  const pending = deferred<Awaited<ReturnType<ProjectLocks['renew']>>>();
+  renew.mockReturnValue(pending.promise);
+  const renewing = session.renew();
+  jest.advanceTimersByTime(1000);
+  const error = new Error('ownership lost');
+  session.markLost(error);
+  pending.resolve({ lease, error: null });
+  await renewing;
+  expect(session.failure).toBe(error);
+  expect(session.clock.remaining()).toBe(5000);
+  expect(jest.getTimerCount()).toBe(0);
+  await session.cleanup();
+});
+
+test('an unsafe renewal does not schedule expiry after it fails closed', async () => {
+  const { session } = setup(1);
+  await session.renew();
+  expect(session.failure).toEqual(new Error('lock renewal returned no safe lease window'));
+  expect(jest.getTimerCount()).toBe(0);
+  await session.cleanup();
 });
 
 test('aborts at expiry while renewal is stalled and ignores its late completion', async () => {
@@ -146,6 +283,7 @@ test('aborts at expiry while renewal is stalled and ignores its late completion'
   renewal.resolve({ lease, error: null });
   await jest.advanceTimersByTimeAsync(0);
   expect(session.clock.remaining()).toBe(0);
+  expect(jest.getTimerCount()).toBe(0);
 });
 
 test('aborts guarded work when the renewal request rejects', async () => {
@@ -168,6 +306,7 @@ test('does not overwrite the first loss or restart expiry after loss', async () 
   session.checkExpiry();
   await session.runRenewals();
   expect(session.failure).toBe(error);
+  expect(jest.getTimerCount()).toBe(0);
   await session.cleanup();
 });
 

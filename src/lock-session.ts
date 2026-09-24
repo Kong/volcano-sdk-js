@@ -67,23 +67,33 @@ export class LockSession {
       return;
     }
     this.scheduleExpiry();
-    await this.renewLease(false);
+    if (this.failure !== null) {
+      return;
+    }
+    await this.renewLease();
   }
 
   start(): void {
     this.scheduleExpiry();
-    this.runRenewals().catch((error: unknown) => {
+    this.continueRenewals();
+  }
+
+  private continueRenewals(): void {
+    void this.runRenewals().catch((error: unknown) => {
       this.markLost(toError(error));
     });
   }
 
   async runRenewals(): Promise<void> {
-    while (this.isActive()) {
-      await this.waitToRenew();
-      if (!this.isActive()) {
-        return;
-      }
-      await this.renew();
+    if (!this.isActive()) {
+      return;
+    }
+    await this.waitToRenew();
+    if (!this.isActive()) {
+      return;
+    }
+    if (await this.renew()) {
+      this.continueRenewals();
     }
   }
 
@@ -91,11 +101,11 @@ export class LockSession {
     return !this.stopped && this.failure === null;
   }
 
-  renew(): Promise<void> {
-    return this.renewLease(true);
+  renew(): Promise<boolean> {
+    return this.renewLease();
   }
 
-  private async renewLease(scheduleNext: boolean): Promise<void> {
+  private async renewLease(): Promise<boolean> {
     const startedAt = lockRequestStart();
     const controller = new AbortController();
     this.renewalController = controller;
@@ -104,9 +114,11 @@ export class LockSession {
       signal: controller.signal,
     });
     this.renewalController = null;
-    if (this.acceptRenewal(renewed.error, startedAt) && scheduleNext) {
+    const accepted = this.acceptRenewal(renewed.error, startedAt);
+    if (accepted) {
       this.scheduleExpiry();
     }
+    return accepted;
   }
 
   private acceptRenewal(error: Error | null, startedAt: LockRequestStart): boolean {
@@ -126,9 +138,14 @@ export class LockSession {
   }
 
   waitToRenew(): Promise<void> {
+    const delay = this.renewalDelay();
+    if (delay === 0) {
+      this.markLost(new Error(UNSAFE_RENEWAL_MESSAGE));
+      return Promise.resolve();
+    }
     return new Promise<void>((resolve) => {
       this.wakeRenewal = resolve;
-      this.renewalTimer = setTimeout(resolve, Math.max(1, this.renewalDelay()));
+      this.renewalTimer = setTimeout(resolve, Math.ceil(delay));
     }).finally(() => {
       this.wakeRenewal = null;
       this.renewalTimer = undefined;
@@ -151,22 +168,19 @@ export class LockSession {
 
   scheduleExpiry(): void {
     clearTimeout(this.expiryTimer);
-    const delay = Math.min(MAX_TIMER_DELAY_MS, this.clock.remaining());
-    this.expiryTimer = setTimeout(
-      () => {
-        this.checkExpiry();
-      },
-      Math.max(1, delay),
-    );
+    const remaining = this.clock.remaining();
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      this.markLost(new Error(EXPIRY_MESSAGE));
+      return;
+    }
+    const delay = Math.min(MAX_TIMER_DELAY_MS, remaining);
+    this.expiryTimer = setTimeout(() => {
+      this.checkExpiry();
+    }, Math.ceil(delay));
   }
 
   checkExpiry(): void {
     if (this.stopped || this.failure !== null) {
-      return;
-    }
-    const remaining = this.clock.remaining();
-    if (!Number.isFinite(remaining) || remaining === 0) {
-      this.markLost(new Error(EXPIRY_MESSAGE));
       return;
     }
     this.scheduleExpiry();
@@ -183,7 +197,7 @@ export class LockSession {
   }
 
   async cleanup(): Promise<Error | null> {
-    if (this.failure === null && this.clock.remaining() === 0) {
+    if (this.clock.remaining() === 0) {
       this.markLost(new Error(EXPIRY_MESSAGE));
     }
     this.stopped = true;
