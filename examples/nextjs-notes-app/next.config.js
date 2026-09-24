@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Next 15 passes legacy options to ESLint 10; the repository lint gate checks this app.
+  eslint: { ignoreDuringBuilds: true },
   // Enable React strict mode for better development experience
   reactStrictMode: true,
 

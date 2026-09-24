@@ -2,15 +2,20 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
+import * as prettier from 'prettier';
+import ts from 'typescript';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const eslint = join(root, 'node_modules/eslint/bin/eslint.js');
+const jest = join(root, 'node_modules/jest/bin/jest.js');
 const require = createRequire(import.meta.url);
 const coverageConfig = require('../jest.typed.config.cjs');
+const manifest = require('../package.json');
+const nextRules = require('@next/eslint-plugin-next').flatConfig.coreWebVitals.rules;
 
 function trackedFiles() {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
@@ -29,46 +34,235 @@ function handwrittenSource(files) {
   );
 }
 
+function maintainedCode(files) {
+  return files.filter(
+    (path) =>
+      /\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) &&
+      !path.startsWith('src/generated/') &&
+      !path.startsWith('src/generated-runtime/'),
+  );
+}
+
+function typecheckedFiles(configPath) {
+  const path = join(root, configPath);
+  const config = ts.readConfigFile(path, ts.sys.readFile);
+  assert.equal(config.error, undefined, `${configPath} is invalid`);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, path);
+  assert.deepEqual(parsed.errors, [], `${configPath} has configuration errors`);
+  return new Set(parsed.fileNames);
+}
+
+function discoveredTests(configPath) {
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      [jest, '--listTests', '--json', '--runInBand', '--config', configPath],
+      {
+        cwd: root,
+        encoding: 'utf8',
+      },
+    ),
+  );
+}
+
+function requireFullCoverage(config) {
+  assert.deepEqual(config.coverageThreshold.global, {
+    branches: 100,
+    functions: 100,
+    lines: 100,
+    statements: 100,
+  });
+  assert.deepEqual(config.collectCoverageFrom, [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/generated/**',
+  ]);
+}
+
+function requireUnsuppressed(path, source) {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (
+      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
+      token !== ts.SyntaxKind.MultiLineCommentTrivia
+    ) {
+      continue;
+    }
+    requireAllowedComment(path, scanner.getTokenText());
+  }
+}
+
+function requireAllowedComment(path, comment) {
+  const forbidden =
+    /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|istanbul ignore|c8 ignore|nyc ignore/;
+  assert.doesNotMatch(comment, forbidden, `${path} suppresses a quality check`);
+  if (path.startsWith('test/types/') && comment.includes('@ts-expect-error')) {
+    assert.match(
+      comment,
+      /^\/\/\s*@ts-expect-error\s+\S/,
+      `${path} needs an expected-error rationale`,
+    );
+    return;
+  }
+  assert.doesNotMatch(comment, /@ts-expect-error/, `${path} suppresses a quality check`);
+}
+
+async function requireLinted(checker, path) {
+  const absolute = join(root, path);
+  assert.equal(await checker.isPathIgnored(absolute), false, `${path} is ignored by ESLint`);
+  const config = await checker.calculateConfigForFile(absolute);
+  assert.ok(config, `${path} has no ESLint configuration`);
+  if (!path.endsWith('.d.ts')) {
+    assert.deepEqual(config.rules.complexity, [2, 5], `${path} weakens complexity`);
+  }
+  if (path.startsWith('examples/nextjs-notes-app/src/')) {
+    requireNextRules(config, path);
+  }
+}
+
+function requireNextRules(config, path) {
+  for (const [rule, severity] of Object.entries(nextRules)) {
+    assert.equal(config.rules[rule]?.[0], severity === 'error' ? 2 : 1, `${path} weakens ${rule}`);
+  }
+}
+
+function requireNoNestedConfigs(files) {
+  const names = [
+    '.eslintrc',
+    'eslint.config.',
+    '.prettierrc',
+    'prettier.config.',
+    '.prettierignore',
+    '.editorconfig',
+    'jest.',
+    'tsconfig.',
+  ];
+  assert.deepEqual(
+    files.filter(
+      (path) =>
+        path.includes('/') && names.some((name) => path.split('/').at(-1)?.startsWith(name)),
+    ),
+    [],
+  );
+}
+
+async function requireRootFormatting(path) {
+  const absolute = isAbsolute(path) ? path : join(root, path);
+  const activeConfig = await prettier.resolveConfigFile(absolute);
+  assert.equal(activeConfig, join(root, 'prettier.config.cjs'), `${path} overrides Prettier`);
+  const file = await prettier.getFileInfo(absolute, { ignorePath: join(root, '.prettierignore') });
+  assert.equal(file.ignored, false, `${path} is ignored by Prettier`);
+  assert.ok(file.inferredParser, `${path} has no Prettier parser`);
+}
+
+async function requireNoManifestOverrides(files) {
+  const qualityKeys = ['prettier', 'eslintConfig', 'jest', 'nyc', 'c8'];
+  for (const path of files.filter((item) => item.includes('/') && item.endsWith('/package.json'))) {
+    const absolute = isAbsolute(path) ? path : join(root, path);
+    const manifest = JSON.parse(await readFile(absolute, 'utf8'));
+    for (const key of qualityKeys) {
+      assert.equal(manifest[key], undefined, `${path} overrides ${key}`);
+    }
+  }
+}
+
 test('tracked SDK code remains in native lint, type, test, and coverage gates', async () => {
   const files = trackedFiles();
   const runtime = handwrittenSource(files);
   const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
   assert.ok(runtime.length > 0);
   assert.ok(tests.some((path) => path.endsWith('.test.ts')));
-  const tsconfig = JSON.parse(await readFile(join(root, 'tsconfig.json'), 'utf8'));
-  assert.deepEqual(tsconfig.include, ['src/**/*.ts', '__tests__/**/*.ts']);
-  assert.deepEqual(tsconfig.exclude, ['src/generated', 'src/generated-runtime']);
-  assert.deepEqual(coverageConfig.collectCoverageFrom, [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/generated/**',
-  ]);
-  assert.deepEqual(coverageConfig.coverageThreshold.global, {
-    branches: 100,
-    functions: 100,
-    lines: 100,
-    statements: 100,
-  });
-  assert.deepEqual(coverageConfig.testMatch, ['**/__tests__/**/*.test.{js,ts}']);
+  const typechecked = typecheckedFiles('tsconfig.json');
+  for (const path of [
+    ...runtime,
+    ...tests,
+    ...files.filter((item) => item.startsWith('test/types/') && item.endsWith('.ts')),
+  ]) {
+    assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
+  }
+  requireFullCoverage(coverageConfig);
+  assert.match(manifest.scripts['quality:checks'], /pnpm test:examples/);
+  assert.equal(manifest.scripts['format:check'], 'prettier . --config prettier.config.cjs --check');
+  const discovered = new Set(
+    ['jest.config.js', 'jest.integration.config.cjs', 'jest.contract.config.cjs'].flatMap(
+      (config) => discoveredTests(config),
+    ),
+  );
+  for (const path of files.filter((item) =>
+    /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item),
+  )) {
+    assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
+  }
   const checker = new ESLint();
-  for (const path of [...runtime, ...tests]) {
-    assert.equal(
-      await checker.isPathIgnored(join(root, path)),
-      false,
-      `${path} is ignored by ESLint`,
-    );
-    const source = await readFile(join(root, path), 'utf8');
-    assert.doesNotMatch(
-      source,
-      /eslint-(?:disable|enable)|@ts-(?:ignore|expect-error|nocheck)|(?:istanbul|c8|nyc) ignore/,
-      `${path} suppresses a quality check`,
-    );
+  for (const path of maintainedCode(files)) {
+    await requireLinted(checker, path);
+    await requireRootFormatting(path);
+    requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
   }
   assert.deepEqual(
-    files.filter((path) =>
-      /^(?:src|__tests__)\/(?:.*\/)?(?:eslint\.config\.|\.eslintrc|tsconfig\.|jest\.)/.test(path),
+    files.filter(
+      (path) =>
+        path.startsWith('src/') &&
+        path.endsWith('.js') &&
+        !path.startsWith('src/generated-runtime/'),
     ),
-    [],
+    ['src/index.js'],
+  );
+  requireNoNestedConfigs(files);
+  await requireNoManifestOverrides(files);
+});
+
+test('lowered coverage and suppression comments fail policy validation', () => {
+  assert.throws(() =>
+    requireFullCoverage({ ...coverageConfig, coverageThreshold: { global: { branches: 99 } } }),
+  );
+  assert.throws(() => requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity'));
+  assert.throws(() =>
+    requireUnsuppressed('src/new.ts', 'const marker = true; // @ts-expect-error\nmarker;'),
+  );
+  assert.doesNotThrow(() =>
+    requireUnsuppressed(
+      'test/types/invalid.ts',
+      '// @ts-expect-error invalid public call\ninvalid();',
+    ),
+  );
+  assert.throws(() => requireUnsuppressed('test/types/invalid.ts', '// @ts-ignore\ninvalid();'));
+  assert.throws(() =>
+    requireUnsuppressed('test/types/invalid.ts', '// @ts-expect-error\ninvalid();'),
+  );
+  assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']));
+});
+
+test('a nested manifest cannot replace the root formatter configuration', async () => {
+  const directory = await mkdtemp(join(root, 'examples', 'quality-fixture-'));
+  try {
+    const source = join(directory, 'fixture.ts');
+    await writeFile(source, 'export const value = true;\n');
+    await writeFile(join(directory, 'package.json'), JSON.stringify({ prettier: { semi: false } }));
+    await assert.rejects(requireRootFormatting(source), /overrides Prettier/);
+    await assert.rejects(
+      requireNoManifestOverrides([join(directory, 'package.json')]),
+      /overrides prettier/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('excluded new code and weakened complexity fail policy validation', async () => {
+  await assert.rejects(
+    requireLinted({ isPathIgnored: async () => true }, 'src/new-module.ts'),
+    /ignored by ESLint/,
+  );
+  await assert.rejects(
+    requireLinted(
+      {
+        isPathIgnored: async () => false,
+        calculateConfigForFile: async () => ({ rules: { complexity: [2, 6] } }),
+      },
+      'src/new-module.ts',
+    ),
+    /weakens complexity/,
   );
 });
 

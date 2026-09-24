@@ -4,6 +4,7 @@ const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const prettierConfig = require('eslint-config-prettier/flat');
 const importX = require('eslint-plugin-import-x');
 const jest = require('eslint-plugin-jest');
+const next = require('@next/eslint-plugin-next');
 const nModule = require('eslint-plugin-n');
 const promise = require('eslint-plugin-promise');
 const reactHooks = require('eslint-plugin-react-hooks');
@@ -24,17 +25,20 @@ const unicorn = unicornModule.default || unicornModule;
 const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
-const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/package-*.ts'];
+const testSupportFiles = ['__tests__/**/*.cjs'];
+const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/**/*.ts'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
-const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
+const moduleScriptFiles = ['scripts/**/*.mjs', '*.config.mjs'];
 const rootConfigFiles = ['*.config.js', '*.config.cjs', 'eslint.config.cjs'];
 const exampleFiles = ['examples/nextjs-notes-app/src/**/*.js'];
 const exampleConfigFiles = ['examples/nextjs-notes-app/*.config.js'];
+const durableExampleFiles = ['examples/durable-order-pipeline/**/*.js'];
 const commonjsFiles = [
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...testFiles,
+  ...testSupportFiles,
   ...commonjsScriptFiles,
 ];
 const strictFiles = [
@@ -45,6 +49,8 @@ const strictFiles = [
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...exampleFiles,
+  ...durableExampleFiles,
+  ...testSupportFiles,
 ];
 const lintedFiles = [...jsFiles, ...declarationFiles, ...typescriptFiles];
 
@@ -98,7 +104,7 @@ module.exports = [
     },
     settings: {
       'import-x/resolver-next': [
-        createTypeScriptImportResolver({ project: './tsconfig.json' }),
+        createTypeScriptImportResolver({ project: './tsconfig.eslint.json' }),
         importPlugin.createNodeResolver({ extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'] }),
       ],
     },
@@ -138,6 +144,11 @@ module.exports = [
     ],
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
+  scopedRules(next.flatConfig.coreWebVitals, exampleFiles),
+  {
+    files: exampleFiles,
+    settings: { next: { rootDir: 'examples/nextjs-notes-app/' } },
+  },
   ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/stylistic'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/strict-type-checked'], typescriptFiles),
@@ -154,6 +165,7 @@ module.exports = [
     },
     rules: {
       'array-callback-return': ['error', { checkForEach: true }],
+      complexity: ['error', 5],
       curly: ['error', 'all'],
       'dot-notation': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
@@ -267,7 +279,6 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': 'off',
-      complexity: ['error', 5],
       'dot-notation': 'off',
       '@typescript-eslint/dot-notation': 'error',
       'sonarjs/cognitive-complexity': ['error', 10],

@@ -33,7 +33,10 @@ test('the required quality command uses Stryker over every handwritten runtime f
     '!src/generated-runtime/**',
   ]);
   assert.equal(packageConfig.scripts.quality, 'pnpm quality:checks && pnpm mutation:full');
-  assert.match(packageConfig.scripts['quality:checks'], /pnpm test:quickstart$/);
+  assert.match(
+    packageConfig.scripts['quality:checks'],
+    /pnpm test:quickstart && pnpm test:examples$/,
+  );
   assert.equal(packageConfig.scripts['mutation:full'], 'node scripts/run-mutation.mjs');
 });
 
@@ -61,6 +64,21 @@ test('a new handwritten runtime file cannot fall outside the full mutation scope
   }
 });
 
+function assertShardOwnership(patterns, expectedFiles) {
+  const owner = new Map();
+  const seen = [];
+  for (let shard = 0; shard < 4; shard += 1) {
+    for (const pattern of shardMutationPatterns(patterns, shard, 4)) {
+      const path = pattern.split(':')[0];
+      assert.ok(!owner.has(path) || owner.get(path) === shard);
+      owner.set(path, shard);
+      seen.push(pattern);
+    }
+  }
+  assert.deepEqual(seen.sort(), patterns.sort());
+  assert.equal(owner.size, expectedFiles);
+}
+
 test('mutation shards keep every file and its overlapping ranges together', () => {
   const paths = Array.from(
     { length: 4 },
@@ -74,18 +92,7 @@ test('mutation shards keep every file and its overlapping ranges together', () =
   }
   try {
     const patterns = [paths[0], `${paths[0]}:15-19`, ...paths.slice(1)];
-    const owner = new Map();
-    const seen = [];
-    for (let shard = 0; shard < 4; shard += 1) {
-      for (const pattern of shardMutationPatterns(patterns, shard, 4)) {
-        const path = pattern.split(':')[0];
-        assert.ok(!owner.has(path) || owner.get(path) === shard);
-        owner.set(path, shard);
-        seen.push(pattern);
-      }
-    }
-    assert.deepEqual(seen.sort(), patterns.sort());
-    assert.equal(owner.size, paths.length);
+    assertShardOwnership(patterns, paths.length);
     assert.throws(() => shardMutationPatterns(patterns, 4, 4), /Invalid mutation shard/);
     assert.throws(() => shardMutationPatterns([paths[0]], 3, 4), /selected no source/);
   } finally {

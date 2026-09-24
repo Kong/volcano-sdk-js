@@ -28,26 +28,30 @@ test('legacy public generic exceptions are exact and remain in use', async () =>
     },
   });
   const results = await eslint.lintFiles(['src/sdk-public-types.ts']);
+  const found = await verifiedScopes(results);
+  assert.deepEqual(found.sort(), expected.toSorted());
+});
+
+async function verifiedScopes(results) {
   const found = [];
   for (const result of results) {
-    const path = 'src/sdk-public-types.ts';
     const source = await readFile(result.filePath, 'utf8');
     const lines = source.split('\n');
     for (const message of result.messages.filter((item) => item.ruleId === rule)) {
       const declaration = lines[message.line - 1]?.trim() ?? '';
-      const scope = scopeForDiagnostic(path, declaration);
-      assert.ok(scope, `Unexpected ${rule} at ${path}:${message.line}: ${declaration}`);
+      const scope = scopeForDiagnostic(declaration);
+      assert.ok(scope, `Unexpected ${rule} at ${result.filePath}:${message.line}: ${declaration}`);
       found.push(scope);
     }
   }
-  assert.deepEqual(found.sort(), expected.toSorted());
-});
+  return found;
+}
 
-function scopeForDiagnostic(path, declaration) {
-  if (path === 'src/sdk-public-types.ts' && declaration.startsWith('invoke<TPayload')) {
+function scopeForDiagnostic(declaration) {
+  if (declaration.startsWith('invoke<TPayload')) {
     return expected[0];
   }
-  if (path === 'src/sdk-public-types.ts' && declaration.startsWith('start<TInput')) {
+  if (declaration.startsWith('start<TInput')) {
     return expected[1];
   }
   return null;

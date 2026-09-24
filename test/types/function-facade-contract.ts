@@ -16,6 +16,6 @@ const started: Promise<{
   data: DurableExecution | null;
   status: number | null;
   error: Error | null;
-}> = durable.start<{ order_id: number }>('orders', { order_id: 1 });
+}> = durable.start<{ order_id: number | string }>('orders', { order_id: 1 });
 
-void [invoked, started];
+export const facadeResults = [invoked, started];
