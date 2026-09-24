@@ -4527,6 +4527,250 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available sandbox presets */
+        get: operations["listSandboxPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox templates */
+        get: operations["listSandboxes"];
+        put?: never;
+        /** Create a sandbox template from a verified preset */
+        post: operations["createSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox template */
+        get: operations["getSandbox"];
+        put?: never;
+        post?: never;
+        /** Retire a template and terminate its sessions */
+        delete: operations["deleteSandbox"];
+        options?: never;
+        head?: never;
+        /** Rename a sandbox template */
+        patch: operations["updateSandbox"];
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox deployment history */
+        get: operations["listSandboxDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project sandbox sessions */
+        get: operations["listSandboxSessions"];
+        put?: never;
+        /** Start a sandbox session */
+        post: operations["createSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute once and return after confirmed termination */
+        post: operations["executeSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox session */
+        get: operations["getSandboxSession"];
+        put?: never;
+        post?: never;
+        /** Request sandbox termination */
+        delete: operations["terminateSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend a sandbox session */
+        post: operations["suspendSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a sandbox session */
+        post: operations["resumeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/exec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a command within a session */
+        post: operations["executeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read a workspace file */
+        post: operations["readSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a workspace file */
+        post: operations["writeSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/grants/{subjectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Authorize an authenticated project user for this session */
+        put: operations["grantSandboxSession"];
+        post?: never;
+        /** Revoke a project user session grant */
+        delete: operations["revokeSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a short-lived port-scoped access credential */
+        post: operations["createSandboxSessionAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8873,6 +9117,192 @@ export interface components {
             densities: components["schemas"]["AuthPageDensity"][];
             radii: components["schemas"]["AuthPageRadius"][];
             layouts: components["schemas"]["AuthPageLayout"][];
+        };
+        SandboxPreset: {
+            id: string;
+            runtime: string;
+            version: string;
+            /** @enum {integer} */
+            memory_mb: 1024 | 2048;
+            regions: string[];
+        };
+        SandboxTemplate: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            preset?: string;
+            memory_mb?: number;
+            /** @enum {string} */
+            status: "ready" | "unavailable" | "deleting";
+            /** Format: date-time */
+            created_at: string;
+        };
+        CreateSandboxTemplateRequest: {
+            name: string;
+            /** @enum {string} */
+            preset: "python3.12" | "node22";
+            /**
+             * @default 1024
+             * @enum {integer}
+             */
+            memory_mb?: 1024 | 2048;
+        };
+        UpdateSandboxTemplateRequest: {
+            name: string;
+        };
+        SandboxSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            sandbox_id: string;
+            /** @enum {string} */
+            state: "starting" | "running" | "suspending" | "suspended" | "resuming" | "terminating" | "terminated" | "unknown";
+            /** @enum {string} */
+            desired_state: "running" | "suspended" | "terminated";
+            region: string;
+            memory_mb: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        CreateSandboxSessionRequest: {
+            /** @enum {string} */
+            preset?: "python3.12" | "node22";
+            /** Format: uuid */
+            sandbox_id?: string;
+            /** @enum {integer} */
+            memory_mb?: 1024 | 2048;
+            region: string;
+            /** @default 3600 */
+            max_duration_seconds?: number;
+            /** @default 0 */
+            idle_timeout_seconds?: number;
+        } & (unknown | unknown);
+        SandboxCommandRequest: {
+            command: string;
+            /** @default 60 */
+            timeout_seconds?: number;
+            environment?: {
+                [key: string]: string;
+            };
+        };
+        SandboxExecutionRequest: {
+            /** @enum {string} */
+            preset?: "python3.12" | "node22";
+            /** Format: uuid */
+            sandbox_id?: string;
+            /** @enum {integer} */
+            memory_mb?: 1024 | 2048;
+            region: string;
+            command: string;
+            /** @default 60 */
+            timeout_seconds?: number;
+            environment?: {
+                [key: string]: string;
+            };
+        } & (unknown | unknown);
+        SandboxCommandResult: {
+            stdout: string;
+            stderr: string;
+            exit_code: number;
+            stdout_truncated: boolean;
+            stderr_truncated: boolean;
+            timed_out: boolean;
+        };
+        SandboxExecutionResult: {
+            stdout: string;
+            stderr: string;
+            exit_code: number;
+            stdout_truncated: boolean;
+            stderr_truncated: boolean;
+            timed_out: boolean;
+            /** Format: uuid */
+            session_id: string;
+            region: string;
+            /** Format: int64 */
+            duration_ms: number;
+        };
+        SandboxFileWriteRequest: {
+            path: string;
+            /** Format: byte */
+            data: string;
+        };
+        SandboxFileReadRequest: {
+            path: string;
+        };
+        SandboxFileResult: {
+            /** Format: byte */
+            data: string;
+        };
+        SandboxSubjectGrantRequest: {
+            /** Format: date-time */
+            expires_at: string;
+        };
+        SandboxAccessRequest: {
+            port: number;
+            /** @default 300 */
+            expires_in_seconds?: number;
+        };
+        SandboxAccess: {
+            /** Format: uri */
+            url: string;
+            token: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        SandboxDeployment: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SandboxPagination: {
+            limit: number;
+            has_more: boolean;
+            next_cursor?: string;
+        };
+        SandboxTemplatePage: {
+            data: components["schemas"]["SandboxTemplate"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxSessionPage: {
+            data: components["schemas"]["SandboxSession"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxDeploymentPage: {
+            data: components["schemas"]["SandboxDeployment"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxPresetList: {
+            data: components["schemas"]["SandboxPreset"][];
+        };
+        SandboxCapacity: {
+            region: string;
+            /** Format: int64 */
+            allocated_memory_mb: number;
+        };
+        SandboxCapacityList: {
+            data: components["schemas"]["SandboxCapacity"][];
+        };
+        PublishSandboxPresetRequest: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            preset: "python3.12" | "node22";
+            /** @enum {integer} */
+            memory_mb: 1024 | 2048;
+            /** Format: uuid */
+            deployment_id: string;
         };
     };
     responses: {
@@ -22941,6 +23371,696 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    listSandboxPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List available sandbox presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxPresetList"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxes: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplatePage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Create a sandbox template from a verified preset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retire a template and terminate its sessions */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rename a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxDeployments: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox deployment history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDeploymentPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxSessions: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List project sandbox sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSessionPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Start a sandbox session */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute once and return after confirmed termination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxExecutionResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    terminateSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request sandbox termination */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    suspendSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suspend a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resumeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resume a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute a command within a session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxCommandResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    readSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Read a workspace file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFileResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    writeSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Write a workspace file */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    grantSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxSubjectGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorize an authenticated project user for this session */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoke a project user session grant */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSessionAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Issue a short-lived port-scoped access credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAccess"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

@@ -1,3 +1,4 @@
+/// <reference lib="esnext.disposable" />
 import type { FilterValue } from './database-filters';
 export type { FilterValue } from './database-filters';
 
@@ -1090,6 +1091,7 @@ export class VolcanoAuth {
 
   /** Service-role-only project lease methods */
   locks: ProjectLocks;
+  sandboxes: Sandboxes;
 
   /** Set current database name for query builder (required before querying) */
   database(databaseName: string): VolcanoAuth;
@@ -1165,3 +1167,102 @@ export {
   databaseConnectionString,
   type DatabaseConnectionStringOptions,
 } from './database-connection-string';
+
+export type SandboxResult<T> = { data: T; error: null } | { data: null; error: Error };
+export interface SandboxRequestOptions {
+  requestId?: string;
+  signal?: AbortSignal;
+}
+export interface SandboxCreateOptions extends SandboxRequestOptions {
+  preset?: 'python3.12' | 'node22';
+  sandboxId?: string;
+  region: string;
+  memoryMB?: 1024 | 2048;
+  maxDurationSeconds?: number;
+  idleTimeoutSeconds?: number;
+}
+export interface SandboxExecOptions extends SandboxCreateOptions {
+  timeoutSeconds?: number;
+  environment?: Record<string, string>;
+}
+export interface SandboxCommandOptions extends SandboxRequestOptions {
+  timeoutSeconds?: number;
+  environment?: Record<string, string>;
+}
+export interface SandboxCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+}
+export interface SandboxExecutionResult extends SandboxCommandResult {
+  sessionId: string;
+  region: string;
+  durationMs: number;
+}
+export type SandboxState =
+  | 'starting'
+  | 'running'
+  | 'suspending'
+  | 'suspended'
+  | 'resuming'
+  | 'terminating'
+  | 'terminated'
+  | 'unknown';
+export interface SandboxAccess {
+  url: string;
+  token: string;
+  expiresAt: string;
+}
+export interface SandboxSession extends AsyncDisposable {
+  readonly id: string;
+  readonly projectId: string;
+  readonly region: string;
+  readonly state: SandboxState;
+  readonly expiresAt: string;
+  refresh(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
+  exec(
+    command: string,
+    options?: SandboxCommandOptions,
+  ): Promise<SandboxResult<SandboxCommandResult>>;
+  suspend(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
+  resume(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
+  terminate(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
+  access(port: number, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxAccess>>;
+  files: {
+    read(path: string, options?: SandboxRequestOptions): Promise<SandboxResult<Uint8Array>>;
+    write(
+      path: string,
+      data: Uint8Array,
+      options?: SandboxRequestOptions,
+    ): Promise<SandboxResult<void>>;
+  };
+}
+export interface SandboxPreset {
+  id: string;
+  memoryMB: number;
+  regions: string[];
+}
+export interface Sandboxes {
+  presets(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxPreset[]>>;
+  exec(
+    projectId: string,
+    command: string,
+    options: SandboxExecOptions,
+  ): Promise<SandboxResult<SandboxExecutionResult>>;
+  create(projectId: string, options: SandboxCreateOptions): Promise<SandboxResult<SandboxSession>>;
+  get(sessionId: string, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
+  grant(
+    sessionId: string,
+    authUserId: string,
+    expiresAt: string,
+    options?: SandboxRequestOptions,
+  ): Promise<SandboxResult<void>>;
+  revoke(
+    sessionId: string,
+    authUserId: string,
+    options?: SandboxRequestOptions,
+  ): Promise<SandboxResult<void>>;
+}

@@ -30,7 +30,10 @@ tags:
       work is metered on its own allowances: executions, and the operations each
       execution performs while it runs.
   - name: Frontends
-    description: Frontend deployment and management. Supports Next.js 15.x and 16.x with Node.js 22.x or 24.x inferred from package.json engines.node when the selected Node.js family satisfies the installed Next.js package engines.node constraint.
+    description: Frontend deployment and management. Supports Next.js 15.x and 16.x
+      with Node.js 22.x or 24.x inferred from package.json engines.node when the
+      selected Node.js family satisfies the installed Next.js package
+      engines.node constraint.
   - name: Tokens
     description: Service keys for function invocation and database admin access
   - name: Variables
@@ -50,7 +53,8 @@ tags:
   - name: Anon Keys
     description: Project-specific public keys for frontend auth
   - name: Service Keys
-    description: Project-specific secret keys for admin operations (bypass RLS - backend only!)
+    description: Project-specific secret keys for admin operations (bypass RLS -
+      backend only!)
   - name: OAuth Configuration
     description: OAuth provider configuration (Google, GitHub, Microsoft, Apple)
   - name: OAuth Authentication
@@ -199,7 +203,8 @@ paths:
             type: string
       responses:
         '303':
-          description: Redirect to the provider completion URL, signed application redirect, or Volcano import page
+          description: Redirect to the provider completion URL, signed application
+            redirect, or Volcano import page
           headers:
             Location:
               description: Validated redirect target
@@ -396,7 +401,8 @@ paths:
       tags:
         - Project Imports
       summary: Check whether a provider project is ready to import
-      description: Produces a deterministic read-only readiness report for a proposed new Volcano project.
+      description: Produces a deterministic read-only readiness report for a proposed
+        new Volcano project.
       operationId: preflightProjectImport
       security:
         - UserToken: []
@@ -473,7 +479,9 @@ paths:
       tags:
         - Project Imports
       summary: Start a Vercel project import
-      description: Creates a Volcano project from an importable production preflight report. Retrying the same request with the same Idempotency-Key returns the existing run.
+      description: Creates a Volcano project from an importable production preflight
+        report. Retrying the same request with the same Idempotency-Key returns
+        the existing run.
       operationId: startProjectImport
       security:
         - UserToken: []
@@ -535,7 +543,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Preflight is stale, idempotency key was reused, or destination conflicts
+          description: Preflight is stale, idempotency key was reused, or destination
+            conflicts
           content:
             application/json:
               schema:
@@ -1100,7 +1109,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict (project name already exists or a resource deployment blocks a region change)
+          description: Conflict (project name already exists or a resource deployment
+            blocks a region change)
           content:
             application/json:
               schema:
@@ -1460,7 +1470,8 @@ paths:
                 expected_shared_variables:
                   type: array
                   uniqueItems: true
-                  description: When present, replace only if the current complete shared list matches this list.
+                  description: When present, replace only if the current complete shared list
+                    matches this list.
                   items:
                     type: string
                     maxLength: 256
@@ -1470,7 +1481,9 @@ paths:
                   minLength: 64
                   maxLength: 64
                   pattern: ^[a-f0-9]{64}$
-                  description: SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_shared_variables for a compact conditional replacement.
+                  description: SHA-256 of the sorted unique current shared names joined by a
+                    newline. Use instead of expected_shared_variables for a
+                    compact conditional replacement.
       responses:
         '204':
           description: Shared list replaced and affected function synchronization started.
@@ -2682,14 +2695,18 @@ paths:
               properties:
                 name:
                   type: string
-                  description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot start or end with hyphen)
+                  description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot
+                    start or end with hyphen)
                   maxLength: 63
                   pattern: ^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$
                   example: my-api-function
                 code:
                   type: string
                   format: binary
-                  description: ZIP or tar.gz archive containing function source code plus dependency manifests/lockfiles. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz source archive.
+                  description: ZIP or tar.gz archive containing function source code plus
+                    dependency manifests/lockfiles. The API enforces
+                    SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz
+                    source archive.
                 runtime:
                   type: string
                   enum:
@@ -2961,7 +2978,8 @@ paths:
           description: Function response (passthrough from function runtime)
           headers:
             X-Volcano-Version:
-              description: Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production)
+              description: Volcano API/runtime version that served this invocation
+                (`<version>` in production, `<env>-<version>` in non-production)
               schema:
                 type: string
             X-Volcano-Region:
@@ -2985,7 +3003,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Forbidden - CORS blocked, missing `functions.invoke`, or private function with anon key
+          description: Forbidden - CORS blocked, missing `functions.invoke`, or private
+            function with anon key
           content:
             application/json:
               schema:
@@ -3018,10 +3037,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         default:
-          description: Function response (passthrough; status code/body/headers come from the function)
+          description: Function response (passthrough; status code/body/headers come from
+            the function)
           headers:
             X-Volcano-Version:
-              description: Volcano API/runtime version that served this invocation (`<version>` in production, `<env>-<version>` in non-production)
+              description: Volcano API/runtime version that served this invocation
+                (`<version>` in production, `<env>-<version>` in non-production)
               schema:
                 type: string
             X-Volcano-Region:
@@ -3209,7 +3230,8 @@ paths:
             type: string
             maxLength: 63
             pattern: ^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$
-          description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot start or end with hyphen)
+          description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot
+            start or end with hyphen)
           example: my-function
       responses:
         '200':
@@ -3231,7 +3253,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Forbidden - CORS blocked or missing `functions.invoke` permission for anon key
+          description: Forbidden - CORS blocked or missing `functions.invoke` permission
+            for anon key
           content:
             application/json:
               schema:
@@ -3401,7 +3424,8 @@ paths:
           required: false
           schema:
             type: string
-          description: Opaque stream cursor fallback when setting `Last-Event-ID` is not practical.
+          description: Opaque stream cursor fallback when setting `Last-Event-ID` is not
+            practical.
       requestBody:
         required: true
         content:
@@ -3410,7 +3434,9 @@ paths:
               $ref: '#/components/schemas/LogStreamRequest'
       responses:
         '200':
-          description: Server-Sent Events stream. `log` events contain a JSON `LogSearchEvent`; `warning` events contain a JSON object with an `error` field.
+          description: Server-Sent Events stream. `log` events contain a JSON
+            `LogSearchEvent`; `warning` events contain a JSON object with an
+            `error` field.
           content:
             text/event-stream:
               schema:
@@ -3425,7 +3451,8 @@ paths:
                     event: log
                     data: {"id":"LOG_EVENT_ID","timestamp":"2024-01-01T12:00:00Z","level":"info","message":"User logged in","resource":{"type":"function","id":"550e8400-e29b-41d4-a716-446655440000","name":"login"},"region":"us-east-1"}
         '400':
-          description: Bad request - invalid selector, stream cursor, or unsupported stream field
+          description: Bad request - invalid selector, stream cursor, or unsupported
+            stream field
           content:
             application/json:
               schema:
@@ -3492,7 +3519,10 @@ paths:
                 code_0:
                   type: string
                   format: binary
-                  description: Function ZIP or tar.gz archive referenced by the first manifest entry's `file_field`; additional code_N file fields may be included. Each archive is subject to SOURCE_ARCHIVE_SIZE_LIMIT_MB.
+                  description: Function ZIP or tar.gz archive referenced by the first manifest
+                    entry's `file_field`; additional code_N file fields may be
+                    included. Each archive is subject to
+                    SOURCE_ARCHIVE_SIZE_LIMIT_MB.
               required:
                 - functions
       responses:
@@ -3503,7 +3533,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/BatchFunctionDeployResponse'
         '207':
-          description: Batch deployment partially accepted; successful functions started deployment and failed functions were compensated where possible
+          description: Batch deployment partially accepted; successful functions started
+            deployment and failed functions were compensated where possible
           content:
             application/json:
               schema:
@@ -3585,7 +3616,8 @@ paths:
       tags:
         - Functions
       summary: Create a scheduler for a function
-      description: Creates regional scheduled invocation jobs. Requested regions must be a subset of the function's deployed regions.
+      description: Creates regional scheduled invocation jobs. Requested regions must
+        be a subset of the function's deployed regions.
       operationId: createFunctionScheduler
       security:
         - UserToken: []
@@ -3809,14 +3841,16 @@ paths:
               properties:
                 name:
                   type: string
-                  description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot start or end with hyphen)
+                  description: DNS-safe function name (lowercase letters, numbers, hyphens; cannot
+                    start or end with hyphen)
                   maxLength: 63
                   pattern: ^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$
                   example: order-pipeline
                 code:
                   type: string
                   format: binary
-                  description: ZIP or tar.gz archive containing function source code plus dependency manifests/lockfiles.
+                  description: ZIP or tar.gz archive containing function source code plus
+                    dependency manifests/lockfiles.
                 runtime:
                   type: string
                   enum:
@@ -3835,7 +3869,8 @@ paths:
                   example: nodejs24.x
                 handler:
                   type: string
-                  description: The name of the function to invoke. Defaults to "handler" if not specified.
+                  description: The name of the function to invoke. Defaults to "handler" if not
+                    specified.
                   default: handler
                   example: handler
                 is_public:
@@ -3863,7 +3898,8 @@ paths:
                     JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged.
       responses:
         '200':
-          description: Existing durable function updated; its deployment was started or queued
+          description: Existing durable function updated; its deployment was started or
+            queued
           content:
             application/json:
               schema:
@@ -3890,7 +3926,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Name is held by a standard function, or a deletion is queued or running
+          description: Name is held by a standard function, or a deletion is queued or
+            running
           content:
             application/json:
               schema:
@@ -4506,12 +4543,16 @@ paths:
                 app_root:
                   type: string
                   maxLength: 1024
-                  description: Optional relative POSIX path from the uploaded archive root to the Next.js app to build, for example `apps/web`.
+                  description: Optional relative POSIX path from the uploaded archive root to the
+                    Next.js app to build, for example `apps/web`.
                   example: apps/web
                 archive:
                   type: string
                   format: binary
-                  description: ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
+                  description: ZIP or tar.gz archive of the frontend project directory or monorepo
+                    workspace root. The API enforces
+                    SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz
+                    archive.
       responses:
         '200':
           description: Existing frontend updated; its deployment was started or queued
@@ -4538,7 +4579,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Frontend deployment limit exceeded for the current plan or project hard cap
+          description: Frontend deployment limit exceeded for the current plan or project
+            hard cap
           content:
             application/json:
               schema:
@@ -4562,7 +4604,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Service unavailable - frontend workflow or archive limit configuration missing
+          description: Service unavailable - frontend workflow or archive limit
+            configuration missing
           content:
             application/json:
               schema:
@@ -4847,7 +4890,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict - custom domain already in use, still detaching, or frontend already has a custom domain
+          description: Conflict - custom domain already in use, still detaching, or
+            frontend already has a custom domain
           content:
             application/json:
               schema:
@@ -4859,7 +4903,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Service unavailable - custom domain provisioning is temporarily unavailable
+          description: Service unavailable - custom domain provisioning is temporarily
+            unavailable
           content:
             application/json:
               schema:
@@ -6100,14 +6145,16 @@ paths:
                     type: string
                   role_name:
                     type: string
-                    description: Volcano-managed per-database client login (also the pgproxy routing username)
+                    description: Volcano-managed per-database client login (also the pgproxy routing
+                      username)
                     example: volcano_client_11111111-1111-1111-1111-111111111111
                   new_password:
                     type: string
                     description: New Volcano-managed client password. Always starts with `vpg_`.
                   connection_string:
                     type: string
-                    description: Updated pgproxy connection string using Volcano-managed credentials.
+                    description: Updated pgproxy connection string using Volcano-managed
+                      credentials.
         '400':
           description: Database is not active
           content:
@@ -6212,14 +6259,16 @@ paths:
           schema:
             type: string
             format: date-time
-          description: Start time in RFC3339 format (e.g., "2024-01-01T00:00:00Z"). Defaults to 24 hours ago.
+          description: Start time in RFC3339 format (e.g., "2024-01-01T00:00:00Z").
+            Defaults to 24 hours ago.
         - name: to
           in: query
           required: false
           schema:
             type: string
             format: date-time
-          description: End time in RFC3339 format (e.g., "2024-01-02T00:00:00Z"). Defaults to now.
+          description: End time in RFC3339 format (e.g., "2024-01-02T00:00:00Z"). Defaults
+            to now.
         - name: granularity
           in: query
           required: false
@@ -7920,7 +7969,8 @@ paths:
                     description: Opaque cursor for the next page (cursor pagination only)
                   prev_cursor:
                     type: string
-                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
+                    description: Opaque cursor for the previous page (cursor pagination only). Send
+                      as `ending_before`.
         '400':
           description: Invalid or conflicting pagination parameters
           content:
@@ -8115,7 +8165,8 @@ paths:
         '204':
           description: Identity unlinked
         '400':
-          description: Identity cannot be unlinked (primary, last, or would remove last sign-in method), or the identity id is malformed
+          description: Identity cannot be unlinked (primary, last, or would remove last
+            sign-in method), or the identity id is malformed
           content:
             application/json:
               schema:
@@ -8186,7 +8237,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthMethodSummary'
         '400':
-          description: This method cannot be set as primary (password stub, converted anonymous method, or unverified email), or the method id is malformed
+          description: This method cannot be set as primary (password stub, converted
+            anonymous method, or unverified email), or the method id is
+            malformed
           content:
             application/json:
               schema:
@@ -8198,7 +8251,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: The promoted identity's email domain is not in the project's allowed_email_domains
+          description: The promoted identity's email domain is not in the project's
+            allowed_email_domains
           content:
             application/json:
               schema:
@@ -8315,7 +8369,8 @@ paths:
         - name: status
           in: query
           required: false
-          description: Filter by effective status. `banned` returns only currently-banned users; an expired temporary ban lists as `active`.
+          description: Filter by effective status. `banned` returns only currently-banned
+            users; an expired temporary ban lists as `active`.
           schema:
             type: string
             enum:
@@ -8503,7 +8558,8 @@ paths:
                     description: Opaque cursor for the next page (cursor pagination only)
                   prev_cursor:
                     type: string
-                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
+                    description: Opaque cursor for the previous page (cursor pagination only). Send
+                      as `ending_before`.
         '400':
           description: Invalid or conflicting pagination parameters
           content:
@@ -8827,7 +8883,8 @@ paths:
       tags:
         - Auth Configuration
       summary: Get default email templates
-      description: Returns the default email templates used when no custom template is configured.
+      description: Returns the default email templates used when no custom template is
+        configured.
       operationId: getDefaultEmailTemplates
       responses:
         '200':
@@ -9294,7 +9351,8 @@ paths:
               schema:
                 type: string
         '404':
-          description: Ticket is invalid or expired, its path does not match, or managed authentication is disabled
+          description: Ticket is invalid or expired, its path does not match, or managed
+            authentication is disabled
           content:
             text/plain:
               schema:
@@ -9425,13 +9483,15 @@ paths:
           required: false
           schema:
             type: string
-          description: Device user code (from `POST /auth/device/authorize`) used with `action=device`.
+          description: Device user code (from `POST /auth/device/authorize`) used with
+            `action=device`.
         - name: anon_key
           in: query
           required: false
           schema:
             type: string
-          description: Project anon key used by built-in managed auth flows (required for login/signup/device actions).
+          description: Project anon key used by built-in managed auth flows (required for
+            login/signup/device actions).
         - name: state
           in: query
           required: false
@@ -10563,7 +10623,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '502':
-          description: Provider transport failure, invalid JSON, or response body larger than 8 MiB
+          description: Provider transport failure, invalid JSON, or response body larger
+            than 8 MiB
           content:
             application/json:
               schema:
@@ -10605,7 +10666,8 @@ paths:
                       $ref: '#/components/schemas/AnonKey'
                   total:
                     type: integer
-                    description: Total number of items matching the query (so the UI can render numbered pages).
+                    description: Total number of items matching the query (so the UI can render
+                      numbered pages).
                   has_more:
                     type: boolean
                     description: Whether a next page exists.
@@ -10614,7 +10676,8 @@ paths:
                     description: Opaque cursor for the next page (cursor pagination only)
                   prev_cursor:
                     type: string
-                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
+                    description: Opaque cursor for the previous page (cursor pagination only). Send
+                      as `ending_before`.
     post:
       tags:
         - Anon Keys
@@ -10770,7 +10833,8 @@ paths:
       tags:
         - Anon Keys
       summary: Set default anon key
-      description: Promotes the given key to the project's configured default. At most one key per project can be default.
+      description: Promotes the given key to the project's configured default. At most
+        one key per project can be default.
       operationId: setDefaultAnonKey
       security:
         - UserToken: []
@@ -11196,13 +11260,15 @@ paths:
                     description: Opaque cursor for the next page (cursor pagination only)
                   prev_cursor:
                     type: string
-                    description: Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`.
+                    description: Opaque cursor for the previous page (cursor pagination only). Send
+                      as `ending_before`.
   /projects/{id}/storage/stats:
     get:
       tags:
         - Storage Admin
       summary: Get storage statistics for a project
-      description: Returns aggregate storage statistics including bucket count, object count, and total size.
+      description: Returns aggregate storage statistics including bucket count, object
+        count, and total size.
       operationId: getStorageStats
       security:
         - UserToken: []
@@ -11285,7 +11351,8 @@ paths:
       tags:
         - Realtime
       summary: Get realtime statistics for a project
-      description: Returns realtime usage statistics including connection counts and subscribed tables.
+      description: Returns realtime usage statistics including connection counts and
+        subscribed tables.
       operationId: getRealtimeStats
       security:
         - UserToken: []
@@ -11388,7 +11455,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          description: A non-service credential was supplied or the service key lacks
+            `locks.manage`
           content:
             application/json:
               schema:
@@ -11460,7 +11528,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          description: A non-service credential was supplied or the service key lacks
+            `locks.manage`
           content:
             application/json:
               schema:
@@ -11516,7 +11585,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          description: A non-service credential was supplied or the service key lacks
+            `locks.manage`
           content:
             application/json:
               schema:
@@ -11580,7 +11650,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          description: A non-service credential was supplied or the service key lacks
+            `locks.manage`
           content:
             application/json:
               schema:
@@ -11636,7 +11707,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: A non-service credential was supplied or the service key lacks `locks.manage`
+          description: A non-service credential was supplied or the service key lacks
+            `locks.manage`
           content:
             application/json:
               schema:
@@ -12094,7 +12166,8 @@ paths:
       tags:
         - System
       summary: Health check endpoint
-      description: Returns server health status. Used for load balancer and monitoring checks.
+      description: Returns server health status. Used for load balancer and monitoring
+        checks.
       operationId: healthCheck
       responses:
         '200':
@@ -12104,6 +12177,740 @@ paths:
               schema:
                 type: string
                 example: OK
+  /sandboxes/presets:
+    get:
+      tags:
+        - Sandboxes
+      summary: List available sandbox presets
+      operationId: listSandboxPresets
+      security: []
+      responses:
+        "200":
+          description: List available sandbox presets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxPresetList"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /projects/{id}/sandboxes:
+    get:
+      tags:
+        - Sandboxes
+      summary: List sandbox templates
+      operationId: listSandboxes
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List sandbox templates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxTemplatePage"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - Sandboxes
+      summary: Create a sandbox template from a verified preset
+      operationId: createSandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSandboxTemplateRequest"
+      responses:
+        "201":
+          description: Create a sandbox template from a verified preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxTemplate"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /projects/{id}/sandboxes/{sandboxId}:
+    get:
+      tags:
+        - Sandboxes
+      summary: Get a sandbox template
+      operationId: getSandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Get a sandbox template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxTemplate"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags:
+        - Sandboxes
+      summary: Rename a sandbox template
+      operationId: updateSandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSandboxTemplateRequest"
+      responses:
+        "200":
+          description: Rename a sandbox template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxTemplate"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - Sandboxes
+      summary: Retire a template and terminate its sessions
+      operationId: deleteSandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Retire a template and terminate its sessions
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /projects/{id}/sandboxes/{sandboxId}/deployments:
+    get:
+      tags:
+        - Sandboxes
+      summary: List sandbox deployment history
+      operationId: listSandboxDeployments
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List sandbox deployment history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxDeploymentPage"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /projects/{id}/sandbox-sessions:
+    get:
+      tags:
+        - Sandboxes
+      summary: List project sandbox sessions
+      operationId: listSandboxSessions
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: List project sandbox sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSessionPage"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - Sandboxes
+      summary: Start a sandbox session
+      operationId: createSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSandboxSessionRequest"
+      responses:
+        "201":
+          description: Start a sandbox session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSession"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /projects/{id}/sandbox-executions:
+    post:
+      tags:
+        - Sandboxes
+      summary: Execute once and return after confirmed termination
+      operationId: executeSandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxExecutionRequest"
+      responses:
+        "200":
+          description: Execute once and return after confirmed termination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxExecutionResult"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}:
+    get:
+      tags:
+        - Sandboxes
+      summary: Get a sandbox session
+      operationId: getSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Get a sandbox session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSession"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - Sandboxes
+      summary: Request sandbox termination
+      operationId: terminateSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Request sandbox termination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSession"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/suspend:
+    post:
+      tags:
+        - Sandboxes
+      summary: Suspend a sandbox session
+      operationId: suspendSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Suspend a sandbox session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSession"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/resume:
+    post:
+      tags:
+        - Sandboxes
+      summary: Resume a sandbox session
+      operationId: resumeSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Resume a sandbox session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxSession"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/exec:
+    post:
+      tags:
+        - Sandboxes
+      summary: Execute a command within a session
+      operationId: executeSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxCommandRequest"
+      responses:
+        "200":
+          description: Execute a command within a session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxCommandResult"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/files/read:
+    post:
+      tags:
+        - Sandboxes
+      summary: Read a workspace file
+      operationId: readSandboxSessionFile
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxFileReadRequest"
+      responses:
+        "200":
+          description: Read a workspace file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxFileResult"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/files/write:
+    post:
+      tags:
+        - Sandboxes
+      summary: Write a workspace file
+      operationId: writeSandboxSessionFile
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxFileWriteRequest"
+      responses:
+        "204":
+          description: Write a workspace file
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/grants/{subjectId}:
+    put:
+      tags:
+        - Sandboxes
+      summary: Authorize an authenticated project user for this session
+      operationId: grantSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxSubjectGrantRequest"
+      responses:
+        "204":
+          description: Authorize an authenticated project user for this session
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - Sandboxes
+      summary: Revoke a project user session grant
+      operationId: revokeSandboxSession
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Revoke a project user session grant
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sandbox-sessions/{sessionId}/access:
+    post:
+      tags:
+        - Sandboxes
+      summary: Issue a short-lived port-scoped access credential
+      operationId: createSandboxSessionAccess
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SandboxAccessRequest"
+      responses:
+        "200":
+          description: Issue a short-lived port-scoped access credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxAccess"
+        default:
+          description: Request refused or unavailable. Errors include invalid input (400),
+            unauthenticated (401), forbidden (403), not found (404), conflicting
+            retry (409), capacity exhausted (429), and disabled or unavailable
+            (503).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   securitySchemes:
     AnonKey:
@@ -12165,7 +12972,8 @@ components:
         type: string
         pattern: ^[a-z0-9_]+$
         maxLength: 64
-      description: Branch name (unique within the parent database, lowercase letters, numbers, and underscores only)
+      description: Branch name (unique within the parent database, lowercase letters,
+        numbers, and underscores only)
     BucketName:
       name: bucketName
       in: path
@@ -12207,7 +13015,8 @@ components:
         type: string
         pattern: ^[a-z0-9_]+$
         maxLength: 64
-      description: Database name (unique within project, lowercase letters, numbers, and underscores only)
+      description: Database name (unique within project, lowercase letters, numbers,
+        and underscores only)
     DeploymentId:
       name: deploymentId
       in: path
@@ -12271,7 +13080,8 @@ components:
       name: X-Volcano-Lock-Token
       in: header
       required: true
-      description: Opaque UUID generated once by the caller and retained for the lease lifetime.
+      description: Opaque UUID generated once by the caller and retained for the lease
+        lifetime.
       schema:
         type: string
         format: uuid
@@ -12485,7 +13295,8 @@ components:
             - auth.logout
         is_default:
           type: boolean
-          description: Whether this is the project's configured default anon key. Only one key per project can be default.
+          description: Whether this is the project's configured default anon key. Only one
+            key per project can be default.
         created_at:
           type: string
           format: date-time
@@ -12605,7 +13416,8 @@ components:
           default: signup
         platform_token_ttl:
           type: integer
-          description: TTL in seconds for platform tokens minted via `/auth/platform/exchange`
+          description: TTL in seconds for platform tokens minted via
+            `/auth/platform/exchange`
           default: 2592000
         allow_password_reset:
           type: boolean
@@ -12629,7 +13441,8 @@ components:
           default: 86400
         require_email_confirmation:
           type: boolean
-          description: Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+          description: Require users to confirm email before sign-in. Can only be true
+            when email_enabled is true.
           default: false
         email_confirmation_timeout:
           type: integer
@@ -12637,11 +13450,15 @@ components:
           default: 86400
         auto_link_verified_oauth:
           type: boolean
-          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+          description: Link a verified OAuth identity to an existing confirmed account
+            with the same email instead of returning a conflict. Requires
+            require_email_confirmation to be true.
           default: false
         email_enabled:
           type: boolean
-          description: Enable transactional email sending (confirmation, reset, change notifications). Must be true when require_email_confirmation is true.
+          description: Enable transactional email sending (confirmation, reset, change
+            notifications). Must be true when require_email_confirmation is
+            true.
           default: false
         email_from_address:
           type: string
@@ -12656,7 +13473,8 @@ components:
           type: string
         smtp_password_configured:
           type: boolean
-          description: Whether an SMTP password is configured. The password itself is never returned.
+          description: Whether an SMTP password is configured. The password itself is
+            never returned.
           default: false
         smtp_use_tls:
           type: boolean
@@ -12676,7 +13494,8 @@ components:
           description: Default redirect target after successful hosted auth.
         allowed_redirect_urls:
           type: array
-          description: Redirect allowlist used to validate post_auth_redirect_url and post_logout_redirect_url.
+          description: Redirect allowlist used to validate post_auth_redirect_url and
+            post_logout_redirect_url.
           items:
             type: string
         post_logout_redirect_url:
@@ -12761,7 +13580,8 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Users with a successful session creation or refresh in the trailing 30 days since activity collection was deployed.
+          description: Users with a successful session creation or refresh in the trailing
+            30 days since activity collection was deployed.
       required:
         - total_users
         - active_users_30d
@@ -12900,7 +13720,8 @@ components:
           allOf:
             - $ref: '#/components/schemas/AuthHostedPage'
           nullable: true
-          description: The saved page, or null when the project has not customized this page type yet.
+          description: The saved page, or null when the project has not customized this
+            page type yet.
         defaults:
           $ref: '#/components/schemas/AuthHostedPageDefaults'
         runtime:
@@ -12924,7 +13745,8 @@ components:
           description: Whether ownership of this email has been verified
         is_primary:
           type: boolean
-          description: Whether the account's primary sign-in method resolves to this identity
+          description: Whether the account's primary sign-in method resolves to this
+            identity
         created_at:
           type: string
           format: date-time
@@ -13017,7 +13839,8 @@ components:
           type: integer
           minimum: 15
           maximum: 15
-          description: Lowest minimum password length accepted by the auth configuration endpoint.
+          description: Lowest minimum password length accepted by the auth configuration
+            endpoint.
         max_length:
           type: integer
           minimum: 128
@@ -13034,10 +13857,12 @@ components:
           description: Whether passwords must contain an ASCII digit (0-9).
         require_special_chars:
           type: boolean
-          description: Whether passwords must contain one of the backend-supported special characters.
+          description: Whether passwords must contain one of the backend-supported special
+            characters.
         compromised_passwords_rejected:
           type: boolean
-          description: Whether common and known-compromised passwords are rejected by the backend.
+          description: Whether common and known-compromised passwords are rejected by the
+            backend.
       required:
         - effective_min_length
         - min_configurable_length
@@ -13266,7 +14091,9 @@ components:
             $ref: '#/components/schemas/Function'
         failed:
           type: array
-          description: Functions that failed before their workflow started. Successful functions are left running; failed new functions are deleted and failed updates are rolled back where possible.
+          description: Functions that failed before their workflow started. Successful
+            functions are left running; failed new functions are deleted and
+            failed updates are rolled back where possible.
           items:
             $ref: '#/components/schemas/BatchFunctionDeployFailure'
       required:
@@ -13445,7 +14272,9 @@ components:
           additionalProperties: true
         regions:
           type: array
-          description: Optional single explicit deployed region. If omitted, the scheduler chooses one deployed region and invokes according to the cron expression.
+          description: Optional single explicit deployed region. If omitted, the scheduler
+            chooses one deployed region and invokes according to the cron
+            expression.
           maxItems: 1
           items:
             type: string
@@ -13466,11 +14295,13 @@ components:
         client_id:
           type: string
           example: 123456789.apps.googleusercontent.com
-          description: Required for non-device providers. Must not be provided for `provider=device`; server always auto-generates it.
+          description: Required for non-device providers. Must not be provided for
+            `provider=device`; server always auto-generates it.
         client_secret:
           type: string
           example: GOCSPX-abc123def456
-          description: Required for non-device providers. Must not be provided for `provider=device`; server always auto-generates it.
+          description: Required for non-device providers. Must not be provided for
+            `provider=device`; server always auto-generates it.
         redirect_url:
           type: string
           description: Required for non-device providers. Not used for `provider=device`.
@@ -13484,7 +14315,8 @@ components:
             - openid
             - email
             - profile
-          description: Optional for non-device providers, uses provider defaults if omitted. Not used for `provider=device`.
+          description: Optional for non-device providers, uses provider defaults if
+            omitted. Not used for `provider=device`.
     CreateProjectRequest:
       type: object
       description: Request to create a new project
@@ -13615,7 +14447,10 @@ components:
       properties:
         shared:
           type: boolean
-          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
+          description: Include this name in the project's shared function variables.
+            Omission preserves existing membership; new variables default to
+            true for legacy clients. Send false explicitly to create a
+            non-shared variable.
         name:
           type: string
           minLength: 1
@@ -14252,7 +15087,8 @@ components:
           description: Total active compute time in seconds
         time_range:
           type: string
-          description: Time range of the metrics (e.g., "2024-01-01T00:00:00Z to 2024-01-02T00:00:00Z")
+          description: Time range of the metrics (e.g., "2024-01-01T00:00:00Z to
+            2024-01-02T00:00:00Z")
         granularity:
           type: string
           enum:
@@ -14367,7 +15203,8 @@ components:
           type: string
         code:
           type: string
-          description: Stable machine-readable error code when a specific recovery path is available.
+          description: Stable machine-readable error code when a specific recovery path is
+            available.
       required:
         - error
     ImportProvider:
@@ -14550,7 +15387,11 @@ components:
         confirm_environment_variable_read:
           type: boolean
           default: false
-          description: Set to true only after the user confirms an immediately preceding disclosure that the Vercel Integration grant permits reads and writes, while this preflight reads production variable values only. When false or omitted, preflight reads variable metadata only and reports readable values as manual input.
+          description: Set to true only after the user confirms an immediately preceding
+            disclosure that the Vercel Integration grant permits reads and
+            writes, while this preflight reads production variable values only.
+            When false or omitted, preflight reads variable metadata only and
+            reports readable values as manual input.
       required:
         - connection_id
         - source_id
@@ -14664,7 +15505,8 @@ components:
         scope:
           type: string
           minLength: 1
-          description: URL-encoded source scope, including target, branch, and custom environment identifiers.
+          description: URL-encoded source scope, including target, branch, and custom
+            environment identifiers.
       required:
         - kind
         - name
@@ -14866,7 +15708,8 @@ components:
           type: boolean
         is_empty:
           type: boolean
-          description: Whether the repository has no commits and can receive an initial source export.
+          description: Whether the repository has no commits and can receive an initial
+            source export.
       required:
         - id
         - full_name
@@ -14891,14 +15734,17 @@ components:
         repo_id:
           type: integer
           format: int64
-          description: Stable GitHub repository id (repository.id), the authoritative binding.
+          description: Stable GitHub repository id (repository.id), the authoritative
+            binding.
         repo_full_name:
           type: string
         root_directory:
           type: string
         production_branch:
           type: string
-          description: The branch a push must land on to deploy. Follows the repository's GitHub default branch unless the project set its own, which a default-branch rename on GitHub then leaves alone.
+          description: The branch a push must land on to deploy. Follows the repository's
+            GitHub default branch unless the project set its own, which a
+            default-branch rename on GitHub then leaves alone.
         updated_at:
           type: string
           format: date-time
@@ -14911,7 +15757,9 @@ components:
         - updated_at
     ProjectGitDeploySettings:
       type: object
-      description: 'A project''s GitHub auto-deploy settings: what a push to the connected repo''s production branch deploys. All settings are default-off.'
+      description: 'A project''s GitHub auto-deploy settings: what a push to the
+        connected repo''s production branch deploys. All settings are
+        default-off.'
       properties:
         auto_deploy_enabled:
           type: boolean
@@ -14921,10 +15769,12 @@ components:
           description: Whether the repo's functions are deployed on push.
         frontend_name:
           type: string
-          description: Name of the frontend to build and deploy on push. Omitted when no frontend is deployed. Resolved at deploy time; need not exist yet.
+          description: Name of the frontend to build and deploy on push. Omitted when no
+            frontend is deployed. Resolved at deploy time; need not exist yet.
         frontend_app_root:
           type: string
-          description: App root (subdirectory) the frontend builds from. Omitted for the repo root.
+          description: App root (subdirectory) the frontend builds from. Omitted for the
+            repo root.
         updated_at:
           type: string
           format: date-time
@@ -14945,7 +15795,8 @@ components:
           description: Frontend to deploy on push. Omit or empty to deploy no frontend.
         frontend_app_root:
           type: string
-          description: App root the frontend builds from. Requires frontend_name; omit for the repo root.
+          description: App root the frontend builds from. Requires frontend_name; omit for
+            the repo root.
       required:
         - auto_deploy_enabled
         - deploy_functions
@@ -15019,17 +15870,22 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: When source export started, cleared if an incomplete transition is canceled.
+          description: When source export started, cleared if an incomplete transition is
+            canceled.
         exported_at:
           type: string
           format: date-time
           nullable: true
-          description: When the initial export push entered deployment, or when a transition was canceled after its commit was reserved. Once set, the one-time export is consumed.
+          description: When the initial export push entered deployment, or when a
+            transition was canceled after its commit was reserved. Once set, the
+            one-time export is consumed.
         handed_over_at:
           type: string
           format: date-time
           nullable: true
-          description: When a complete production-branch deployment first proved the repository could drive the project, null until then. Once set, the repository is the project's source of truth.
+          description: When a complete production-branch deployment first proved the
+            repository could drive the project, null until then. Once set, the
+            repository is the project's source of truth.
       required:
         - mode
         - transition_started_at
@@ -15037,7 +15893,8 @@ components:
         - handed_over_at
     ProjectSourceExport:
       type: object
-      description: The initial production-branch commit, and everything export could not carry.
+      description: The initial production-branch commit, and everything export could
+        not carry.
       properties:
         repo_full_name:
           type: string
@@ -15050,7 +15907,8 @@ components:
           type: integer
         skipped:
           type: array
-          description: Resources whose source could not be taken, with the reason. Most often a resource that has never deployed successfully.
+          description: Resources whose source could not be taken, with the reason. Most
+            often a resource that has never deployed successfully.
           items:
             $ref: '#/components/schemas/ProjectSourceExportSkip'
         omitted:
@@ -15072,7 +15930,8 @@ components:
         production_branch:
           type: string
           minLength: 1
-          description: The currently configured production branch the user confirmed for export.
+          description: The currently configured production branch the user confirmed for
+            export.
       required:
         - production_branch
     ProjectSourceExportSkip:
@@ -15080,7 +15939,9 @@ components:
       properties:
         kind:
           type: string
-          description: 'The kind of resource, "function" or "frontend". Deliberately not an enum: the generated constants would collide with an existing resource-type enum and rename its members.'
+          description: 'The kind of resource, "function" or "frontend". Deliberately not
+            an enum: the generated constants would collide with an existing
+            resource-type enum and rename its members.'
         name:
           type: string
         reason:
@@ -15094,7 +15955,9 @@ components:
       properties:
         kind:
           type: string
-          description: 'What was left out: migrations Volcano stores no copy of, variable values, a credential-shaped file, installed dependencies, or an archive entry a repository cannot carry.'
+          description: 'What was left out: migrations Volcano stores no copy of, variable
+            values, a credential-shaped file, installed dependencies, or an
+            archive entry a repository cannot carry.'
         resource:
           type: string
           description: The resource it came from, empty when project-wide.
@@ -15111,7 +15974,8 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-          description: The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet.
+          description: The branch a push must land on to deploy. Validated as a Git branch
+            name only — it does not have to exist yet.
       required:
         - production_branch
     ConnectProjectGitRequest:
@@ -15127,18 +15991,38 @@ components:
         repository_id:
           type: integer
           format: int64
-          description: Stable GitHub repository id (repository.id), the preferred selector. Either repository_id or repo_full_name is required; when both are given they must identify the same live repository.
+          description: Stable GitHub repository id (repository.id), the preferred
+            selector. Either repository_id or repo_full_name is required; when
+            both are given they must identify the same live repository.
         repo_full_name:
           type: string
           deprecated: true
-          description: Deprecated selector kept for a compatibility window; prefer repository_id. Either repository_id or repo_full_name is required.
+          description: Deprecated selector kept for a compatibility window; prefer
+            repository_id. Either repository_id or repo_full_name is required.
         root_directory:
           type: string
-          description: Monorepo subdirectory the project builds from. Omit for the repo root.
+          description: Monorepo subdirectory the project builds from. Omit for the repo
+            root.
         production_branch:
           type: string
           maxLength: 255
-          description: 'The branch a push must land on to deploy, with three cases, because this is a full replace and a read-modify-write client sends back whatever it read. Omit it to follow the repository''s GitHub default branch, which also discards a branch set earlier. Send back the branch the project already deploys from, when that is the repository''s default, and nothing changes either way — a project pinned to that branch stays pinned. Sending the default branch when the project deploys from something else returns it to following the default, including on a rebind, where a pin describes a branch chosen for the repository being left. Any other branch becomes the project''s own choice, exempt from later default-branch renames. Validated as a Git branch name only: it does not have to exist yet, so a project can be pointed at a branch about to be pushed. Changing repository and naming a branch other than the new repository''s default in one request is refused with 400, because the branch named is almost always the previous repository''s, echoed back — connect first, then set the branch.'
+          description: 'The branch a push must land on to deploy, with three cases,
+            because this is a full replace and a read-modify-write client sends
+            back whatever it read. Omit it to follow the repository''s GitHub
+            default branch, which also discards a branch set earlier. Send back
+            the branch the project already deploys from, when that is the
+            repository''s default, and nothing changes either way — a project
+            pinned to that branch stays pinned. Sending the default branch when
+            the project deploys from something else returns it to following the
+            default, including on a rebind, where a pin describes a branch
+            chosen for the repository being left. Any other branch becomes the
+            project''s own choice, exempt from later default-branch renames.
+            Validated as a Git branch name only: it does not have to exist yet,
+            so a project can be pointed at a branch about to be pushed. Changing
+            repository and naming a branch other than the new repository''s
+            default in one request is refused with 400, because the branch named
+            is almost always the previous repository''s, echoed back — connect
+            first, then set the branch.'
       required:
         - connection_id
         - installation_id
@@ -15162,7 +16046,8 @@ components:
         app_root:
           type: string
           maxLength: 1024
-          description: Optional relative POSIX path from the uploaded archive root to the Next.js app that is deployed.
+          description: Optional relative POSIX path from the uploaded archive root to the
+            Next.js app that is deployed.
         status:
           type: string
           description: |
@@ -15343,7 +16228,8 @@ components:
           description: What initiated this deployment.
         initiated_by:
           type: string
-          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+          description: Platform user that triggered a request-initiated deployment; absent
+            for git and system deployments.
         artifact_bucket:
           type: string
         artifact_key:
@@ -15359,10 +16245,12 @@ components:
         codebuild_duration_seconds:
           type: integer
           format: int64
-          description: Total CodeBuild build duration recorded for this deployment, in seconds.
+          description: Total CodeBuild build duration recorded for this deployment, in
+            seconds.
         codebuild_build_count:
           type: integer
-          description: Number of completed CodeBuild builds included in codebuild_duration_seconds.
+          description: Number of completed CodeBuild builds included in
+            codebuild_duration_seconds.
         codebuild_duration_recorded_at:
           type: string
           format: date-time
@@ -15432,7 +16320,8 @@ components:
         page_views:
           type: integer
           format: int64
-          description: Navigable-document responses served on this day (text/html or Sec-Fetch-Dest=document) — strict subset of `requests`.
+          description: Navigable-document responses served on this day (text/html or
+            Sec-Fetch-Dest=document) — strict subset of `requests`.
       required:
         - day
         - requests
@@ -15459,14 +16348,16 @@ components:
         - requests
     FrontendUsageHistoryResponse:
       type: object
-      description: Zero-filled daily series of request + error counts for a single frontend, oldest first.
+      description: Zero-filled daily series of request + error counts for a single
+        frontend, oldest first.
       properties:
         frontend_id:
           type: string
           format: uuid
         days:
           type: integer
-          description: Number of daily entries returned (always equal to the `days` query param after clamping).
+          description: Number of daily entries returned (always equal to the `days` query
+            param after clamping).
         daily:
           type: array
           items:
@@ -15525,15 +16416,21 @@ components:
           type: object
           nullable: true
           additionalProperties: true
-          description: Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode function.
+          description: Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode
+            function.
         has_openapi_spec:
           type: boolean
-          description: Whether OpenAPI metadata is configured; list responses omit the document itself.
+          description: Whether OpenAPI metadata is configured; list responses omit the
+            document itself.
         aws_function_arn:
           type: string
         invoke_url:
           type: string
-          description: 'Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development, so a client testing for an empty string never matches.'
+          description: 'Canonical geo-routed HTTPS endpoint for invoking this function.
+            Use it as-is: it does not share a domain with the API, so a host
+            derived from the API URL will not reach the function. Omitted when
+            the deployment serves no public invocation domain, as in local
+            development, so a client testing for an empty string never matches.'
         deployed_regions:
           type: array
           items:
@@ -15839,7 +16736,8 @@ components:
           description: What initiated this deployment.
         initiated_by:
           type: string
-          description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+          description: Platform user that triggered a request-initiated deployment; absent
+            for git and system deployments.
         artifact_bucket:
           type: string
         artifact_key:
@@ -15849,10 +16747,12 @@ components:
         codebuild_duration_seconds:
           type: integer
           format: int64
-          description: Total CodeBuild build duration recorded for this deployment, in seconds.
+          description: Total CodeBuild build duration recorded for this deployment, in
+            seconds.
         codebuild_build_count:
           type: integer
-          description: Number of completed CodeBuild builds included in codebuild_duration_seconds.
+          description: Number of completed CodeBuild builds included in
+            codebuild_duration_seconds.
         codebuild_duration_recorded_at:
           type: string
           format: date-time
@@ -15956,7 +16856,10 @@ components:
         q:
           type: string
           maxLength: 512
-          description: Optional activity query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
+          description: Optional activity query. Supports quoted text, implicit AND,
+            AND/OR/NOT, parentheses, and fields such as `level`, `region`,
+            `invocation.id`, `resource.id`, `resource.name`, `function`,
+            `frontend`, `database`, and `body`.
         start_time:
           type: string
           format: date-time
@@ -15996,7 +16899,10 @@ components:
         q:
           type: string
           maxLength: 512
-          description: Optional log query. Supports quoted text, implicit AND, AND/OR/NOT, parentheses, and fields such as `level`, `region`, `invocation.id`, `resource.id`, `resource.name`, `function`, `frontend`, `database`, and `body`.
+          description: Optional log query. Supports quoted text, implicit AND, AND/OR/NOT,
+            parentheses, and fields such as `level`, `region`, `invocation.id`,
+            `resource.id`, `resource.name`, `function`, `frontend`, `database`,
+            and `body`.
         start_time:
           type: string
           format: date-time
@@ -16018,7 +16924,8 @@ components:
         - resource
     LogStreamRequest:
       type: object
-      description: Stream request for live project logs. Pagination cursors and fixed end times are not supported.
+      description: Stream request for live project logs. Pagination cursors and fixed
+        end times are not supported.
       additionalProperties: false
       properties:
         resource:
@@ -16026,7 +16933,8 @@ components:
         q:
           type: string
           maxLength: 512
-          description: Optional log query using the same syntax as search and activity requests.
+          description: Optional log query using the same syntax as search and activity
+            requests.
         start_time:
           type: string
           format: date-time
@@ -16036,18 +16944,21 @@ components:
           minimum: 1
           maximum: 1000
           default: 100
-          description: Maximum number of records to deliver on connect or reconnect before following new events.
+          description: Maximum number of records to deliver on connect or reconnect before
+            following new events.
       required:
         - resource
     LogSearchEvent:
       allOf:
         - $ref: '#/components/schemas/LogEvent'
         - type: object
-          description: Runtime log event returned by project log search. Search results always include a stable event ID and owning resource.
+          description: Runtime log event returned by project log search. Search results
+            always include a stable event ID and owning resource.
           properties:
             id:
               type: string
-              description: Opaque stable log event ID for pagination, deduplication, and display.
+              description: Opaque stable log event ID for pagination, deduplication, and
+                display.
             resource:
               $ref: '#/components/schemas/LogResource'
           required:
@@ -16070,7 +16981,8 @@ components:
           description: Whether there are more log events available.
         next_cursor:
           type: string
-          description: Opaque cursor for the next page. Send this value as `cursor` on the next request.
+          description: Opaque cursor for the next page. Send this value as `cursor` on the
+            next request.
       required:
         - data
         - limit
@@ -16110,13 +17022,16 @@ components:
         language:
           type: string
           example: nodejs
-          description: Runtime language family used by the CLI to choose defaults from source files.
+          description: Runtime language family used by the CLI to choose defaults from
+            source files.
         default:
           type: boolean
           description: Whether this runtime is the CLI default for its language.
         durable_capable:
           type: boolean
-          description: Whether a durable function can be authored on this runtime. Only runtimes with a durable authoring API report true, and a durable deploy naming any other runtime is rejected.
+          description: Whether a durable function can be authored on this runtime. Only
+            runtimes with a durable authoring API report true, and a durable
+            deploy naming any other runtime is rejected.
         deployment:
           $ref: '#/components/schemas/FunctionRuntimeDeployment'
     FunctionRuntimesResponse:
@@ -16182,7 +17097,8 @@ components:
         run_count:
           type: integer
           format: int64
-          description: Total number of times this scheduler has executed. 0 for a scheduler that has never run.
+          description: Total number of times this scheduler has executed. 0 for a
+            scheduler that has never run.
         created_at:
           type: string
           format: date-time
@@ -16206,10 +17122,12 @@ components:
           type: boolean
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16267,7 +17185,8 @@ components:
       properties:
         id:
           type: string
-          description: Opaque stable log event ID for pagination, deduplication, and display.
+          description: Opaque stable log event ID for pagination, deduplication, and
+            display.
         timestamp:
           type: string
           format: date-time
@@ -16275,7 +17194,9 @@ components:
         level:
           $ref: '#/components/schemas/LiveLogLevel'
         body:
-          description: Application log value. JSON arguments retain their JSON type. Strings containing a serialized JSON object or array are normalized to that object or array; all other strings remain strings.
+          description: Application log value. JSON arguments retain their JSON type.
+            Strings containing a serialized JSON object or array are normalized
+            to that object or array; all other strings remain strings.
           nullable: true
           oneOf:
             - type: string
@@ -16295,7 +17216,8 @@ components:
           $ref: '#/components/schemas/LogDeployment'
         invocation_id:
           type: string
-          description: Function invocation ID associated with this log event, when available.
+          description: Function invocation ID associated with this log event, when
+            available.
       required:
         - timestamp
         - body
@@ -16460,10 +17382,12 @@ components:
           description: URL path to next page (only present if has_more is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16519,13 +17443,16 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (offset pagination only; present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more
+            is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16584,10 +17511,12 @@ components:
           description: URL path to next page (only present if has_more is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16698,13 +17627,16 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (offset pagination only; present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more
+            is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - limit
@@ -16731,13 +17663,16 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (offset pagination only; present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more
+            is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
         status:
           type: string
           enum:
@@ -16780,13 +17715,16 @@ components:
           description: Whether there are more pages available
         next:
           type: string
-          description: URL path to next page (offset pagination only; present if has_more is true)
+          description: URL path to next page (offset pagination only; present if has_more
+            is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16795,7 +17733,8 @@ components:
         - has_more
     PaginatedStorageBuckets:
       type: object
-      description: Cursor-paginated storage buckets (returned only when cursor pagination is requested).
+      description: Cursor-paginated storage buckets (returned only when cursor
+        pagination is requested).
       properties:
         data:
           type: array
@@ -16815,7 +17754,8 @@ components:
           description: Opaque cursor for the next page (present if has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (present when a previous page
+            exists). Send as `ending_before`.
       required:
         - data
         - limit
@@ -16844,10 +17784,12 @@ components:
           description: URL path to next page (only present if has_more is true)
         next_cursor:
           type: string
-          description: Opaque cursor for the next page (cursor pagination only; present if has_more is true)
+          description: Opaque cursor for the next page (cursor pagination only; present if
+            has_more is true)
         prev_cursor:
           type: string
-          description: Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`.
+          description: Opaque cursor for the previous page (cursor pagination only;
+            present when a previous page exists). Send as `ending_before`.
       required:
         - data
         - page
@@ -16920,11 +17862,13 @@ components:
         git_connection:
           allOf:
             - $ref: '#/components/schemas/ProjectGitConnectionSummary'
-          description: Present for connected projects when `git_connection` is requested through the list endpoint's `include` parameter.
+          description: Present for connected projects when `git_connection` is requested
+            through the list endpoint's `include` parameter.
         health:
           allOf:
             - $ref: '#/components/schemas/ProjectHealthSummary'
-          description: Present when `health` is requested through the list endpoint's `include` parameter.
+          description: Present when `health` is requested through the list endpoint's
+            `include` parameter.
         created_at:
           type: string
           format: date-time
@@ -16968,13 +17912,16 @@ components:
         shared_variables:
           type: array
           uniqueItems: true
-          description: Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it.
+          description: Replace the complete shared function-variable list with existing
+            names, without changing variable values. Omission keeps membership
+            unchanged; an empty list clears it.
           items:
             type: string
             pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
         variables:
           type: array
-          description: Fully synced when declared - variables absent from this list are deleted.
+          description: Fully synced when declared - variables absent from this list are
+            deleted.
           items:
             $ref: '#/components/schemas/ProjectConfigVariable'
         buckets:
@@ -17033,10 +17980,12 @@ components:
       properties:
         section:
           type: string
-          description: Manifest section the entry belongs to (e.g. variables, buckets, auth.providers.oauth).
+          description: Manifest section the entry belongs to (e.g. variables, buckets,
+            auth.providers.oauth).
         name:
           type: string
-          description: Resource name or key within the section. Empty for singleton sections.
+          description: Resource name or key within the section. Empty for singleton
+            sections.
         action:
           type: string
           enum:
@@ -17050,7 +17999,8 @@ components:
           description: Error detail when action is `error`.
         notice:
           type: string
-          description: Optional operational note (e.g. disabling realtime drops active connections).
+          description: Optional operational note (e.g. disabling realtime drops active
+            connections).
       required:
         - section
         - action
@@ -17170,7 +18120,8 @@ components:
       properties:
         require_confirmation:
           type: boolean
-          description: Require users to confirm email before sign-in. Requires email sending to be enabled.
+          description: Require users to confirm email before sign-in. Requires email
+            sending to be enabled.
         confirmation_timeout:
           type: integer
           description: Email confirmation token expiry in seconds
@@ -17223,7 +18174,8 @@ components:
           $ref: '#/components/schemas/ProjectConfigAuthEmailPasswordProvider'
         oauth:
           type: array
-          description: Fully synced when declared - providers absent from this list are deleted.
+          description: Fully synced when declared - providers absent from this list are
+            deleted.
           items:
             $ref: '#/components/schemas/ProjectConfigOAuthProvider'
     ProjectConfigAuthRateLimits:
@@ -17622,7 +18574,8 @@ components:
           type: string
           format: password
           writeOnly: true
-          description: Write-only; omitted from config export. Not used for `provider=device`.
+          description: Write-only; omitted from config export. Not used for
+            `provider=device`.
         redirect_url:
           type: string
           description: Not used for `provider=device`.
@@ -17732,7 +18685,10 @@ components:
       properties:
         shared:
           type: boolean
-          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
+          description: Include this name in the project's shared function variables.
+            Omission preserves existing membership; new variables default to
+            true for legacy clients. Send false explicitly to create a
+            non-shared variable.
         name:
           type: string
           minLength: 1
@@ -18304,7 +19260,11 @@ components:
           description: Canonical function ID used for invocation routing
         invoke_url:
           type: string
-          description: 'Canonical HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development; invoke through POST /functions/{functionId}/invoke instead.'
+          description: 'Canonical HTTPS endpoint for invoking this function. Use it as-is:
+            it does not share a domain with the API, so a host derived from the
+            API URL will not reach the function. Omitted when the deployment
+            serves no public invocation domain, as in local development; invoke
+            through POST /functions/{functionId}/invoke instead.'
         cache_ttl_seconds:
           type: integer
           minimum: 1
@@ -18325,7 +19285,8 @@ components:
           default: cron
         cron_expression:
           type: string
-          description: Standard 5-field cron expression evaluated in UTC. Seconds fields, descriptors, and Quartz syntax are not supported.
+          description: Standard 5-field cron expression evaluated in UTC. Seconds fields,
+            descriptors, and Quartz syntax are not supported.
           example: '*/5 * * * *'
     ServiceKey:
       type: object
@@ -18510,7 +19471,8 @@ components:
         - mime_type
     StorageObjectWithBucket:
       type: object
-      description: Storage object with bucket name included (for admin listing across buckets)
+      description: Storage object with bucket name included (for admin listing across
+        buckets)
       properties:
         id:
           type: string
@@ -18680,11 +19642,13 @@ components:
         html_body:
           type: string
           maxLength: 262144
-          description: Optional HTML body override. Rendered as an html/template. Max 256 KiB.
+          description: Optional HTML body override. Rendered as an html/template. Max 256
+            KiB.
         text_body:
           type: string
           maxLength: 262144
-          description: Optional plain-text body override. Rendered as a text/template. Max 256 KiB.
+          description: Optional plain-text body override. Rendered as a text/template. Max
+            256 KiB.
     TestEmailResponse:
       type: object
       required:
@@ -18694,7 +19658,9 @@ components:
           type: boolean
     UpdateAuthConfigRequest:
       type: object
-      description: 'All fields optional - only include fields you want to update. Validation rule: require_email_confirmation=true requires email_enabled=true.'
+      description: 'All fields optional - only include fields you want to update.
+        Validation rule: require_email_confirmation=true requires
+        email_enabled=true.'
       properties:
         access_token_lifetime:
           type: integer
@@ -18772,16 +19738,20 @@ components:
           type: integer
         require_email_confirmation:
           type: boolean
-          description: Require users to confirm email before sign-in. Can only be true when email_enabled is true.
+          description: Require users to confirm email before sign-in. Can only be true
+            when email_enabled is true.
         email_confirmation_timeout:
           type: integer
           description: Email confirmation token expiry in seconds.
         auto_link_verified_oauth:
           type: boolean
-          description: Link a verified OAuth identity to an existing confirmed account with the same email instead of returning a conflict. Requires require_email_confirmation to be true.
+          description: Link a verified OAuth identity to an existing confirmed account
+            with the same email instead of returning a conflict. Requires
+            require_email_confirmation to be true.
         email_enabled:
           type: boolean
-          description: Enable transactional email sending. Cannot be false while require_email_confirmation is true.
+          description: Enable transactional email sending. Cannot be false while
+            require_email_confirmation is true.
         email_from_address:
           type: string
         email_from_name:
@@ -18797,7 +19767,9 @@ components:
           format: password
           writeOnly: true
           minLength: 1
-          description: Replacement SMTP password. Omit this field to preserve the configured password. The value is encrypted at rest and never returned.
+          description: Replacement SMTP password. Omit this field to preserve the
+            configured password. The value is encrypted at rest and never
+            returned.
         smtp_use_tls:
           type: boolean
         email_confirmation_subject:
@@ -18923,10 +19895,12 @@ components:
       properties:
         client_id:
           type: string
-          description: Supported for non-device providers. Not supported for `provider=device`.
+          description: Supported for non-device providers. Not supported for
+            `provider=device`.
         client_secret:
           type: string
-          description: Supported for non-device providers. Not supported for `provider=device`.
+          description: Supported for non-device providers. Not supported for
+            `provider=device`.
         redirect_url:
           type: string
           format: uri
@@ -18992,7 +19966,10 @@ components:
       properties:
         shared:
           type: boolean
-          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
+          description: Include this name in the project's shared function variables.
+            Omission preserves existing membership; new variables default to
+            true for legacy clients. Send false explicitly to create a
+            non-shared variable.
         value:
           type: string
       required:
@@ -19084,7 +20061,10 @@ components:
       properties:
         shared:
           type: boolean
-          description: Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable.
+          description: Include this name in the project's shared function variables.
+            Omission preserves existing membership; new variables default to
+            true for legacy clients. Send false explicitly to create a
+            non-shared variable.
         id:
           type: string
           format: uuid
@@ -19120,7 +20100,8 @@ components:
             - api
             - system
             - unknown
-          description: What initiated the latest variable propagation sync, when one has run.
+          description: What initiated the latest variable propagation sync, when one has
+            run.
         created_at:
           type: string
           format: date-time
@@ -19320,7 +20301,8 @@ components:
         - status
     DeploymentProgress:
       type: object
-      description: Normalized live progress derived from the deployment workflow and build phases.
+      description: Normalized live progress derived from the deployment workflow and
+        build phases.
       properties:
         current_phase:
           type: string
@@ -19364,7 +20346,8 @@ components:
         ids:
           type: array
           maxItems: 25
-          description: Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources.
+          description: Optional deployment identifiers. Omit or send an empty array to
+            include every deployment for the selected resources.
           items:
             type: string
             format: uuid
@@ -19381,7 +20364,8 @@ components:
         ids:
           type: array
           maxItems: 25
-          description: Optional function identifiers. Omit or send an empty array to include every function in the project.
+          description: Optional function identifiers. Omit or send an empty array to
+            include every function in the project.
           items:
             type: string
             format: uuid
@@ -19402,7 +20386,8 @@ components:
         ids:
           type: array
           maxItems: 25
-          description: Optional frontend identifiers. Omit or send an empty array to include every frontend in the project.
+          description: Optional frontend identifiers. Omit or send an empty array to
+            include every frontend in the project.
           items:
             type: string
             format: uuid
@@ -19412,7 +20397,8 @@ components:
         - type
     LogDatabaseRequestResource:
       type: object
-      description: Database runtime log resource selector. Deployment logs are not supported for databases.
+      description: Database runtime log resource selector. Deployment logs are not
+        supported for databases.
       additionalProperties: false
       properties:
         type:
@@ -19423,7 +20409,8 @@ components:
         ids:
           type: array
           maxItems: 25
-          description: Optional database identifiers. Omit or send an empty array to include every database in the project.
+          description: Optional database identifiers. Omit or send an empty array to
+            include every database in the project.
           items:
             type: string
             format: uuid
@@ -19606,13 +20593,15 @@ components:
       properties:
         root_id:
           type: string
-          description: Element id the runtime script renders into. Markup carrying it opts into the theme-shell contract.
+          description: Element id the runtime script renders into. Markup carrying it opts
+            into the theme-shell contract.
         script:
           type: string
           description: The runtime script injected into the rendered page.
         mock_prelude:
           type: string
-          description: Preview harness that supplies request params and stubs the hosted-auth API. Never served on a real page.
+          description: Preview harness that supplies request params and stubs the
+            hosted-auth API. Never served on a real page.
     AuthPageAppearanceDefaults:
       type: object
       required:
@@ -19657,3 +20646,516 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuthPageLayout'
+    SandboxPreset:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        runtime:
+          type: string
+        version:
+          type: string
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+        regions:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - runtime
+        - version
+        - memory_mb
+        - regions
+    SandboxTemplate:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        preset:
+          type: string
+        memory_mb:
+          type: integer
+        status:
+          type: string
+          enum:
+            - ready
+            - unavailable
+            - deleting
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - name
+        - status
+        - created_at
+    CreateSandboxTemplateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+        preset:
+          type: string
+          enum:
+            - python3.12
+            - node22
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+          default: 1024
+      required:
+        - name
+        - preset
+    UpdateSandboxTemplateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+      required:
+        - name
+    SandboxSession:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        sandbox_id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - starting
+            - running
+            - suspending
+            - suspended
+            - resuming
+            - terminating
+            - terminated
+            - unknown
+        desired_state:
+          type: string
+          enum:
+            - running
+            - suspended
+            - terminated
+        region:
+          type: string
+        memory_mb:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - project_id
+        - sandbox_id
+        - state
+        - desired_state
+        - region
+        - memory_mb
+        - created_at
+        - expires_at
+    CreateSandboxSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        preset:
+          type: string
+          enum:
+            - python3.12
+            - node22
+        sandbox_id:
+          type: string
+          format: uuid
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+        region:
+          type: string
+          pattern: ^aws-[a-z0-9-]+$
+        max_duration_seconds:
+          type: integer
+          minimum: 30
+          maximum: 28800
+          default: 3600
+        idle_timeout_seconds:
+          type: integer
+          minimum: 0
+          maximum: 28800
+          default: 0
+      required:
+        - region
+      oneOf:
+        - required:
+            - preset
+          not:
+            required:
+              - sandbox_id
+        - required:
+            - sandbox_id
+          not:
+            required:
+              - preset
+    SandboxCommandRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        command:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          default: 60
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+          maxProperties: 64
+      required:
+        - command
+    SandboxExecutionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        preset:
+          type: string
+          enum:
+            - python3.12
+            - node22
+        sandbox_id:
+          type: string
+          format: uuid
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+        region:
+          type: string
+          pattern: ^aws-[a-z0-9-]+$
+        command:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 60
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+          maxProperties: 64
+      required:
+        - region
+        - command
+      oneOf:
+        - required:
+            - preset
+          not:
+            required:
+              - sandbox_id
+        - required:
+            - sandbox_id
+          not:
+            required:
+              - preset
+    SandboxCommandResult:
+      type: object
+      additionalProperties: false
+      properties:
+        stdout:
+          type: string
+        stderr:
+          type: string
+        exit_code:
+          type: integer
+        stdout_truncated:
+          type: boolean
+        stderr_truncated:
+          type: boolean
+        timed_out:
+          type: boolean
+      required:
+        - stdout
+        - stderr
+        - exit_code
+        - stdout_truncated
+        - stderr_truncated
+        - timed_out
+    SandboxExecutionResult:
+      type: object
+      additionalProperties: false
+      properties:
+        stdout:
+          type: string
+        stderr:
+          type: string
+        exit_code:
+          type: integer
+        stdout_truncated:
+          type: boolean
+        stderr_truncated:
+          type: boolean
+        timed_out:
+          type: boolean
+        session_id:
+          type: string
+          format: uuid
+        region:
+          type: string
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - stdout
+        - stderr
+        - exit_code
+        - stdout_truncated
+        - stderr_truncated
+        - timed_out
+        - session_id
+        - region
+        - duration_ms
+    SandboxFileWriteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        data:
+          type: string
+          format: byte
+          maxLength: 11184812
+      required:
+        - path
+        - data
+    SandboxFileReadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      required:
+        - path
+    SandboxFileResult:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: string
+          format: byte
+      required:
+        - data
+    SandboxSubjectGrantRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - expires_at
+    SandboxAccessRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65532
+        expires_in_seconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 300
+      required:
+        - port
+    SandboxAccess:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          format: uri
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+      required:
+        - url
+        - token
+        - expires_at
+    SandboxDeployment:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - created_at
+        - updated_at
+    SandboxPagination:
+      type: object
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+        has_more:
+          type: boolean
+        next_cursor:
+          type: string
+      required:
+        - limit
+        - has_more
+    SandboxTemplatePage:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxTemplate"
+        pagination:
+          $ref: "#/components/schemas/SandboxPagination"
+      required:
+        - data
+        - pagination
+    SandboxSessionPage:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxSession"
+        pagination:
+          $ref: "#/components/schemas/SandboxPagination"
+      required:
+        - data
+        - pagination
+    SandboxDeploymentPage:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxDeployment"
+        pagination:
+          $ref: "#/components/schemas/SandboxPagination"
+      required:
+        - data
+        - pagination
+    SandboxPresetList:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxPreset"
+      required:
+        - data
+    SandboxCapacity:
+      type: object
+      additionalProperties: false
+      properties:
+        region:
+          type: string
+        allocated_memory_mb:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - region
+        - allocated_memory_mb
+    SandboxCapacityList:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxCapacity"
+      required:
+        - data
+    PublishSandboxPresetRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        preset:
+          type: string
+          enum:
+            - python3.12
+            - node22
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+        deployment_id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - preset
+        - memory_mb
+        - deployment_id
