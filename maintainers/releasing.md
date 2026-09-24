@@ -22,9 +22,8 @@ workflow and `.github/release-tools/hosting-tests.json`; update both together.
 
 ## Setup
 
-- Make existing `KONG_GH_APP_ID` / `KONG_GH_APP_PRIVATE_KEY` available to this
-  repository. The job requests only Hosting Contents read. Release Please continues
-  using `VOLCANO_APP_ID` / `VOLCANO_APP_KEY`.
+- Reuse `VOLCANO_APP_ID` / `VOLCANO_APP_KEY`, the existing app credentials used by
+  Release Please. The acceptance job requests only Hosting Contents read.
 - Deploy Hosting's fixture role and dedicated production test account credential.
   Fixture creation and recovery use public APIs; SDK subprocesses receive only
   scoped project credentials. Cleanup must pass before evidence is recorded.

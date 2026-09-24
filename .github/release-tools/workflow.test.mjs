@@ -8,8 +8,8 @@ test('only release PR compatibility builds; manual merge publishes existing file
   const compatibility = read('production-compatibility');
   assert.match(compatibility, /pull_request:/);
   assert.match(compatibility, /environment: sdk-production-compatibility/);
-  assert.match(compatibility, /vars.KONG_GH_APP_ID/);
-  assert.match(compatibility, /secrets.KONG_GH_APP_PRIVATE_KEY/);
+  assert.match(compatibility, /vars.VOLCANO_APP_ID/);
+  assert.match(compatibility, /secrets.VOLCANO_APP_KEY/);
   assert.match(compatibility, /repositories: volcano-hosting\n {10}permission-contents: read/);
   assert.match(compatibility, /sparse-checkout: tests\/sdk-contract/);
   const suite = JSON.parse(readFileSync(new URL('./hosting-tests.json', import.meta.url), 'utf8'));
