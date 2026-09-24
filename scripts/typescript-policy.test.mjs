@@ -233,9 +233,7 @@ test('tracked SDK code remains in native lint, type, test, and coverage gates', 
   requireFullCoverage(coverageConfig);
   assert.equal(manifest.scripts['format:check'], 'prettier . --config prettier.config.cjs --check');
   const discovered = new Set(
-    ['jest.config.js', 'jest.integration.config.cjs', 'jest.contract.config.cjs'].flatMap(
-      (config) => discoveredTests(config),
-    ),
+    ['jest.config.js', 'jest.typed.config.cjs'].flatMap((config) => discoveredTests(config)),
   );
   for (const path of files.filter((item) =>
     /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item),

@@ -6,8 +6,6 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import unit from '../jest.config.js';
-import contract from '../jest.contract.config.cjs';
-import integration from '../jest.integration.config.cjs';
 
 const jest = fileURLToPath(new URL('../node_modules/jest/bin/jest.js', import.meta.url));
 
@@ -41,7 +39,7 @@ async function runFixture(source, config) {
   }
 }
 
-for (const [name, config] of Object.entries({ unit, integration, contract })) {
+for (const [name, config] of Object.entries({ unit })) {
   test(`${name} attributes an unhandled rejection to the originating test`, async () => {
     const result = await runFixture(
       `

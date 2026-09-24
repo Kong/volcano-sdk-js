@@ -7,8 +7,8 @@
   evidenced tool or compatibility exceptions; never grant a human review approval.
 - Keep reviewer and repository-administration credentials outside ordinary
   automation.
-- Preserve shared behavioral scenarios and coordinate contract changes with
-  `Kong/volcano-hosting` and the other SDKs.
+- Keep native unit, type, build, and package checks here. Hosting owns behavioral
+  acceptance scenarios and bindings; coordinate changes with `Kong/volcano-hosting`.
 - Keep maintainer guidance under `maintainers/`; `docs/` is published.
 
 ## Documentation

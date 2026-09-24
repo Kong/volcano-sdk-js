@@ -6,7 +6,7 @@ const manifest = JSON.parse(await readFile(new URL('../package.json', import.met
 const requiredTasks = {
   quality: 'pnpm quality:policy && pnpm quality:checks && pnpm mutation:full',
   'quality:checks':
-    'pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart && pnpm test:examples',
+    'pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node scripts/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:quickstart && pnpm test:examples',
   'quality:policy': 'node --test scripts/quality-policy.test.mjs',
   audit: 'node scripts/audit-dependencies.mjs',
   lint: 'pnpm build && eslint . --max-warnings=0 && pnpm format:check',
@@ -22,7 +22,6 @@ const requiredTasks = {
   'test:tooling': 'node --test --test-concurrency=1 scripts/*.test.mjs',
   test: 'pnpm build && jest',
   'test:typed-runtime': 'pnpm build && jest --config jest.typed.config.cjs',
-  'test:contract': 'pnpm build && jest --config jest.contract.config.cjs --runInBand',
   'test:quickstart':
     'pnpm test:package && pnpm test:types:package && node scripts/test-package-quickstart.mjs reports/volcano-sdk.tgz',
   'test:package':
