@@ -1,6 +1,6 @@
 ---
 title: 'Durable functions'
-description: 'Write functions that checkpoint their progress and resume where they left off, so one execution can run for hours across many invocations.'
+description: 'Write functions that checkpoint their progress and resume where they left off for up to 366 days.'
 ---
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to a year, far longer than a single invocation is allowed.
@@ -458,8 +458,8 @@ const { data, error } = await volcano.durable.start(
   { executionName: `order-${orderId}` },
 );
 
-if (error) {
-  throw error;
+if (error || !data) {
+  throw error ?? new Error('Durable start returned no execution');
 }
 console.log(data.id, data.status); // 'running'
 ```
@@ -478,20 +478,26 @@ starting a durable function that is not public, `404` for a name that is not a
 durable function in this project, `409` while the function is still
 provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
 for a project with too many executions in flight for its plan or out of either
-durable allowance, and `503` where durable execution is unavailable, which
-is what a local deployment answers. `409` is the one to expect right after a deploy: retry once the
-function is `active`.
+durable allowance, and `503` where durable execution is unavailable. `409` is
+the one to expect right after a deploy: retry once the function is `active`.
 
 Starting is the only durable operation an application credential can perform.
-Reading an execution, listing them and stopping one are owner-scoped: they take
-the project id and a platform token, because an anon key is shared by everyone
-who loads the page and an execution is addressed by id alone. Call them from
-your backend, never a browser.
+Reading an execution, listing them and stopping one are owner-scoped. Use a
+separate backend client with the project owner's platform user token. Auth-user
+sessions, anon keys, service keys, and project access tokens are not accepted.
 
 ```javascript
-const { data, error } = await volcano.durable.get(projectId, 'order-pipeline', executionId);
+import { VolcanoClient } from '@volcano.dev/sdk';
 
-if (!error && data.status === 'succeeded') {
+const ownerClient = new VolcanoClient({
+  apiUrl: process.env.VOLCANO_API_URL,
+  anonKey: process.env.VOLCANO_ANON_KEY,
+  accessToken: process.env.VOLCANO_PLATFORM_TOKEN,
+});
+
+const { data, error } = await ownerClient.durable.get(projectId, 'order-pipeline', executionId);
+
+if (!error && data?.status === 'succeeded') {
   console.log(data.result); // what the function returned
 }
 ```
@@ -515,7 +521,7 @@ anything bigger to a table or a bucket.
 
 ```javascript
 // Most recent first, optionally filtered by status.
-const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
+const { data } = await ownerClient.durable.list(projectId, 'order-pipeline', {
   status: 'running',
   limit: 20,
   page: 1,
@@ -523,7 +529,7 @@ const { data } = await volcano.durable.list(projectId, 'order-pipeline', {
 console.log(data.data.length, data.total, data.has_more);
 
 // Asks for the execution to stop; completed steps are not undone.
-await volcano.durable.stop(projectId, 'order-pipeline', executionId);
+await ownerClient.durable.stop(projectId, 'order-pipeline', executionId);
 ```
 
 Listing reports the status the platform last observed rather than polling each
@@ -546,7 +552,7 @@ having the browser poll the execution. See
 
 ## Limits and what an operation costs
 
-| Limit                             | Free            | Pro             |
+| Limit                             | HOBBY           | SUPERAGENT      |
 | --------------------------------- | --------------- | --------------- |
 | Execution allowance               | 5,000 / month   | 10,000 / month  |
 | Operation allowance               | 100,000 / month | 200,000 / month |
