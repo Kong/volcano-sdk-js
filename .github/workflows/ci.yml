@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ['20', '22']
-        mutation-shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        mutation-shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -75,7 +75,7 @@ jobs:
       - name: Run SDK quality checks
         env:
           MUTATION_SHARD_INDEX: ${{ matrix.mutation-shard }}
-          MUTATION_SHARD_COUNT: '8'
+          MUTATION_SHARD_COUNT: '16'
         run: pnpm quality
 
       - name: Preserve failing tests and property counterexamples
