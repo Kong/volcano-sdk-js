@@ -6,7 +6,7 @@ import {
   type QueryResult,
 } from '../../src/index.ts';
 
-type ExistingOptions = { userId?: string | null };
+interface ExistingOptions { userId?: string | null }
 type ExistingFunction = (base: string, options?: ExistingOptions) => string;
 
 declare const existingOptions: ExistingOptions;
@@ -18,7 +18,7 @@ const preservesExistingOptions: ExistingOptions = currentOptions;
 const acceptsExistingFunction: typeof databaseConnectionString = existingFunction;
 const preservesExistingFunction: ExistingFunction = databaseConnectionString;
 
-void [
+export const connectionCompatibility = [
   acceptsExistingOptions,
   preservesExistingOptions,
   acceptsExistingFunction,
@@ -29,4 +29,4 @@ declare const query: QueryBuilder<{ id: number }>;
 declare const mutation: MutationBuilder<{ id: number }>;
 const queryResult: Promise<QueryResult<{ id: number }>> = Promise.resolve(query);
 const mutationResult: Promise<QueryResult<{ id: number }>> = Promise.resolve(mutation);
-void [queryResult, mutationResult];
+export const builderResults = [queryResult, mutationResult];

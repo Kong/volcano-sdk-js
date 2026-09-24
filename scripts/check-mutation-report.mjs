@@ -1,35 +1,47 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-function mutationReportFindings(report) {
+function isFileMap(files) {
+  return files !== null && typeof files === 'object' && !Array.isArray(files);
+}
+
+function reportEntries(report) {
   const files = report?.files;
-  if (files === null || typeof files !== 'object' || Array.isArray(files)) {
-    return { integrity: ['Missing mutation report files'], outcomes: [] };
+  if (!isFileMap(files)) {
+    return { error: 'Missing mutation report files' };
   }
   const entries = Object.entries(files);
   if (entries.length === 0) {
-    return { integrity: ['Mutation report contains no source files'], outcomes: [] };
+    return { error: 'Mutation report contains no source files' };
+  }
+  return { entries };
+}
+
+function fileFindings(filename, file) {
+  if (!Array.isArray(file?.mutants)) {
+    return { integrity: [`${filename}: missing mutant results`], outcomes: [], count: 0 };
+  }
+  return {
+    integrity: [],
+    outcomes: file.mutants
+      .filter((mutant) => mutant.status !== 'Killed' && mutant.status !== 'CompileError')
+      .map((mutant) => `${filename}:${String(mutant.id)} ${String(mutant.status)}`),
+    count: file.mutants.length,
+  };
+}
+
+function mutationReportFindings(report) {
+  const { entries, error } = reportEntries(report);
+  if (error !== undefined) {
+    return { integrity: [error], outcomes: [] };
   }
 
-  const integrity = [];
-  const outcomes = [];
-  let mutants = 0;
-  for (const [filename, file] of entries) {
-    if (!Array.isArray(file?.mutants)) {
-      integrity.push(`${filename}: missing mutant results`);
-      continue;
-    }
-    for (const mutant of file.mutants) {
-      mutants += 1;
-      if (mutant.status !== 'Killed' && mutant.status !== 'CompileError') {
-        outcomes.push(`${filename}:${String(mutant.id)} ${String(mutant.status)}`);
-      }
-    }
-  }
-  if (mutants === 0) {
+  const findings = entries.map(([filename, file]) => fileFindings(filename, file));
+  const integrity = findings.flatMap((item) => item.integrity);
+  if (findings.reduce((total, item) => total + item.count, 0) === 0) {
     integrity.push('Mutation report contains no mutants');
   }
-  return { integrity, outcomes };
+  return { integrity, outcomes: findings.flatMap((item) => item.outcomes) };
 }
 
 export function mutationReportProblems(report) {
@@ -44,13 +56,11 @@ export function mutationGateFailed(report) {
 
 function mutationStatusCounts(report) {
   const counts = new Map();
-  for (const file of Object.values(report?.files ?? {})) {
-    if (!Array.isArray(file?.mutants)) {
-      continue;
-    }
-    for (const mutant of file.mutants) {
-      counts.set(mutant.status, (counts.get(mutant.status) ?? 0) + 1);
-    }
+  const mutants = Object.values(report?.files ?? {}).flatMap((file) =>
+    Array.isArray(file?.mutants) ? file.mutants : [],
+  );
+  for (const mutant of mutants) {
+    counts.set(mutant.status, (counts.get(mutant.status) ?? 0) + 1);
   }
   return counts;
 }

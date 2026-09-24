@@ -24,17 +24,20 @@ const unicorn = unicornModule.default || unicornModule;
 const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
-const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/package-*.ts'];
+const testSupportFiles = ['__tests__/**/*.cjs'];
+const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/**/*.ts'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
-const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
+const moduleScriptFiles = ['scripts/**/*.mjs', '*.config.mjs'];
 const rootConfigFiles = ['*.config.js', '*.config.cjs', 'eslint.config.cjs'];
 const exampleFiles = ['examples/nextjs-notes-app/src/**/*.js'];
 const exampleConfigFiles = ['examples/nextjs-notes-app/*.config.js'];
+const durableExampleFiles = ['examples/durable-order-pipeline/**/*.js'];
 const commonjsFiles = [
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...testFiles,
+  ...testSupportFiles,
   ...commonjsScriptFiles,
 ];
 const strictFiles = [
@@ -45,6 +48,8 @@ const strictFiles = [
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...exampleFiles,
+  ...durableExampleFiles,
+  ...testSupportFiles,
 ];
 const lintedFiles = [...jsFiles, ...declarationFiles, ...typescriptFiles];
 
@@ -154,6 +159,7 @@ module.exports = [
     },
     rules: {
       'array-callback-return': ['error', { checkForEach: true }],
+      complexity: ['error', 5],
       curly: ['error', 'all'],
       'dot-notation': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
@@ -267,7 +273,6 @@ module.exports = [
     },
     rules: {
       'no-unused-vars': 'off',
-      complexity: ['error', 5],
       'dot-notation': 'off',
       '@typescript-eslint/dot-notation': 'error',
       'sonarjs/cognitive-complexity': ['error', 10],

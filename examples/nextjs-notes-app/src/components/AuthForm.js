@@ -123,6 +123,54 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
 
         {/* Form */}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <AuthFeedback error={error} success={success} />
+
+          <AuthFields
+            showName={showName}
+            name={name}
+            setName={setName}
+            email={email}
+            setEmail={setEmail}
+            showPassword={showPassword}
+            password={password}
+            setPassword={setPassword}
+            mode={mode}
+          />
+
+          {/* Forgot Password Link */}
+          {forgotPasswordLink && (
+            <div className="text-right">
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-volcano-600 hover:text-volcano-500"
+              >
+                Forgot your password?
+              </Link>
+            </div>
+          )}
+
+          <SubmitButton loading={loading} submitText={submitText} />
+
+          <GuestSignIn mode={mode} onAnonymousSignIn={onAnonymousSignIn} loading={loading} />
+        </form>
+
+        {/* Alternate Link */}
+        <p className="text-center text-sm text-gray-600">
+          {alternateLink.text}{' '}
+          <Link
+            href={alternateLink.href}
+            className="font-medium text-volcano-600 hover:text-volcano-500"
+          >
+            {alternateLink.linkText}
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AuthFeedback({ error, success }) {
+  return <>
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -137,6 +185,11 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
             </div>
           )}
 
+  </>;
+}
+
+function AuthFields({ showName, name, setName, email, setEmail, showPassword, password, setPassword, mode }) {
+  return (
           <div className="space-y-4">
             {/* Name Field (signup only) */}
             {showName && (
@@ -199,18 +252,11 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
             )}
           </div>
 
-          {/* Forgot Password Link */}
-          {forgotPasswordLink && (
-            <div className="text-right">
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-volcano-600 hover:text-volcano-500"
-              >
-                Forgot your password?
-              </Link>
-            </div>
-          )}
+  );
+}
 
+function SubmitButton({ loading, submitText }) {
+  return <>
           {/* Submit Button */}
           <div>
             <button
@@ -247,6 +293,11 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
             </button>
           </div>
 
+  </>;
+}
+
+function GuestSignIn({ mode, onAnonymousSignIn, loading }) {
+  return <>
           {/* Anonymous Sign In (sign in page only) */}
           {mode === 'signin' && onAnonymousSignIn && (
             <div className="relative">
@@ -269,19 +320,5 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
               Continue as Guest
             </button>
           )}
-        </form>
-
-        {/* Alternate Link */}
-        <p className="text-center text-sm text-gray-600">
-          {alternateLink.text}{' '}
-          <Link
-            href={alternateLink.href}
-            className="font-medium text-volcano-600 hover:text-volcano-500"
-          >
-            {alternateLink.linkText}
-          </Link>
-        </p>
-      </div>
-    </div>
-  );
+  </>;
 }

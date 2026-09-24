@@ -5,19 +5,25 @@ function git(...args) {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
 }
 
+function dryRunArguments(patterns) {
+  return patterns.length > 0
+    ? ['run', '--dryRunOnly', '--mutate', patterns.join(',')]
+    : ['run', '--dryRunOnly'];
+}
+
+function reportDryRunFailure(run) {
+  process.stderr.write(run.stdout ?? '');
+  process.stderr.write(run.stderr ?? '');
+  throw new Error('Stryker mutation inventory failed');
+}
+
 function mutantCount(patterns) {
-  const args = ['run', '--dryRunOnly'];
-  if (patterns.length > 0) {
-    args.push('--mutate', patterns.join(','));
-  }
-  const run = spawnSync('./node_modules/.bin/stryker', args, {
+  const run = spawnSync('./node_modules/.bin/stryker', dryRunArguments(patterns), {
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024,
   });
   if (run.status !== 0) {
-    process.stderr.write(run.stdout || '');
-    process.stderr.write(run.stderr || '');
-    throw new Error('Stryker mutation inventory failed');
+    reportDryRunFailure(run);
   }
   const count = /Instrumented \d+ source file\(s\) with (\d+) mutant\(s\)/.exec(run.stdout);
   if (!count) {

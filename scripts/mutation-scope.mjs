@@ -82,40 +82,50 @@ function shardItems(group) {
     .filter((item) => item.weight > 0);
 }
 
-export function shardMutationPatterns(patterns, shardIndex, shardCount) {
-  if (
-    !Number.isInteger(shardIndex) ||
-    !Number.isInteger(shardCount) ||
-    shardCount < 1 ||
-    shardIndex < 0 ||
-    shardIndex >= shardCount
-  ) {
+function validateShardSelection(shardIndex, shardCount) {
+  const invalid = [
+    !Number.isInteger(shardIndex),
+    !Number.isInteger(shardCount),
+    shardCount < 1,
+    shardIndex < 0,
+    shardIndex >= shardCount,
+  ];
+  if (invalid.includes(true)) {
     throw new Error('Invalid mutation shard index or count');
   }
+}
 
-  const groups = new Map();
-  for (const pattern of patterns) {
-    const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
-    if (!match) {
-      throw new Error(`Invalid mutation pattern: ${pattern}`);
-    }
-    const [, path, first, last] = match;
-    const source = readFileSync(path, 'utf8');
-    const lineCount =
-      source.length === 0 ? 0 : source.split('\n').length - Number(source.endsWith('\n'));
-    const start = first === undefined ? 1 : Number(first);
-    const end = last === undefined ? lineCount : Number(last);
-    if (start < 1 || end < start || end > lineCount) {
-      throw new Error(`Invalid mutation range: ${pattern}`);
-    }
-    const group = groups.get(path) ?? { path, patterns: [], lines: new Set(), source, lineCount };
-    group.patterns.push(pattern);
-    for (let line = start; line <= end; line += 1) {
-      group.lines.add(line);
-    }
-    groups.set(path, group);
+function parsePattern(pattern) {
+  const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
+  if (match === null) {
+    throw new Error(`Invalid mutation pattern: ${pattern}`);
   }
+  return match;
+}
 
+function patternBounds(first, last, lineCount) {
+  return { start: Number(first ?? 1), end: Number(last ?? lineCount) };
+}
+
+function addPatternGroup(groups, pattern) {
+  const [, path, first, last] = parsePattern(pattern);
+  const source = readFileSync(path, 'utf8');
+  const lineCount =
+    source.split('\n').length - Number(source.endsWith('\n')) - Number(source.length === 0);
+  const { start, end } = patternBounds(first, last, lineCount);
+  const invalidRange = [start < 1, end < start, end > lineCount];
+  if (invalidRange.includes(true)) {
+    throw new Error(`Invalid mutation range: ${pattern}`);
+  }
+  const group = groups.get(path) ?? { path, patterns: [], lines: new Set(), source, lineCount };
+  group.patterns.push(pattern);
+  for (let line = start; line <= end; line += 1) {
+    group.lines.add(line);
+  }
+  groups.set(path, group);
+}
+
+function distributeShardItems(groups, shardCount) {
   const shards = Array.from({ length: shardCount }, () => ({ patterns: [], weight: 0 }));
   const ordered = [...groups.values()]
     .flatMap((group) => shardItems(group))
@@ -133,6 +143,16 @@ export function shardMutationPatterns(patterns, shardIndex, shardCount) {
     target.patterns.push(...item.patterns);
     target.weight += item.weight;
   }
+  return shards;
+}
+
+export function shardMutationPatterns(patterns, shardIndex, shardCount) {
+  validateShardSelection(shardIndex, shardCount);
+  const groups = new Map();
+  for (const pattern of patterns) {
+    addPatternGroup(groups, pattern);
+  }
+  const shards = distributeShardItems(groups, shardCount);
   const selected = shards[shardIndex].patterns;
   if (selected.length === 0) {
     throw new Error(`Mutation shard ${shardIndex}/${shardCount} selected no source`);
