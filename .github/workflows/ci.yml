@@ -2,6 +2,10 @@ name: CI
 
 on:
   workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        default: ''
   push:
     branches:
       - main
@@ -30,12 +34,19 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.25.x'
           cache: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+      - run: npm ci --prefix .github/release-tools --ignore-scripts --no-audit --no-fund
+      - run: npm test --prefix .github/release-tools
 
       - name: Run actionlint
         run: bash .github/scripts/actionlint.sh
@@ -56,6 +67,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up pnpm
@@ -71,6 +83,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - run: npm ci --prefix .github/release-tools --ignore-scripts --no-audit --no-fund
 
       - name: Run SDK quality checks
         env:
@@ -111,6 +125,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up pnpm

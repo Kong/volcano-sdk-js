@@ -27,7 +27,16 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
+      - name: Hold the next release while a merged candidate awaits publication
+        id: pending
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pending="$(gh pr list --state merged --label 'autorelease: pending' --json number --jq 'length')"
+          echo "blocked=$([ "$pending" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        if: steps.pending.outputs.blocked != 'true'
         with:
           token: ${{ steps.app.outputs.token }}
           skip-github-release: true

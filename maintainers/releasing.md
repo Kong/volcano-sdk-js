@@ -3,25 +3,57 @@
 The checked-in release and publish workflows own versioning and publication.
 This checklist does not authorize a release, a registry mutation or an environment approval.
 
-## Before publication
+## Reviewed release flow
 
-1. Identify the release PR, exact source commit, version, tag and intended registry account. Inspect the generated changelog and package metadata.
-2. Require passing native checks: `pnpm lint`, `pnpm check:openapi`, `pnpm test:types`, `pnpm test`, `pnpm build`, and `pnpm test:package`. Verify the OpenAPI snapshot and generated output using the checked-in commands.
-3. Obtain clean code and security reviews. Record the approved shared-acceptance run and exact Hosting/SDK revisions for behavior changes; dry runs and synthetic HTTP tests are not live acceptance.
-4. Build the npm tarball locally, install it in a clean environment, and run the exact public quickstart. Retain its digest and inventory as candidate package-content evidence; this is not proof of the bytes the release workflow will later build.
-5. Confirm explicit release authorization before any publication action. The existing automatic release path may publish after a release PR lands; a successful check or an unprotected environment is not itself release approval. Resolve authorization before merging a release PR rather than assuming `npm-production` has a human gate.
+Release Please maintains the version/changelog PR; maintainers merge it deliberately.
+Ordinary changes can accumulate. Client-only fixes use the same release path.
+Update `backend-requirements.json` when any accumulated SDK change needs newer
+Hosting behavior. Its release and source SHA must identify an actually completed
+production deployment; a hotfix label cannot waive that requirement.
 
-Use the existing workflows and their tag, ancestry, identity and artifact checks.
-The release-triggered workflow builds after the GitHub release is published, then passes its preserved artifact to the registry job without rebuilding. A local candidate and the workflow artifact are separate builds. Authorize the source version and this workflow before triggering that path; do not claim exact-byte pre-publication approval from the local check. If approval of specific bytes is required, first add and review a build/test/approval boundary that holds that same artifact before publication. Do not retag a release or overwrite a published version.
-After publication, verify the registry's package identity and version, digest/provenance where available, clean installation, and the documented quickstart against the approved platform revision.
-Record the workflow URL and registry URL. Source-main tests alone do not prove the published artifact contains that source.
+The current PR head runs native checks and Hosting-owned staging acceptance using
+an installed candidate tarball. A head update invalidates that evidence. After
+merge, `publish.yml` builds the final package once and runs full Hosting Staging
+Validation for those exact bytes. It then requires declared production readiness,
+rechecks it immediately before npm publication, creates the stable GitHub release,
+and checks registry installation in a job without publishing credentials.
 
-Both PR CI and the release build run `node scripts/test-package-quickstart.mjs package/*.tgz`.
-The check installs that tarball outside the checkout without install scripts or publisher credentials,
-then executes the unchanged getting-started example against synthetic local auth responses.
-It checks sign-in, profile retrieval and logout and records the unchanged tarball's SHA256.
-The release job uploads that tested tarball for publication. This catches package/example regressions;
-it does not replace registry installation or approved live platform acceptance.
+This is staging acceptance plus declared production readiness, not direct testing
+against production. The latest production attempt must be successful and preserve
+the declared required source. A later failed, cancelled, or unfinished rollout
+blocks release. The deployment records do not attest current out-of-band settings
+or flags, and the final read does not lock out a rollout starting afterward.
+
+The original candidate artifact contains its source SHA, build run, version,
+backend declaration and SHA-256. Recovery uses `workflow_dispatch` with that
+original merged build run ID, repeats full Hosting validation, and reuses its
+files. No recovery rebuild occurs. A newer staging batch (including a queued batch)
+invalidates old evidence conservatively and requires another full validation. Expired/missing artifacts fail closed. If npm
+already contains the version, its tarball must match byte-for-byte.
+
+Pending merged Release Please PRs remain `autorelease: pending` until publication;
+new release PRs wait. After publication the SDK sets `autorelease: tagged`, creates
+the tag at the tested merge SHA and refreshes Release Please. The pinned Release
+Please library is exercised through two version/changelog cycles in release-tool
+tests, including an intervening held candidate. No SDK version allocator is added.
+
+Before enabling the pilot, configure Hosting's dedicated staging fixture account,
+deploy the reviewed read-only production evidence role and staging fixture role,
+and verify GitHub App grants in both repositories. The SDK app needs Hosting
+Actions write and Contents read. Hosting needs SDK Actions/Contents/Pull requests
+read. Keep npm trusted publishing on this repository's `publish.yml` and
+`npm-production`; restrict that environment to main. Restrict the new
+`sdk-release-validation` environment to main and the exact Release Please branch.
+Require `SDK Release Gate` and native quality checks
+on release PRs. Confirm the real OIDC subjects before enabling the IAM trust.
+
+The workflow supports main releases. If a fix must exclude unreleased features,
+prepare a maintenance branch and review its release workflow/environment trust;
+do not introduce a bypass. Native checks and the legacy contract/live runners
+remain while Hosting validates migration coverage. Python/Ruby are a later pilot.
+
+See Hosting's `docs/internal/guides/sdk-release-gate.md` for the rollout checklist,
+credential ownership, fixture recovery, coverage limits and unexecuted live proof.
 
 ## Recover from a bad release
 

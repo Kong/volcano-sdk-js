@@ -32,6 +32,10 @@
       "paths": {
         "@/*": ["./src/*"]
       }
+    },
+    ".github/release-tools": {
+      "entry": ["release.mjs", "publish.mjs", "*.test.mjs"],
+      "project": ["*.mjs"]
     }
   }
 }
