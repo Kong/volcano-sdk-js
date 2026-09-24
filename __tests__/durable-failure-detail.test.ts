@@ -28,6 +28,9 @@ test('copies error fields that JSON serialization would otherwise drop', () => {
 });
 
 test('omits missing and explicitly undefined engine metadata', () => {
-  expect(failureDetail(new Error('plain'))).toEqual({ name: 'Error', message: 'plain' });
-  expect(failureDetail(new EngineError('empty'))).toEqual({ name: 'Error', message: 'empty' });
+  expect(failureDetail(new Error('plain'))).toStrictEqual({ name: 'Error', message: 'plain' });
+  expect(failureDetail(new EngineError('empty'))).toStrictEqual({
+    name: 'Error',
+    message: 'empty',
+  });
 });
