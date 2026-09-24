@@ -290,7 +290,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/index.ts', 'src/sdk-public-types.ts'],
+    files: ['src/sdk-public-types.ts'],
     rules: {
       '@typescript-eslint/no-unnecessary-type-parameters': 'off',
     },
