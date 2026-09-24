@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
  * These tests verify the auto-fetch functionality for lightweight notifications
  * in Phase 3 of the realtime scalability implementation.
  */
-import { VolcanoAuth } from '../src/index.js';
+import { QueryBuilder, VolcanoAuth } from '../src/index.js';
 import { VolcanoRealtime } from '../src/realtime.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -345,6 +345,20 @@ describe('Realtime Auto-Fetch', () => {
   });
 
   describe('_fetchRow batching', () => {
+    test('delivers full publications without trying to fetch a row', () => {
+      const { client } = createMockVolcanoClient();
+      realtime.setVolcanoClient(client);
+      const channel = realtime.channel('public:users', { type: 'postgres' });
+      const callback = jest.fn();
+      channel.on('*', callback);
+      const publication = { type: 'UPDATE', schema: 'public', table: 'users', record: { id: 1 } };
+
+      channel._handlePublication({ data: publication });
+
+      expect(callback).toHaveBeenCalledWith(publication, { data: publication });
+      expect(channel._pendingFetches.size).toBe(0);
+    });
+
     test('batches multiple fetch requests within window', async () => {
       const {
         client: mockClient,
@@ -416,6 +430,7 @@ describe('Realtime Auto-Fetch', () => {
         name: `User ${String(i + 1)}`,
       }));
       const { client: mockClient, fromSpy } = createMockVolcanoClient(mockData);
+      const inSpy = jest.spyOn(QueryBuilder.prototype, 'in');
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('public:users', {
@@ -426,8 +441,8 @@ describe('Realtime Auto-Fetch', () => {
       const callback = jest.fn();
       channel.on('*', callback);
 
-      // Send 6 lightweight INSERTs (exceeds max batch size of 5)
-      for (let i = 1; i <= 6; i++) {
+      // Reaching the limit flushes without waiting for the batch timer.
+      for (let i = 1; i <= 5; i++) {
         channel._handlePublication({
           data: {
             mode: 'lightweight',
@@ -440,11 +455,9 @@ describe('Realtime Auto-Fetch', () => {
         });
       }
 
-      // First 5 should trigger immediate flush
       await Promise.resolve();
-
-      // Should have flushed when hitting batch size
       expect(fromSpy).toHaveBeenCalled();
+      expect(inSpy).toHaveBeenCalledWith('id', ['1', '2', '3', '4', '5']);
     });
   });
 
