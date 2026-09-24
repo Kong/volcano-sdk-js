@@ -26,14 +26,17 @@ function hostWith(data: unknown): AuthProviderHost {
 
 test.each([
   null,
-  {},
   { authorization_url: 42 },
   Object.assign([], { authorization_url: 'url' }),
   Object.assign(() => 0, { authorization_url: 'url' }),
 ])('rejects malformed successful OAuth link response: %p', async (data) => {
   await expect(linkOAuthProvider(hostWith(data), 'google')).rejects.toThrow(
-    'OAuth link response must include an authorization URL',
+    'OAuth link response must have a string authorization URL when present',
   );
+});
+
+test('preserves an OAuth link response without the optional authorization URL', async () => {
+  await expect(linkOAuthProvider(hostWith({}), 'google')).resolves.toEqual({ data: {}, error: null });
 });
 
 test('treats a null OAuth providers field as an empty collection', async () => {
@@ -66,7 +69,7 @@ test.each([
 });
 
 test.each([
-  [{ provider: 'google', expires_in: 120 }, 'message'],
+  [{ message: 12, provider: 'google', expires_in: 120 }, 'message'],
   [{ message: 'ready', provider: 12, expires_in: 120 }, 'provider'],
 ])('rejects non-string OAuth token %s fields', async (data, name) => {
   await expect(getOAuthProviderToken(hostWith(data), 'google')).rejects.toThrow(
@@ -74,7 +77,7 @@ test.each([
   );
 });
 
-test.each([undefined, null, 3.5, '120'])(
+test.each([null, 3.5, '120'])(
   'rejects non-integer OAuth token expiry: %p',
   async (expiresIn) => {
     const data = { message: 'ready', provider: 'google', expires_in: expiresIn };
@@ -83,3 +86,12 @@ test.each([undefined, null, 3.5, '120'])(
     );
   },
 );
+
+test('preserves absent optional OAuth token status fields', async () => {
+  await expect(getOAuthProviderToken(hostWith({}), 'google')).resolves.toEqual({
+    message: undefined,
+    provider: undefined,
+    expiresIn: undefined,
+    error: null,
+  });
+});

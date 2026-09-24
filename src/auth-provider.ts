@@ -14,8 +14,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function assertLinkResponse(value: unknown): asserts value is LinkProviderResponse {
-  if (!isRecord(value) || typeof value['authorization_url'] !== 'string') {
-    throw new TypeError('OAuth link response must include an authorization URL');
+  if (
+    !isRecord(value) ||
+    (Object.hasOwn(value, 'authorization_url') && typeof value['authorization_url'] !== 'string')
+  ) {
+    throw new TypeError('OAuth link response must have a string authorization URL when present');
   }
 }
 
@@ -100,16 +103,22 @@ function failedTokenStatus(error: Error): OAuthTokenResponse {
   return { message: null, provider: null, expiresIn: null, error };
 }
 
-function tokenString(value: unknown, name: string): string {
+function tokenString(value: unknown, name: string): string | undefined {
   const field = requiredField(value, name);
+  if (field === undefined) {
+    return undefined;
+  }
   if (typeof field !== 'string') {
     throw new TypeError(`OAuth token ${name} must be a string`);
   }
   return field;
 }
 
-function tokenExpiry(value: unknown): number {
+function tokenExpiry(value: unknown): number | undefined {
   const field = requiredField(value, 'expires_in');
+  if (field === undefined) {
+    return undefined;
+  }
   if (!Number.isInteger(field)) {
     throw new TypeError('OAuth token expires_in must be an integer');
   }

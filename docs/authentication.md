@@ -425,6 +425,10 @@ if (error) {
   return;
 }
 
+if (!data?.authorization_url) {
+  throw new Error('The provider did not return an authorization URL');
+}
+
 // Redirect user to complete linking
 window.location.href = data.authorization_url;
 ```

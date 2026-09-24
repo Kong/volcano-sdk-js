@@ -155,9 +155,9 @@ export interface EmailChangeResponse {
 }
 
 export interface OAuthTokenResponse {
-  message: string | null;
-  provider: string | null;
-  expiresIn: number | null;
+  message: string | null | undefined;
+  provider: string | null | undefined;
+  expiresIn: number | null | undefined;
   error: AuthError | null;
 }
 
@@ -249,7 +249,7 @@ export interface OAuthProvider {
 }
 
 export interface LinkProviderResponse {
-  authorization_url: string;
+  authorization_url?: string;
 }
 
 export type AuthStateCallback = (user: User | null) => void;
