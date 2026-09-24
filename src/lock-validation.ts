@@ -1,4 +1,4 @@
-const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
+const MAX_LOCK_TTL_SECONDS = 7_776_000; // 90 days
 
 export function validateLockOptions(key: unknown, options: unknown): number {
   validateLockKey(key);

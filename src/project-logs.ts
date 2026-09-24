@@ -9,9 +9,6 @@ import type {
   LogsResponse,
 } from './sdk-public-types.ts';
 
-const LOG_LEVELS = new Set<unknown>(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
-const LOG_RESOURCE_TYPES = new Set<unknown>(['function', 'frontend', 'database']);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -43,10 +40,10 @@ function isLogResource(value: unknown): value is LogResource {
   if (!isRecord(value)) {
     return false;
   }
+  const resourceTypes: readonly unknown[] = ['function', 'frontend', 'database'];
+  const type = value['type'];
   return (
-    LOG_RESOURCE_TYPES.has(value['type']) &&
-    typeof value['id'] === 'string' &&
-    optionalString(value['name'])
+    resourceTypes.includes(type) && typeof value['id'] === 'string' && optionalString(value['name'])
   );
 }
 
@@ -55,7 +52,8 @@ function isLogDeployment(value: unknown): value is LogDeployment {
 }
 
 function isLogLevel(value: unknown): boolean {
-  return LOG_LEVELS.has(value);
+  const levels: readonly unknown[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+  return levels.includes(value);
 }
 
 function isEventCore(value: Record<string, unknown>): boolean {
