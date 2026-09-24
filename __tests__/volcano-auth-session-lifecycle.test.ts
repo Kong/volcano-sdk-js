@@ -479,4 +479,70 @@ describe('VolcanoAuth session lifecycle', () => {
       consoleError.mockRestore();
     });
   });
+  describe('Security - updateUser Validation', () => {
+    // SDK no longer validates params - backend handles validation
+    it('should pass empty params to backend (backend validates)', async () => {
+      volcano.accessToken = sessionToken();
+
+      // Mock backend returning validation error
+      fetchMock.mockResolvedValueOnce(
+        reply(400, { error: 'At least one of password or metadata is required' }),
+      );
+
+      const result = await volcano.auth.updateUser({});
+
+      // SDK passes request to backend, backend returns error
+      expect(result.user).toBeNull();
+      expect(result.error).toBeDefined();
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    it('should allow update with password only', async () => {
+      volcano.accessToken = sessionToken();
+
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
+
+      const result = await volcano.auth.updateUser({ password: 'newpass123' });
+
+      expect(result.error).toBeNull();
+      expect(result.user).toBeDefined();
+    });
+
+    it('should allow update with metadata only', async () => {
+      volcano.accessToken = sessionToken();
+
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
+
+      const result = await volcano.auth.updateUser({ metadata: { name: 'Test' } });
+
+      expect(result.error).toBeNull();
+      expect(result.user).toBeDefined();
+    });
+
+    it('should allow update with both password and metadata', async () => {
+      volcano.accessToken = sessionToken();
+
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
+
+      const result = await volcano.auth.updateUser({
+        password: 'newpass123',
+        metadata: { name: 'Test' },
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.user).toBeDefined();
+    });
+  });
 });
