@@ -9,59 +9,45 @@
  * - For OAuth tests: mock OAuth server running
  */
 
-const { VolcanoAuth } = require('../../src/index.js');
+import { type User, VolcanoAuth } from '../../src/index.js';
+import {
+  integrationUrl,
+  isRecord,
+  managementFetch,
+  platformFetch as requestPlatform,
+  requiredString,
+} from './http.ts';
 
 // Configuration
-const API_URL = process.env.VOLCANO_API_URL || 'http://localhost:8000';
-const MGMT_URL = process.env.VOLCANO_MGMT_URL || 'http://localhost:8001';
+const API_URL = integrationUrl('VOLCANO_API_URL', 'http://localhost:8000');
+const MGMT_URL = integrationUrl('VOLCANO_MGMT_URL', 'http://localhost:8001');
 const TEST_FUNCTION_ZIP_BASE64 =
   'UEsDBAoAAAAAAMybV1xk0uNfQQAAAEEAAAAIABwAaW5kZXguanNVVAkAA08bnWlPG51pdXgLAAEE9QEAAAQUAAAAZXhwb3J0cy5oYW5kbGVyID0gYXN5bmMgKCkgPT4gKHsgc3RhdHVzQ29kZTogMjAwLCBib2R5OiAnb2snIH0pOwpQSwECHgMKAAAAAADMm1dcZNLjX0EAAABBAAAACAAYAAAAAAABAAAApIEAAAAAaW5kZXguanNVVAUAA08bnWl1eAsAAQT1AQAABBQAAABQSwUGAAAAAAEAAQBOAAAAgwAAAAAA';
 
-function createTestFunctionZipBuffer() {
+function createTestFunctionZipBuffer(): Buffer {
   return Buffer.from(TEST_FUNCTION_ZIP_BASE64, 'base64');
 }
 
 // Helper to make management API calls
-async function mgmtFetch(path, options = {}) {
-  const response = await fetch(`${MGMT_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Management API error: ${response.status} - ${error.error || 'Unknown error'}`);
-  }
-
-  if (response.status === 204) return null;
-  return response.json();
+async function mgmtFetch(route: string, options: RequestInit = {}): Promise<unknown> {
+  return managementFetch(MGMT_URL, route, options);
 }
 
 // Helper to make platform API calls with user token
-async function platformFetch(path, token, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Platform API error: ${response.status} - ${error.error || 'Unknown error'}`);
-  }
-
-  if (response.status === 204) return null;
-  return response.json();
+async function platformFetch(
+  route: string,
+  token: string,
+  options: RequestInit = {},
+): Promise<unknown> {
+  return requestPlatform(API_URL, route, token, options);
 }
 
-async function platformFetchMultipart(path, token, formData) {
-  const response = await fetch(`${API_URL}${path}`, {
+async function platformFetchMultipart(
+  route: string,
+  token: string,
+  formData: FormData,
+): Promise<unknown> {
+  const response = await fetch(`${API_URL}${route}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -70,33 +56,38 @@ async function platformFetchMultipart(path, token, formData) {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Platform API error: ${response.status} - ${error.error || 'Unknown error'}`);
+    const error: unknown = await response.json().catch(() => ({}));
+    throw new Error(`Platform API error: ${response.status.toString()} - ${JSON.stringify(error)}`);
   }
 
-  return response.json();
+  const result: unknown = await response.json();
+  return result;
 }
 
-async function createFunctionViaPlatform(projectId, token, functionName) {
+async function createFunctionViaPlatform(
+  projectId: string,
+  token: string,
+  functionName: string,
+): Promise<{ id: string }> {
   const formData = new FormData();
   formData.append('name', functionName);
   formData.append('runtime', 'nodejs24.x');
   formData.append('handler', 'index.handler');
   formData.append(
     'code',
-    new Blob([createTestFunctionZipBuffer()], { type: 'application/zip' }),
+    new Blob([Uint8Array.from(createTestFunctionZipBuffer())], { type: 'application/zip' }),
     'function.zip',
   );
-  return platformFetchMultipart(`/projects/${projectId}/functions`, token, formData);
+  const created = await platformFetchMultipart(`/projects/${projectId}/functions`, token, formData);
+  return { id: requiredString(created, 'id') };
 }
 
-async function withTimeout(promise, timeoutMs, label) {
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs.toString()}ms`));
+    }, timeoutMs);
   });
   try {
     return await Promise.race([promise, timeoutPromise]);
@@ -105,78 +96,183 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 
+function requirePresent<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`Expected ${label}`);
+  }
+  return value;
+}
+
+function wireSession(value: unknown): {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+} {
+  const tokenType = isRecord(value) ? value['token_type'] : undefined;
+  const expiresIn = isRecord(value) ? value['expires_in'] : undefined;
+  return {
+    access_token: requiredString(value, 'access_token'),
+    refresh_token: requiredString(value, 'refresh_token'),
+    token_type: typeof tokenType === 'string' ? tokenType : 'bearer',
+    expires_in: typeof expiresIn === 'number' ? expiresIn : 0,
+  };
+}
+
+function queryRows(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError('Expected database rows');
+  }
+  const entries: unknown[] = value;
+  if (!entries.every(isRecord)) {
+    throw new Error('Expected database row objects');
+  }
+  return entries;
+}
+
+function rowAt(value: unknown, index: number): Record<string, unknown> {
+  return requirePresent(queryRows(value)[index], 'database row');
+}
+
+function numericField(row: Record<string, unknown>, field: string): number {
+  const value = row[field];
+  if (typeof value === 'number' || typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  throw new Error(`Expected numeric ${field}`);
+}
+
+function fetchInputUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  return input instanceof URL ? input.href : input.url;
+}
+
 // Integration tests run in the Node test environment, so there is no DOM. The
 // managed-auth redirect hand-off is browser-only (the SDK reads the session from
 // window.location.hash), so install a minimal window for the duration of a test.
-function installBrowserEnv(initialHash) {
-  let currentHash = initialHash || '';
-  const store = {};
-  const sessionStore = {};
-  const makeStorage = (backing) => ({
-    getItem(key) {
-      return Object.prototype.hasOwnProperty.call(backing, key) ? backing[key] : null;
+function installBrowserEnv(initialHash = '') {
+  let currentHash = initialHash;
+  const store: Record<string, string> = {};
+  const sessionStore: Record<string, string> = {};
+  const makeStorage = (backing: Record<string, string>) => ({
+    getItem(key: string): string | null {
+      return backing[key] ?? null;
     },
-    setItem(key, value) {
-      backing[key] = String(value);
+    setItem(key: string, value: string): void {
+      backing[key] = value;
     },
-    removeItem(key) {
-      delete backing[key];
+    removeItem(key: string): void {
+      Reflect.deleteProperty(backing, key);
     },
-    clear() {
+    clear(): void {
       for (const key of Object.keys(backing)) {
-        delete backing[key];
+        Reflect.deleteProperty(backing, key);
       }
     },
   });
-  global.window = {
-    document: {},
-    location: {
-      origin: 'https://app.example.com',
-      pathname: '/callback',
-      search: '',
-      get hash() {
-        return currentHash;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      document: {},
+      location: {
+        origin: 'https://app.example.com',
+        pathname: '/callback',
+        search: '',
+        get hash() {
+          return currentHash;
+        },
+        set hash(value: string) {
+          currentHash = value;
+        },
       },
-      set hash(value) {
-        currentHash = value;
+      history: {
+        state: null,
+        replaceState(_state: unknown, _title: string, url: string | URL | null | undefined): void {
+          const urlText = url === null || url === undefined ? '' : url.toString();
+          const hashIndex = urlText.indexOf('#');
+          currentHash = hashIndex !== -1 ? urlText.slice(hashIndex) : '';
+        },
       },
+      localStorage: makeStorage(store),
+      sessionStorage: makeStorage(sessionStore),
     },
-    history: {
-      state: null,
-      replaceState(_state, _title, url) {
-        const hashIndex = String(url).indexOf('#');
-        currentHash = hashIndex >= 0 ? String(url).slice(hashIndex) : '';
-      },
-    },
-    localStorage: makeStorage(store),
-    sessionStorage: makeStorage(sessionStore),
-  };
+  });
   return {
     store,
     sessionStore,
     getHash: () => currentHash,
     // Seed the RP nonce the way signInWithHostedAuth()/signInWithOAuth() would
     // before redirecting.
-    seedAuthState: (nonce) => {
-      sessionStore.volcano_auth_state = String(nonce);
+    seedAuthState(nonce: string) {
+      sessionStore['volcano_auth_state'] = nonce;
     },
   };
 }
 
-function uninstallBrowserEnv() {
-  delete global.window;
+function uninstallBrowserEnv(): void {
+  Reflect.deleteProperty(globalThis, 'window');
+}
+
+async function createHostedHelperProject(
+  token: string,
+  cleanupFns: (() => Promise<void>)[],
+  nameSuffix: string,
+  rateLimitSignin = 1,
+): Promise<{ projectId: string; anonKeyId: string; anonKey: string }> {
+  const createdProject = await platformFetch('/projects', token, {
+    method: 'POST',
+    body: JSON.stringify({ name: `sdk-e2e-hosted-${nameSuffix}-${Date.now().toString()}` }),
+  });
+  const hostedProject = { id: requiredString(createdProject, 'id') };
+  cleanupFns.push(async () => {
+    await platformFetch(`/projects/${hostedProject.id}`, token, {
+      method: 'DELETE',
+    });
+  });
+
+  await platformFetch(`/projects/${hostedProject.id}/auth/config`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      managed_auth_enabled: true,
+      enable_signup: true,
+      enable_email_password: true,
+      rate_limit_signin: rateLimitSignin,
+      allowed_redirect_urls: ['https://app.example.com/callback'],
+      post_auth_redirect_url: 'https://app.example.com/callback',
+    }),
+  });
+
+  const hostedAnonKeyResponse = await platformFetch(
+    `/projects/${hostedProject.id}/anon-keys`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ name: `sdk-e2e-hosted-key-${nameSuffix}-${Date.now().toString()}` }),
+    },
+  );
+
+  return {
+    projectId: hostedProject.id,
+    anonKeyId: requiredString(hostedAnonKeyResponse, 'id'),
+    anonKey: requiredString(hostedAnonKeyResponse, 'key_value'),
+  };
 }
 
 describe('SDK E2E Integration Tests', () => {
   // Test fixtures
-  let platformUser;
-  let platformToken;
-  let project;
-  let anonKey;
-  let volcano;
+  let platformUser: { id: string } = { id: '' };
+  let platformToken: string;
+  let project: { id: string };
+  let anonKey: string;
+  let volcano: VolcanoAuth;
 
   // Cleanup tracking
-  const projectCleanupFns = [];
+  const projectCleanupFns: (() => Promise<void>)[] = [];
 
   beforeAll(async () => {
     console.log('\n========================================');
@@ -197,13 +293,14 @@ describe('SDK E2E Integration Tests', () => {
     }
 
     // Create platform user
-    platformUser = await mgmtFetch('/users', {
+    const createdUser = await mgmtFetch('/users', {
       method: 'POST',
       body: JSON.stringify({
-        id: `sdk-e2e-test-${Date.now()}`,
+        id: `sdk-e2e-test-${Date.now().toString()}`,
         name: 'SDK E2E Test User',
       }),
     });
+    platformUser = { id: requiredString(createdUser, 'id') };
     console.log(`[ok] Created platform user: ${platformUser.id}`);
 
     // Create platform token
@@ -211,14 +308,15 @@ describe('SDK E2E Integration Tests', () => {
       method: 'POST',
       body: JSON.stringify({ name: 'sdk-e2e-test-token' }),
     });
-    platformToken = tokenResponse.token;
+    platformToken = requiredString(tokenResponse, 'token');
     console.log('[ok] Created platform token');
 
     // Create project with unique name
-    project = await platformFetch('/projects', platformToken, {
+    const createdProject = await platformFetch('/projects', platformToken, {
       method: 'POST',
-      body: JSON.stringify({ name: `sdk-e2e-${Date.now()}` }),
+      body: JSON.stringify({ name: `sdk-e2e-${Date.now().toString()}` }),
     });
+    project = { id: requiredString(createdProject, 'id') };
     projectCleanupFns.push(async () => {
       await platformFetch(`/projects/${project.id}`, platformToken, { method: 'DELETE' });
     });
@@ -233,7 +331,7 @@ describe('SDK E2E Integration Tests', () => {
         body: JSON.stringify({ name: 'sdk-e2e-test-key' }),
       },
     );
-    anonKey = anonKeyResponse.key_value;
+    anonKey = requiredString(anonKeyResponse, 'key_value');
     console.log('[ok] Created anon key');
 
     // Enable anonymous signups for the project
@@ -250,36 +348,42 @@ describe('SDK E2E Integration Tests', () => {
     // Initialize SDK
     volcano = new VolcanoAuth({
       apiUrl: API_URL,
-      projectId: project.id,
-      anonKey: anonKey,
+      anonKey,
     });
     console.log('[ok] SDK initialized\n');
   });
+
+  async function cleanupProjects(): Promise<void> {
+    for (const fn of projectCleanupFns.slice().reverse()) {
+      try {
+        await withTimeout(fn(), 45000, 'project cleanup function');
+      } catch (error) {
+        console.log(
+          `[warn] Cleanup warning: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
+
+  async function cleanupPlatformUser(): Promise<void> {
+    if (platformUser.id !== '') {
+      try {
+        await mgmtFetch(`/users/${platformUser.id}`, { method: 'DELETE' });
+        console.log(`[ok] Platform user ${platformUser.id} deleted`);
+      } catch (error) {
+        console.log(
+          `[warn] User deletion warning: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
 
   afterAll(async () => {
     console.log('\n========================================');
     console.log('Cleanup');
     console.log('========================================\n');
-
-    // Run project cleanup functions before deleting the user so project delete handlers run.
-    for (const fn of projectCleanupFns.slice().reverse()) {
-      try {
-        await withTimeout(fn(), 45000, 'project cleanup function');
-      } catch (error) {
-        console.log(`[warn] Cleanup warning: ${error.message}`);
-      }
-    }
-
-    // Delete platform user
-    if (platformUser && platformUser.id) {
-      try {
-        await mgmtFetch(`/users/${platformUser.id}`, { method: 'DELETE' });
-        console.log(`[ok] Platform user ${platformUser.id} deleted`);
-      } catch (error) {
-        console.log(`[warn] User deletion warning: ${error.message}`);
-      }
-    }
-
+    await cleanupProjects();
+    await cleanupPlatformUser();
     console.log('[ok] Cleanup complete');
   }, 180000);
 
@@ -288,9 +392,9 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Authentication', () => {
-    const testEmail = `test-${Date.now()}@example.com`;
+    const testEmail = `test-${Date.now().toString()}@example.com`;
     const testPassword = 'SecureP@ssw0rd123!';
-    let testUser;
+    let testUser: User;
 
     test('signUp - creates new user', async () => {
       const result = await volcano.auth.signUp({
@@ -301,18 +405,18 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       expect(result.user).toBeDefined();
-      expect(result.user.email).toBe(testEmail);
+      expect(requirePresent(result.user, 'user').email).toBe(testEmail);
       expect(result.session).toBeDefined();
-      expect(result.session.access_token).toBeDefined();
-      expect(result.session.refresh_token).toBeDefined();
+      expect(requirePresent(result.session, 'session').access_token).toBeDefined();
+      expect(requirePresent(result.session, 'session').refresh_token).toBeDefined();
 
       // Verify last_sign_in_at is set on signup (not "Never")
-      expect(result.user.last_sign_in_at).toBeDefined();
-      expect(result.user.last_sign_in_at).not.toBeNull();
+      expect(requirePresent(result.user, 'user').last_sign_in_at).toBeDefined();
+      expect(requirePresent(result.user, 'user').last_sign_in_at).not.toBeNull();
 
-      testUser = result.user;
+      testUser = requirePresent(result.user, 'user');
       console.log(`  [ok] User signed up: ${testUser.id}`);
-      console.log(`  [ok] Last sign in set: ${testUser.last_sign_in_at}`);
+      console.log(`  [ok] Last sign in set: ${testUser.last_sign_in_at ?? 'unknown'}`);
     });
 
     test('signOut - clears session', async () => {
@@ -329,8 +433,8 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       expect(result.user).toBeDefined();
-      expect(result.user.email).toBe(testEmail);
-      expect(result.session.access_token).toBeDefined();
+      expect(requirePresent(result.user, 'user').email).toBe(testEmail);
+      expect(requirePresent(result.session, 'session').access_token).toBeDefined();
 
       console.log('  [ok] User signed in');
     });
@@ -339,7 +443,7 @@ describe('SDK E2E Integration Tests', () => {
       const result = await volcano.auth.getUser();
 
       expect(result.user).toBeDefined();
-      expect(result.user.id).toBe(testUser.id);
+      expect(requirePresent(result.user, 'user').id).toBe(testUser.id);
       expect(result.error).toBeNull();
       console.log('  [ok] Got current user');
     });
@@ -347,7 +451,7 @@ describe('SDK E2E Integration Tests', () => {
     test('user() - returns current user synchronously', () => {
       const user = volcano.auth.user();
       expect(user).toBeDefined();
-      expect(user.id).toBe(testUser.id);
+      expect(requirePresent(user, 'user').id).toBe(testUser.id);
       console.log('  [ok] Got user synchronously');
     });
 
@@ -365,7 +469,7 @@ describe('SDK E2E Integration Tests', () => {
       const result = await volcano.auth.refreshSession();
 
       expect(result.session).toBeDefined();
-      expect(result.session.access_token).toBeDefined();
+      expect(requirePresent(result.session, 'session').access_token).toBeDefined();
       expect(result.error).toBeNull();
       console.log('  [ok] Session refreshed');
     });
@@ -383,59 +487,24 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Managed Hosted Auth Helpers', () => {
-    async function createHostedHelperProject(nameSuffix, rateLimitSignin = 1) {
-      const hostedProject = await platformFetch('/projects', platformToken, {
-        method: 'POST',
-        body: JSON.stringify({ name: `sdk-e2e-hosted-${nameSuffix}-${Date.now()}` }),
-      });
-      projectCleanupFns.push(async () => {
-        await platformFetch(`/projects/${hostedProject.id}`, platformToken, {
-          method: 'DELETE',
-        });
-      });
-
-      await platformFetch(`/projects/${hostedProject.id}/auth/config`, platformToken, {
-        method: 'PUT',
-        body: JSON.stringify({
-          managed_auth_enabled: true,
-          enable_signup: true,
-          enable_email_password: true,
-          rate_limit_signin: rateLimitSignin,
-          allowed_redirect_urls: ['https://app.example.com/callback'],
-          post_auth_redirect_url: 'https://app.example.com/callback',
-        }),
-      });
-
-      const hostedAnonKeyResponse = await platformFetch(
-        `/projects/${hostedProject.id}/anon-keys`,
-        platformToken,
-        {
-          method: 'POST',
-          body: JSON.stringify({ name: `sdk-e2e-hosted-key-${nameSuffix}-${Date.now()}` }),
-        },
-      );
-
-      return {
-        projectId: hostedProject.id,
-        anonKeyId: hostedAnonKeyResponse.id,
-        anonKey: hostedAnonKeyResponse.key_value,
-      };
-    }
-
     // ------------------------------------------------------------------------
     // Session bootstrap: the SDK must authenticate the user WITHOUT a prior
     // getUser() call, consistently for the standard flow and the managed flow.
     // ------------------------------------------------------------------------
 
     test('standard flow - session from signUp is usable for an authenticated call without getUser()', async () => {
-      const hosted = await createHostedHelperProject('standard-bootstrap', 50);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'standard-bootstrap',
+        50,
+      );
       const client = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: hosted.projectId,
         anonKey: hosted.anonKey,
       });
 
-      const email = `standard-bootstrap-${Date.now()}@example.com`;
+      const email = `standard-bootstrap-${Date.now().toString()}@example.com`;
       const password = 'SecureP@ssw0rd123!';
       const signup = await client.auth.signUp({
         email,
@@ -444,20 +513,25 @@ describe('SDK E2E Integration Tests', () => {
         signInWhenAllowed: true,
       });
       expect(signup.session).toBeDefined();
-      expect(signup.session.access_token).toBeTruthy();
+      expect(requirePresent(signup.session, 'session').access_token).toBeTruthy();
 
       // No getUser() — go straight to an operation that requires authentication.
       const updated = await client.auth.updateUser({ metadata: { bootstrapped: 'standard' } });
       expect(updated.error).toBeNull();
       expect(updated.user).toBeDefined();
-      expect(updated.user.email).toBe(email);
+      expect(requirePresent(updated.user, 'user').email).toBe(email);
 
       console.log('  [ok] standard signUp session authenticated an update without getUser()');
     });
 
     test('standard flow - a new client restores the session from storage and is usable without getUser()', async () => {
-      const hosted = await createHostedHelperProject('standard-reload', 50);
-      const email = `standard-reload-${Date.now()}@example.com`;
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'standard-reload',
+        50,
+      );
+      const email = `standard-reload-${Date.now().toString()}@example.com`;
       const password = 'SecureP@ssw0rd123!';
 
       const browser = installBrowserEnv('');
@@ -465,25 +539,23 @@ describe('SDK E2E Integration Tests', () => {
         // First client signs up; its session is persisted to (browser) storage.
         const first = new VolcanoAuth({
           apiUrl: API_URL,
-          projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
         const signup = await first.auth.signUp({ email, password, signInWhenAllowed: true });
-        expect(signup.session.access_token).toBeTruthy();
+        expect(requirePresent(signup.session, 'session').access_token).toBeTruthy();
         expect(browser.store['volcano_access_token']).toBeTruthy();
 
         // Simulate a page reload: a brand-new client restores the session from storage.
         const reloaded = new VolcanoAuth({
           apiUrl: API_URL,
-          projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
-        expect(reloaded.accessToken).toBe(signup.session.access_token);
+        expect(reloaded.accessToken).toBe(requirePresent(signup.session, 'session').access_token);
 
         // No getUser() — authenticated operation works straight away.
         const updated = await reloaded.auth.updateUser({ metadata: { bootstrapped: 'reload' } });
         expect(updated.error).toBeNull();
-        expect(updated.user.email).toBe(email);
+        expect(requirePresent(updated.user, 'user').email).toBe(email);
       } finally {
         uninstallBrowserEnv();
       }
@@ -498,7 +570,12 @@ describe('SDK E2E Integration Tests', () => {
     // serves the hosted page, the server mints a real session, and the SDK
     // validates the echoed `state` and authenticates — all with no getUser().
     test('managed flow - FULL E2E: getHostedAuthUrl() init + real hosted page + server session + SDK state validation', async () => {
-      const hosted = await createHostedHelperProject('managed-e2e', 50);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'managed-e2e',
+        50,
+      );
 
       // Models the app origin/tab. sessionStorage persists across the navigation
       // to the hosted page and back to the post-auth redirect URL.
@@ -508,7 +585,6 @@ describe('SDK E2E Integration Tests', () => {
         //    one-time nonce, stores it in sessionStorage, and returns the hosted URL.
         const initiator = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
         const hostedUrl = initiator.auth.getHostedAuthUrl({
-          projectId: hosted.projectId,
           action: 'signup',
         });
         const parsedHosted = new URL(hostedUrl);
@@ -518,7 +594,7 @@ describe('SDK E2E Integration Tests', () => {
         const stateNonce = parsedHosted.searchParams.get('state');
         expect(stateNonce).toBeTruthy();
         // The SDK stored exactly this nonce for validation on return.
-        expect(browser.sessionStore.volcano_auth_state).toBe(stateNonce);
+        expect(browser.sessionStore['volcano_auth_state']).toBe(stateNonce);
 
         // 2) The hosted page is really served by the API and contains the logic
         //    that echoes ?state back into the post-auth fragment.
@@ -529,7 +605,7 @@ describe('SDK E2E Integration Tests', () => {
 
         // 3) The hosted page authenticates the user (its JS POSTs /auth/signup with
         //    the anon key) and mints a real session — reproduce that server call.
-        const email = `managed-e2e-${Date.now()}@example.com`;
+        const email = `managed-e2e-${Date.now().toString()}@example.com`;
         const password = 'SecureP@ssw0rd123!';
         const signupResponse = await fetch(`${API_URL}/auth/signup`, {
           method: 'POST',
@@ -540,7 +616,8 @@ describe('SDK E2E Integration Tests', () => {
           body: JSON.stringify({ email, password, user_metadata: { name: 'Managed E2E' } }),
         });
         expect([200, 201]).toContain(signupResponse.status);
-        const session = await signupResponse.json();
+        const sessionBody: unknown = await signupResponse.json();
+        const session = wireSession(sessionBody);
         expect(session.access_token).toBeTruthy();
         expect(session.refresh_token).toBeTruthy();
 
@@ -549,9 +626,9 @@ describe('SDK E2E Integration Tests', () => {
         const frag = new URLSearchParams();
         frag.set('access_token', session.access_token);
         frag.set('refresh_token', session.refresh_token);
-        frag.set('token_type', session.token_type || 'bearer');
-        frag.set('expires_in', String(session.expires_in || 0));
-        frag.set('state', stateNonce);
+        frag.set('token_type', session.token_type);
+        frag.set('expires_in', session.expires_in.toString());
+        frag.set('state', requirePresent(stateNonce, 'state nonce'));
         // Same tab/origin: sessionStorage (and thus the nonce) is still present.
         global.window.location.hash = `#${frag.toString()}`;
 
@@ -562,12 +639,12 @@ describe('SDK E2E Integration Tests', () => {
         expect(client.refreshToken).toBe(session.refresh_token);
         expect(browser.getHash()).toBe('');
         // The one-time nonce was consumed.
-        expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
+        expect(browser.sessionStore['volcano_auth_state']).toBeUndefined();
 
         // 6) An authenticated operation works immediately, with no getUser() first.
         const updated = await client.auth.updateUser({ metadata: { bootstrapped: 'managed-e2e' } });
         expect(updated.error).toBeNull();
-        expect(updated.user.email).toBe(email);
+        expect(requirePresent(updated.user, 'user').email).toBe(email);
       } finally {
         uninstallBrowserEnv();
       }
@@ -578,10 +655,15 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('managed flow - an unsolicited redirect session (no nonce stored) is rejected', async () => {
-      const hosted = await createHostedHelperProject('managed-csrf', 50);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'managed-csrf',
+        50,
+      );
 
       // A real, valid session (as if minted for an attacker's own account).
-      const email = `managed-csrf-${Date.now()}@example.com`;
+      const email = `managed-csrf-${Date.now().toString()}@example.com`;
       const password = 'SecureP@ssw0rd123!';
       const signupResponse = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
@@ -592,14 +674,15 @@ describe('SDK E2E Integration Tests', () => {
         body: JSON.stringify({ email, password, user_metadata: { name: 'Managed CSRF' } }),
       });
       expect([200, 201]).toContain(signupResponse.status);
-      const session = await signupResponse.json();
+      const sessionBody: unknown = await signupResponse.json();
+      const session = wireSession(sessionBody);
       expect(session.access_token).toBeTruthy();
 
       const params = new URLSearchParams();
       params.set('access_token', session.access_token);
       params.set('refresh_token', session.refresh_token);
-      params.set('token_type', session.token_type || 'bearer');
-      params.set('expires_in', String(session.expires_in || 0));
+      params.set('token_type', session.token_type);
+      params.set('expires_in', session.expires_in.toString());
       params.set('state', 'attacker-supplied-state');
       const redirectHash = `#${params.toString()}`;
 
@@ -608,7 +691,6 @@ describe('SDK E2E Integration Tests', () => {
       try {
         const client = new VolcanoAuth({
           apiUrl: API_URL,
-          projectId: hosted.projectId,
           anonKey: hosted.anonKey,
         });
         // The unsolicited session is NOT adopted, and the tokens are scrubbed.
@@ -627,7 +709,12 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('managed flow - a session whose state does not match the stored nonce is rejected', async () => {
-      const hosted = await createHostedHelperProject('managed-mismatch', 50);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'managed-mismatch',
+        50,
+      );
 
       const browser = installBrowserEnv('');
       try {
@@ -635,10 +722,10 @@ describe('SDK E2E Integration Tests', () => {
         const initiator = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
         const hostedUrl = initiator.auth.getHostedAuthUrl({ projectId: hosted.projectId });
         const realNonce = new URL(hostedUrl).searchParams.get('state');
-        expect(browser.sessionStore.volcano_auth_state).toBe(realNonce);
+        expect(browser.sessionStore['volcano_auth_state']).toBe(realNonce);
 
         // A real session is minted...
-        const email = `managed-mismatch-${Date.now()}@example.com`;
+        const email = `managed-mismatch-${Date.now().toString()}@example.com`;
         const password = 'SecureP@ssw0rd123!';
         const signupResponse = await fetch(`${API_URL}/auth/signup`, {
           method: 'POST',
@@ -649,22 +736,23 @@ describe('SDK E2E Integration Tests', () => {
           body: JSON.stringify({ email, password, user_metadata: { name: 'Managed Mismatch' } }),
         });
         expect([200, 201]).toContain(signupResponse.status);
-        const session = await signupResponse.json();
+        const sessionBody: unknown = await signupResponse.json();
+        const session = wireSession(sessionBody);
 
         // ...but the fragment that lands carries a DIFFERENT state (injected/replayed).
         const frag = new URLSearchParams();
         frag.set('access_token', session.access_token);
         frag.set('refresh_token', session.refresh_token);
-        frag.set('token_type', session.token_type || 'bearer');
-        frag.set('expires_in', String(session.expires_in || 0));
-        frag.set('state', `${realNonce}-tampered`);
+        frag.set('token_type', session.token_type);
+        frag.set('expires_in', session.expires_in.toString());
+        frag.set('state', `${requirePresent(realNonce, 'state nonce')}-tampered`);
         global.window.location.hash = `#${frag.toString()}`;
 
         const client = new VolcanoAuth({ apiUrl: API_URL, anonKey: hosted.anonKey });
         // Mismatched state ⇒ not adopted, tokens scrubbed, nonce consumed.
         expect(client.accessToken).toBeFalsy();
         expect(browser.getHash()).toBe('');
-        expect(browser.sessionStore.volcano_auth_state).toBeUndefined();
+        expect(browser.sessionStore['volcano_auth_state']).toBeUndefined();
       } finally {
         uninstallBrowserEnv();
       }
@@ -673,15 +761,19 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('hosted login options - returns 429 with retry-after on burst', async () => {
-      const hosted = await createHostedHelperProject('options-rl');
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'options-rl',
+      );
       const optionsUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/options?anon_key=${encodeURIComponent(hosted.anonKey)}`;
 
       const first = await fetch(optionsUrl, {
         headers: {},
       });
       expect(first.status).toBe(200);
-      const firstJson = await first.json();
-      expect(Array.isArray(firstJson.oauth_providers)).toBe(true);
+      const firstJson: unknown = await first.json();
+      expect(isRecord(firstJson) && Array.isArray(firstJson['oauth_providers'])).toBe(true);
 
       const start = Date.now();
       const second = await fetch(optionsUrl, {
@@ -695,7 +787,12 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('hosted helpers - valid anon key can access options and check-email', async () => {
-      const hosted = await createHostedHelperProject('valid-anon-key', 20);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'valid-anon-key',
+        20,
+      );
       const optionsUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/options?anon_key=${encodeURIComponent(hosted.anonKey)}`;
       const checkEmailUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/check-email`;
 
@@ -703,8 +800,10 @@ describe('SDK E2E Integration Tests', () => {
         headers: {},
       });
       expect(optionsResponse.status).toBe(200);
-      const optionsBody = await optionsResponse.json();
-      expect(typeof optionsBody.email_password_enabled).toBe('boolean');
+      const optionsBody: unknown = await optionsResponse.json();
+      expect(
+        isRecord(optionsBody) && typeof optionsBody['email_password_enabled'] === 'boolean',
+      ).toBe(true);
 
       const checkEmailResponse = await fetch(checkEmailUrl, {
         method: 'POST',
@@ -712,18 +811,22 @@ describe('SDK E2E Integration Tests', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${hosted.anonKey}`,
         },
-        body: JSON.stringify({ email: `valid-key-${Date.now()}@example.com` }),
+        body: JSON.stringify({ email: `valid-key-${Date.now().toString()}@example.com` }),
       });
       expect(checkEmailResponse.status).toBe(200);
-      const checkEmailBody = await checkEmailResponse.json();
-      expect(typeof checkEmailBody.exists).toBe('boolean');
+      const checkEmailBody: unknown = await checkEmailResponse.json();
+      expect(isRecord(checkEmailBody) && typeof checkEmailBody['exists'] === 'boolean').toBe(true);
       console.log('  [ok] Hosted helper endpoints accept valid anon key');
     });
 
     test('hosted login check-email - returns 429 with retry-after on burst', async () => {
-      const hosted = await createHostedHelperProject('check-email-rl');
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'check-email-rl',
+      );
       const checkEmailUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/check-email`;
-      const body = JSON.stringify({ email: `hosted-rl-${Date.now()}@example.com` });
+      const body = JSON.stringify({ email: `hosted-rl-${Date.now().toString()}@example.com` });
 
       const first = await fetch(checkEmailUrl, {
         method: 'POST',
@@ -734,8 +837,8 @@ describe('SDK E2E Integration Tests', () => {
         body,
       });
       expect(first.status).toBe(200);
-      const firstJson = await first.json();
-      expect(typeof firstJson.exists).toBe('boolean');
+      const firstJson: unknown = await first.json();
+      expect(isRecord(firstJson) && typeof firstJson['exists'] === 'boolean').toBe(true);
 
       const start = Date.now();
       const second = await fetch(checkEmailUrl, {
@@ -754,7 +857,12 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('hosted helper endpoints reject invalid anon key', async () => {
-      const hosted = await createHostedHelperProject('invalid-anon-key', 20);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'invalid-anon-key',
+        20,
+      );
       const invalidAnonKeySuffix = hosted.anonKey.endsWith('x') ? 'y' : 'x';
       const invalidAnonKey = `${hosted.anonKey.slice(0, -1)}${invalidAnonKeySuffix}`;
       const optionsUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/options?anon_key=${encodeURIComponent(invalidAnonKey)}`;
@@ -771,14 +879,19 @@ describe('SDK E2E Integration Tests', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${invalidAnonKey}`,
         },
-        body: JSON.stringify({ email: `invalid-key-${Date.now()}@example.com` }),
+        body: JSON.stringify({ email: `invalid-key-${Date.now().toString()}@example.com` }),
       });
       expect(checkEmailResponse.status).toBe(401);
       console.log('  [ok] Hosted helper endpoints reject invalid anon key');
     });
 
     test('hosted helper endpoints reject revoked anon key', async () => {
-      const hosted = await createHostedHelperProject('revoked-anon-key', 20);
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'revoked-anon-key',
+        20,
+      );
       const optionsUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/options?anon_key=${encodeURIComponent(hosted.anonKey)}`;
       const checkEmailUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/login/check-email`;
 
@@ -806,14 +919,18 @@ describe('SDK E2E Integration Tests', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${hosted.anonKey}`,
         },
-        body: JSON.stringify({ email: `revoked-key-${Date.now()}@example.com` }),
+        body: JSON.stringify({ email: `revoked-key-${Date.now().toString()}@example.com` }),
       });
       expect(checkEmailAfterRevoke.status).toBe(401);
       console.log('  [ok] Hosted helper endpoints reject revoked anon key');
     });
 
     test('managed hosted login page loads with valid anon key (no invalid anon key state)', async () => {
-      const hosted = await createHostedHelperProject('render-page');
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'render-page',
+      );
       const hostedUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted?anon_key=${encodeURIComponent(hosted.anonKey)}`;
       const hostedSignupUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted?action=signup&anon_key=${encodeURIComponent(hosted.anonKey)}`;
       const hostedForgotUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted?action=forgot-password&anon_key=${encodeURIComponent(hosted.anonKey)}`;
@@ -873,13 +990,19 @@ describe('SDK E2E Integration Tests', () => {
         headers: {},
       });
       expect(optionsResponse.status).toBe(200);
-      const optionsBody = await optionsResponse.json();
-      expect(typeof optionsBody.email_password_enabled).toBe('boolean');
+      const optionsBody: unknown = await optionsResponse.json();
+      expect(
+        isRecord(optionsBody) && typeof optionsBody['email_password_enabled'] === 'boolean',
+      ).toBe(true);
       console.log('  [ok] Managed hosted login page and init helper accept valid anon key');
     });
 
     test('managed hosted reset-password page loads built-in reset form', async () => {
-      const hosted = await createHostedHelperProject('render-reset-page');
+      const hosted = await createHostedHelperProject(
+        platformToken,
+        projectCleanupFns,
+        'render-reset-page',
+      );
       const resetPageUrl = `${API_URL}/projects/${hosted.projectId}/auth/hosted/reset-password?anon_key=${encodeURIComponent(hosted.anonKey)}&token=test-token`;
 
       const response = await fetch(resetPageUrl, {
@@ -902,33 +1025,42 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Anonymous Authentication', () => {
-    let anonVolcano;
-    let anonUser;
+    let anonVolcano: VolcanoAuth;
+    let anonUser: User;
 
     beforeAll(() => {
       // Create fresh SDK instance for anonymous tests
       anonVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
     });
 
     test('signUpAnonymous - creates anonymous user', async () => {
-      const result = await anonVolcano.auth.signUpAnonymous({ device: 'test' });
-
-      expect(result.user).toBeDefined();
+      const alias: unknown = Reflect.get(anonVolcano.auth, 'signUpAnonymous');
+      if (typeof alias !== 'function') {
+        throw new TypeError('Anonymous signup compatibility alias missing');
+      }
+      const result: unknown = await Reflect.apply(alias, anonVolcano.auth, [{ device: 'test' }]);
+      if (!isRecord(result)) {
+        throw new Error('Anonymous signup returned an invalid response');
+      }
+      const user = result['user'];
+      expect(user).toBeDefined();
       // Anonymous flag is stored in user_metadata
-      expect(result.user.user_metadata?.anonymous).toBe(true);
-      expect(result.session).toBeDefined();
-      expect(result.error).toBeNull();
+      expect(
+        isRecord(user) && isRecord(user['user_metadata']) && user['user_metadata']['anonymous'],
+      ).toBe(true);
+      expect(result['session']).toBeDefined();
+      expect(result['error']).toBeNull();
 
-      anonUser = result.user;
+      const current = await anonVolcano.auth.getUser();
+      anonUser = requirePresent(current.user, 'user');
       console.log(`  [ok] Anonymous user created: ${anonUser.id}`);
     });
 
     test('convertAnonymous - converts to regular user', async () => {
-      const convertEmail = `converted-${Date.now()}@example.com`;
+      const convertEmail = `converted-${Date.now().toString()}@example.com`;
       const result = await anonVolcano.auth.convertAnonymous({
         email: convertEmail,
         password: 'ConvertedP@ss123!',
@@ -936,8 +1068,8 @@ describe('SDK E2E Integration Tests', () => {
 
       expect(result.user).toBeDefined();
       // After conversion, anonymous flag should be removed from metadata
-      expect(result.user.user_metadata?.anonymous).toBeFalsy();
-      expect(result.user.email).toBe(convertEmail);
+      expect(requirePresent(result.user, 'user').user_metadata?.['anonymous']).toBeFalsy();
+      expect(requirePresent(result.user, 'user').email).toBe(convertEmail);
       expect(result.error).toBeNull();
       console.log('  [ok] Anonymous user converted');
     });
@@ -952,11 +1084,10 @@ describe('SDK E2E Integration Tests', () => {
       // Create a fresh user for this test
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
-      const email = `confirm-test-${Date.now()}@example.com`;
+      const email = `confirm-test-${Date.now().toString()}@example.com`;
       await freshVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
@@ -976,8 +1107,7 @@ describe('SDK E2E Integration Tests', () => {
     test('confirmEmail - validates token format', async () => {
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       // Use invalid token - should return error
@@ -994,13 +1124,12 @@ describe('SDK E2E Integration Tests', () => {
 
   describe('Password Recovery', () => {
     test('forgotPassword - initiates reset flow', async () => {
-      const email = `forgot-${Date.now()}@example.com`;
+      const email = `forgot-${Date.now().toString()}@example.com`;
 
       // Create user first
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
       await freshVolcano.auth.signUp({
         email,
@@ -1009,7 +1138,11 @@ describe('SDK E2E Integration Tests', () => {
       });
       await freshVolcano.auth.signOut();
 
-      const result = await freshVolcano.auth.forgotPassword(email);
+      const alias: unknown = Reflect.get(freshVolcano.auth, 'forgotPassword');
+      if (typeof alias !== 'function') {
+        throw new TypeError('Forgot-password compatibility alias missing');
+      }
+      const result: unknown = await Reflect.apply(alias, freshVolcano.auth, [email]);
 
       // May return error if email not configured, which is OK
       expect(result).toBeDefined();
@@ -1019,8 +1152,7 @@ describe('SDK E2E Integration Tests', () => {
     test('resetPassword - validates token', async () => {
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       const result = await freshVolcano.auth.resetPassword({
@@ -1038,24 +1170,23 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Email Change', () => {
-    let emailChangeVolcano;
+    let emailChangeVolcano: VolcanoAuth;
 
     beforeAll(async () => {
       emailChangeVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await emailChangeVolcano.auth.signUp({
-        email: `email-change-${Date.now()}@example.com`,
+        email: `email-change-${Date.now().toString()}@example.com`,
         password: 'TestP@ss123!',
         signInWhenAllowed: true,
       });
     });
 
     test('requestEmailChange - initiates email change', async () => {
-      const newEmail = `new-email-${Date.now()}@example.com`;
+      const newEmail = `new-email-${Date.now().toString()}@example.com`;
       const result = await emailChangeVolcano.auth.requestEmailChange(newEmail);
 
       // May return error if email not configured
@@ -1084,18 +1215,17 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Session Management', () => {
-    let sessionVolcano;
-    let sessionUser;
+    let sessionVolcano: VolcanoAuth;
+    let sessionUser: User;
 
     beforeAll(async () => {
       // Create a fresh user for session tests
       sessionVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
-      const email = `session-test-${Date.now()}@example.com`;
+      const email = `session-test-${Date.now().toString()}@example.com`;
       const result = await sessionVolcano.auth.signUp({
         email,
         password: 'SessionP@ss123!',
@@ -1103,7 +1233,7 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       expect(result.user).toBeDefined();
-      sessionUser = result.user;
+      sessionUser = requirePresent(result.user, 'user');
       console.log(`  [ok] Session test user created: ${email}`);
     });
 
@@ -1112,20 +1242,20 @@ describe('SDK E2E Integration Tests', () => {
 
       expect(result.error).toBeNull();
       expect(result.sessions).toBeDefined();
-      expect(result.sessions.length).toBeGreaterThanOrEqual(1);
+      expect(requirePresent(result.sessions, 'sessions').length).toBeGreaterThanOrEqual(1);
       expect(result.total).toBeGreaterThanOrEqual(1);
       expect(result.page).toBe(1);
       expect(result.limit).toBe(20);
       expect(result.total_pages).toBeGreaterThanOrEqual(1);
 
       // The current session should be marked
-      const currentSession = result.sessions.find((s) => s.is_current);
+      const currentSession = requirePresent(result.sessions, 'sessions').find((s) => s.is_current);
       expect(currentSession).toBeDefined();
-      expect(currentSession.is_active).toBe(true);
-      expect(currentSession.provider).toBe('email');
+      expect(requirePresent(currentSession, 'current session').is_active).toBe(true);
+      expect(requirePresent(currentSession, 'current session').provider).toBe('email');
 
       console.log(
-        `  [ok] getSessions returned page ${result.page}/${result.total_pages} with ${result.sessions.length} sessions (${result.total} total)`,
+        `  [ok] getSessions returned page ${result.page.toString()}/${result.total_pages.toString()} with ${requirePresent(result.sessions, 'sessions').length.toString()} sessions (${result.total.toString()} total)`,
       );
     });
 
@@ -1139,11 +1269,11 @@ describe('SDK E2E Integration Tests', () => {
 
       expect(result.error).toBeNull();
       expect(result.limit).toBe(2);
-      expect(result.sessions.length).toBeLessThanOrEqual(2);
+      expect(requirePresent(result.sessions, 'sessions').length).toBeLessThanOrEqual(2);
       expect(result.total_pages).toBeGreaterThanOrEqual(1);
 
       console.log(
-        `  [ok] getSessions pagination: limit=${result.limit}, total_pages=${result.total_pages}`,
+        `  [ok] getSessions pagination: limit=${result.limit.toString()}, total_pages=${result.total_pages.toString()}`,
       );
     });
 
@@ -1158,19 +1288,25 @@ describe('SDK E2E Integration Tests', () => {
 
       // Get all sessions
       const sessionsResult = await sessionVolcano.auth.getSessions();
-      expect(sessionsResult.sessions.length).toBeGreaterThanOrEqual(2);
+      expect(requirePresent(sessionsResult.sessions, 'sessions').length).toBeGreaterThanOrEqual(2);
 
       // Find a non-current session to delete
-      const sessionToDelete = sessionsResult.sessions.find((s) => !s.is_current);
+      const sessionToDelete = requirePresent(sessionsResult.sessions, 'sessions').find(
+        (s) => !s.is_current,
+      );
       expect(sessionToDelete).toBeDefined();
 
       // Delete it
-      const deleteResult = await sessionVolcano.auth.deleteSession(sessionToDelete.id);
+      const deleteResult = await sessionVolcano.auth.deleteSession(
+        requirePresent(sessionToDelete, 'session to delete').id,
+      );
       expect(deleteResult.error).toBeNull();
 
       // Verify it's gone
       const sessionsAfter = await sessionVolcano.auth.getSessions();
-      const deletedSession = sessionsAfter.sessions.find((s) => s.id === sessionToDelete.id);
+      const deletedSession = requirePresent(sessionsAfter.sessions, 'sessions').find(
+        (s) => s.id === requirePresent(sessionToDelete, 'session to delete').id,
+      );
       expect(deletedSession).toBeUndefined();
 
       console.log('  [ok] deleteSession removed specific session');
@@ -1198,7 +1334,9 @@ describe('SDK E2E Integration Tests', () => {
       // Verify only current session remains
       const sessionsAfter = await sessionVolcano.auth.getSessions();
       expect(sessionsAfter.total).toBe(1);
-      expect(sessionsAfter.sessions[0].is_current).toBe(true);
+      expect(
+        requirePresent(requirePresent(sessionsAfter.sessions, 'sessions')[0], 'session').is_current,
+      ).toBe(true);
 
       console.log('  [ok] deleteAllOtherSessions kept only current session');
     });
@@ -1206,8 +1344,7 @@ describe('SDK E2E Integration Tests', () => {
     test('getSessions - error when not authenticated', async () => {
       const unauthVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       const result = await unauthVolcano.auth.getSessions();
@@ -1222,18 +1359,16 @@ describe('SDK E2E Integration Tests', () => {
       // Create two separate users
       const aliceVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       const bobVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       // Sign up Alice and create multiple sessions
-      const aliceEmail = `alice-isolation-${Date.now()}@example.com`;
+      const aliceEmail = `alice-isolation-${Date.now().toString()}@example.com`;
       await aliceVolcano.auth.signUp({
         email: aliceEmail,
         password: 'AliceP@ss123!',
@@ -1243,7 +1378,7 @@ describe('SDK E2E Integration Tests', () => {
       await aliceVolcano.auth.signIn({ email: aliceEmail, password: 'AliceP@ss123!' });
 
       // Sign up Bob
-      const bobEmail = `bob-isolation-${Date.now()}@example.com`;
+      const bobEmail = `bob-isolation-${Date.now().toString()}@example.com`;
       await bobVolcano.auth.signUp({
         email: bobEmail,
         password: 'BobP@ss123!',
@@ -1259,11 +1394,15 @@ describe('SDK E2E Integration Tests', () => {
 
       // Alice's sessions should all be hers (no Bob's sessions visible)
       // Bob's sessions should all be his (no Alice's sessions visible)
-      expect(aliceSessions.sessions.every((s) => s.provider === 'email')).toBe(true);
-      expect(bobSessions.sessions.every((s) => s.provider === 'email')).toBe(true);
+      expect(
+        requirePresent(aliceSessions.sessions, 'sessions').every((s) => s.provider === 'email'),
+      ).toBe(true);
+      expect(
+        requirePresent(bobSessions.sessions, 'sessions').every((s) => s.provider === 'email'),
+      ).toBe(true);
 
       console.log(
-        `  [ok] ISOLATION: Alice sees ${aliceSessions.total} sessions, Bob sees ${bobSessions.total} sessions`,
+        `  [ok] ISOLATION: Alice sees ${aliceSessions.total.toString()} sessions, Bob sees ${bobSessions.total.toString()} sessions`,
       );
     });
 
@@ -1271,18 +1410,16 @@ describe('SDK E2E Integration Tests', () => {
       // Create attacker and victim users
       const victimVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       const attackerVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       // Create victim with a session
-      const victimEmail = `victim-${Date.now()}@example.com`;
+      const victimEmail = `victim-${Date.now().toString()}@example.com`;
       await victimVolcano.auth.signUp({
         email: victimEmail,
         password: 'VictimP@ss123!',
@@ -1292,10 +1429,13 @@ describe('SDK E2E Integration Tests', () => {
       // Get victim's session ID
       const victimSessions = await victimVolcano.auth.getSessions();
       expect(victimSessions.total).toBeGreaterThan(0);
-      const victimSessionId = victimSessions.sessions[0].id;
+      const victimSessionId = requirePresent(
+        requirePresent(victimSessions.sessions, 'sessions')[0],
+        'session',
+      ).id;
 
       // Create attacker
-      const attackerEmail = `attacker-${Date.now()}@example.com`;
+      const attackerEmail = `attacker-${Date.now().toString()}@example.com`;
       await attackerVolcano.auth.signUp({
         email: attackerEmail,
         password: 'AttackP@ss123!',
@@ -1310,7 +1450,9 @@ describe('SDK E2E Integration Tests', () => {
 
       // Victim's session should still exist
       const victimSessionsAfter = await victimVolcano.auth.getSessions();
-      const stillExists = victimSessionsAfter.sessions.some((s) => s.id === victimSessionId);
+      const stillExists = requirePresent(victimSessionsAfter.sessions, 'sessions').some(
+        (s) => s.id === victimSessionId,
+      );
       expect(stillExists).toBe(true);
 
       console.log('  [ok] ISOLATION: Attacker cannot delete victim session');
@@ -1320,11 +1462,10 @@ describe('SDK E2E Integration Tests', () => {
       // Create a fresh SDK instance and sign up
       const testVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
-      const email = `invalidation-test-${Date.now()}@example.com`;
+      const email = `invalidation-test-${Date.now().toString()}@example.com`;
       await testVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
@@ -1338,7 +1479,10 @@ describe('SDK E2E Integration Tests', () => {
       // Get the current session ID
       const sessionsResult = await testVolcano.auth.getSessions();
       expect(sessionsResult.sessions).toHaveLength(1);
-      const currentSessionId = sessionsResult.sessions[0].id;
+      const currentSessionId = requirePresent(
+        requirePresent(sessionsResult.sessions, 'sessions')[0],
+        'session',
+      ).id;
 
       // Delete the current session (simulates server-side session invalidation)
       // This makes both access and refresh tokens invalid
@@ -1365,11 +1509,10 @@ describe('SDK E2E Integration Tests', () => {
       // Create a fresh SDK instance and sign up
       const testVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
-      const email = `ban-test-${Date.now()}@example.com`;
+      const email = `ban-test-${Date.now().toString()}@example.com`;
       const signUpResult = await testVolcano.auth.signUp({
         email,
         password: 'TestP@ss123!',
@@ -1380,7 +1523,7 @@ describe('SDK E2E Integration Tests', () => {
       expect(testVolcano.accessToken).toBeDefined();
       expect(testVolcano.refreshToken).toBeDefined();
 
-      const userId = signUpResult.user.id;
+      const userId = requirePresent(signUpResult.user, 'user').id;
 
       // Ban the user via platform API (requires platform token)
       await platformFetch(`/projects/${project.id}/auth/users/${userId}/ban`, platformToken, {
@@ -1416,7 +1559,7 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('OAuth', () => {
-    let oauthVolcano;
+    let oauthVolcano: VolcanoAuth;
 
     beforeAll(async () => {
       // Configure a GitHub OAuth provider for testing
@@ -1435,18 +1578,20 @@ describe('SDK E2E Integration Tests', () => {
         console.log('  [ok] GitHub OAuth provider configured');
       } catch (error) {
         // Provider may already exist, which is OK
-        console.log('  [warn] GitHub OAuth provider config:', error.message);
+        console.log(
+          '  [warn] GitHub OAuth provider config:',
+          error instanceof Error ? error.message : String(error),
+        );
       }
 
       // Create SDK instance with authenticated user for OAuth tests
       oauthVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await oauthVolcano.auth.signUp({
-        email: `oauth-test-${Date.now()}@example.com`,
+        email: `oauth-test-${Date.now().toString()}@example.com`,
         password: 'TestP@ss123!',
         signInWhenAllowed: true,
       });
@@ -1499,7 +1644,7 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Functions', () => {
-    let originalFetch;
+    let originalFetch: typeof fetch;
 
     beforeEach(() => {
       originalFetch = global.fetch;
@@ -1518,8 +1663,7 @@ describe('SDK E2E Integration Tests', () => {
     test('invoke - requires authentication', async () => {
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       // Not authenticated - should return error
@@ -1533,8 +1677,7 @@ describe('SDK E2E Integration Tests', () => {
     test('invoke - rejects invalid authentication token', async () => {
       const invalidTokenVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       invalidTokenVolcano.accessToken = 'invalid-token-value';
@@ -1548,14 +1691,13 @@ describe('SDK E2E Integration Tests', () => {
 
     test('invoke - handles non-existent function', async () => {
       // Re-authenticate using the test user created in Authentication tests
-      const testEmail = `invoke-test-${Date.now()}@example.com`;
+      const testEmail = `invoke-test-${Date.now().toString()}@example.com`;
       const testPassword = 'SecureP@ssw0rd123!';
 
       // Create a fresh SDK instance and sign up a new user for this test
       const funcVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await funcVolcano.auth.signUp({
@@ -1577,21 +1719,20 @@ describe('SDK E2E Integration Tests', () => {
     test('invoke - negative resolver cache avoids repeated lookups for missing function', async () => {
       const cacheVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await cacheVolcano.auth.signUp({
-        email: `invoke-cache-miss-${Date.now()}@example.com`,
+        email: `invoke-cache-miss-${Date.now().toString()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
 
-      const missingName = `missing-${Date.now()}`;
+      const missingName = `missing-${Date.now().toString()}`;
       let resolveCalls = 0;
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(missingName)}`;
       global.fetch = async (url, options) => {
-        const requestUrl = String(url);
+        const requestUrl = fetchInputUrl(url);
         if (requestUrl === `${API_URL}${resolvePath}`) {
           resolveCalls += 1;
         }
@@ -1608,7 +1749,7 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - shared singleton cache is reused across SDK instances', async () => {
-      const functionName = `cache-shared-${Date.now()}`;
+      const functionName = `cache-shared-${Date.now().toString()}`;
       const createdFunction = await createFunctionViaPlatform(
         project.id,
         platformToken,
@@ -1617,29 +1758,27 @@ describe('SDK E2E Integration Tests', () => {
 
       const instanceA = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
       await instanceA.auth.signUp({
-        email: `invoke-shared-a-${Date.now()}@example.com`,
+        email: `invoke-shared-a-${Date.now().toString()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
 
       const instanceB = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
-        accessToken: instanceA.accessToken,
+        anonKey,
+        accessToken: requirePresent(instanceA.accessToken, 'access token'),
       });
 
       let resolveCalls = 0;
       let invokeCalls = 0;
-      const invokeUrls = [];
+      const invokeUrls: string[] = [];
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(functionName)}`;
 
       global.fetch = async (url, options) => {
-        const requestUrl = String(url);
+        const requestUrl = fetchInputUrl(url);
         if (requestUrl === `${API_URL}${resolvePath}`) {
           resolveCalls += 1;
           return originalFetch(url, options);
@@ -1647,10 +1786,13 @@ describe('SDK E2E Integration Tests', () => {
         if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
           invokeCalls += 1;
           invokeUrls.push(requestUrl);
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return Response.json(
+            { ok: true },
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         }
         return originalFetch(url, options);
       };
@@ -1669,17 +1811,18 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - cache is isolated across projects with same function name', async () => {
-      const sharedFunctionName = `cross-project-${Date.now()}`;
+      const sharedFunctionName = `cross-project-${Date.now().toString()}`;
       const projectAFunction = await createFunctionViaPlatform(
         project.id,
         platformToken,
         sharedFunctionName,
       );
 
-      const projectB = await platformFetch('/projects', platformToken, {
+      const createdProjectB = await platformFetch('/projects', platformToken, {
         method: 'POST',
-        body: JSON.stringify({ name: `sdk-e2e-functions-b-${Date.now()}` }),
+        body: JSON.stringify({ name: `sdk-e2e-functions-b-${Date.now().toString()}` }),
       });
+      const projectB = { id: requiredString(createdProjectB, 'id') };
       projectCleanupFns.push(async () => {
         await platformFetch(`/projects/${projectB.id}`, platformToken, { method: 'DELETE' });
       });
@@ -1701,7 +1844,7 @@ describe('SDK E2E Integration Tests', () => {
           body: JSON.stringify({ name: 'sdk-e2e-fn-cache-b-key' }),
         },
       );
-      const projectBAnonKey = projectBAnonKeyResponse.key_value;
+      const projectBAnonKey = requiredString(projectBAnonKeyResponse, 'key_value');
       const projectBFunction = await createFunctionViaPlatform(
         projectB.id,
         platformToken,
@@ -1710,42 +1853,43 @@ describe('SDK E2E Integration Tests', () => {
 
       const sdkA = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
       await sdkA.auth.signUp({
-        email: `invoke-project-a-${Date.now()}@example.com`,
+        email: `invoke-project-a-${Date.now().toString()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
 
       const sdkB = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: projectB.id,
         anonKey: projectBAnonKey,
       });
       await sdkB.auth.signUp({
-        email: `invoke-project-b-${Date.now()}@example.com`,
+        email: `invoke-project-b-${Date.now().toString()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
 
       let resolveCalls = 0;
-      const invokeUrls = [];
+      const invokeUrls: string[] = [];
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(sharedFunctionName)}`;
 
       global.fetch = async (url, options) => {
-        const requestUrl = String(url);
+        const requestUrl = fetchInputUrl(url);
         if (requestUrl === `${API_URL}${resolvePath}`) {
           resolveCalls += 1;
           return originalFetch(url, options);
         }
         if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
           invokeUrls.push(requestUrl);
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return Response.json(
+            { ok: true },
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         }
         return originalFetch(url, options);
       };
@@ -1766,16 +1910,15 @@ describe('SDK E2E Integration Tests', () => {
     });
 
     test('invoke - invalidates stale mapping and re-resolves after invoke 404', async () => {
-      const functionName = `cache-retry-${Date.now()}`;
+      const functionName = `cache-retry-${Date.now().toString()}`;
       await createFunctionViaPlatform(project.id, platformToken, functionName);
 
       const retryVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
       await retryVolcano.auth.signUp({
-        email: `invoke-retry-${Date.now()}@example.com`,
+        email: `invoke-retry-${Date.now().toString()}@example.com`,
         password: 'SecureP@ssw0rd123!',
         signInWhenAllowed: true,
       });
@@ -1785,7 +1928,7 @@ describe('SDK E2E Integration Tests', () => {
       const resolvePath = `/functions/resolve?name=${encodeURIComponent(functionName)}`;
 
       global.fetch = async (url, options) => {
-        const requestUrl = String(url);
+        const requestUrl = fetchInputUrl(url);
         if (requestUrl === `${API_URL}${resolvePath}`) {
           resolveCalls += 1;
           return originalFetch(url, options);
@@ -1793,15 +1936,21 @@ describe('SDK E2E Integration Tests', () => {
         if (requestUrl.startsWith(`${API_URL}/functions/`) && requestUrl.endsWith('/invoke')) {
           invokeCalls += 1;
           if (invokeCalls === 1) {
-            return new Response(JSON.stringify({ error: 'function not found' }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return Response.json(
+              { error: 'function not found' },
+              {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
           }
-          return new Response(JSON.stringify({ recovered: true }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return Response.json(
+            { recovered: true },
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         }
         return originalFetch(url, options);
       };
@@ -1821,23 +1970,33 @@ describe('SDK E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Database Queries', () => {
-    let database;
-    let dbVolcano;
+    let database: { id: string; name: string; connection_string?: string };
+    let dbVolcano: VolcanoAuth;
 
-    beforeAll(async () => {
+    async function createDatabaseFixture(): Promise<void> {
       console.log('\n  Setting up database for query tests...');
 
       // Create a database
-      database = await platformFetch(`/projects/${project.id}/databases`, platformToken, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: `sdk_test_db_${Date.now()}`,
-          region: 'aws-us-east-1',
-          pg_version: '16',
-        }),
-      });
+      const createdDatabase = await platformFetch(
+        `/projects/${project.id}/databases`,
+        platformToken,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: `sdk_test_db_${Date.now().toString()}`,
+            region: 'aws-us-east-1',
+            pg_version: '16',
+          }),
+        },
+      );
+      database = {
+        id: requiredString(createdDatabase, 'id'),
+        name: requiredString(createdDatabase, 'name'),
+      };
       console.log(`  [ok] Database created: ${database.id}`);
+    }
 
+    async function waitForDatabaseActive(): Promise<void> {
       // Wait for database to be active (can take up to 60 seconds)
       console.log('  Waiting for database to be active...');
       let attempts = 0;
@@ -1847,9 +2006,13 @@ describe('SDK E2E Integration Tests', () => {
           `/projects/${project.id}/databases/${database.name}`,
           platformToken,
         );
-        if (dbStatus.status === 'active') {
+        if (isRecord(dbStatus) && dbStatus['status'] === 'active') {
           console.log('  [ok] Database is active');
-          database = dbStatus;
+          database = {
+            id: requiredString(dbStatus, 'id'),
+            name: requiredString(dbStatus, 'name'),
+            connection_string: requiredString(dbStatus, 'connection_string'),
+          };
           break;
         }
         attempts++;
@@ -1859,16 +2022,17 @@ describe('SDK E2E Integration Tests', () => {
       if (attempts >= maxAttempts) {
         throw new Error('Database did not become active in time');
       }
+    }
 
+    async function configureDatabaseSdk(): Promise<void> {
       // Create SDK instance for database tests
       dbVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await dbVolcano.auth.signUp({
-        email: `db-user-${Date.now()}@example.com`,
+        email: `db-user-${Date.now().toString()}@example.com`,
         password: 'TestP@ss123!',
         signInWhenAllowed: true,
       });
@@ -1886,10 +2050,12 @@ describe('SDK E2E Integration Tests', () => {
         body: JSON.stringify({ name: 'sdk-test-service-key' }),
       });
       console.log('  [ok] Service key created for DDL operations');
+    }
 
+    async function createTestTable(): Promise<void> {
       // Use direct SQL connection to create test table
       // The connection_string field contains the proxy connection URL
-      if (database.connection_string) {
+      if (database.connection_string !== undefined && database.connection_string !== '') {
         const { Client } = await import('pg');
 
         // Modify connection string to disable SSL verification for self-signed certs
@@ -1930,13 +2096,23 @@ describe('SDK E2E Integration Tests', () => {
 
           console.log('  [ok] Test table created via direct SQL connection');
         } catch (err) {
-          console.log('  Warning: Table creation failed:', err.message);
+          console.log(
+            '  Warning: Table creation failed:',
+            err instanceof Error ? err.message : String(err),
+          );
         } finally {
           await client.end();
         }
       } else {
         console.log('  Warning: No connection_string available for DDL');
       }
+    }
+
+    beforeAll(async () => {
+      await createDatabaseFixture();
+      await waitForDatabaseActive();
+      await configureDatabaseSdk();
+      await createTestTable();
     }, 120000); // 2 minute timeout for database setup
 
     // ---- Builder Tests (no database required) ----
@@ -1996,12 +2172,11 @@ describe('SDK E2E Integration Tests', () => {
     test('execute() - requires database ID', async () => {
       const freshVolcano = new VolcanoAuth({
         apiUrl: API_URL,
-        projectId: project.id,
-        anonKey: anonKey,
+        anonKey,
       });
 
       await freshVolcano.auth.signUp({
-        email: `db-test-${Date.now()}@example.com`,
+        email: `db-test-${Date.now().toString()}@example.com`,
         password: 'TestP@ss123!',
         signInWhenAllowed: true,
       });
@@ -2010,7 +2185,9 @@ describe('SDK E2E Integration Tests', () => {
       const result = await freshVolcano.from('users').execute();
 
       expect(result.error).toBeDefined();
-      expect(result.error.message).toContain('Database name not set');
+      expect(requirePresent(result.error, 'database error').message).toContain(
+        'Database name not set',
+      );
       console.log('  [ok] Execute requires database name');
     });
 
@@ -2026,9 +2203,9 @@ describe('SDK E2E Integration Tests', () => {
       });
 
       expect(result.error).toBeNull();
-      expect(result.data).toBeDefined();
-      expect(result.data.length).toBeGreaterThan(0);
-      expect(result.data[0].name).toBe('Test Product 1');
+      expect(queryRows(result.data)).toBeDefined();
+      expect(queryRows(result.data).length).toBeGreaterThan(0);
+      expect(rowAt(result.data, 0)['name']).toBe('Test Product 1');
       console.log('  [ok] Insert single record works');
     });
 
@@ -2073,18 +2250,18 @@ describe('SDK E2E Integration Tests', () => {
       const result = await dbVolcano.from('sdk_test_products').select('*');
 
       expect(result.error).toBeNull();
-      expect(result.data).toBeDefined();
-      expect(result.data.length).toBeGreaterThanOrEqual(5);
-      console.log(`  [ok] Select all returned ${result.data.length} records`);
+      expect(queryRows(result.data)).toBeDefined();
+      expect(queryRows(result.data).length).toBeGreaterThanOrEqual(5);
+      console.log(`  [ok] Select all returned ${queryRows(result.data).length.toString()} records`);
     });
 
     test('select() - retrieves specific columns', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('name, price');
 
       expect(result.error).toBeNull();
-      expect(result.data).toBeDefined();
-      expect(result.data[0]).toHaveProperty('name');
-      expect(result.data[0]).toHaveProperty('price');
+      expect(queryRows(result.data)).toBeDefined();
+      expect(rowAt(result.data, 0)).toHaveProperty('name');
+      expect(rowAt(result.data, 0)).toHaveProperty('price');
       console.log('  [ok] Select specific columns works');
     });
 
@@ -2095,11 +2272,13 @@ describe('SDK E2E Integration Tests', () => {
         .eq('category', 'electronics');
 
       expect(result.error).toBeNull();
-      expect(result.data.length).toBeGreaterThanOrEqual(2);
-      result.data.forEach((item) => {
-        expect(item.category).toBe('electronics');
+      expect(queryRows(result.data).length).toBeGreaterThanOrEqual(2);
+      queryRows(result.data).forEach((item) => {
+        expect(item['category']).toBe('electronics');
       });
-      console.log(`  [ok] eq() filter returned ${result.data.length} electronics items`);
+      console.log(
+        `  [ok] eq() filter returned ${queryRows(result.data).length.toString()} electronics items`,
+      );
     });
 
     test('neq() - filters by inequality', async () => {
@@ -2109,60 +2288,72 @@ describe('SDK E2E Integration Tests', () => {
         .neq('category', 'electronics');
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(item.category).not.toBe('electronics');
+      queryRows(result.data).forEach((item) => {
+        expect(item['category']).not.toBe('electronics');
       });
-      console.log(`  [ok] neq() filter returned ${result.data.length} non-electronics items`);
+      console.log(
+        `  [ok] neq() filter returned ${queryRows(result.data).length.toString()} non-electronics items`,
+      );
     });
 
     test('gt() - filters by greater than', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').gt('price', 100);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(parseFloat(item.price)).toBeGreaterThan(100);
+      queryRows(result.data).forEach((item) => {
+        expect(numericField(item, 'price')).toBeGreaterThan(100);
       });
-      console.log(`  [ok] gt() filter returned ${result.data.length} items > $100`);
+      console.log(
+        `  [ok] gt() filter returned ${queryRows(result.data).length.toString()} items > $100`,
+      );
     });
 
     test('gte() - filters by greater than or equal', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').gte('price', 99.99);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(parseFloat(item.price)).toBeGreaterThanOrEqual(99.99);
+      queryRows(result.data).forEach((item) => {
+        expect(numericField(item, 'price')).toBeGreaterThanOrEqual(99.99);
       });
-      console.log(`  [ok] gte() filter returned ${result.data.length} items >= $99.99`);
+      console.log(
+        `  [ok] gte() filter returned ${queryRows(result.data).length.toString()} items >= $99.99`,
+      );
     });
 
     test('lt() - filters by less than', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').lt('price', 50);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(parseFloat(item.price)).toBeLessThan(50);
+      queryRows(result.data).forEach((item) => {
+        expect(numericField(item, 'price')).toBeLessThan(50);
       });
-      console.log(`  [ok] lt() filter returned ${result.data.length} items < $50`);
+      console.log(
+        `  [ok] lt() filter returned ${queryRows(result.data).length.toString()} items < $50`,
+      );
     });
 
     test('lte() - filters by less than or equal', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').lte('quantity', 5);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(item.quantity).toBeLessThanOrEqual(5);
+      queryRows(result.data).forEach((item) => {
+        expect(item['quantity']).toBeLessThanOrEqual(5);
       });
-      console.log(`  [ok] lte() filter returned ${result.data.length} items with qty <= 5`);
+      console.log(
+        `  [ok] lte() filter returned ${queryRows(result.data).length.toString()} items with qty <= 5`,
+      );
     });
 
     test('like() - filters by pattern (case-sensitive)', async () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').like('name', 'Test%');
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(item.name.startsWith('Test')).toBe(true);
+      queryRows(result.data).forEach((item) => {
+        expect(requiredString(item, 'name').startsWith('Test')).toBe(true);
       });
-      console.log(`  [ok] like() filter returned ${result.data.length} items starting with 'Test'`);
+      console.log(
+        `  [ok] like() filter returned ${queryRows(result.data).length.toString()} items starting with 'Test'`,
+      );
     });
 
     test('ilike() - filters by pattern (case-insensitive)', async () => {
@@ -2172,11 +2363,11 @@ describe('SDK E2E Integration Tests', () => {
         .ilike('name', '%product%');
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(item.name.toLowerCase()).toContain('product');
+      queryRows(result.data).forEach((item) => {
+        expect(requiredString(item, 'name').toLowerCase()).toContain('product');
       });
       console.log(
-        `  [ok] ilike() filter returned ${result.data.length} items containing 'product'`,
+        `  [ok] ilike() filter returned ${queryRows(result.data).length.toString()} items containing 'product'`,
       );
     });
 
@@ -2184,10 +2375,12 @@ describe('SDK E2E Integration Tests', () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').is('is_active', false);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(item.is_active).toBe(false);
+      queryRows(result.data).forEach((item) => {
+        expect(item['is_active']).toBe(false);
       });
-      console.log(`  [ok] is() filter returned ${result.data.length} inactive items`);
+      console.log(
+        `  [ok] is() filter returned ${queryRows(result.data).length.toString()} inactive items`,
+      );
     });
 
     test('in() - filters by value in array', async () => {
@@ -2197,10 +2390,12 @@ describe('SDK E2E Integration Tests', () => {
         .in('category', ['electronics', 'luxury']);
 
       expect(result.error).toBeNull();
-      result.data.forEach((item) => {
-        expect(['electronics', 'luxury']).toContain(item.category);
+      queryRows(result.data).forEach((item) => {
+        expect(['electronics', 'luxury']).toContain(item['category']);
       });
-      console.log(`  [ok] in() filter returned ${result.data.length} electronics/luxury items`);
+      console.log(
+        `  [ok] in() filter returned ${queryRows(result.data).length.toString()} electronics/luxury items`,
+      );
     });
 
     test('order() - sorts ascending', async () => {
@@ -2210,9 +2405,9 @@ describe('SDK E2E Integration Tests', () => {
         .order('price', { ascending: true });
 
       expect(result.error).toBeNull();
-      for (let i = 1; i < result.data.length; i++) {
-        expect(parseFloat(result.data[i].price)).toBeGreaterThanOrEqual(
-          parseFloat(result.data[i - 1].price),
+      for (let i = 1; i < queryRows(result.data).length; i++) {
+        expect(numericField(rowAt(result.data, i), 'price')).toBeGreaterThanOrEqual(
+          numericField(rowAt(result.data, i - 1), 'price'),
         );
       }
       console.log('  [ok] order() ascending works');
@@ -2225,9 +2420,9 @@ describe('SDK E2E Integration Tests', () => {
         .order('price', { ascending: false });
 
       expect(result.error).toBeNull();
-      for (let i = 1; i < result.data.length; i++) {
-        expect(parseFloat(result.data[i].price)).toBeLessThanOrEqual(
-          parseFloat(result.data[i - 1].price),
+      for (let i = 1; i < queryRows(result.data).length; i++) {
+        expect(numericField(rowAt(result.data, i), 'price')).toBeLessThanOrEqual(
+          numericField(rowAt(result.data, i - 1), 'price'),
         );
       }
       console.log('  [ok] order() descending works');
@@ -2237,7 +2432,7 @@ describe('SDK E2E Integration Tests', () => {
       const result = await dbVolcano.from('sdk_test_products').select('*').limit(2);
 
       expect(result.error).toBeNull();
-      expect(result.data).toHaveLength(2);
+      expect(queryRows(result.data)).toHaveLength(2);
       console.log('  [ok] limit() works');
     });
 
@@ -2255,7 +2450,7 @@ describe('SDK E2E Integration Tests', () => {
         .limit(2);
 
       expect(offsetResult.error).toBeNull();
-      expect(offsetResult.data[0].id).toBe(allResult.data[2].id);
+      expect(rowAt(offsetResult.data, 0)['id']).toBe(rowAt(allResult.data, 2)['id']);
       console.log('  [ok] offset() works');
     });
 
@@ -2269,11 +2464,13 @@ describe('SDK E2E Integration Tests', () => {
         .limit(3);
 
       expect(result.error).toBeNull();
-      expect(result.data.length).toBeLessThanOrEqual(3);
-      result.data.forEach((item) => {
-        expect(parseFloat(item.price)).toBeGreaterThanOrEqual(50);
+      expect(queryRows(result.data).length).toBeLessThanOrEqual(3);
+      queryRows(result.data).forEach((item) => {
+        expect(numericField(item, 'price')).toBeGreaterThanOrEqual(50);
       });
-      console.log(`  [ok] Complex query returned ${result.data.length} items`);
+      console.log(
+        `  [ok] Complex query returned ${queryRows(result.data).length.toString()} items`,
+      );
     });
 
     test('update() - updates matching records', async () => {
@@ -2284,7 +2481,7 @@ describe('SDK E2E Integration Tests', () => {
         .eq('name', 'Test Product 1');
 
       expect(selectResult.error).toBeNull();
-      const productId = selectResult.data[0].id;
+      const productId = numericField(rowAt(selectResult.data, 0), 'id');
 
       // Update it
       const updateResult = await dbVolcano
@@ -2299,7 +2496,7 @@ describe('SDK E2E Integration Tests', () => {
         .select('*')
         .eq('id', productId);
 
-      expect(verifyResult.data[0].quantity).toBe(999);
+      expect(rowAt(verifyResult.data, 0)['quantity']).toBe(999);
       console.log('  [ok] update() works');
     });
 
@@ -2335,7 +2532,7 @@ describe('SDK E2E Integration Tests', () => {
         .select('*')
         .eq('name', 'To Be Deleted');
 
-      expect(verifyResult.data).toHaveLength(0);
+      expect(queryRows(verifyResult.data)).toHaveLength(0);
       console.log('  [ok] delete() works');
     });
 
@@ -2351,11 +2548,11 @@ describe('SDK E2E Integration Tests', () => {
       const { data, error } = await dbVolcano.insert('sdk_test_products', {
         name: 'Thenable Test',
         category: 'test',
-        price: 1.0,
+        price: 1,
       });
 
       expect(error).toBeNull();
-      expect(data[0].name).toBe('Thenable Test');
+      expect(requirePresent(queryRows(data)[0], 'row')['name']).toBe('Thenable Test');
 
       // Cleanup
       await dbVolcano.delete('sdk_test_products').eq('name', 'Thenable Test');
@@ -2375,7 +2572,7 @@ describe('SDK E2E Integration Tests', () => {
 
       expect(result).toBeDefined();
       // Will have user if there's a valid session, or null otherwise
-      console.log(`  [ok] Initialize completed (user: ${result.user ? 'yes' : 'no'})`);
+      console.log(`  [ok] Initialize completed (user: ${result.user !== null ? 'yes' : 'no'})`);
     });
   });
 });
