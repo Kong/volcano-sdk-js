@@ -12,6 +12,7 @@ module.exports = {
   // via jest.integration.config.cjs), not by the SDK's unit `pnpm test`.
   testPathIgnorePatterns: [
     '/node_modules/',
+    '<rootDir>/.stryker-tmp/',
     '<rootDir>/__tests__/contract/',
     '<rootDir>/__tests__/integration/',
   ],
