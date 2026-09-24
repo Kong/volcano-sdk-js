@@ -5,13 +5,13 @@ import { mutationPatterns, mutationShardCount, shardMutationPatterns } from './m
 
 test('CI starts every required mutation shard', () => {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
-  const matrix = /mutation-shard: \[([\d, ]+)\]/.exec(workflow);
+  const matrix = /mutation-shard:\s*\[([\d,\s]+)\]/.exec(workflow);
   const environment = /MUTATION_SHARD_COUNT: '(\d+)'/.exec(workflow);
   assert.ok(matrix);
   assert.ok(environment);
   assert.equal(Number(environment[1]), mutationShardCount);
   assert.deepEqual(
-    matrix[1].split(',').map((value) => Number(value.trim())),
+    [...matrix[1].matchAll(/\d+/g)].map((match) => Number(match[0])),
     Array.from({ length: mutationShardCount }, (_, index) => index),
   );
 });

@@ -7,7 +7,8 @@ interface CredentialPair {
 // it alive across replacement; settled operations do not enter a global registry.
 export class AuthSessionOperations<RefreshResult, SignOutResult> {
   constructor(verified: CredentialPair | null = null) {
-    this.verifyPair(verified);
+    const initial: CredentialPair = verified ?? {};
+    this.verifiedPair = verified === null ? null : [initial.access_token, initial.refresh_token];
   }
 
   verifyPair(data: CredentialPair | null): void {

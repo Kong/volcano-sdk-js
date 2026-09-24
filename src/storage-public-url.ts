@@ -19,11 +19,11 @@ export function storagePublicUrl(
     return errorResult(pathError);
   }
   const parts = anonKey.split('.');
-  if (parts.length !== 3) {
+  if (!isTokenParts(parts)) {
     return errorResult('Invalid anon key format');
   }
   try {
-    const payload: unknown = JSON.parse(decodeBase64Url(parts.slice(1, 2).join('')));
+    const payload: unknown = JSON.parse(decodeBase64Url(parts[1]));
     const projectId = projectIdFrom(payload);
     if (projectId === null) {
       return errorResult('Project ID not found in anon key');
@@ -36,14 +36,16 @@ export function storagePublicUrl(
   }
 }
 
+function isTokenParts(parts: string[]): parts is [string, string, string] {
+  return parts.length === 3;
+}
+
 function projectIdFrom(payload: unknown): string | null {
   if (typeof payload !== 'object' || payload === null) {
     return null;
   }
-  if (!('project_id' in payload)) {
-    return null;
-  }
-  return nonEmptyProjectId(payload.project_id);
+  const projectId: unknown = Reflect.get(payload, 'project_id');
+  return nonEmptyProjectId(projectId);
 }
 
 function nonEmptyProjectId(projectId: unknown): string | null {

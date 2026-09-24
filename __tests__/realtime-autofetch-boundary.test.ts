@@ -61,6 +61,7 @@ describe('auto-fetch database boundary', () => {
 
   test('queries clients that directly expose from without a database selector', () => {
     const tables: string[] = [];
+    const databaseNames: string[] = [];
     const client = {
       from(table: string) {
         tables.push(table);
@@ -72,10 +73,27 @@ describe('auto-fetch database boundary', () => {
     expect(
       fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }),
     ).toEqual({ data: [] });
+    expect(
+      fetchFrom(
+        {
+          ...client,
+          _currentDatabaseName: 'chosen',
+          database(name: string) {
+            databaseNames.push(name);
+            return client;
+          },
+        },
+        '',
+      ),
+    ).toEqual({ data: [] });
+    expect(databaseNames).toEqual(['chosen']);
   });
 
   test('rejects clients with incomplete query capabilities', () => {
     expect(() => fetchFrom(null)).toThrow('volcanoClient.from not available');
+    expect(() => fetchFrom({ database: () => ({ from: () => ({}) }) }, 'db')).toThrow(
+      'volcanoClient.from not available',
+    );
     expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
       'volcanoClient.database not available',
     );

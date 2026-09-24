@@ -4,7 +4,7 @@ import ts from 'typescript';
 // Stryker accepts file/line ranges but has no native CI shard selector.
 // Split small, mutation-dense modules without cutting through syntax nodes.
 const MAX_SHARD_LINES = 80;
-export const mutationShardCount = 16;
+export const mutationShardCount = 32;
 function handwrittenRuntime(path) {
   return (
     /^src\/.+\.(?:js|ts)$/.test(path) &&

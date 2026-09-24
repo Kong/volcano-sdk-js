@@ -424,6 +424,26 @@ describe('Realtime Auto-Fetch', () => {
       expect(fromSpy).toHaveBeenCalledWith('private.secrets');
     });
 
+    test('uses an unqualified table name when the notification omits its schema', async () => {
+      const { client: mockClient, fromSpy } = createMockVolcanoClient([{ id: 1 }]);
+      realtime.setVolcanoClient(mockClient);
+      const channel = realtime.channel('public:secrets', { type: 'postgres' });
+
+      channel._handlePublication({
+        data: {
+          mode: 'lightweight',
+          type: 'INSERT',
+          schema: '',
+          table: 'secrets',
+          id: 1,
+          timestamp: '2024-01-01T00:00:00Z',
+        },
+      });
+
+      await jest.advanceTimersByTimeAsync(50);
+      expect(fromSpy).toHaveBeenCalledWith('secrets');
+    });
+
     test('forces flush at max batch size', async () => {
       const mockData = Array.from({ length: 50 }, (_, i) => ({
         id: i + 1,

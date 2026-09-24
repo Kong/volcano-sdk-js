@@ -2,7 +2,7 @@
 
 `pnpm quality` runs Stryker against every handwritten runtime file under `src/`.
 Generated files, declarations, and tests are outside the mutation target. A
-local run checks the complete target; CI runs the same command in 16 required
+local run checks the complete target; CI runs the same command in 32 required
 shards on Node 20 and 22. `scripts/verify-mutation-shards.mjs` compares the
 shard mutant counts with Stryker's unfiltered inventory, so a missing range or
 empty shard fails the gate.

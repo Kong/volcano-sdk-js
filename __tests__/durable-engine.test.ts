@@ -30,6 +30,7 @@ describe('durable runtime boundary', () => {
     {},
     { withDurableExecution: true, default: engine },
     { ...engine, withDurableExecution: undefined },
+    { ...engine, withDurableExecution: 'not callable' },
     { ...engine, StepSemantics: null },
     { ...engine, StepSemantics: {} },
     { ...engine, StepSemantics: { AtMostOncePerRetry: undefined } },
