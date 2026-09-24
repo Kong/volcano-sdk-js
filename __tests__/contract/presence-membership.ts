@@ -5,7 +5,7 @@ interface PresenceChannel {
   onPresenceSync(callback: (state: PresenceState) => void): () => void;
   getPresenceState(): PresenceState;
   subscribe(): Promise<void>;
-  unsubscribe(): Promise<void>;
+  unsubscribe(): void;
 }
 
 interface PresenceWorld {
@@ -91,14 +91,15 @@ async function verifyPresenceMembership(world: PresenceWorld): Promise<number[]>
     const joined = await firstObserver.roster(2);
     expect(await secondObserver.roster(2)).toEqual(joined);
     expect(joined).toEqual(expect.arrayContaining(initial));
-    await second.unsubscribe();
+    second.unsubscribe();
     expect(await firstObserver.roster(1)).toEqual(initial);
     await firstObserver.wait(() => observedMembership(firstObserver.snapshots, initial, joined));
     return [1, 2, 1];
   } finally {
     firstObserver.unsubscribe();
     secondObserver.unsubscribe();
-    await Promise.all([first.unsubscribe(), second.unsubscribe()]);
+    first.unsubscribe();
+    second.unsubscribe();
   }
 }
 

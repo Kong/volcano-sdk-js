@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface BroadcastMessage {
+  [key: string]: unknown;
   event: string;
   value: string;
 }
@@ -9,10 +10,10 @@ interface BroadcastWorld {
   realtimeMessage: BroadcastMessage;
   subscriber: {
     on(event: 'message', callback: (message: unknown) => void): unknown;
-    unsubscribe(): Promise<unknown>;
+    unsubscribe(): void;
     subscribe(): Promise<unknown>;
-  };
-  publisher: { send(message: BroadcastMessage): Promise<unknown> };
+  } | null;
+  publisher: { send(message: BroadcastMessage): Promise<unknown> } | null;
 }
 
 class BroadcastMailbox {
@@ -39,7 +40,7 @@ class BroadcastMailbox {
 }
 
 async function publishAndReceive(
-  publisher: BroadcastWorld['publisher'],
+  publisher: NonNullable<BroadcastWorld['publisher']>,
   messages: BroadcastMailbox,
   message: BroadcastMessage,
 ): Promise<BroadcastMessage> {
@@ -69,9 +70,13 @@ function isBroadcastMessage(value: unknown): value is BroadcastMessage {
 }
 
 async function verifyBroadcastPause(world: BroadcastWorld): Promise<BroadcastMessage> {
+  const { subscriber, publisher } = world;
+  if (subscriber === null || publisher === null) {
+    throw new Error('Broadcast channels were not initialized');
+  }
   const messages = new BroadcastMailbox();
   const delivered: BroadcastMessage[] = [];
-  world.subscriber.on('message', (message) => {
+  subscriber.on('message', (message) => {
     if (!isBroadcastMessage(message)) {
       throw new Error('Broadcast message was invalid');
     }
@@ -79,17 +84,17 @@ async function verifyBroadcastPause(world: BroadcastWorld): Promise<BroadcastMes
     messages.emit(message);
   });
   const baseline = { ...world.realtimeMessage, value: `${world.realtimeMessage.value}-baseline` };
-  await publishAndReceive(world.publisher, messages, baseline);
-  await world.subscriber.unsubscribe();
+  await publishAndReceive(publisher, messages, baseline);
+  subscriber.unsubscribe();
   delivered.length = 0;
-  await world.publisher.send({
+  await publisher.send({
     ...world.realtimeMessage,
     value: `${world.realtimeMessage.value}-paused`,
   });
   await delay(1_000);
   expect(delivered).toEqual([]);
-  await world.subscriber.subscribe();
-  return publishAndReceive(world.publisher, messages, world.realtimeMessage);
+  await subscriber.subscribe();
+  return publishAndReceive(publisher, messages, world.realtimeMessage);
 }
 
 export { verifyBroadcastPause };

@@ -1,24 +1,28 @@
-const { randomUUID } = require('node:crypto');
-const { readFileSync } = require('node:fs');
-const path = require('node:path');
-
-const { autoBindSteps, loadFeatures } = require('jest-cucumber');
-
-const { VolcanoClient } = require('../../src/index.js');
-const {
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { autoBindSteps, loadFeatures } from 'jest-cucumber';
+import {
+  type CompleteSession,
+  type CurrentSession,
+  type ProjectLockAcquireResult,
+  type ProjectLockLease,
+  VolcanoClient,
+} from '../../src/index.js';
+import { verifyBroadcastPause } from './broadcast-pause.ts';
+import { verifyPostgresChanges } from './postgres-changes.ts';
+import { verifyPresenceMembership } from './presence-membership.ts';
+import {
+  type ContractFixture,
   ContractWorld,
   recordOutcome,
   requireSuccessfulOutcome,
   TERMINAL_DURABLE_STATUSES,
-} = require('./world.ts');
-const { verifyBroadcastPause } = require('./broadcast-pause.ts');
-const { LogContract } = require('./logs.ts');
-const { verifyPresenceMembership } = require('./presence-membership.ts');
-const { verifyPostgresChanges } = require('./postgres-changes.ts');
+} from './world.ts';
 
-function absoluteEnvironmentPath(name) {
+function absoluteEnvironmentPath(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value.length === 0) {
     throw new Error(`${name} is required`);
   }
   if (!path.isAbsolute(value)) {
@@ -27,44 +31,163 @@ function absoluteEnvironmentPath(name) {
   return value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isContractRow(value: unknown): value is { slug: string; value: string } {
+  return isRecord(value) && typeof value['slug'] === 'string' && typeof value['value'] === 'string';
+}
+
+function hasStringFields(value: Record<string, unknown>): boolean {
+  const stringFields = [
+    'api_url',
+    'anon_key',
+    'service_key',
+    'platform_token',
+    'project_id',
+    'user_id',
+    'user_email',
+    'user_password',
+    'storage_path',
+    'realtime_channel',
+    'lock_key',
+    'function_name',
+    'durable_function_name',
+    'database_name',
+    'realtime_table_name',
+    'bucket_name',
+    'function_id',
+    'logs_access_token',
+    'table_name',
+    'query_table_name',
+  ];
+  return stringFields.every((field) => typeof value[field] === 'string');
+}
+
+function hasMutationRows(value: Record<string, unknown>): boolean {
+  const rows = value['mutation_rows'];
+  if (!isRecord(rows)) {
+    return false;
+  }
+  const update = rows['update'];
+  return (
+    isContractRow(value['fixture_row']) &&
+    isContractRow(rows['insert']) &&
+    isContractRow(rows['delete']) &&
+    isContractUpdate(update)
+  );
+}
+
+function isContractUpdate(value: unknown): boolean {
+  return isRecord(value) && isContractRow(value['before']) && isContractRow(value['after']);
+}
+
+function isContractFixture(value: unknown): value is ContractFixture {
+  return isRecord(value) && hasStringFields(value) && hasMutationRows(value);
+}
+
 const featuresPath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FEATURES');
 const fixturePath = absoluteEnvironmentPath('VOLCANO_SDK_CONTRACT_FIXTURE');
-const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
+const parsedFixture: unknown = JSON.parse(readFileSync(fixturePath, 'utf8'));
+if (!isContractFixture(parsedFixture)) {
+  throw new Error('SDK contract fixture is malformed');
+}
+const fixture = parsedFixture;
 const features = loadFeatures(path.join(featuresPath, '*.feature'));
+test('the shared contract suite discovers scenarios', () => {
+  expect(features.length).toBeGreaterThan(0);
+});
 const ACCESS_TOKEN_CLOCK_TICK_MS = 1_100;
 const REJECTED_ACCESS_TOKEN = 'sdk-contract-rejected-access-token';
 
-let activeWorld;
+interface ScenarioContext {
+  world: ContractWorld;
+}
 
-function startScenario(context) {
+type ContractQuery = ReturnType<VolcanoClient['from']>;
+type QueryResult = Awaited<ReturnType<ContractQuery['execute']>>;
+type StorageBucket = ReturnType<VolcanoClient['storage']['from']>;
+
+function requireSession(session: CurrentSession | null): CurrentSession {
+  if (session === null) {
+    throw new Error('Current session was empty');
+  }
+  return session;
+}
+
+function requireCompleteSession(session: CurrentSession | null): CompleteSession {
+  const current = requireSession(session);
+  if (
+    current.refresh_token === null ||
+    current.refresh_token.length === 0 ||
+    current.user === null
+  ) {
+    throw new Error('Current session is missing its refresh token or user');
+  }
+  return { ...current, refresh_token: current.refresh_token, user: current.user };
+}
+
+function requirePresent<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${label} was absent`);
+  }
+  return value;
+}
+
+function requireAcquiredLease(result: ProjectLockAcquireResult, label: string): ProjectLockLease {
+  if (result.error !== null) {
+    throw result.error;
+  }
+  if (!result.acquired) {
+    throw new Error(`${label} was not acquired`);
+  }
+  return requirePresent(result.lease, label);
+}
+
+function requireNoError(result: { error: Error | null }): void {
+  if (result.error !== null) {
+    throw result.error;
+  }
+}
+
+let activeWorld: ContractWorld | undefined;
+
+function startScenario(context: ScenarioContext): ContractWorld {
   activeWorld = new ContractWorld(fixture);
   context.world = activeWorld;
   return activeWorld;
 }
 
-async function authenticate(world) {
+async function authenticate(world: ContractWorld): Promise<void> {
   await world.authenticate();
   world.client.database(world.fixture.database_name);
 }
 
-function registerDatabaseCleanup(world, operation) {
+function registerDatabaseCleanup(
+  world: ContractWorld,
+  operation: () => PromiseLike<{ error: Error | null }>,
+): void {
   world.cleanupCallbacks.push(async () => {
     const result = await operation();
-    if (result.error) {
+    if (result.error !== null) {
       throw result.error;
     }
   });
 }
 
-function queryFixture(world) {
+function queryFixture(world: ContractWorld): ContractQuery {
   return world.client.from(world.fixture.query_table_name).select('slug').order('rank');
 }
 
-async function recordQuerySet(world, queries) {
-  const rows = new Map();
+async function recordQuerySet(
+  world: ContractWorld,
+  queries: Record<string, PromiseLike<QueryResult>>,
+): Promise<void> {
+  const rows = new Map<string, QueryResult['data']>();
   for (const [name, query] of Object.entries(queries)) {
     const result = await query;
-    if (result.error) {
+    if (result.error !== null) {
       recordOutcome(world, null, result.error);
       return;
     }
@@ -73,16 +196,21 @@ async function recordQuerySet(world, queries) {
   recordOutcome(world, Object.fromEntries(rows), null);
 }
 
-function storageData(result) {
-  if (result.error) throw result.error;
+function storageData<T>(result: { data: T | null; error: Error | null }): T {
+  if (result.error !== null) {
+    throw result.error;
+  }
+  if (result.data === null) {
+    throw new Error('Storage response was empty');
+  }
   return result.data;
 }
 
-function storageBucket(world) {
+function storageBucket(world: ContractWorld): StorageBucket {
   return world.client.storage.from(world.fixture.bucket_name);
 }
 
-async function cleanStorageObject(world) {
+async function cleanStorageObject(world: ContractWorld): Promise<void> {
   const bucket = storageBucket(world);
   const objects = storageData(await bucket.list(world.storagePath));
   if (objects.some(({ name }) => name === world.storagePath)) {
@@ -90,7 +218,7 @@ async function cleanStorageObject(world) {
   }
 }
 
-async function partialUpload(world) {
+async function partialUpload(world: ContractWorld) {
   const bucket = storageBucket(world);
   const bytes = Buffer.concat([Buffer.alloc(5 * 1024 * 1024, 'x'), world.storageBytes]);
   const session = storageData(
@@ -100,23 +228,30 @@ async function partialUpload(world) {
       contentType: 'application/octet-stream',
     }),
   );
-  world.cleanupCallbacks.push(async () => {
-    const result = await bucket.abortUploadSession(world.storagePath, session.session_id);
-    if (result.error && result.error.status !== 404) throw result.error;
-  });
-  world.cleanupCallbacks.push(() => cleanStorageObject(world));
+  world.cleanupCallbacks.push(
+    async () => {
+      const result = await bucket.abortUploadSession(world.storagePath, session.session_id);
+      if (result.error !== null && result.error.status !== 404) {
+        throw result.error;
+      }
+    },
+    () => cleanStorageObject(world),
+  );
   const part = storageData(
     await bucket.uploadPart(
       world.storagePath,
       session.session_id,
       1,
-      new Blob([bytes.subarray(0, session.part_size)]),
+      new Blob([Uint8Array.from(bytes.subarray(0, session.part_size))]),
     ),
   );
   return { session, part, bytes };
 }
 
-async function recordStorage(world, operation) {
+async function recordStorage(
+  world: ContractWorld,
+  operation: () => Promise<unknown>,
+): Promise<void> {
   try {
     recordOutcome(world, await operation(), null);
   } catch (error) {
@@ -130,11 +265,10 @@ afterEach(async () => {
   await world?.cleanup();
 });
 
-autoBindSteps(features, [
+autoBindSteps<ScenarioContext>(features, [
   ({ given, when, then, context }) => {
     given('a read-only project logs client', () => {
-      const world = startScenario(context);
-      world.logsContract = new LogContract(world);
+      startScenario(context);
     });
     when('the contract function emits three unique structured log events', async () => {
       await context.world.logsContract.emit(3);
@@ -145,7 +279,8 @@ autoBindSteps(features, [
     when('the client searches and paginates those events within 240 seconds', async () => {
       const world = context.world;
       try {
-        recordOutcome(world, await world.logsContract.search(), null);
+        world.logsSearchResult = await world.logsContract.search();
+        recordOutcome(world, world.logsSearchResult, null);
       } catch (error) {
         recordOutcome(world, null, error);
       }
@@ -153,16 +288,25 @@ autoBindSteps(features, [
     when('the client reads matching log activity within 120 seconds', async () => {
       const world = context.world;
       try {
-        recordOutcome(world, await world.logsContract.activity(), null);
+        world.logsActivityResult = await world.logsContract.activity();
+        recordOutcome(world, world.logsActivityResult, null);
       } catch (error) {
         recordOutcome(world, null, error);
       }
     });
     then('all three structured events retain their metadata without duplicates', () => {
-      context.world.logsContract.verifyEvents(context.world.lastOutcome.value);
+      requireSuccessfulOutcome(context.world);
+      if (context.world.logsSearchResult === null) {
+        throw new Error('Log search did not complete');
+      }
+      context.world.logsContract.verifyEvents(context.world.logsSearchResult);
     });
     then('activity counts exactly that event in its function and level buckets', () => {
-      context.world.logsContract.verifyActivity(context.world.lastOutcome.value);
+      requireSuccessfulOutcome(context.world);
+      if (context.world.logsActivityResult === null) {
+        throw new Error('Log activity did not complete');
+      }
+      context.world.logsContract.verifyActivity(context.world.logsActivityResult);
     });
     when('one presence client joins and leaves while the other remains subscribed', async () => {
       const world = context.world;
@@ -171,7 +315,7 @@ autoBindSteps(features, [
     then(
       'both rosters identify the contract user and the original handler observes membership changes',
       () => {
-        expect(context.world.lastOutcome.value).toEqual([1, 2, 1]);
+        expect(requireSuccessfulOutcome(context.world)).toEqual([1, 2, 1]);
       },
     );
     when('the clients observe an inserted and updated contract row', async () => {
@@ -179,18 +323,23 @@ autoBindSteps(features, [
       recordOutcome(world, await verifyPostgresChanges(world), null);
     });
     then('automatic and lightweight notifications retain metadata and row identity', () => {
-      expect(context.world.lastOutcome.value).toEqual(['INSERT', 'UPDATE']);
+      expect(requireSuccessfulOutcome(context.world)).toEqual(['INSERT', 'UPDATE']);
     });
     given('the client replaces its access token with a rejected token', async () => {
       const { data, error } = await context.world.client.auth.getSession();
-      if (error) throw error;
-      const parts = data.session.access_token.split('.');
+      if (error !== null) {
+        throw error;
+      }
+      const session = requireCompleteSession(data.session);
+      const parts = session.access_token.split('.');
       expect(parts).toHaveLength(3);
       const adopted = await context.world.client.auth.setSession({
-        ...data.session,
-        access_token: `${parts[0]}.${parts[1]}.sdk-contract-rejected-signature`,
+        ...session,
+        access_token: `${requirePresent(parts[0], 'JWT header')}.${requirePresent(parts[1], 'JWT payload')}.sdk-contract-rejected-signature`,
       });
-      if (adopted.error) throw adopted.error;
+      if (adopted.error !== null) {
+        throw adopted.error;
+      }
       context.world.previousSession = adopted.data.session;
     });
 
@@ -204,10 +353,13 @@ autoBindSteps(features, [
       then(`the ${operation} replaces the rejected token for the same user`, async () => {
         const { data, error } = await context.world.client.auth.getSession();
         expect(error).toBeNull();
-        expect(data.session.access_token).toBeTruthy();
-        expect(data.session.access_token).not.toBe(context.world.previousSession.access_token);
-        expect(data.session.refresh_token).toBeTruthy();
-        expect(data.session.user.id).toBe(context.world.fixture.user_id);
+        const session = requireCompleteSession(data.session);
+        expect(session.access_token).toBeTruthy();
+        expect(session.access_token).not.toBe(
+          requireSession(context.world.previousSession).access_token,
+        );
+        expect(session.refresh_token).toBeTruthy();
+        expect(session.user.id).toBe(context.world.fixture.user_id);
       });
     }
 
@@ -225,12 +377,20 @@ autoBindSteps(features, [
     when('the client lists its server sessions', async () => {
       const world = context.world;
       const result = await world.client.auth.getSessions({ page: 1, limit: 100 });
+      world.sessionPage = result;
       recordOutcome(world, result, result.error);
     });
 
     then('the session list contains the current session for the contract user', () => {
       const world = context.world;
-      const page = world.lastOutcome.value;
+      requireSuccessfulOutcome(world);
+      const page = world.sessionPage;
+      if (page === null) {
+        throw new Error('Session list did not complete');
+      }
+      if (page.sessions === null) {
+        throw new Error('Session list was empty');
+      }
       expect(page.page).toBe(1);
       expect(page.sessions.length).toBeGreaterThan(0);
       expect(page.total).toBeGreaterThanOrEqual(page.sessions.length);
@@ -246,8 +406,10 @@ autoBindSteps(features, [
     });
 
     then('the returned and cached profiles belong to the contract user', () => {
-      expect(context.world.lastOutcome.value.id).toBe(context.world.fixture.user_id);
-      expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        id: context.world.fixture.user_id,
+      });
+      expect(context.world.client.currentUser).toMatchObject({ id: context.world.fixture.user_id });
     });
 
     given('the confirmed contract user', () => {
@@ -259,7 +421,10 @@ autoBindSteps(features, [
       const unsubscribe = world.client.auth.onAuthStateChange((user) => {
         world.authStateUsers.push(user);
       });
-      world.cleanupCallbacks.push(unsubscribe);
+      world.cleanupCallbacks.push(() => {
+        unsubscribe();
+        return Promise.resolve();
+      });
     });
 
     when("the client signs in with the contract user's credentials", async () => {
@@ -282,7 +447,7 @@ autoBindSteps(features, [
         apiUrl: context.world.fixture.api_url,
         anonKey: context.world.fixture.anon_key,
       });
-      const result = await target.auth.setSession(source.data.session);
+      const result = await target.auth.setSession(requireCompleteSession(source.data.session));
       const session = result.data.session;
       context.world.client = target;
       recordOutcome(context.world, { session, user: session?.user ?? null }, result.error);
@@ -293,7 +458,7 @@ autoBindSteps(features, [
       context.world.previousSession = before.data.session;
       await new Promise((resolve) => setTimeout(resolve, ACCESS_TOKEN_CLOCK_TICK_MS));
       const refreshed = await context.world.client.auth.refreshSession();
-      if (refreshed.error) {
+      if (refreshed.error !== null) {
         recordOutcome(context.world, null, refreshed.error);
         return;
       }
@@ -308,17 +473,25 @@ autoBindSteps(features, [
       async () => {
         const world = context.world;
         const source = await world.client.auth.getSession();
-        if (source.error) throw source.error;
+        if (source.error !== null) {
+          throw source.error;
+        }
         const target = new VolcanoClient({
           apiUrl: world.fixture.api_url,
           anonKey: world.fixture.anon_key,
         });
-        const supplied = { ...source.data.session, access_token: REJECTED_ACCESS_TOKEN };
+        const supplied = {
+          ...requireCompleteSession(source.data.session),
+          access_token: REJECTED_ACCESS_TOKEN,
+        };
         const adopted = await target.auth.setSession(supplied);
-        if (adopted.error) throw adopted.error;
+        if (adopted.error !== null) {
+          throw adopted.error;
+        }
         const result = await target.auth.refreshSession();
         recordOutcome(world, result.session, result.error);
-        expect((await target.auth.getSession()).data.session).toEqual(supplied);
+        const current = await target.auth.getSession();
+        expect(current.data.session).toEqual(supplied);
       },
     );
 
@@ -326,17 +499,21 @@ autoBindSteps(features, [
       const world = context.world;
       const source = world.client;
       const current = await source.auth.getSession();
-      if (current.error) throw current.error;
+      if (current.error !== null) {
+        throw current.error;
+      }
       world.previousSession = current.data.session;
       world.bootstrapCleanup = async () => {
         const result = await source.auth.signOut();
-        if (result.error) throw result.error;
+        if (result.error !== null) {
+          throw result.error;
+        }
       };
       world.cleanupCallbacks.push(world.bootstrapCleanup);
       world.client = new VolcanoClient({
         apiUrl: world.fixture.api_url,
         anonKey: world.fixture.anon_key,
-        accessToken: world.previousSession.access_token,
+        accessToken: requireSession(world.previousSession).access_token,
       });
       const result = await world.client.auth.getSession();
       recordOutcome(world, result.data.session, result.error);
@@ -345,7 +522,7 @@ autoBindSteps(features, [
     then('the token-only session has no cached user', async () => {
       const result = await context.world.client.auth.getSession();
       expect(result.error).toBeNull();
-      expect(result.data.session.user).toBeNull();
+      expect(requireSession(result.data.session).user).toBeNull();
     });
 
     when('a fresh client starts with a rejected access token', async () => {
@@ -364,18 +541,26 @@ autoBindSteps(features, [
       const world = context.world;
       const result = await world.client.auth.getSession();
       expect(result.error).toBeNull();
-      expect(result.data.session.access_token).toBe(world.previousSession.access_token);
-      expect(result.data.session.refresh_token).toBeNull();
+      expect(requireSession(result.data.session).access_token).toBe(
+        requireSession(world.previousSession).access_token,
+      );
+      expect(requireSession(result.data.session).refresh_token).toBeNull();
     });
 
     then('the refreshed session becomes current', () => {
-      expect(context.world.refreshedSession).not.toBe(context.world.previousSession);
-      expect(context.world.refreshedSession.access_token).not.toBe(
-        context.world.previousSession.access_token,
+      const refreshed = context.world.refreshedSession;
+      if (refreshed === null) {
+        throw new Error('Session refresh did not complete');
+      }
+      expect(refreshed).not.toBe(context.world.previousSession);
+      expect(refreshed.access_token).not.toBe(
+        requireSession(context.world.previousSession).access_token,
       );
-      expect(context.world.lastOutcome.value.session).toMatchObject({
-        access_token: context.world.refreshedSession.access_token,
-        refresh_token: context.world.refreshedSession.refresh_token,
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        session: {
+          access_token: refreshed.access_token,
+          refresh_token: refreshed.refresh_token,
+        },
       });
     });
 
@@ -384,7 +569,7 @@ autoBindSteps(features, [
       context.world.signedOutSession = current.data.session;
       const result = await context.world.client.auth.signOut();
       recordOutcome(context.world, null, result.error);
-      if (!result.error && context.world.bootstrapCleanup) {
+      if (result.error === null && context.world.bootstrapCleanup !== null) {
         const world = context.world;
         world.cleanupCallbacks = world.cleanupCallbacks.filter(
           (callback) => callback !== world.bootstrapCleanup,
@@ -403,7 +588,7 @@ autoBindSteps(features, [
       const target = new VolcanoClient({
         apiUrl: world.fixture.api_url,
         anonKey: world.fixture.anon_key,
-        accessToken: world.signedOutSession.access_token,
+        accessToken: requireSession(world.signedOutSession).access_token,
       });
       const result = await target.auth.getUser();
       recordOutcome(world, result.user, result.error);
@@ -414,7 +599,7 @@ autoBindSteps(features, [
         apiUrl: context.world.fixture.api_url,
         anonKey: context.world.fixture.anon_key,
       });
-      await target.auth.setSession(context.world.signedOutSession);
+      await target.auth.setSession(requireCompleteSession(context.world.signedOutSession));
       context.world.client = target;
       const result = await target.auth.refreshSession();
       recordOutcome(context.world, null, result.error);
@@ -436,8 +621,10 @@ autoBindSteps(features, [
     });
 
     then('the current session belongs to the contract user', () => {
-      expect(context.world.lastOutcome.value.user.id).toBe(context.world.fixture.user_id);
-      expect(context.world.client.currentUser.id).toBe(context.world.fixture.user_id);
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        user: { id: context.world.fixture.user_id },
+      });
+      expect(context.world.client.currentUser).toMatchObject({ id: context.world.fixture.user_id });
     });
 
     then('the auth-state listener observes the signed-in contract user', () => {
@@ -447,13 +634,17 @@ autoBindSteps(features, [
     });
 
     then('the current session exposes access and refresh tokens', () => {
-      const session = context.world.lastOutcome.value.session;
-      expect(session.access_token).toEqual(expect.any(String));
-      expect(session.access_token).not.toHaveLength(0);
-      expect(session.refresh_token).toEqual(expect.any(String));
-      expect(session.refresh_token).not.toHaveLength(0);
-      expect(context.world.client.accessToken).toBe(session.access_token);
-      expect(context.world.client.refreshToken).toBe(session.refresh_token);
+      const outcome = requireSuccessfulOutcome(context.world);
+      if (!isRecord(outcome) || !isRecord(outcome['session'])) {
+        throw new Error('Session outcome was malformed');
+      }
+      const session = outcome['session'];
+      expect(session['access_token']).toEqual(expect.any(String));
+      expect(session['access_token']).not.toHaveLength(0);
+      expect(session['refresh_token']).toEqual(expect.any(String));
+      expect(session['refresh_token']).not.toHaveLength(0);
+      expect(context.world.client.accessToken).toBe(session['access_token']);
+      expect(context.world.client.refreshToken).toBe(session['refresh_token']);
     });
 
     given('an authenticated client', async () => {
@@ -470,7 +661,7 @@ autoBindSteps(features, [
     });
 
     then('exactly the fixture row is returned', () => {
-      expect(context.world.lastOutcome.value).toEqual([context.world.fixture.fixture_row]);
+      expect(requireSuccessfulOutcome(context.world)).toEqual([context.world.fixture.fixture_row]);
     });
 
     when('the client selects a projected page of query fixture members', async () => {
@@ -487,7 +678,7 @@ autoBindSteps(features, [
     });
 
     then('the projected page contains only beta and gamma in that order', () => {
-      expect(context.world.lastOutcome.value).toEqual([
+      expect(requireSuccessfulOutcome(context.world)).toEqual([
         { slug: 'beta', rank: 20 },
         { slug: 'gamma', rank: 30 },
       ]);
@@ -512,7 +703,7 @@ autoBindSteps(features, [
         lt: ['alpha', 'beta'],
         lte: ['alpha', 'beta', 'gamma'],
       };
-      expect(context.world.lastOutcome.value).toEqual(
+      expect(requireSuccessfulOutcome(context.world)).toEqual(
         Object.fromEntries(
           Object.entries(expected).map(([name, slugs]) => [name, slugs.map((slug) => ({ slug }))]),
         ),
@@ -531,7 +722,7 @@ autoBindSteps(features, [
     );
 
     then('each pattern returns exactly the matching query fixture rows', () => {
-      expect(context.world.lastOutcome.value).toEqual({
+      expect(requireSuccessfulOutcome(context.world)).toEqual({
         like: [{ slug: 'alpha' }, { slug: 'epsilon' }],
         ilike: [{ slug: 'alpha' }, { slug: 'beta' }, { slug: 'epsilon' }],
       });
@@ -547,7 +738,7 @@ autoBindSteps(features, [
     });
 
     then('each identity filter returns exactly the matching query fixture rows', () => {
-      expect(context.world.lastOutcome.value).toEqual({
+      expect(requireSuccessfulOutcome(context.world)).toEqual({
         null: [{ slug: 'gamma' }],
         enabled: [{ slug: 'alpha' }, { slug: 'gamma' }, { slug: 'epsilon' }],
         disabled: [{ slug: 'beta' }, { slug: 'delta' }],
@@ -565,7 +756,7 @@ autoBindSteps(features, [
 
     then('exactly the inserted contract row is returned', () => {
       const row = context.world.fixture.mutation_rows.insert;
-      expect(context.world.lastOutcome.value).toEqual([row]);
+      expect(requireSuccessfulOutcome(context.world)).toEqual([row]);
     });
 
     when('the client updates its contract row', async () => {
@@ -583,7 +774,7 @@ autoBindSteps(features, [
 
     then('exactly the updated contract row is returned', () => {
       const row = context.world.fixture.mutation_rows.update.after;
-      expect(context.world.lastOutcome.value).toEqual([row]);
+      expect(requireSuccessfulOutcome(context.world)).toEqual([row]);
     });
 
     when('the client deletes its contract row', async () => {
@@ -592,7 +783,7 @@ autoBindSteps(features, [
         const removed = await context.world.client
           .delete(context.world.fixture.table_name)
           .eq('slug', row.slug);
-        return removed.error
+        return removed.error !== null
           ? removed
           : context.world.client.insert(context.world.fixture.table_name, row);
       });
@@ -604,7 +795,7 @@ autoBindSteps(features, [
 
     then('exactly the deleted contract row is returned', () => {
       const row = context.world.fixture.mutation_rows.delete;
-      expect(context.world.lastOutcome.value).toEqual([row]);
+      expect(requireSuccessfulOutcome(context.world)).toEqual([row]);
     });
 
     when('the client updates a missing contract row', async () => {
@@ -624,7 +815,7 @@ autoBindSteps(features, [
     });
 
     then('the mutation returns an empty row list', () => {
-      expect(context.world.lastOutcome.value).toEqual([]);
+      expect(requireSuccessfulOutcome(context.world)).toEqual([]);
     });
 
     then('the existing contract row is unchanged', async () => {
@@ -641,29 +832,33 @@ autoBindSteps(features, [
       const bucket = context.world.client.storage.from(context.world.fixture.bucket_name);
       const upload = await bucket.upload(
         context.world.storagePath,
-        new Blob([context.world.storageBytes], { type: 'application/octet-stream' }),
+        new Blob([Uint8Array.from(context.world.storageBytes)], {
+          type: 'application/octet-stream',
+        }),
       );
-      if (upload.error) {
+      if (upload.error !== null) {
         recordOutcome(context.world, null, upload.error);
         return;
       }
       context.world.cleanupCallbacks.push(async () => {
         const removed = await bucket.remove([context.world.storagePath]);
-        if (removed.error) {
+        if (removed.error !== null) {
           throw removed.error;
         }
       });
       const download = await bucket.download(context.world.storagePath);
-      if (download.error) {
+      if (download.error !== null) {
         recordOutcome(context.world, null, download.error);
         return;
       }
-      const bytes = Buffer.from(await download.data.arrayBuffer());
-      recordOutcome(context.world, { bytes, path: upload.data.name }, null);
+      const bytes = Buffer.from(await storageData(download).arrayBuffer());
+      recordOutcome(context.world, { bytes, path: storageData(upload).name }, null);
     });
 
     then('the downloaded bytes equal the uploaded bytes', () => {
-      expect(context.world.lastOutcome.value.bytes).toEqual(context.world.storageBytes);
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        bytes: context.world.storageBytes,
+      });
     });
 
     when(
@@ -672,25 +867,37 @@ autoBindSteps(features, [
         const { world } = context;
         const bucket = world.client.storage.from(world.fixture.bucket_name);
         try {
-          const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]), {
-            contentType: 'text/plain',
-          });
-          if (upload.error) throw upload.error;
+          const upload = await bucket.upload(
+            world.storagePath,
+            new Blob([Uint8Array.from(world.storageBytes)]),
+            {
+              contentType: 'text/plain',
+            },
+          );
+          if (upload.error !== null) {
+            throw upload.error;
+          }
           world.cleanupCallbacks.push(async () => {
             const removed = await bucket.remove([world.storagePath]);
-            if (removed.error) throw removed.error;
+            if (removed.error !== null) {
+              throw removed.error;
+            }
           });
           const listed = await bucket.list(world.storagePath);
-          if (listed.error) throw listed.error;
+          if (listed.error !== null) {
+            throw listed.error;
+          }
           const downloaded = await bucket.download(world.storagePath);
-          if (downloaded.error) throw downloaded.error;
+          if (downloaded.error !== null) {
+            throw downloaded.error;
+          }
           recordOutcome(
             world,
             {
-              path: upload.data.name,
-              bytes: Buffer.from(await downloaded.data.arrayBuffer()),
-              contentType: upload.data.mime_type,
-              listed: listed.data.map(({ name, mime_type }) => ({ name, mime_type })),
+              path: storageData(upload).name,
+              bytes: Buffer.from(await storageData(downloaded).arrayBuffer()),
+              contentType: storageData(upload).mime_type,
+              listed: storageData(listed).map(({ name, mime_type }) => ({ name, mime_type })),
             },
             null,
           );
@@ -702,27 +909,39 @@ autoBindSteps(features, [
 
     then('the uploaded and listed object content types are text/plain', () => {
       const { world } = context;
-      expect(world.lastOutcome.value.contentType).toBe('text/plain');
-      expect(world.lastOutcome.value.listed).toEqual([
-        { name: world.storagePath, mime_type: 'text/plain' },
-      ]);
+      expect(requireSuccessfulOutcome(world)).toMatchObject({
+        contentType: 'text/plain',
+        listed: [{ name: world.storagePath, mime_type: 'text/plain' }],
+      });
     });
 
     when('the client uploads the contract object and downloads bytes 2 through 7', async () => {
       const { world } = context;
       const bucket = world.client.storage.from(world.fixture.bucket_name);
       try {
-        const upload = await bucket.upload(world.storagePath, new Blob([world.storageBytes]));
-        if (upload.error) throw upload.error;
+        const upload = await bucket.upload(
+          world.storagePath,
+          new Blob([Uint8Array.from(world.storageBytes)]),
+        );
+        if (upload.error !== null) {
+          throw upload.error;
+        }
         world.cleanupCallbacks.push(async () => {
           const removed = await bucket.remove([world.storagePath]);
-          if (removed.error) throw removed.error;
+          if (removed.error !== null) {
+            throw removed.error;
+          }
         });
         const download = await bucket.download(world.storagePath, { range: 'bytes=2-7' });
-        if (download.error) throw download.error;
+        if (download.error !== null) {
+          throw download.error;
+        }
         recordOutcome(
           world,
-          { bytes: Buffer.from(await download.data.arrayBuffer()), path: upload.data.name },
+          {
+            bytes: Buffer.from(await storageData(download).arrayBuffer()),
+            path: storageData(upload).name,
+          },
           null,
         );
       } catch (error) {
@@ -731,9 +950,9 @@ autoBindSteps(features, [
     });
 
     then('the downloaded bytes equal uploaded bytes 2 through 7 inclusive', () => {
-      expect(context.world.lastOutcome.value.bytes).toEqual(
-        context.world.storageBytes.subarray(2, 8),
-      );
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        bytes: context.world.storageBytes.subarray(2, 8),
+      });
     });
 
     when('the client copies, moves, and removes a copy of the contract object', async () => {
@@ -744,44 +963,42 @@ autoBindSteps(features, [
       const moved = `${source}.moved`;
       world.cleanupCallbacks.push(async () => {
         const listed = await bucket.list(source);
-        if (listed.error) throw listed.error;
-        const paths = listed.data
+        if (listed.error !== null) {
+          throw listed.error;
+        }
+        const paths = storageData(listed)
           .map(({ name }) => name)
           .filter((name) => [source, copied, moved].includes(name));
         const removed = await bucket.remove(paths);
-        if (removed.error) throw removed.error;
+        if (removed.error !== null) {
+          throw removed.error;
+        }
       });
       try {
-        const upload = await bucket.upload(source, new Blob([world.storageBytes]));
-        if (upload.error) throw upload.error;
-        const copy = await bucket.copy(source, copied);
-        if (copy.error) throw copy.error;
-        const originalDownload = await bucket.download(source);
-        if (originalDownload.error) throw originalDownload.error;
-        const copiedDownload = await bucket.download(copied);
-        if (copiedDownload.error) throw copiedDownload.error;
-        const move = await bucket.move(copied, moved);
-        if (move.error) throw move.error;
-        const movedDownload = await bucket.download(moved);
-        if (movedDownload.error) throw movedDownload.error;
-        const afterMove = await bucket.list(source);
-        if (afterMove.error) throw afterMove.error;
-        const removed = await bucket.remove([moved]);
-        if (removed.error) throw removed.error;
-        const afterRemove = await bucket.list(source);
-        if (afterRemove.error) throw afterRemove.error;
-        const remainingDownload = await bucket.download(source);
-        if (remainingDownload.error) throw remainingDownload.error;
+        storageData(await bucket.upload(source, new Blob([Uint8Array.from(world.storageBytes)])));
+        storageData(await bucket.copy(source, copied));
+        const originalDownload = storageData(await bucket.download(source));
+        const copiedDownload = storageData(await bucket.download(copied));
+        storageData(await bucket.move(copied, moved));
+        const movedDownload = storageData(await bucket.download(moved));
+        const afterMove = storageData(await bucket.list(source));
+        storageData(await bucket.remove([moved]));
+        const afterRemove = storageData(await bucket.list(source));
+        const remainingDownload = storageData(await bucket.download(source));
         recordOutcome(
           world,
           {
             bytes: await Promise.all(
               [originalDownload, copiedDownload, movedDownload, remainingDownload].map(
-                async (result) => Buffer.from(await result.data.arrayBuffer()),
+                async (blob) => Buffer.from(await blob.arrayBuffer()),
               ),
             ),
-            afterMove: afterMove.data.map(({ name }) => name).sort(),
-            afterRemove: afterRemove.data.map(({ name }) => name).sort(),
+            afterMove: afterMove
+              .map(({ name }) => name)
+              .sort((left, right) => left.localeCompare(right)),
+            afterRemove: afterRemove
+              .map(({ name }) => name)
+              .sort((left, right) => left.localeCompare(right)),
           },
           null,
         );
@@ -791,28 +1008,37 @@ autoBindSteps(features, [
     });
 
     then('the original, copied, and moved bytes equal the uploaded bytes', () => {
-      for (const bytes of context.world.lastOutcome.value.bytes) {
+      const outcome = requireSuccessfulOutcome(context.world);
+      if (!isRecord(outcome) || !Array.isArray(outcome['bytes'])) {
+        throw new Error('Storage copy outcome was malformed');
+      }
+      for (const bytes of outcome['bytes']) {
         expect(bytes).toEqual(context.world.storageBytes);
       }
     });
 
     then('moving the copy leaves only the original and moved paths', () => {
       const source = context.world.storagePath;
-      expect(context.world.lastOutcome.value.afterMove).toEqual([source, `${source}.moved`].sort());
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        afterMove: [source, `${source}.moved`].sort((left, right) => left.localeCompare(right)),
+      });
     });
 
     then('removing the moved object leaves the original unchanged', () => {
-      expect(context.world.lastOutcome.value.afterRemove).toEqual([context.world.storagePath]);
-      expect(context.world.lastOutcome.value.bytes[3]).toEqual(context.world.storageBytes);
+      const outcome = requireSuccessfulOutcome(context.world);
+      expect(outcome).toMatchObject({ afterRemove: [context.world.storagePath] });
+      if (!isRecord(outcome) || !Array.isArray(outcome['bytes'])) {
+        throw new Error('Storage move outcome was malformed');
+      }
+      expect(outcome['bytes'][3]).toEqual(context.world.storageBytes);
     });
 
     when('the client uploads one part and resumes the contract upload', async () => {
       const { world } = context;
       await recordStorage(world, async () => {
-        const value = await partialUpload(world);
+        const { session, part, bytes } = await partialUpload(world);
         const bucket = storageBucket(world);
-        const { session } = value;
-        value.progress = storageData(
+        const progress = storageData(
           await bucket.getUploadSession(world.storagePath, session.session_id),
         );
         storageData(
@@ -820,22 +1046,28 @@ autoBindSteps(features, [
             world.storagePath,
             session.session_id,
             2,
-            new Blob([value.bytes.subarray(session.part_size)]),
+            new Blob([Uint8Array.from(bytes.subarray(session.part_size))]),
           ),
         );
-        value.object = storageData(
+        const object = storageData(
           await bucket.completeUploadSession(world.storagePath, session.session_id),
         ).object;
-        value.download = Buffer.from(
+        const download = Buffer.from(
           await storageData(await bucket.download(world.storagePath)).arrayBuffer(),
         );
+        const value = { session, part, bytes, progress, object, download };
+        world.multipartResult = value;
         return value;
       });
     });
 
     then('upload progress describes exactly the first uploaded part', () => {
       const { world } = context;
-      const { progress, session, part, bytes } = world.lastOutcome.value;
+      requireSuccessfulOutcome(world);
+      const { progress, session, part, bytes } = requirePresent(
+        world.multipartResult,
+        'Multipart result',
+      );
       expect(progress).toMatchObject({
         session_id: session.session_id,
         path: world.storagePath,
@@ -856,7 +1088,8 @@ autoBindSteps(features, [
 
     then('the completed multipart object preserves its path, type, and bytes', () => {
       const { world } = context;
-      const value = world.lastOutcome.value;
+      requireSuccessfulOutcome(world);
+      const value = requirePresent(world.multipartResult, 'Multipart result');
       expect(value.object).toMatchObject({
         name: world.storagePath,
         mime_type: 'application/octet-stream',
@@ -870,7 +1103,10 @@ autoBindSteps(features, [
       await recordStorage(world, async () => {
         const { session } = await partialUpload(world);
         const bucket = storageBucket(world);
-        storageData(await bucket.abortUploadSession(world.storagePath, session.session_id));
+        const aborted = await bucket.abortUploadSession(world.storagePath, session.session_id);
+        if (aborted.error !== null) {
+          throw aborted.error;
+        }
         const status = await bucket.getUploadSession(world.storagePath, session.session_id);
         const object = await bucket.download(world.storagePath);
         return { session: status.error?.status, object: object.error?.status };
@@ -878,7 +1114,7 @@ autoBindSteps(features, [
     });
 
     then('the aborted session and unfinished object are not found', () => {
-      expect(context.world.lastOutcome.value).toEqual({ session: 404, object: 404 });
+      expect(requireSuccessfulOutcome(context.world)).toEqual({ session: 404, object: 404 });
     });
 
     when('the client makes the contract object public and private again', async () => {
@@ -886,7 +1122,9 @@ autoBindSteps(features, [
       await recordStorage(world, async () => {
         const bucket = storageBucket(world);
         world.cleanupCallbacks.push(() => cleanStorageObject(world));
-        storageData(await bucket.upload(world.storagePath, new Blob([world.storageBytes])));
+        storageData(
+          await bucket.upload(world.storagePath, new Blob([Uint8Array.from(world.storageBytes)])),
+        );
         const { publicUrl } = storageData(bucket.getPublicUrl(world.storagePath));
         const anonymousRead = () => fetch(publicUrl, { signal: AbortSignal.timeout(10_000) });
         const before = await anonymousRead();
@@ -907,11 +1145,17 @@ autoBindSteps(features, [
     });
 
     then('anonymous reads return the original bytes only while the object is public', () => {
-      const { privateBytes, ...visible } = context.world.lastOutcome.value;
-      for (const bytes of privateBytes) {
+      const outcome = requireSuccessfulOutcome(context.world);
+      if (!isRecord(outcome) || !Array.isArray(outcome['privateBytes'])) {
+        throw new Error('Storage visibility outcome was malformed');
+      }
+      for (const bytes of outcome['privateBytes']) {
+        if (!Buffer.isBuffer(bytes)) {
+          throw new TypeError('Private response was not binary');
+        }
         expect(bytes.includes(context.world.storageBytes)).toBe(false);
       }
-      expect(visible).toEqual({
+      expect(outcome).toMatchObject({
         statuses: [404, 200, 404],
         bytes: context.world.storageBytes,
         visibility: [true, false],
@@ -919,7 +1163,9 @@ autoBindSteps(features, [
     });
 
     then('the stored object path equals the contract path', () => {
-      expect(context.world.lastOutcome.value.path).toBe(context.world.storagePath);
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({
+        path: context.world.storagePath,
+      });
     });
 
     given('a service-role client', () => {
@@ -930,16 +1176,17 @@ autoBindSteps(features, [
       const acquired = await context.world.serviceClient.locks.acquire(context.world.lockKey, {
         ttl: 10,
       });
-      if (acquired.error || !acquired.acquired) {
-        recordOutcome(context.world, null, acquired.error || new Error('Lock was not acquired'));
+      if (acquired.error !== null || !acquired.acquired) {
+        recordOutcome(context.world, null, acquired.error ?? new Error('Lock was not acquired'));
         return;
       }
-      const cleanup = context.world.registerLockCleanup(context.world.lockKey, acquired.lease);
+      const lease = requirePresent(acquired.lease, 'Acquired lease');
+      const cleanup = context.world.registerLockCleanup(context.world.lockKey, lease);
       const released = await context.world.serviceClient.locks.release(
         context.world.lockKey,
-        acquired.lease,
+        lease,
       );
-      if (released.error) {
+      if (released.error !== null) {
         recordOutcome(context.world, null, released.error);
         return;
       }
@@ -947,11 +1194,11 @@ autoBindSteps(features, [
         (callback) => callback !== cleanup,
       );
       const state = await context.world.serviceClient.locks.get(context.world.lockKey);
-      recordOutcome(context.world, { lease: acquired.lease, state: state.state }, state.error);
+      recordOutcome(context.world, { lease, state: state.state }, state.error);
     });
 
     then('the released lease is no longer held', () => {
-      expect(context.world.lastOutcome.value.state.held).toBe(false);
+      expect(requireSuccessfulOutcome(context.world)).toMatchObject({ state: { held: false } });
     });
 
     given('a project-owner client', () => {
@@ -974,6 +1221,7 @@ autoBindSteps(features, [
         try {
           const first = await world.startDurableExecution();
           const second = await world.startDurableExecution();
+          world.durablePair = { first, second };
           recordOutcome(world, { first, second }, null);
         } catch (error) {
           recordOutcome(world, null, error);
@@ -983,34 +1231,42 @@ autoBindSteps(features, [
 
     then('the started execution carries its id, function, name, region, and creation time', () => {
       const { world } = context;
-      expect(world.lastOutcome.value).toMatchObject({
-        id: expect.any(String),
-        function_id: expect.any(String),
-        name: world.durableExecutionName,
-        region: expect.any(String),
-        created_at: expect.any(String),
-      });
+      requireSuccessfulOutcome(world);
+      const execution = requirePresent(world.startedExecution, 'Started execution');
+      expect(typeof execution.id).toBe('string');
+      expect(typeof execution.function_id).toBe('string');
+      expect(execution.name).toBe(world.durableExecutionName);
+      expect(typeof execution.region).toBe('string');
+      expect(typeof execution.created_at).toBe('string');
     });
 
     then('the started execution is not terminal and carries no result', () => {
-      const execution = context.world.lastOutcome.value;
+      requireSuccessfulOutcome(context.world);
+      const execution = requirePresent(context.world.startedExecution, 'Started execution');
       expect(TERMINAL_DURABLE_STATUSES).not.toContain(execution.status);
       expect(execution.result).toBeUndefined();
     });
 
     then('both starts return the same execution', () => {
-      const { first, second } = context.world.lastOutcome.value;
+      requireSuccessfulOutcome(context.world);
+      const { first, second } = requirePresent(context.world.durablePair, 'Durable start pair');
       expect(second.id).toBe(first.id);
       expect(second.name).toBe(first.name);
     });
 
     when('the owner reads the execution until it is terminal', async () => {
       const { world } = context;
-      if (!world.lastOutcome?.ok) {
+      if (world.lastOutcome?.ok !== true) {
         return;
       }
       try {
-        recordOutcome(world, await world.followDurableExecution(world.startedExecution.id), null);
+        recordOutcome(
+          world,
+          await world.followDurableExecution(
+            requirePresent(world.startedExecution, 'Started execution').id,
+          ),
+          null,
+        );
       } catch (error) {
         recordOutcome(world, null, error);
       }
@@ -1018,25 +1274,32 @@ autoBindSteps(features, [
 
     then("the execution succeeded carrying the function's result", () => {
       const { world } = context;
-      expect(world.lastOutcome.value.status).toBe('succeeded');
-      expect(world.lastOutcome.value.result).toEqual({ echoed: world.durablePayload.value });
+      expect(requireSuccessfulOutcome(world)).toMatchObject({
+        status: 'succeeded',
+        result: { echoed: world.durablePayload.value },
+      });
     });
 
     when("the owner lists the durable function's executions", async () => {
       const { world } = context;
-      if (!world.lastOutcome?.ok) {
+      if (world.lastOutcome?.ok !== true) {
         return;
       }
       const { data, error } = await world.ownerClient.durable.list(
         world.fixture.project_id,
         world.fixture.durable_function_name,
       );
+      world.listedExecutions = data;
       recordOutcome(world, data, error);
     });
 
     then('the listed executions include the started execution', () => {
       const { world } = context;
-      expect(world.lastOutcome.value.data.map(({ id }) => id)).toContain(world.startedExecution.id);
+      requireSuccessfulOutcome(world);
+      const executions = requirePresent(world.listedExecutions, 'Listed executions');
+      expect(executions.data.map(({ id }) => id)).toContain(
+        requirePresent(world.startedExecution, 'Started execution').id,
+      );
     });
 
     when('the client recovers the contract lock with caller-owned tokens', async () => {
@@ -1044,41 +1307,38 @@ autoBindSteps(features, [
       const locks = world.serviceClient.locks;
       const options = { ttl: 30, token: randomUUID(), requestId: randomUUID() };
       const acquired = await locks.acquire(world.lockKey, options);
-      if (!acquired.acquired || acquired.error)
-        throw acquired.error || new Error('Lock not acquired');
-      const cleanup = world.registerLockCleanup(world.lockKey, acquired.lease);
+      const acquiredLease = requireAcquiredLease(acquired, 'Acquired lease');
+      const cleanup = world.registerLockCleanup(world.lockKey, acquiredLease);
       const recovered = await locks.acquire(world.lockKey, options);
-      if (!recovered.acquired || recovered.error)
-        throw recovered.error || new Error('Lock not recovered');
+      const recoveredLease = requireAcquiredLease(recovered, 'Recovered lease');
       const held = await locks.get(world.lockKey, { requestId: randomUUID() });
-      if (held.error) throw held.error;
-      const renewed = await locks.renew(world.lockKey, recovered.lease, {
+      requireNoError(held);
+      const renewed = await locks.renew(world.lockKey, recoveredLease, {
         ttl: 60,
         requestId: randomUUID(),
       });
-      if (renewed.error) throw renewed.error;
+      requireNoError(renewed);
       const released = await locks.release(world.lockKey, renewed.lease, {
         requestId: randomUUID(),
       });
-      if (released.error) throw released.error;
+      requireNoError(released);
       const available = await locks.get(world.lockKey, { requestId: randomUUID() });
-      recordOutcome(
-        world,
-        {
-          token: options.token,
-          cleanup,
-          acquired: acquired.lease,
-          recovered: recovered.lease,
-          held: held.state,
-          renewed: renewed.lease,
-          available: available.state,
-        },
-        available.error,
-      );
+      const result = {
+        token: options.token,
+        cleanup,
+        acquired: acquiredLease,
+        recovered: recoveredLease,
+        held: requirePresent(held.state, 'Held lock state'),
+        renewed: renewed.lease,
+        available: requirePresent(available.state, 'Available lock state'),
+      };
+      world.lockRecoveryResult = result;
+      recordOutcome(world, result, available.error);
     });
 
     then('recovery and renewal preserve the held lease until release', () => {
-      const value = context.world.lastOutcome.value;
+      requireSuccessfulOutcome(context.world);
+      const value = requirePresent(context.world.lockRecoveryResult, 'Lock recovery result');
       expect(value.held.held).toBe(true);
       expect(value.available.held).toBe(false);
       const world = context.world;
@@ -1093,30 +1353,32 @@ autoBindSteps(features, [
         value.recovered.fencingToken,
         value.held.fencingToken,
         value.renewed.fencingToken,
-      ]).toEqual(Array(3).fill(value.acquired.fencingToken));
+      ]).toEqual(Array.from({ length: 3 }).fill(value.acquired.fencingToken));
     });
 
     when('the client acquires and force releases the contract lock', async () => {
       const world = context.world;
       const acquired = await world.serviceClient.locks.acquire(world.lockKey, { ttl: 30 });
-      if (!acquired.acquired || acquired.error)
-        throw acquired.error || new Error('Lock not acquired');
-      const cleanup = world.registerLockCleanup(world.lockKey, acquired.lease);
+      const lease = requireAcquiredLease(acquired, 'Acquired lease');
+      const cleanup = world.registerLockCleanup(world.lockKey, lease);
       const released = await world.serviceClient.locks.forceRelease(world.lockKey, {
         requestId: randomUUID(),
       });
-      if (released.error) throw released.error;
+      requireNoError(released);
       const available = await world.serviceClient.locks.get(world.lockKey);
-      recordOutcome(
-        world,
-        { lease: acquired.lease, cleanup, available: available.state },
-        available.error,
-      );
+      const result = {
+        lease,
+        cleanup,
+        available: requirePresent(available.state, 'Available lock state'),
+      };
+      world.forceReleaseResult = result;
+      recordOutcome(world, result, available.error);
     });
 
     then('the force-released lock is available', () => {
       const world = context.world;
-      const value = world.lastOutcome.value;
+      requireSuccessfulOutcome(world);
+      const value = requirePresent(world.forceReleaseResult, 'Force release result');
       expect(value.available.held).toBe(false);
       world.cleanupCallbacks = world.cleanupCallbacks.filter(
         (callback) => callback !== value.cleanup,
@@ -1125,19 +1387,26 @@ autoBindSteps(features, [
 
     when('the client reacquires the force-released contract lock', async () => {
       const world = context.world;
-      const original = world.lastOutcome.value.lease;
+      requireSuccessfulOutcome(world);
+      const original = requirePresent(world.forceReleaseResult, 'Force release result').lease;
       const acquired = await world.serviceClient.locks.acquire(world.lockKey, { ttl: 30 });
-      if (!acquired.acquired || acquired.error)
-        throw acquired.error || new Error('Lock not acquired');
-      world.registerLockCleanup(world.lockKey, acquired.lease);
-      recordOutcome(world, { original, replacement: acquired.lease }, null);
+      const replacement = requireAcquiredLease(acquired, 'Replacement lease');
+      world.registerLockCleanup(world.lockKey, replacement);
+      world.reacquiredLock = { original, replacement };
+      recordOutcome(world, world.reacquiredLock, null);
     });
 
     then('the replacement owner receives a higher fencing token', () => {
-      const { original, replacement } = context.world.lastOutcome.value;
+      requireSuccessfulOutcome(context.world);
+      const { original, replacement } = requirePresent(
+        context.world.reacquiredLock,
+        'Reacquired lock',
+      );
       expect(replacement.token).not.toBe(original.token);
       expect(original.fencingToken).not.toBeNull();
-      expect(replacement.fencingToken).toBeGreaterThan(original.fencingToken);
+      expect(replacement.fencingToken).toBeGreaterThan(
+        requirePresent(original.fencingToken, 'Original fencing token'),
+      );
     });
 
     when('the authenticated client invokes the contract function by name', async () => {
@@ -1159,9 +1428,8 @@ autoBindSteps(features, [
     // a domain the API URL does not name, so an echo coming back is what proves
     // the SDK sent the request there rather than somewhere it guessed.
     then('the function echoes the payload', () => {
-      const response = context.world.lastOutcome.value;
-      expect(response.status).toBe(200);
-      expect(response.data).toEqual({ echoed: 'contract' });
+      const response = requireSuccessfulOutcome(context.world);
+      expect(response).toMatchObject({ status: 200, data: { echoed: 'contract' } });
     });
 
     given('two authenticated realtime clients', async () => {
@@ -1172,11 +1440,15 @@ autoBindSteps(features, [
     when('one client subscribes and the other publishes the contract message', async () => {
       let timeout;
       const received = new Promise((resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error('Realtime message timed out')), 10000);
-        context.world.subscriber.on('message', resolve);
+        timeout = setTimeout(() => {
+          reject(new Error('Realtime message timed out'));
+        }, 10000);
+        requirePresent(context.world.subscriber, 'Realtime subscriber').on('message', resolve);
       });
       try {
-        await context.world.publisher.send(context.world.realtimeMessage);
+        await requirePresent(context.world.publisher, 'Realtime publisher').send(
+          context.world.realtimeMessage,
+        );
         recordOutcome(context.world, await received, null);
       } catch (error) {
         recordOutcome(context.world, null, error);
@@ -1186,7 +1458,7 @@ autoBindSteps(features, [
     });
 
     then('the subscriber receives the contract message within 10 seconds', () => {
-      expect(context.world.lastOutcome.value).toEqual(context.world.realtimeMessage);
+      expect(requireSuccessfulOutcome(context.world)).toEqual(context.world.realtimeMessage);
     });
   },
 ]);

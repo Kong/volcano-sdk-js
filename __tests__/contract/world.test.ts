@@ -21,6 +21,17 @@ describe('contract world cleanup', () => {
       bucket_name: 'bucket',
       function_id: 'function-id',
       logs_access_token: 'logs-token',
+      table_name: 'rows',
+      query_table_name: 'rows_queries',
+      fixture_row: { slug: 'contract', value: 'original' },
+      mutation_rows: {
+        insert: { slug: 'contract-insert', value: 'insert' },
+        update: {
+          before: { slug: 'contract-update', value: 'before' },
+          after: { slug: 'contract-update', value: 'after' },
+        },
+        delete: { slug: 'contract-delete', value: 'delete' },
+      },
     });
     const releaseError = Object.assign(new Error('lock release failed'), { status: 503 });
     world.serviceClient.locks.release = () => Promise.resolve({ error: releaseError });

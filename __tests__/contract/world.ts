@@ -1,12 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import {
   type AuthResponse,
+  type CreateUploadSessionResponse,
   type CurrentSession,
   type DurableExecution,
+  type LogActivityResponse,
+  type LogSearchEvent,
+  type PaginatedDurableExecutions,
   type ProjectLockLease,
+  type ProjectLockState,
+  type Session,
+  type SessionsResponse,
+  type StorageObject,
+  type UploadPartResponse,
+  type UploadSessionStatusResponse,
   VolcanoClient,
 } from '../../src/index.js';
 import { type RealtimeChannel, VolcanoRealtime } from '../../src/realtime.ts';
+import { LogContract } from './logs.ts';
 
 export interface ContractFixture {
   [key: string]: unknown;
@@ -28,6 +39,17 @@ export interface ContractFixture {
   bucket_name: string;
   function_id: string;
   logs_access_token: string;
+  table_name: string;
+  query_table_name: string;
+  fixture_row: { slug: string; value: string };
+  mutation_rows: {
+    insert: { slug: string; value: string };
+    update: {
+      before: { slug: string; value: string };
+      after: { slug: string; value: string };
+    };
+    delete: { slug: string; value: string };
+  };
 }
 
 interface CredentialClient {
@@ -45,6 +67,33 @@ export interface DiagnosticWorld {
   client?: CredentialClient;
   serviceClient?: CredentialClient;
   ownerClient?: CredentialClient;
+}
+
+type ContractOutcome = { ok: true; value: unknown } | { ok: false; category: string } | null;
+
+export interface MultipartResult {
+  session: NonNullable<CreateUploadSessionResponse['data']>;
+  part: NonNullable<UploadPartResponse['data']>;
+  bytes: Buffer;
+  progress: NonNullable<UploadSessionStatusResponse['data']>;
+  object: StorageObject;
+  download: Buffer;
+}
+
+export interface LockRecoveryResult {
+  token: string;
+  cleanup: () => Promise<void>;
+  acquired: ProjectLockLease;
+  recovered: ProjectLockLease;
+  held: ProjectLockState;
+  renewed: ProjectLockLease;
+  available: ProjectLockState;
+}
+
+export interface ForceReleaseResult {
+  lease: ProjectLockLease;
+  cleanup: () => Promise<void>;
+  available: ProjectLockState;
 }
 
 interface FailureSummary {
@@ -236,10 +285,10 @@ function requireSuccessfulOutcome(world: DiagnosticWorld): unknown {
 
 class ContractWorld {
   readonly fixture: ContractFixture;
-  lastOutcome: DiagnosticWorld['lastOutcome'] = null;
+  lastOutcome: ContractOutcome = null;
   lastFailure: FailureSummary | null = null;
   previousSession: CurrentSession | null = null;
-  refreshedSession: CurrentSession | null = null;
+  refreshedSession: Session | null = null;
   signedOutSession: CurrentSession | null = null;
   authStateUsers: unknown[] = [];
   client: VolcanoClient;
@@ -258,9 +307,21 @@ class ContractWorld {
   durablePayload: { value: string };
   subscriber: RealtimeChannel | null = null;
   publisher: RealtimeChannel | null = null;
+  readonly logsContract: LogContract;
+  multipartResult: MultipartResult | null = null;
+  lockRecoveryResult: LockRecoveryResult | null = null;
+  forceReleaseResult: ForceReleaseResult | null = null;
+  reacquiredLock: { original: ProjectLockLease; replacement: ProjectLockLease } | null = null;
+  durablePair: { first: DurableExecution; second: DurableExecution } | null = null;
+  listedExecutions: PaginatedDurableExecutions | null = null;
+  sessionPage: SessionsResponse | null = null;
+  logsSearchResult: LogSearchEvent[] | null = null;
+  logsActivityResult: LogActivityResponse | null = null;
+  bootstrapCleanup: (() => Promise<unknown>) | null = null;
 
   constructor(fixture: ContractFixture) {
     this.fixture = fixture;
+    this.logsContract = new LogContract(this);
     this.lastOutcome = null;
     this.lastFailure = null;
     this.previousSession = null;

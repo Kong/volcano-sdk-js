@@ -13,7 +13,7 @@ interface ObserverChannel {
 
 interface PostgresChannel extends ObserverChannel {
   subscribe(): Promise<void>;
-  unsubscribe(): Promise<void>;
+  unsubscribe(): void;
 }
 
 interface ObserverClient {
@@ -261,7 +261,9 @@ async function verifyPostgresChanges(world: PostgresWorld): Promise<string[]> {
     observers.forEach((observer) => {
       observer.close();
     });
-    await Promise.all(channels.map((channel) => channel.unsubscribe()));
+    channels.forEach((channel) => {
+      channel.unsubscribe();
+    });
   }
 }
 
