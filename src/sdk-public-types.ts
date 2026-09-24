@@ -347,13 +347,13 @@ export interface Auth {
    */
   signInWithOAuth(provider: OAuthProviderName, options?: { redirectTo?: string }): string;
   /** Sign in with Google */
-  signInWithGoogle(): void;
+  signInWithGoogle(): string;
   /** Sign in with GitHub */
-  signInWithGitHub(): void;
+  signInWithGitHub(): string;
   /** Sign in with Microsoft */
-  signInWithMicrosoft(): void;
+  signInWithMicrosoft(): string;
   /** Sign in with Apple */
-  signInWithApple(): void;
+  signInWithApple(): string;
   /** Link OAuth provider to current user. Throws if provider is invalid. */
   linkOAuthProvider(
     provider: OAuthProviderName,
