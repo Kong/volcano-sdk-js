@@ -205,8 +205,9 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
   expect(client.created).toHaveLength(1);
   expect(client.subscription.subscribes).toBe(2);
   expect(state._paused).toBe(false);
-  await client.subscription.emit('state', { newState: 'subscribing' });
   state._paused = true;
+  await client.subscription.emit('state', { newState: 'subscribing' });
+  expect(state._paused).toBe(true);
   await client.subscription.emit('state', { newState: 'subscribed' });
   expect(state._paused).toBe(false);
   state._subscription = null;
@@ -310,6 +311,7 @@ test('unsubscribe cancels timers and pending fetches while retaining the subscri
     });
     state._presenceState = { old: { client: 'old' } };
     state.unsubscribe();
+    expect(state._lifecycleVersion).toBe(1);
     expect(state._presenceTimeoutId).toBeNull();
     expect(state._pendingFetches.size).toBe(0);
     expect(rejected.map((error) => error.message)).toEqual([
@@ -321,6 +323,7 @@ test('unsubscribe cancels timers and pending fetches while retaining the subscri
     expect(client.subscription.unsubscribes).toBe(1);
     await jest.advanceTimersByTimeAsync(150);
     expect(client.presenceCalls).toEqual([]);
+    expect(state.syncs).toBe(0);
   } finally {
     jest.useRealTimers();
   }
@@ -396,6 +399,8 @@ test('presence events update state and are ignored while paused or malformed', a
   await subscription.emit('leave', { info: { client: 'bob' } });
   await subscription.emit('subscribed', {});
   expect(state.updated).toHaveLength(1);
+  expect(state.events).toHaveLength(2);
+  expect(state._presenceState).toEqual({});
   expect(state._presenceTimeoutId).toBeNull();
 });
 
@@ -420,13 +425,20 @@ test('presence snapshot applies after delay and ignores stale and malformed resu
     await jest.advanceTimersByTimeAsync(150);
     expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
 
+    for (const malformed of [null, 7, 'invalid']) {
+      client.presenceResult = Promise.resolve({ clients: malformed });
+      await client.subscription.emit('subscribed', {});
+      await jest.advanceTimersByTimeAsync(150);
+      expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
+    }
+
     const waiting = deferred<unknown>();
     client.presenceResult = waiting.promise;
     await client.subscription.emit('subscribed', {});
     await jest.advanceTimersByTimeAsync(150);
     state.unsubscribe();
     waiting.resolve({ clients: { stale: { client: 'stale' } } });
-    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(0);
     expect(state._presenceState).toEqual({});
   } finally {
     jest.useRealTimers();
