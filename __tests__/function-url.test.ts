@@ -43,6 +43,7 @@ test.each([
   'https://',
   'mailto:user@example.com',
   'ftp://example.com/file',
+  new URL('https://example.com/invoke'),
 ])('rejects malformed or unsupported invocation URLs: %p', (value) => {
   expect(validInvokeUrl(value, 'https://api.example.com')).toBeNull();
 });
@@ -62,6 +63,7 @@ test('allows HTTP only when the configured API is also HTTP', () => {
   );
   expect(validInvokeUrl('http://localhost:8081/invoke', 'https://api.example.com')).toBeNull();
   expect(validInvokeUrl('http://localhost:8081/invoke', 'invalid API URL')).toBeNull();
+  expect(validInvokeUrl('ftp://example.com/invoke', 'http://localhost:8080')).toBeNull();
 });
 
 test('rejects an invalid resolved function identifier before building a URL', () => {

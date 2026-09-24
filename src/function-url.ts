@@ -6,15 +6,6 @@ export function sanitizeFunctionIdentifierForHost(identifier: unknown): string |
   }
 
   const trimmed = identifier.trim();
-  if (trimmed === '') {
-    return null;
-  }
-
-  // DNS host labels are case-insensitive; preserve exact behavior by requiring lowercase.
-  if (trimmed !== trimmed.toLowerCase()) {
-    return null;
-  }
-
   if (!FUNCTION_HOST_LABEL_REGEX.test(trimmed)) {
     return null;
   }
@@ -59,17 +50,12 @@ function invocationUrl(value: unknown): URL | null {
     return null;
   }
   try {
-    const parsed = new URL(value);
-    return parsed.hostname === '' ? null : parsed;
+    return new URL(value);
   } catch {
     return null;
   }
 }
 
 function isPlaintextUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === 'http:';
-  } catch {
-    return false;
-  }
+  return invocationUrl(value)?.protocol === 'http:';
 }
