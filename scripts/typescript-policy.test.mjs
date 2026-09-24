@@ -14,6 +14,7 @@ const jest = join(root, 'node_modules/jest/bin/jest.js');
 const require = createRequire(import.meta.url);
 const coverageConfig = require('../jest.typed.config.cjs');
 const manifest = require('../package.json');
+const nextRules = require('@next/eslint-plugin-next').flatConfig.coreWebVitals.rules;
 
 function trackedFiles() {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
@@ -78,19 +79,20 @@ function requireFullCoverage(config) {
 }
 
 function requireUnsuppressed(path, source) {
-  assert.equal(
-    source
-      .split('\n')
-      .some(
-        (line) =>
-          /^\s*(?:\/\/|\/\*|\*)/.test(line) &&
-          /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|@ts-expect-error|istanbul ignore|c8 ignore|nyc ignore/.test(
-            line,
-          ),
-      ),
-    false,
-    `${path} suppresses a quality check`,
-  );
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (
+      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
+      token !== ts.SyntaxKind.MultiLineCommentTrivia
+    ) {
+      continue;
+    }
+    assert.doesNotMatch(
+      scanner.getTokenText(),
+      /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|@ts-expect-error|istanbul ignore|c8 ignore|nyc ignore/,
+      `${path} suppresses a quality check`,
+    );
+  }
 }
 
 async function requireLinted(checker, path) {
@@ -100,6 +102,15 @@ async function requireLinted(checker, path) {
   assert.ok(config, `${path} has no ESLint configuration`);
   if (!path.endsWith('.d.ts')) {
     assert.deepEqual(config.rules.complexity, [2, 5], `${path} weakens complexity`);
+  }
+  if (path.startsWith('examples/nextjs-notes-app/src/')) {
+    requireNextRules(config, path);
+  }
+}
+
+function requireNextRules(config, path) {
+  for (const [rule, severity] of Object.entries(nextRules)) {
+    assert.equal(config.rules[rule]?.[0], severity === 'error' ? 2 : 1, `${path} weakens ${rule}`);
   }
 }
 
@@ -171,6 +182,9 @@ test('lowered coverage and suppression comments fail policy validation', () => {
     requireFullCoverage({ ...coverageConfig, coverageThreshold: { global: { branches: 99 } } }),
   );
   assert.throws(() => requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity'));
+  assert.throws(() =>
+    requireUnsuppressed('src/new.ts', 'const marker = true; // @ts-expect-error\nmarker;'),
+  );
   assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']));
 });
 

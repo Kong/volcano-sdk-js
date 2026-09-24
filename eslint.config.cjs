@@ -4,6 +4,7 @@ const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const prettierConfig = require('eslint-config-prettier/flat');
 const importX = require('eslint-plugin-import-x');
 const jest = require('eslint-plugin-jest');
+const next = require('@next/eslint-plugin-next');
 const nModule = require('eslint-plugin-n');
 const promise = require('eslint-plugin-promise');
 const reactHooks = require('eslint-plugin-react-hooks');
@@ -143,6 +144,11 @@ module.exports = [
     ],
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
+  scopedRules(next.flatConfig.coreWebVitals, exampleFiles),
+  {
+    files: exampleFiles,
+    settings: { next: { rootDir: 'examples/nextjs-notes-app/' } },
+  },
   ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/stylistic'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/strict-type-checked'], typescriptFiles),

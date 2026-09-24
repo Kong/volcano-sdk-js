@@ -139,6 +139,7 @@
     "@babel/preset-typescript": "7.29.7",
     "@eslint/js": "^10.0.1",
     "@jest/globals": "30.3.0",
+    "@next/eslint-plugin-next": "15.5.24",
     "@rollup/plugin-typescript": "^12.3.0",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/jest-runner": "9.6.1",
