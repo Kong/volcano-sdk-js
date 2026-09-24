@@ -1,12 +1,76 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { ESLint } from 'eslint';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const eslint = join(root, 'node_modules/eslint/bin/eslint.js');
+const require = createRequire(import.meta.url);
+const coverageConfig = require('../jest.typed.config.cjs');
+
+function trackedFiles() {
+  return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean);
+}
+
+function handwrittenSource(files) {
+  return files.filter(
+    (path) =>
+      path.startsWith('src/') &&
+      path.endsWith('.ts') &&
+      !path.endsWith('.d.ts') &&
+      !path.startsWith('src/generated/') &&
+      !path.startsWith('src/generated-runtime/'),
+  );
+}
+
+test('tracked SDK code remains in native lint, type, test, and coverage gates', async () => {
+  const files = trackedFiles();
+  const runtime = handwrittenSource(files);
+  const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
+  assert.ok(runtime.length > 0);
+  assert.ok(tests.some((path) => path.endsWith('.test.ts')));
+  const tsconfig = JSON.parse(await readFile(join(root, 'tsconfig.json'), 'utf8'));
+  assert.deepEqual(tsconfig.include, ['src/**/*.ts', '__tests__/**/*.ts']);
+  assert.deepEqual(tsconfig.exclude, ['src/generated', 'src/generated-runtime']);
+  assert.deepEqual(coverageConfig.collectCoverageFrom, [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/generated/**',
+  ]);
+  assert.deepEqual(coverageConfig.coverageThreshold.global, {
+    branches: 100,
+    functions: 100,
+    lines: 100,
+    statements: 100,
+  });
+  assert.deepEqual(coverageConfig.testMatch, ['**/__tests__/**/*.test.{js,ts}']);
+  const checker = new ESLint();
+  for (const path of [...runtime, ...tests]) {
+    assert.equal(
+      await checker.isPathIgnored(join(root, path)),
+      false,
+      `${path} is ignored by ESLint`,
+    );
+    const source = await readFile(join(root, path), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /eslint-(?:disable|enable)|@ts-(?:ignore|expect-error|nocheck)|(?:istanbul|c8|nyc) ignore/,
+      `${path} suppresses a quality check`,
+    );
+  }
+  assert.deepEqual(
+    files.filter((path) =>
+      /^(?:src|__tests__)\/(?:.*\/)?(?:eslint\.config\.|\.eslintrc|tsconfig\.|jest\.)/.test(path),
+    ),
+    [],
+  );
+});
 
 async function lintFixture(source, parent) {
   const directory = await mkdtemp(join(root, parent, 'quality-fixture-'));
