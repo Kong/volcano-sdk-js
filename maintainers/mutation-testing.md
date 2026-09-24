@@ -12,7 +12,7 @@ results from its score, so 100% alone cannot prove that tests killed every valid
 mutant. `scripts/check-mutation-report.mjs` requires `Killed` for every valid
 mutant, permits `CompileError` for invalid mutants, and fails empty or partial
 reports. The weekly audit records historical outcomes without failing on them,
-but still fails if its report is empty or incomplete. The 60-second per-mutant
+but still fails if its report is empty or incomplete. The 180-second per-mutant
 allowance accommodates slower CI runners; a timeout still fails the PR gate.
 [Stryker's state and score
 definitions](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)

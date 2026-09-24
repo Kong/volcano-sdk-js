@@ -156,3 +156,36 @@ test('large class shards keep each method intact and every selected line unique'
     unlinkSync(path);
   }
 });
+
+test('dense modules shorter than 200 lines split only between complete functions', () => {
+  const path = `src/mutation-functions-fixture-${String(process.pid)}.ts`;
+  const source = `${Array.from(
+    { length: 12 },
+    (_, index) =>
+      `export function f${String(index)}() {\n${Array.from({ length: 12 }, (_, line) => `  const v${String(line)} = ${String(line)};`).join('\n')}\n  return v0;\n}`,
+  ).join('\n')}\n`;
+  writeFileSync(path, source);
+  try {
+    const lines = source.trimEnd().split('\n');
+    const owners = new Map();
+    for (let shard = 0; shard < 3; shard += 1) {
+      for (const pattern of shardMutationPatterns([path], shard, 3)) {
+        const match = /:(\d+)-(\d+)$/.exec(pattern);
+        assert.ok(match);
+        const first = Number(match[1]);
+        const last = Number(match[2]);
+        if (last < lines.length) {
+          assert.equal(lines[last - 1], '}');
+        }
+        for (let line = first; line <= last; line += 1) {
+          assert.equal(owners.has(line), false);
+          owners.set(line, shard);
+        }
+      }
+    }
+    assert.equal(owners.size, lines.length);
+    assert.equal(new Set(owners.values()).size, 3);
+  } finally {
+    unlinkSync(path);
+  }
+});

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
-const MAX_SHARD_LINES = 200;
+// Small, mutation-dense modules must also split across CI jobs.
+const MAX_SHARD_LINES = 80;
 export const mutationShardCount = 8;
 
 // Stryker has native file/line selection, but no git-base selector for a clean CI checkout.
