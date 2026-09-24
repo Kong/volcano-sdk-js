@@ -21,19 +21,16 @@ test('legacy public generic exceptions are exact and remain in use', async () =>
     assert.ok(item.evidence.length > 30);
   }
 
-  const eslint = new ESLint({
-    overrideConfig: {
-      files: ['src/sdk-public-types.ts'],
-      rules: { [rule]: 'error' },
-    },
-  });
+  const eslint = new ESLint();
   const results = await eslint.lintFiles(['src/sdk-public-types.ts']);
   const found = [];
   for (const result of results) {
+    assert.deepEqual(result.messages, []);
     const path = 'src/sdk-public-types.ts';
     const source = await readFile(result.filePath, 'utf8');
     const lines = source.split('\n');
-    for (const message of result.messages.filter((item) => item.ruleId === rule)) {
+    for (const message of result.suppressedMessages) {
+      assert.equal(message.ruleId, rule);
       const declaration = lines[message.line - 1]?.trim() ?? '';
       const scope = scopeForDiagnostic(path, declaration);
       assert.ok(scope, `Unexpected ${rule} at ${path}:${message.line}: ${declaration}`);
