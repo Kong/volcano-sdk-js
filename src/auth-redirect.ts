@@ -33,16 +33,15 @@ export interface OAuthRedirectHost extends RedirectHost {
 
 function handoffParams(): URLSearchParams | null {
   try {
-    return new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const hash = window.location.hash;
+    return new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
   } catch {
     return null;
   }
 }
 
-function stateMatches(expectedNonce: string | null, urlState: string): boolean {
-  return (
-    expectedNonce !== null && expectedNonce !== '' && urlState !== '' && urlState === expectedNonce
-  );
+function stateMatches(expectedNonce: string | null, urlState: string | null): boolean {
+  return expectedNonce !== null && expectedNonce !== '' && urlState === expectedNonce;
 }
 
 function nonempty(value: string | null): value is string {
@@ -80,7 +79,7 @@ export function consumeSessionFromUrl(host: RedirectHost): boolean {
   const { params, accessToken } = handoff;
   const expectedNonce = host._takeAuthState();
   host._takeAuthRedirectURL();
-  if (!stateMatches(expectedNonce, params.get('state') ?? '')) {
+  if (!stateMatches(expectedNonce, params.get('state'))) {
     return rejectHandoff(host, params);
   }
   host._replaceSessionFromUrl(accessToken, params.get('refresh_token'));
@@ -95,7 +94,7 @@ export function replaceSessionFromUrl(
   refreshToken: string | null,
 ): void {
   host.accessToken = accessToken;
-  host.refreshToken = refreshToken === null || refreshToken === '' ? null : refreshToken;
+  host.refreshToken = refreshToken === '' ? null : refreshToken;
   host.currentUser = null;
   host._sessionGeneration += 1;
   host._sessionOperations = new AuthSessionOperations();
@@ -211,9 +210,6 @@ export async function consumeOAuthCodeFromUrl(host: OAuthRedirectHost): Promise<
 
 export async function completeOAuthExchange(host: OAuthRedirectHost): Promise<void> {
   const pending = host._oauthExchangePromise;
-  if (pending === null) {
-    return;
-  }
   try {
     await pending;
   } catch (error) {

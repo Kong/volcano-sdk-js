@@ -8,6 +8,7 @@ import {
   replaceSessionFromUrl,
 } from '../src/auth-redirect.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
+import { deferred } from './auth-concurrency-fixtures.ts';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const session = {
@@ -68,6 +69,13 @@ test('fragment handoff stops after consumption or when no token exists', () => {
   expect(Reflect.get(client, '_takeAuthState')).not.toHaveBeenCalled();
 });
 
+test('fragment handoff rejects an empty access token', () => {
+  const client = host();
+  setWindow({ hash: '#access_token=&state=nonce' });
+  expect(consumeSessionFromUrl(client)).toBe(false);
+  expect(Reflect.get(client, '_takeAuthState')).not.toHaveBeenCalled();
+});
+
 test('fragment handoff fails closed if the location getter throws', () => {
   const client = host();
   setWindow({
@@ -86,6 +94,38 @@ test('fragment handoff rejects a missing state without adopting tokens', () => {
   expect(client._urlSessionConsumed).toBe(true);
   expect(Reflect.get(client, '_replaceSessionFromUrl')).not.toHaveBeenCalled();
   expect(Reflect.get(client, '_stripAuthHashFromUrl')).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { expected: null, state: null },
+  { expected: null, state: 'nonce' },
+  { expected: '', state: '' },
+  { expected: 'nonce', state: 'other' },
+])('fragment handoff rejects state $state against stored $expected', ({ expected, state }) => {
+  const client = host();
+  client._takeAuthState = jest.fn(() => expected);
+  const stateQuery = state === null ? '' : `&state=${state}`;
+  setWindow({ hash: `#access_token=token${stateQuery}` });
+
+  expect(consumeSessionFromUrl(client)).toBe(false);
+  expect(client._urlSessionConsumed).toBe(true);
+  expect(Reflect.get(client, '_replaceSessionFromUrl')).not.toHaveBeenCalled();
+  expect(Reflect.get(client, '_stripAuthHashFromUrl')).toHaveBeenCalledTimes(1);
+});
+
+test('successful fragment handoff is consumed so it cannot be replayed', () => {
+  const client = host();
+  setWindow({ hash: '#access_token=token&state=nonce' });
+  expect(consumeSessionFromUrl(client)).toBe(true);
+  expect(client._urlSessionConsumed).toBe(true);
+  expect(consumeSessionFromUrl(client)).toBe(false);
+  expect(Reflect.get(client, '_replaceSessionFromUrl')).toHaveBeenCalledTimes(1);
+});
+
+test('fragment handoff accepts an already stripped hash value', () => {
+  const client = host();
+  setWindow({ hash: 'access_token=token&state=nonce' });
+  expect(consumeSessionFromUrl(client)).toBe(true);
 });
 
 test('token-only handoff clears an old refresh credential', () => {
@@ -110,6 +150,14 @@ test('OAuth callback rejects missing state and malformed locations', async () =>
   expect(Reflect.get(client, '_takeAuthState')).not.toHaveBeenCalled();
 });
 
+test('OAuth callback rejects state without either a code or provider error', async () => {
+  const client = host();
+  setWindow({ href: 'https://app.example.com/callback?state=nonce' });
+  expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
+  expect(Reflect.get(client, '_takeAuthState')).not.toHaveBeenCalled();
+  expect(Reflect.get(client, '_anonFetch')).not.toHaveBeenCalled();
+});
+
 test('OAuth exchange uses the current callback URL when no redirect was stored', async () => {
   const client = host();
   setWindow({ href: 'https://app.example.com/callback?code=one&state=nonce' });
@@ -122,6 +170,59 @@ test('OAuth exchange uses the current callback URL when no redirect was stored',
     }),
   });
   expect(Reflect.get(client, '_setSession')).toHaveBeenCalledWith(session, 0);
+});
+
+test('OAuth exchange treats an empty stored redirect as absent', async () => {
+  const client = host();
+  client._takeAuthRedirectURL = jest.fn(() => '');
+  setWindow({ href: 'https://app.example.com/callback?code=one&state=nonce' });
+  expect(await consumeOAuthCodeFromUrl(client)).toBe(true);
+  expect(Reflect.get(client, '_anonFetch')).toHaveBeenCalledWith('/auth/oauth/exchange', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: 'one',
+      redirect_url: 'https://app.example.com/callback?code=one&state=nonce',
+    }),
+  });
+});
+
+test('OAuth callback rejects a mismatched state before exchanging credentials', async () => {
+  const client = host();
+  setWindow({ href: 'https://app.example.com/callback?code=one&state=other' });
+  expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
+  expect(client._oauthExchangeError).toEqual(new Error('OAuth callback state did not match'));
+  expect(Reflect.get(client, '_anonFetch')).not.toHaveBeenCalled();
+});
+
+test('OAuth callback reports a provider denial without a description', async () => {
+  const client = host();
+  setWindow({ href: 'https://app.example.com/callback?error=access_denied&state=nonce' });
+  expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
+  expect(client._oauthExchangeError).toEqual(
+    new Error('OAuth provider rejected sign-in: access_denied'),
+  );
+  expect(Reflect.get(client, '_anonFetch')).not.toHaveBeenCalled();
+});
+
+test('OAuth callback preserves a provider error description', async () => {
+  const client = host();
+  setWindow({
+    href: 'https://app.example.com/callback?error=access_denied&error_description=User%20cancelled&state=nonce',
+  });
+  expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
+  expect(client._oauthExchangeError).toEqual(new Error('User cancelled'));
+});
+
+test('OAuth exchange cannot restore a session after its generation changes', async () => {
+  const client = host();
+  const exchange = deferred<{ ok?: boolean; data: unknown; error: unknown }>();
+  client._anonFetch = jest.fn(() => exchange.promise);
+  setWindow({ href: 'https://app.example.com/callback?code=one&state=nonce' });
+  const pending = consumeOAuthCodeFromUrl(client);
+  client._sessionGeneration += 1;
+  exchange.resolve({ ok: true, data: session, error: null });
+  expect(await pending).toBe(false);
+  expect(Reflect.get(client, '_setSession')).not.toHaveBeenCalled();
 });
 
 test('OAuth exchange records a useful error for an empty transport failure', async () => {
