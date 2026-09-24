@@ -20,3 +20,13 @@ ignored, crashed, pending, empty, and incomplete results fail. The 180-second
 per-mutant allowance accommodates slower CI runners; reaching it still fails.
 [Stryker's state and score definitions](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)
 explain the distinction.
+
+## Runner lifetime
+
+[Stryker's native `maxTestRunnerReuse`](https://stryker-mutator.io/docs/stryker-js/configuration/#maxtestrunnerreuse-number)
+restarts a worker after 20 mutants. An unbounded worker retained 5,675
+async-local storage instances; its CPU profile was dominated by Node's
+`AsyncLocalStorage._propagate` calls from Jest 30.3 Circus. Static mutants timed out
+after long runs but were killed in fresh workers. Bounded reuse preserves every
+mutant and the existing timeout allowance. CI retains `stryker.log` on failure
+to distinguish worker behavior from test assertions.

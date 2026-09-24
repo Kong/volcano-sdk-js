@@ -136,6 +136,7 @@ jobs:
           path: |
             reports/unit.json
             reports/mutation.json
+            stryker.log
           if-no-files-found: ignore
 
   sdk-node20:
