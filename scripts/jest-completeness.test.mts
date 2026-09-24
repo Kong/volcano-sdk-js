@@ -137,7 +137,8 @@ await test('the integration entrypoint discovers server-backed suites', () => {
   const result = spawnSync(
     process.execPath,
     [packageManager, 'test:integration', '--listTests', '--json', '--runInBand'],
-    { encoding: 'utf8', timeout: 15_000 },
+    // The public entrypoint compiles tooling and every SDK bundle before discovery.
+    { encoding: 'utf8', timeout: 60_000 },
   );
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stderr);
