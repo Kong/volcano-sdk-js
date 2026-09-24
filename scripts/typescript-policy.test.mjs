@@ -87,12 +87,23 @@ function requireUnsuppressed(path, source) {
     ) {
       continue;
     }
-    assert.doesNotMatch(
-      scanner.getTokenText(),
-      /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|@ts-expect-error|istanbul ignore|c8 ignore|nyc ignore/,
-      `${path} suppresses a quality check`,
-    );
+    requireAllowedComment(path, scanner.getTokenText());
   }
+}
+
+function requireAllowedComment(path, comment) {
+  const forbidden =
+    /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|istanbul ignore|c8 ignore|nyc ignore/;
+  assert.doesNotMatch(comment, forbidden, `${path} suppresses a quality check`);
+  if (path.startsWith('test/types/') && comment.includes('@ts-expect-error')) {
+    assert.match(
+      comment,
+      /^\/\/\s*@ts-expect-error\s+\S/,
+      `${path} needs an expected-error rationale`,
+    );
+    return;
+  }
+  assert.doesNotMatch(comment, /@ts-expect-error/, `${path} suppresses a quality check`);
 }
 
 async function requireLinted(checker, path) {
@@ -161,9 +172,7 @@ test('tracked SDK code remains in native lint, type, test, and coverage gates', 
   const checker = new ESLint();
   for (const path of maintainedCode(files)) {
     await requireLinted(checker, path);
-    if (!path.startsWith('test/types/')) {
-      requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
-    }
+    requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
   }
   assert.deepEqual(
     files.filter(
@@ -184,6 +193,16 @@ test('lowered coverage and suppression comments fail policy validation', () => {
   assert.throws(() => requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity'));
   assert.throws(() =>
     requireUnsuppressed('src/new.ts', 'const marker = true; // @ts-expect-error\nmarker;'),
+  );
+  assert.doesNotThrow(() =>
+    requireUnsuppressed(
+      'test/types/invalid.ts',
+      '// @ts-expect-error invalid public call\ninvalid();',
+    ),
+  );
+  assert.throws(() => requireUnsuppressed('test/types/invalid.ts', '// @ts-ignore\ninvalid();'));
+  assert.throws(() =>
+    requireUnsuppressed('test/types/invalid.ts', '// @ts-expect-error\ninvalid();'),
   );
   assert.throws(() => requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']));
 });
