@@ -10,6 +10,7 @@
         "__tests__/**/*.test.{js,ts}",
         "__tests__/integration/**/*.test.{js,ts}",
         "__tests__/integration/setup.ts",
+        "__tests__/browser-environment.cjs",
         "__tests__/node-environment.cjs",
         "scripts/*.test.mjs",
         "test/types/**/*.ts",

@@ -1,33 +1,26 @@
-const { sessionToken } = require('./session-fixtures.ts');
-const { VolcanoAuth } = require('../src/index.js');
+/** @jest-environment ./__tests__/browser-environment.cjs */
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { VolcanoAuth } from '../src/index.js';
+import {
+  deferred,
+  fetchBody,
+  fetchCall,
+  jsonField,
+  reply,
+  signal,
+  within,
+} from './auth-concurrency-fixtures.ts';
+import { testAccessToken } from './auth-token-fixtures.ts';
+import { sessionToken } from './session-fixtures.ts';
 
-function createDeferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-function base64UrlEncode(value) {
-  return Buffer.from(value)
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-}
-
-function createTestJwtToken(projectId, extraClaims = {}) {
-  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = base64UrlEncode(JSON.stringify({ project_id: projectId, ...extraClaims }));
-  return `${header}.${payload}.test-signature`;
-}
-
-const TEST_ANON_KEY = `ak-${createTestJwtToken('00000000-0000-0000-0000-000000000001', {
+const fetchMock = jest.mocked(globalThis.fetch);
+const TEST_ANON_KEY = `ak-${testAccessToken('00000000-0000-0000-0000-000000000001', {
   role: 'anon',
 })}`;
+
+function callbackRedirectURL(): string {
+  return `${window.location.origin}/auth/callback`;
+}
 
 describe('VolcanoAuth', () => {
   describe('Authentication - managed auth redirect (URL hash adoption)', () => {
@@ -35,22 +28,18 @@ describe('VolcanoAuth', () => {
     const NONCE = 'rp-nonce-abc123';
     // Simulate signInWithHostedAuth()/signInWithOAuth() having stored the
     // one-time nonce in sessionStorage before the redirect.
-    const seedNonce = (nonce = NONCE) => window.sessionStorage.setItem('volcano_auth_state', nonce);
+    const seedNonce = (nonce = NONCE) => {
+      window.sessionStorage.setItem('volcano_auth_state', nonce);
+    };
 
     afterEach(() => {
-      try {
-        window.history.replaceState(null, '', '/');
-        window.sessionStorage.clear();
-      } catch {
-        /* ignore */
-      }
+      window.history.replaceState(null, '', '/');
+      window.sessionStorage.clear();
     });
 
     it('adopts the session from the URL fragment at construction, persists it, and strips the hash', () => {
       seedNonce();
-      window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
-        NONCE;
+      window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
       const replaceSpy = jest.spyOn(window.history, 'replaceState');
 
       // Construction alone must establish the session (no getUser needed).
@@ -58,8 +47,8 @@ describe('VolcanoAuth', () => {
 
       expect(v.accessToken).toBe('hash-access');
       expect(v.refreshToken).toBe('hash-refresh');
-      expect(localStorage.store['volcano_access_token']).toBe('hash-access');
-      expect(localStorage.store['volcano_refresh_token']).toBe('hash-refresh');
+      expect(localStorage.getItem('volcano_access_token')).toBe('hash-access');
+      expect(localStorage.getItem('volcano_refresh_token')).toBe('hash-refresh');
       // Tokens were removed from the URL immediately.
       expect(replaceSpy).toHaveBeenCalled();
       expect(window.location.hash).toBe('');
@@ -70,23 +59,19 @@ describe('VolcanoAuth', () => {
 
     it('lets an authenticated request use the adopted session without calling getUser() first', async () => {
       seedNonce();
-      window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
-        NONCE;
+      window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
       // No getUser() call — go straight to an authenticated operation.
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            user: { id: 'user-redirect', email: 'r@example.com', status: 'active' },
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'user-redirect', email: 'r@example.com', status: 'active' },
+        }),
+      );
       const result = await v.auth.updateUser({ metadata: { ok: true } });
 
       expect(result.error).toBeNull();
-      expect(result.user.id).toBe('user-redirect');
+      expect(result.user?.id).toBe('user-redirect');
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('/auth/user'),
         expect.objectContaining({
@@ -109,20 +94,16 @@ describe('VolcanoAuth', () => {
       callback.mockClear(); // ignore any initial emission on subscribe
 
       // Fragment appears later (e.g. SPA navigation back from the hosted page).
-      window.location.hash =
-        '#access_token=late-access&refresh_token=late-refresh&token_type=bearer&expires_in=3600&state=' +
-        NONCE;
+      window.location.hash = `#access_token=late-access&refresh_token=late-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
 
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            user: { id: 'user-late', email: 'fixture@example.com', status: 'active' },
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'user-late', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
 
       const result = await v.auth.getUser();
-      expect(result.user.id).toBe('user-late');
+      expect(result.user?.id).toBe('user-late');
       expect(v.accessToken).toBe('late-access');
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-late' }));
     });
@@ -131,9 +112,7 @@ describe('VolcanoAuth', () => {
       seedNonce();
       // Fragment present at load → the session is adopted in the constructor,
       // before any listener can subscribe (the common SPA hosted-redirect path).
-      window.location.hash =
-        '#access_token=ctor-access&refresh_token=ctor-refresh&token_type=bearer&expires_in=3600&state=' +
-        NONCE;
+      window.location.hash = `#access_token=ctor-access&refresh_token=ctor-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       expect(v.accessToken).toBe('ctor-access');
 
@@ -143,11 +122,11 @@ describe('VolcanoAuth', () => {
       expect(callback).toHaveBeenLastCalledWith(null);
       callback.mockClear();
 
-      global.fetch.mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({ user: { id: 'user-ctor', email: 'c@example.com', status: 'active' } }),
-      });
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(
+          reply(200, { user: { id: 'user-ctor', email: 'c@example.com', status: 'active' } }),
+        ),
+      );
 
       // First getUser() announces the SIGNED_IN transition for the adoption that
       // happened at construction.
@@ -178,7 +157,7 @@ describe('VolcanoAuth', () => {
 
       // The attacker-crafted session is NOT adopted...
       expect(v.accessToken).toBeFalsy();
-      expect(localStorage.store['volcano_access_token']).toBeUndefined();
+      expect(localStorage.getItem('volcano_access_token')).toBeNull();
       // ...and the tokens are scrubbed from the URL.
       expect(window.location.hash).toBe('');
     });
@@ -199,10 +178,9 @@ describe('VolcanoAuth', () => {
     it('clears a stored refresh token when the redirect hand-off carries none', () => {
       seedNonce();
       // A previous session left a refresh token in storage.
-      localStorage.store['volcano_refresh_token'] = 'stale-stored-refresh';
+      localStorage.setItem('volcano_refresh_token', 'stale-stored-refresh');
       // The redirect fragment carries a fresh access token but NO refresh token.
-      window.location.hash =
-        '#access_token=fresh-access&token_type=bearer&expires_in=3600&state=' + NONCE;
+      window.location.hash = `#access_token=fresh-access&token_type=bearer&expires_in=3600&state=${NONCE}`;
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
@@ -210,15 +188,13 @@ describe('VolcanoAuth', () => {
       // adopted and is purged so it can't refresh into the previous account.
       expect(v.accessToken).toBe('fresh-access');
       expect(v.refreshToken).toBeNull();
-      expect(localStorage.store['volcano_refresh_token']).toBeUndefined();
-      expect(localStorage.removeItem).toHaveBeenCalledWith('volcano_refresh_token');
+      expect(localStorage.getItem('volcano_refresh_token')).toBeNull();
+      expect(Reflect.get(localStorage, 'removeItem')).toHaveBeenCalledWith('volcano_refresh_token');
     });
 
     it('strips the fragment cleanly when only auth params (incl. state) are present', () => {
       seedNonce();
-      window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=' +
-        NONCE;
+      window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&token_type=bearer&expires_in=3600&state=${NONCE}`;
       const replaceSpy = jest.spyOn(window.history, 'replaceState');
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
@@ -231,8 +207,7 @@ describe('VolcanoAuth', () => {
 
     it('leaves the fragment intact when an unknown app param rides alongside the tokens', () => {
       seedNonce();
-      window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing';
+      window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&state=${NONCE}&app_view=billing`;
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
@@ -240,15 +215,14 @@ describe('VolcanoAuth', () => {
       // clobber an app's own hash state/routing.
       expect(v.accessToken).toBe('hash-access');
       expect(window.location.hash).toBe(
-        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing',
+        `#access_token=hash-access&refresh_token=hash-refresh&state=${NONCE}&app_view=billing`,
       );
     });
 
     it('adopts the URL session only once even when the preserved hash keeps tokens around', async () => {
       seedNonce();
       // App params keep the hash (and thus the tokens) in the URL after adoption.
-      window.location.hash =
-        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing';
+      window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&state=${NONCE}&app_view=billing`;
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
       const callback = jest.fn();
@@ -259,13 +233,13 @@ describe('VolcanoAuth', () => {
       // announces that adoption exactly once; repeated getUser() calls must not
       // re-adopt or re-fire the auth callback even though the tokens are still
       // present in window.location.hash.
-      global.fetch.mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(
+          reply(200, {
             user: { id: 'user-once', email: 'once@example.com', status: 'active' },
           }),
-      });
+        ),
+      );
 
       await v.auth.getUser();
       await v.auth.getUser();
@@ -274,7 +248,7 @@ describe('VolcanoAuth', () => {
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-once' }));
       expect(window.location.hash).toBe(
-        '#access_token=hash-access&refresh_token=hash-refresh&state=' + NONCE + '&app_view=billing',
+        `#access_token=hash-access&refresh_token=hash-refresh&state=${NONCE}&app_view=billing`,
       );
       expect(v.accessToken).toBe('hash-access');
     });
@@ -282,16 +256,12 @@ describe('VolcanoAuth', () => {
 
   describe('Authentication - hosted auth / OAuth initiation (RP nonce)', () => {
     afterEach(() => {
-      try {
-        window.sessionStorage.clear();
-      } catch {
-        /* ignore */
-      }
+      window.sessionStorage.clear();
     });
 
     it('getHostedAuthUrl stores a nonce and includes it as state with anon_key', () => {
       // anonKey must be a JWT carrying project_id for projectId derivation.
-      const anonKey = createTestJwtToken('11111111-1111-1111-1111-111111111111');
+      const anonKey = testAccessToken('11111111-1111-1111-1111-111111111111');
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey });
 
       const url = v.auth.getHostedAuthUrl({ action: 'signup' });
@@ -325,11 +295,11 @@ describe('VolcanoAuth', () => {
       const nonce = parsed.searchParams.get('client_state');
       expect(nonce).toBeTruthy();
       expect(parsed.searchParams.get('response_mode')).toBe('code');
-      expect(new URL(transportRedirectUrl).searchParams.get('vh_state')).toBe(nonce);
+      expect(new URL(transportRedirectUrl ?? '').searchParams.get('vh_state')).toBe(nonce);
       expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonce);
       const storedRedirectUrl = window.sessionStorage.getItem('volcano_auth_redirect_url');
       expect(storedRedirectUrl).toBeTruthy();
-      expect(new URL(storedRedirectUrl).searchParams.get('vh_state')).toBeNull();
+      expect(new URL(storedRedirectUrl ?? '').searchParams.get('vh_state')).toBeNull();
     });
 
     it('preserves the registered redirect query encoding when adding transport state', () => {
@@ -340,7 +310,7 @@ describe('VolcanoAuth', () => {
       const parsed = new URL(oauthUrl);
       const nonce = parsed.searchParams.get('client_state');
 
-      expect(parsed.searchParams.get('redirect_url')).toBe(`${redirectTo}&vh_state=${nonce}`);
+      expect(parsed.searchParams.get('redirect_url')).toBe(`${redirectTo}&vh_state=${nonce ?? ''}`);
       expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBe(redirectTo);
     });
 
@@ -359,43 +329,39 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - OAuth authorization code exchange', () => {
-    const callbackRedirectURL = () => `${window.location.origin}/auth/callback`;
-
     afterEach(() => {
       window.history.replaceState(null, '', '/');
       window.sessionStorage.clear();
     });
 
     it('discards a successful code exchange after another session wins', async () => {
-      const response = createDeferred();
-      const requestStarted = createDeferred();
+      const response = deferred<Response>();
+      const requestStarted = signal();
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      global.fetch.mockImplementationOnce(() => {
+      fetchMock.mockImplementationOnce(() => {
         requestStarted.resolve();
         return response.promise;
       });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'OAuth exchange request');
       v._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
         user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
-      response.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: 'stale-access',
-            refresh_token: 'stale-refresh',
-            user: { id: 'stale-user', email: 'fixture@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-      });
+      response.resolve(
+        reply(200, {
+          access_token: 'stale-access',
+          refresh_token: 'stale-refresh',
+          user: { id: 'stale-user', email: 'fixture@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
 
-      await v._completeOAuthExchange();
+      await within(v._completeOAuthExchange(), 'OAuth exchange completion');
 
       expect(v.accessToken).toBe('replacement-access');
       expect(v.currentUser).toEqual({
@@ -407,29 +373,26 @@ describe('VolcanoAuth', () => {
     });
 
     it('does not retain a stale code exchange failure after another session wins', async () => {
-      const response = createDeferred();
-      const requestStarted = createDeferred();
+      const response = deferred<Response>();
+      const requestStarted = signal();
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      global.fetch.mockImplementationOnce(() => {
+      fetchMock.mockImplementationOnce(() => {
         requestStarted.resolve();
         return response.promise;
       });
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
-      await requestStarted.promise;
+      await within(requestStarted.promise, 'OAuth exchange request');
       v._setSession({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
         user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
-      response.resolve({
-        ok: false,
-        json: () => Promise.resolve({ error: 'stale exchange failed' }),
-      });
+      response.resolve(reply(400, { error: 'stale exchange failed' }));
 
-      await v._completeOAuthExchange();
+      await within(v._completeOAuthExchange(), 'OAuth exchange completion');
 
       expect(v.accessToken).toBe('replacement-access');
       expect(v.currentUser).toEqual({
@@ -444,24 +407,20 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'oauth-access',
-              refresh_token: 'oauth-refresh',
-              expires_in: 3600,
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            expires_in: 3600,
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        )
+        .mockResolvedValueOnce(
+          reply(200, {
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const result = await v.initialize();
@@ -469,8 +428,8 @@ describe('VolcanoAuth', () => {
       expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
       expect(v.accessToken).toBe('oauth-access');
       expect(window.location.search).toBe('');
-      expect(global.fetch.mock.calls[0][0]).toBe('https://api.test.com/auth/oauth/exchange');
-      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+      expect(fetchCall(0)[0]).toBe('https://api.test.com/auth/oauth/exchange');
+      expect(JSON.parse(fetchBody(0))).toEqual({
         code: 'one-time-code',
         redirect_url: callbackRedirectURL(),
       });
@@ -480,27 +439,27 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      localStorage.setItem.mockImplementationOnce(() => {
+      const storageSetItem: unknown = Reflect.get(localStorage, 'setItem');
+      if (!jest.isMockFunction(storageSetItem)) {
+        throw new TypeError('Expected mocked browser storage');
+      }
+      storageSetItem.mockImplementationOnce(() => {
         throw new DOMException('Storage is unavailable', 'SecurityError');
       });
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'oauth-access',
-              refresh_token: 'oauth-refresh',
-              expires_in: 3600,
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            expires_in: 3600,
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        )
+        .mockResolvedValueOnce(
+          reply(200, {
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const result = await v.initialize();
@@ -520,30 +479,26 @@ describe('VolcanoAuth', () => {
         '',
         '/auth/callback?return_to=hello+world&code=one-time-code&state=oauth-nonce',
       );
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'oauth-access',
-              refresh_token: 'oauth-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-              expires_in: 3600,
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
+          }),
+        )
+        .mockResolvedValueOnce(
+          reply(200, {
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const result = await v.initialize();
 
       expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
-      expect(JSON.parse(global.fetch.mock.calls[0][1].body).redirect_url).toBe(storedRedirectURL);
+      expect(jsonField(fetchCall(0)[1], 'redirect_url')).toBe(storedRedirectURL);
       expect(window.location.search).toBe('?return_to=hello+world');
     });
 
@@ -555,24 +510,20 @@ describe('VolcanoAuth', () => {
         '',
         '/auth/callback?code=one-time-code&state=oauth-nonce&iss=https%3A%2F%2Fissuer.test',
       );
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'oauth-access',
-              refresh_token: 'oauth-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-              expires_in: 3600,
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'oauth-access',
+            refresh_token: 'oauth-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
+          }),
+        )
+        .mockResolvedValueOnce(
+          reply(200, {
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const result = await v.initialize();
@@ -596,7 +547,7 @@ describe('VolcanoAuth', () => {
           message: 'OAuth callback state did not match',
         }),
       );
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
       expect(window.location.search).toBe('');
     });
 
@@ -604,10 +555,7 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ error: 'invalid authorization code' }),
-      });
+      fetchMock.mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }));
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const apiResult = await v.auth.getUser();
@@ -629,7 +577,7 @@ describe('VolcanoAuth', () => {
       const result = await v.initialize();
 
       expect(result).toEqual({ user: null, error: null });
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
       expect(window.location.search).toBe('?code=promo&state=selected');
     });
 
@@ -642,7 +590,7 @@ describe('VolcanoAuth', () => {
       const result = await v.initialize();
 
       expect(result).toEqual({ user: null, error: null });
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
       expect(window.location.search).toBe('?code=stripe-code&state=stripe-state');
       expect(window.sessionStorage.getItem('volcano_auth_state')).toBe('abandoned-volcano-nonce');
     });
@@ -665,7 +613,7 @@ describe('VolcanoAuth', () => {
           message: 'Sign-in cancelled',
         }),
       );
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
       expect(window.location.search).toBe('');
       expect(window.sessionStorage.getItem('volcano_auth_state')).toBeNull();
       expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBeNull();
@@ -675,21 +623,16 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: false,
-          json: () => Promise.resolve({ error: 'invalid authorization code' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'signed-in-access',
-              refresh_token: 'signed-in-refresh',
-              user: { id: 'signed-in-user', email: 'signed-in@example.com', status: 'active' },
-              expires_in: 3600,
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }))
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'signed-in-access',
+            refresh_token: 'signed-in-refresh',
+            user: { id: 'signed-in-user', email: 'signed-in@example.com', status: 'active' },
+            expires_in: 3600,
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const failed = await v.initialize();
@@ -712,18 +655,13 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: false,
-          json: () => Promise.resolve({ error: 'invalid authorization code' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
-            }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }))
+        .mockResolvedValueOnce(
+          reply(200, {
+            user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const failed = await v.initialize();
@@ -732,14 +670,14 @@ describe('VolcanoAuth', () => {
       expect(failed.error).toEqual(
         expect.objectContaining({ message: 'invalid authorization code' }),
       );
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
 
       const recovered = await v.initialize();
       expect(recovered).toEqual({
         user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
         error: null,
       });
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('refreshes a valid stored session after an OAuth provider denial', async () => {
@@ -748,16 +686,14 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?error=access_denied&state=oauth-nonce');
-      global.fetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: sessionToken(undefined, true),
-            refresh_token: 'refreshed-refresh',
-            expires_in: 3600,
-            user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
-          }),
-      });
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          access_token: sessionToken(undefined, true),
+          refresh_token: 'refreshed-refresh',
+          expires_in: 3600,
+          user: { id: 'user-123', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const result = await v.auth.refreshSession();
@@ -768,7 +704,7 @@ describe('VolcanoAuth', () => {
           error: null,
         }),
       );
-      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+      expect(JSON.parse(fetchBody(0))).toEqual({
         refresh_token: 'stored-refresh',
       });
       expect(v._oauthExchangeError).toBeNull();
@@ -778,47 +714,43 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      let resolveExchange;
-      global.fetch
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveExchange = resolve;
-            }),
-        )
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: 'refreshed-access',
-              refresh_token: 'refreshed-refresh',
-              user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-              expires_in: 3600,
-            }),
-        });
+      const exchange = deferred<Response>();
+      const requestStarted = signal();
+      fetchMock
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return exchange.promise;
+        })
+        .mockResolvedValueOnce(
+          reply(200, {
+            access_token: 'refreshed-access',
+            refresh_token: 'refreshed-refresh',
+            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+            expires_in: 3600,
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const refresh = v.auth.refreshSession();
 
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      resolveExchange({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: 'oauth-access',
-            refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-      });
+      await within(requestStarted.promise, 'OAuth exchange request');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      exchange.resolve(
+        reply(200, {
+          access_token: 'oauth-access',
+          refresh_token: 'oauth-refresh',
+          user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
 
-      await expect(refresh).resolves.toEqual(
+      await expect(within(refresh, 'OAuth refresh')).resolves.toEqual(
         expect.objectContaining({
           session: expect.objectContaining({ access_token: 'refreshed-access' }),
           error: null,
         }),
       );
-      expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({
+      expect(JSON.parse(fetchBody(1))).toEqual({
         refresh_token: 'oauth-refresh',
       });
     });
@@ -827,36 +759,31 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      let resolveExchange;
-      global.fetch
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveExchange = resolve;
-            }),
-        )
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
+      const exchange = deferred<Response>();
+      const requestStarted = signal();
+      fetchMock
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return exchange.promise;
+        })
+        .mockResolvedValueOnce(reply(200, {}));
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const signOut = v.auth.signOut();
 
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      resolveExchange({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: 'oauth-access',
-            refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-      });
+      await within(requestStarted.promise, 'OAuth exchange request');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      exchange.resolve(
+        reply(200, {
+          access_token: 'oauth-access',
+          refresh_token: 'oauth-refresh',
+          user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
 
-      await expect(signOut).resolves.toEqual({ error: null });
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      await expect(within(signOut, 'OAuth sign-out')).resolves.toEqual({ error: null });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(v.accessToken).toBeNull();
       expect(v.refreshToken).toBeNull();
       expect(v._oauthExchangeError).toBeNull();
@@ -866,72 +793,59 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=one-time-code&state=oauth-nonce');
-      let resolveExchange;
-      global.fetch
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveExchange = resolve;
-            }),
-        )
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              id: 'object-1',
-              bucket_id: 'bucket-1',
-              name: 'avatar.png',
-              is_public: true,
-              size: 4,
-              mime_type: 'image/png',
-            }),
-        });
+      const exchange = deferred<Response>();
+      const requestStarted = signal();
+      fetchMock
+        .mockImplementationOnce(() => {
+          requestStarted.resolve();
+          return exchange.promise;
+        })
+        .mockResolvedValueOnce(
+          reply(200, {
+            id: 'object-1',
+            bucket_id: 'bucket-1',
+            name: 'avatar.png',
+            is_public: true,
+            size: 4,
+            mime_type: 'image/png',
+          }),
+        );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const visibility = v.storage.from('avatars').updateVisibility('avatar.png', true);
 
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      resolveExchange({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: 'oauth-access',
-            refresh_token: 'oauth-refresh',
-            user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-      });
+      await within(requestStarted.promise, 'OAuth exchange request');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      exchange.resolve(
+        reply(200, {
+          access_token: 'oauth-access',
+          refresh_token: 'oauth-refresh',
+          user: { id: 'oauth-user', email: 'oauth@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
 
-      await expect(visibility).resolves.toEqual(expect.objectContaining({ error: null }));
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      await expect(within(visibility, 'OAuth storage visibility')).resolves.toEqual(
+        expect.objectContaining({ error: null }),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('uses the anon key after a failed code exchange without clearing the auth error', async () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: false,
-          json: () => Promise.resolve({ error: 'invalid authorization code' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              name: 'public-function',
-              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
-              invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
-              cache_ttl_seconds: 300,
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: {},
-          json: () => Promise.resolve({ submitted: true }),
-        });
+      fetchMock
+        .mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }))
+        .mockResolvedValueOnce(
+          reply(200, {
+            name: 'public-function',
+            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+            cache_ttl_seconds: 300,
+          }),
+        )
+        .mockResolvedValueOnce(reply(200, { submitted: true }));
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: TEST_ANON_KEY });
       const result = await v.functions.invoke('public-function');
@@ -941,7 +855,7 @@ describe('VolcanoAuth', () => {
       expect(initialization.error).toEqual(
         expect.objectContaining({ message: 'invalid authorization code' }),
       );
-      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
   });
 });
