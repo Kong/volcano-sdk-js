@@ -3,11 +3,15 @@ import { LeaseClock, type LockRequestStart, lockRequestStart } from './lock-cloc
 
 export { LeaseClock, lockRequestStart } from './lock-clock.ts';
 
-const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const RENEWAL_REQUEST_BUDGET_MS = 1000;
 const RENEWAL_SAFETY_MARGIN_MS = 1000;
-const EXPIRY_MESSAGE = 'lock lease expired before renewal completed';
 const UNSAFE_RENEWAL_MESSAGE = 'lock renewal returned no safe lease window';
+
+const maxTimerDelayMs = (): number => 24 * 60 * 60 * 1000;
+
+function expiryError(): Error {
+  return new Error('lock lease expired before renewal completed');
+}
 
 interface LockSessionOptions {
   locks: Pick<ProjectLocks, 'renew' | 'release'>;
@@ -153,7 +157,7 @@ export class LockSession {
   }
 
   renewalDelay(): number {
-    const baseDelay = Math.min(this.clock.ttlMs / 3, MAX_TIMER_DELAY_MS);
+    const baseDelay = Math.min(this.clock.ttlMs / 3, maxTimerDelayMs());
     const remaining = this.clock.remaining();
     if (!Number.isFinite(remaining)) {
       return 0;
@@ -170,10 +174,10 @@ export class LockSession {
     clearTimeout(this.expiryTimer);
     const remaining = this.clock.remaining();
     if (!Number.isFinite(remaining) || remaining <= 0) {
-      this.markLost(new Error(EXPIRY_MESSAGE));
+      this.markLost(expiryError());
       return;
     }
-    const delay = Math.min(MAX_TIMER_DELAY_MS, remaining);
+    const delay = Math.min(maxTimerDelayMs(), remaining);
     this.expiryTimer = setTimeout(() => {
       this.checkExpiry();
     }, Math.ceil(delay));
@@ -198,7 +202,7 @@ export class LockSession {
 
   async cleanup(): Promise<Error | null> {
     if (this.clock.remaining() === 0) {
-      this.markLost(new Error(EXPIRY_MESSAGE));
+      this.markLost(expiryError());
     }
     this.stopped = true;
     this.renewalController?.abort();
