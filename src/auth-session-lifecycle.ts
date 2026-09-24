@@ -201,9 +201,6 @@ export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshRe
   if (Boolean(exchangeError) && !hasToken(host.refreshToken)) {
     return { session: null, error: exchangeError };
   }
-  if (!hasToken(host.refreshToken)) {
-    return { session: null, error: new Error('No refresh token') };
-  }
   return refreshSessionForContext(host, host._captureAuthContext());
 }
 
