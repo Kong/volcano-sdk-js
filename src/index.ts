@@ -1099,9 +1099,9 @@ class VolcanoAuth {
   // ========================================================================
 
   /** @internal */
-  invokeFunction<TPayload = JsonValue, TResult = unknown>(
+  invokeFunction<TResult = unknown>(
     functionName: string,
-    payload?: TPayload,
+    payload?: unknown,
   ): Promise<FunctionInvokeResponse<TResult>>;
   /** @internal */
   async invokeFunction(
