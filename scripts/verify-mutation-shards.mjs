@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mutationPatterns, shardMutationPatterns } from './mutation-scope.mjs';
+import { mutationPatterns, mutationShardCount, shardMutationPatterns } from './mutation-scope.mjs';
 
 function git(...args) {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
@@ -48,8 +48,8 @@ const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src')
   .filter(Boolean);
 const patterns = mutationPatterns(committedDiff, workingDiff, untracked);
 const expected = mutantCount(patterns);
-const counts = Array.from({ length: 4 }, (_, index) =>
-  mutantCount(shardMutationPatterns(patterns, index, 4)),
+const counts = Array.from({ length: mutationShardCount }, (_, index) =>
+  mutantCount(shardMutationPatterns(patterns, index, mutationShardCount)),
 );
 let actual = 0;
 for (const count of counts) {

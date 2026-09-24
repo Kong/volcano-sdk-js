@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict';
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   changedRuntimePatterns,
   criticalRuntime,
   mutationPatterns,
+  mutationShardCount,
   shardMutationPatterns,
 } from './mutation-scope.mjs';
+
+test('CI starts every required mutation shard', () => {
+  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const matrix = /mutation-shard: \[([\d, ]+)\]/.exec(workflow);
+  const environment = /MUTATION_SHARD_COUNT: '(\d+)'/.exec(workflow);
+  assert.ok(matrix);
+  assert.ok(environment);
+  assert.equal(Number(environment[1]), mutationShardCount);
+  assert.deepEqual(
+    matrix[1].split(',').map((value) => Number(value.trim())),
+    Array.from({ length: mutationShardCount }, (_, index) => index),
+  );
+});
 
 test('selects changed handwritten runtime lines from a PR diff', () => {
   const diff = [
@@ -106,5 +120,39 @@ test('mutation shards keep every file and its overlapping ranges together', () =
     for (const path of paths) {
       unlinkSync(path);
     }
+  }
+});
+
+test('large class shards keep each method intact and every selected line unique', () => {
+  const path = `src/mutation-class-fixture-${String(process.pid)}.ts`;
+  const members = Array.from({ length: 12 }, (_, index) => [
+    `  method${String(index)}() {`,
+    ...Array.from({ length: 40 }, (_, line) => `    const value${String(line)} = ${String(line)};`),
+    `    return ${String(index)};`,
+    '  }',
+  ]).flat();
+  const source = ['export class Fixture {', ...members, '}', ''].join('\n');
+  writeFileSync(path, source);
+  try {
+    const lineCount = source.trimEnd().split('\n').length;
+    const owner = new Map();
+    for (let shard = 0; shard < 3; shard += 1) {
+      for (const pattern of shardMutationPatterns([path, `${path}:200-220`], shard, 3)) {
+        const match = /:(\d+)-(\d+)$/.exec(pattern);
+        assert.ok(match);
+        const first = Number(match[1]);
+        const last = Number(match[2]);
+        if (last < lineCount) {
+          assert.match(source.split('\n')[last - 1], /^ {2}\}$/);
+        }
+        for (let line = first; line <= last; line += 1) {
+          assert.equal(owner.has(line), false);
+          owner.set(line, shard);
+        }
+      }
+    }
+    assert.equal(owner.size, lineCount);
+  } finally {
+    unlinkSync(path);
   }
 });
