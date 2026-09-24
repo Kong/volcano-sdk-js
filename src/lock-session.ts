@@ -137,9 +137,13 @@ export class LockSession {
 
   renewalDelay(): number {
     const baseDelay = Math.min(this.clock.ttlMs / 3, MAX_TIMER_DELAY_MS);
+    const remaining = this.clock.remaining();
+    if (!Number.isFinite(remaining)) {
+      return 0;
+    }
     const latestDelay = Math.max(
       0,
-      this.clock.remaining() - RENEWAL_SAFETY_MARGIN_MS - RENEWAL_REQUEST_BUDGET_MS,
+      remaining - RENEWAL_SAFETY_MARGIN_MS - RENEWAL_REQUEST_BUDGET_MS,
     );
     const jitter = baseDelay * 0.1 * (this.random() * 2 - 1);
     return Math.min(Math.max(0, baseDelay + jitter), latestDelay);
@@ -160,7 +164,8 @@ export class LockSession {
     if (this.stopped || this.failure !== null) {
       return;
     }
-    if (this.clock.remaining() === 0) {
+    const remaining = this.clock.remaining();
+    if (!Number.isFinite(remaining) || remaining === 0) {
       this.markLost(new Error(EXPIRY_MESSAGE));
       return;
     }

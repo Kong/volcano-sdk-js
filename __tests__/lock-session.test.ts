@@ -109,6 +109,17 @@ test('rejects a renewal without a safe window before the absolute lifetime cap',
   });
 });
 
+test('fails closed when a platform clock cannot provide a finite lease window', async () => {
+  const { session } = setup();
+  jest.spyOn(performance, 'now').mockReturnValue(Number.NaN);
+  const callback = jest.fn<() => string>();
+  await expect(session.run(callback)).resolves.toEqual({
+    data: null,
+    error: new Error('lock renewal returned no safe lease window'),
+  });
+  expect(callback).not.toHaveBeenCalled();
+});
+
 test('renews periodically until guarded work completes', async () => {
   const { session, renew } = setup();
   const callback = deferred<string>();
