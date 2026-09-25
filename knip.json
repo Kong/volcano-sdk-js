@@ -8,8 +8,6 @@
         "src/durable.ts!",
         "src/next/middleware.ts!",
         "__tests__/**/*.test.{js,ts}",
-        "__tests__/integration/**/*.test.{js,ts}",
-        "__tests__/integration/setup.ts",
         "__tests__/browser-environment.cjs",
         "__tests__/node-environment.cjs",
         "scripts/*.test.mts",

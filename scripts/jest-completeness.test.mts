@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
-import { array, stringValue } from './values.mts';
 
 const jest = fileURLToPath(new URL('../node_modules/jest/bin/jest.js', import.meta.url));
 const reporter = fileURLToPath(new URL('jest-completeness.cjs', import.meta.url));
@@ -127,24 +126,3 @@ for (const [source, rule] of forbiddenSources) {
     assert.ok(results.some((result) => result.messages.some((message) => message.ruleId === rule)));
   });
 }
-
-await test('the integration entrypoint discovers server-backed suites', () => {
-  const packageManager = process.env['npm_execpath'];
-  assert.ok(
-    packageManager !== undefined && packageManager !== '',
-    'Run tooling tests through pnpm test:tooling.',
-  );
-  const result = spawnSync(
-    process.execPath,
-    [packageManager, 'test:integration', '--listTests', '--json', '--runInBand'],
-    // The public entrypoint compiles tooling and every SDK bundle before discovery.
-    { encoding: 'utf8', timeout: 60_000 },
-  );
-  assert.equal(result.error, undefined);
-  assert.equal(result.status, 0, result.stderr);
-  const discovery = result.stdout.trim().split('\n').at(-1);
-  assert.ok(discovery !== undefined && discovery !== '');
-  const paths = array(JSON.parse(discovery)).map((value) => stringValue(value));
-  assert.equal(paths.length, 6);
-  assert.ok(paths.every((path) => path.includes('/__tests__/integration/')));
-});

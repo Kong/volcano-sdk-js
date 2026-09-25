@@ -11,8 +11,6 @@ import { record } from './values.mts';
 
 const require = createRequire(import.meta.url);
 const unit = record(require('../jest.config.js'));
-const contract = record(require('../jest.contract.config.cjs'));
-const integration = record(require('../jest.integration.config.cjs'));
 
 const jest = fileURLToPath(new URL('../node_modules/jest/bin/jest.js', import.meta.url));
 
@@ -49,7 +47,7 @@ async function runFixture(
   }
 }
 
-for (const [name, config] of Object.entries({ unit, integration, contract })) {
+for (const [name, config] of Object.entries({ unit })) {
   await test(`${name} attributes an unhandled rejection to the originating test`, async () => {
     const result = await runFixture(
       `

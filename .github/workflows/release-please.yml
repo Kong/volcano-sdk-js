@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: '24.21.0'
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Format changelog and enable checked auto-merge
+      - name: Format release PR changelog
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -50,25 +50,17 @@ jobs:
         # Looking up the branch also handles retries when Release Please leaves the PR unchanged.
         run: |
           gh pr list --base main --head "$RELEASE_BRANCH" --state open \
-            --json number,author,isCrossRepository,isDraft,headRefOid \
-            --jq '.[] | select(.author.login == "app/kong-volcano-app" and .isCrossRepository == false and .isDraft == false) | [.number, .headRefOid] | @tsv' |
-            while IFS=$'\t' read -r number head; do
+            --json author,isCrossRepository,isDraft,headRefOid \
+            --jq '.[] | select(.author.login == "app/kong-volcano-app" and .isCrossRepository == false and .isDraft == false) | .headRefOid' |
+            while read -r head; do
               changelog="$(gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$head")"
               jq -r '.content' <<< "$changelog" | base64 --decode > CHANGELOG.md
               pnpm exec prettier --write CHANGELOG.md
               blob="$(jq -r '.sha' <<< "$changelog")"
               if [ "$blob" != "$(git hash-object CHANGELOG.md)" ]; then
-                head="$(gh api --method PUT "repos/$GH_REPO/contents/CHANGELOG.md" \
+                gh api --method PUT "repos/$GH_REPO/contents/CHANGELOG.md" \
                   -f branch="$RELEASE_BRANCH" -f sha="$blob" \
                   -f message='chore(release): format changelog' \
-                  -f content="$(base64 -w0 CHANGELOG.md)" --jq '.commit.sha')"
+                  -f content="$(base64 -w0 CHANGELOG.md)" --jq '.commit.sha'
               fi
-              # GitHub's PR head can briefly lag behind the Contents API commit.
-              for attempt in {1..5}; do
-                if gh pr merge "$number" --auto --squash --match-head-commit "$head"; then
-                  break
-                fi
-                if [ "$attempt" -eq 5 ]; then exit 1; fi
-                sleep 2
-              done
             done

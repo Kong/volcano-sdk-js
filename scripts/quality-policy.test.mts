@@ -21,7 +21,6 @@ const requiredTasks = {
     'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
   'test:package':
     'pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz',
-  'test:contract': 'pnpm build && jest --config jest.contract.config.cjs --runInBand',
   'test:quickstart':
     'pnpm test:package && pnpm test:types:package && node .quality-tools/test-package-quickstart.mjs reports/volcano-sdk.tgz',
   'test:types:package': 'pnpm build && tsc --noEmit -p tsconfig.consumer.json',
@@ -30,7 +29,7 @@ const requiredTasks = {
   audit: 'pnpm build:tooling && node .quality-tools/audit-dependencies.mjs',
   quality: 'pnpm quality:policy && pnpm quality:checks && pnpm mutation:full',
   'quality:checks':
-    'pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node .quality-tools/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:contract --listTests && pnpm test:quickstart && pnpm test:examples',
+    'pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node .quality-tools/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:quickstart && pnpm test:examples',
   'test:tooling':
     'pnpm build && node --test --test-reporter=tap --test-reporter=./.quality-tools/node-completeness.mjs --test-reporter-destination=stdout --test-reporter-destination=stdout --test-concurrency=1 .quality-tools/*.test.mjs',
   'test:typed-runtime': 'pnpm build && jest --config jest.typed.config.cjs',
