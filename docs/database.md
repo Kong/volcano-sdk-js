@@ -522,21 +522,21 @@ const { data } = await volcano.from('posts').select('*');
 const filtered = data.filter((p) => p.status === 'published');
 ```
 
-## Lambda Functions
+## Functions
 
-For complex queries that aren't possible with the query builder (JOINs, CTEs, stored procedures), use Lambda functions with the standard `pg` library:
+For complex queries that aren't possible with the query builder (JOINs, CTEs, stored procedures), run them in a Volcano function with the standard `pg` library:
 
 ```javascript
-// Call a Lambda function for complex queries
+// Call a function for complex queries
 const { data, error } = await volcano.functions.invoke('get-dashboard-stats', {
   timeframe: 'last-30-days',
 });
 ```
 
-See the [Functions guide](./functions.md) for more details on Lambda functions.
+See the [Functions guide](./functions.md) for more details on functions.
 
 ## Next Steps
 
 - [Storage](./storage.md) - Upload and manage files
 - [Realtime](./realtime.md) - Subscribe to database changes
-- [Functions](./functions.md) - Complex queries with Lambda functions
+- [Functions](./functions.md) - Complex queries in functions
