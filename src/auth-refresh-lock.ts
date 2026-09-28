@@ -10,16 +10,17 @@ let processQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * Serializes refresh-token use across the tabs and SDK instances that share
- * browser storage. When another holder outlasts the wait, `unavailable` runs
- * instead of `task`; taking the lock anyway would spend a rotated token twice.
+ * browser storage. `task` learns whether it holds the cross-tab lock or only
+ * this page's. When another holder outlasts the wait, `unavailable` runs
+ * instead; taking the lock anyway would spend a rotated token twice.
  */
 export function withRefreshLock<Result>(
   requestTimeoutMs: number,
-  task: () => Promise<Result>,
+  task: (shared: boolean) => Promise<Result>,
   unavailable: () => Promise<Result>,
 ): Promise<Result> {
   if (!isBrowser()) {
-    return task();
+    return task(false);
   }
   const locks = webLocks();
   if (locks === null) {
@@ -48,7 +49,7 @@ function isLockManager(value: unknown): value is LockManager {
 async function requestWebLock<Result>(
   locks: LockManager,
   waitMs: number,
-  task: () => Promise<Result>,
+  task: (shared: boolean) => Promise<Result>,
   unavailable: () => Promise<Result>,
 ): Promise<Result> {
   const controller = new AbortController();
@@ -59,7 +60,7 @@ async function requestWebLock<Result>(
   try {
     // Settling inside the callback separates a failed task from a lock that was never granted.
     [outcome] = await locks.request(REFRESH_LOCK_NAME, { signal: controller.signal }, () =>
-      Promise.allSettled([task()]),
+      Promise.allSettled([task(true)]),
     );
   } catch {
     // Aborting after the grant has no effect, so only an expired wait is aborted here.
@@ -74,8 +75,8 @@ async function requestWebLock<Result>(
   throw outcome.reason;
 }
 
-function queueInProcess<Result>(task: () => Promise<Result>): Promise<Result> {
-  const run = processQueue.then(task);
+function queueInProcess<Result>(task: (shared: boolean) => Promise<Result>): Promise<Result> {
+  const run = processQueue.then(() => task(false));
   processQueue = Promise.allSettled([run]);
   return run;
 }

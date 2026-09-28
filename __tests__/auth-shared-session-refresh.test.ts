@@ -205,6 +205,7 @@ describe('a rejected refresh', () => {
   });
 
   it('removes stored credentials that still hold the rejected token', async () => {
+    installWebLocks();
     store(accessToken(1, -60), 'refresh-1');
     const current = tab();
     fetchMock.mockResolvedValueOnce(reply(401, { error: 'invalid or expired refresh token' }));
@@ -214,4 +215,30 @@ describe('a rejected refresh', () => {
     expect(current.accessToken).toBeNull();
     expect(stored()).toEqual([null, null]);
   });
+
+  it('keeps stored credentials without a cross-tab lock', async () => {
+    store(accessToken(1, -60), 'refresh-1');
+    const current = tab();
+    fetchMock.mockResolvedValueOnce(reply(401, { error: 'invalid or expired refresh token' }));
+
+    const { error } = await current.auth.refreshSession();
+    expect(error?.message).toBe('invalid or expired refresh token');
+    expect(current.accessToken).toBeNull();
+    expect(stored()).toEqual([accessToken(1, -60), 'refresh-1']);
+  });
+});
+
+it('signs out with the credentials another tab rotated', async () => {
+  installWebLocks();
+  store(accessToken(1, -60), 'refresh-1');
+  const current = tab();
+  const rotated = accessToken(2);
+  store(rotated, 'refresh-2');
+  fetchMock.mockResolvedValueOnce(reply(204));
+
+  await expect(current.auth.signOut()).resolves.toEqual({ error: null });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchCall(0)[0]).toBe(`https://api.test/auth/user/sessions/${sessionId}`);
+  expect(fetchCall(0)[1]?.headers).toMatchObject({ Authorization: `Bearer ${rotated}` });
+  expect(stored()).toEqual([null, null]);
 });

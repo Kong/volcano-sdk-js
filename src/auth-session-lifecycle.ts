@@ -56,14 +56,18 @@ export interface AuthLifecycleHost {
   _isAuthContextCurrent(context: AuthContext): boolean;
   _anonFetch(path: string, options: RequestInit): Promise<RequestResult>;
   _fetchSessionRefresh(context: AuthContext): Promise<FetchedRefresh>;
-  _withRefreshLock(
-    task: () => Promise<RefreshResult>,
-    unavailable: () => Promise<RefreshResult>,
-  ): Promise<RefreshResult>;
+  _withRefreshLock<Result>(
+    task: (shared: boolean) => Promise<Result>,
+    unavailable: () => Promise<Result>,
+  ): Promise<Result>;
   _persistedSessionContext(context: AuthContext): PersistedAuthContext | null;
   _adoptPersistedSession(context: AuthContext, persisted: PersistedAuthContext): boolean;
   _setRefreshedSession(data: CompleteSessionFields, context: AuthContext): boolean;
-  _clearRejectedSession(context: AuthContext, rejectedRefreshToken: string | null): boolean;
+  _clearRejectedSession(
+    context: AuthContext,
+    rejectedRefreshToken: string | null,
+    shared: boolean,
+  ): boolean;
   _clearSession(context: AuthContext): boolean;
   _clearSessionAtGeneration(generation: number): boolean;
 }
@@ -113,10 +117,14 @@ function credentialsForSignOut(
 async function logoutError(
   host: AuthLifecycleHost,
   context: AuthContext,
-  refreshing: Promise<RefreshResult> | null,
+  preceding: PrecedingRefresh,
 ): Promise<unknown> {
-  const preceding = await precedingRefresh(refreshing);
   const { accessToken, refreshToken } = credentialsForSignOut(context, preceding);
+  const persisted = host._persistedSessionContext({ ...context, accessToken, refreshToken });
+  if (persisted !== null) {
+    // Another tab rotated this session, so only its stored credentials still work.
+    return revokeAccessSession(host, persisted, persisted.sessionId, null);
+  }
   const verified = context.operations.hasVerifiedPair(accessToken, refreshToken);
   const sessionId = extractSessionIdFromToken(context.accessToken);
   if (sessionId !== null && !verified) {
@@ -165,7 +173,12 @@ export async function signOutCaptured(
 ): Promise<SignOutResult> {
   let error: unknown;
   try {
-    error = await logoutError(host, context, refreshing);
+    // Await this client's refresh first: it takes the same lock.
+    const preceding = await precedingRefresh(refreshing);
+    // Revocation can spend the rotating refresh token, so it waits for other tabs'
+    // refreshes; past the wait it still revokes rather than leave the session active.
+    const revoke = () => logoutError(host, context, preceding);
+    error = await host._withRefreshLock(revoke, revoke);
   } catch (reason) {
     error = normalizedError(reason, 'Session revocation failed');
   }
@@ -288,71 +301,82 @@ function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string |
   return host.currentUser?.id ?? null;
 }
 
+interface RefreshAttempt {
+  readonly context: AuthContext;
+  // The credentials this attempt knows to be current or has just spent.
+  readonly spent: AuthContext;
+  // Whether the attempt holds the cross-tab lock rather than an in-page one.
+  readonly shared: boolean;
+}
+
+interface RefreshOutcome {
+  readonly result: RefreshResult;
+  readonly attempt: RefreshAttempt;
+}
+
 // The server rejects a rotated refresh token, so one that another tab or instance
 // already spent must not be sent again.
 function refreshResult(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {
   return host._withRefreshLock(
-    () => refreshPersistedSession(host, context),
-    () => Promise.resolve(adoptPersisted(host, context) ?? refreshLockTimeout()),
+    (shared) => refreshPersistedSession(host, { context, spent: context, shared }),
+    () =>
+      Promise.resolve(
+        adoptedRefresh(host, context, host._persistedSessionContext(context)) ??
+          refreshLockTimeout(),
+      ),
   );
 }
 
 async function refreshPersistedSession(
   host: AuthLifecycleHost,
-  context: AuthContext,
+  attempt: RefreshAttempt,
 ): Promise<RefreshResult> {
-  const persisted = host._persistedSessionContext(context);
-  // Storage holds no profile, so a client that has not loaded its user refreshes instead.
-  const adopted = host.currentUser === null ? null : adoptedRefresh(host, context, persisted);
+  const first = await attemptRefresh(host, attempt);
+  // Without a cross-tab lock, another tab can rotate this session during the request.
+  const rotated =
+    isRejected(first.result) && host._persistedSessionContext(first.attempt.spent) !== null;
+  const outcome = rotated ? await attemptRefresh(host, first.attempt) : first;
+  return isRejected(outcome.result)
+    ? clearRejected(host, outcome.attempt, outcome.result)
+    : outcome.result;
+}
+
+async function attemptRefresh(
+  host: AuthLifecycleHost,
+  attempt: RefreshAttempt,
+): Promise<RefreshOutcome> {
+  const { context, spent } = attempt;
+  const persisted = host._persistedSessionContext(spent);
+  const adopted = adoptedRefresh(host, context, persisted);
   if (adopted !== null) {
-    return adopted;
+    return { result: adopted, attempt };
   }
-  const source = persisted ?? context;
+  const source = persisted ?? spent;
   const result = await host._fetchSessionRefresh(source);
-  return context.operations.signingOut === null
-    ? commitRefresh(host, context, source, result)
-    : result;
-}
-
-function commitRefresh(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-  source: AuthContext,
-  result: FetchedRefresh,
-): RefreshResult {
-  if (result.ok === true) {
+  if (result.ok === true && context.operations.signingOut === null) {
     host._setRefreshedSession(result.data, context);
-    return result;
   }
-  return result.status === 401 || result.status === 403
-    ? rejectedRefresh(host, context, source, result)
-    : result;
+  return { result, attempt: { ...attempt, spent: source } };
 }
 
-function rejectedRefresh(
+function isRejected(result: RefreshResult): result is FailedRefresh {
+  return result.status === 401 || result.status === 403;
+}
+
+function clearRejected(
   host: AuthLifecycleHost,
-  context: AuthContext,
-  source: AuthContext,
+  attempt: RefreshAttempt,
   result: FailedRefresh,
 ): RefreshResult {
-  // Without a cross-tab lock, another tab can rotate this session during the request.
-  const rotated = adoptPersisted(host, context, source);
-  if (rotated !== null) {
-    return rotated;
+  const { context, spent, shared } = attempt;
+  if (context.operations.signingOut === null) {
+    context.operations.refreshClearedSession = host._clearRejectedSession(
+      context,
+      spent.refreshToken,
+      shared,
+    );
   }
-  context.operations.refreshClearedSession = host._clearRejectedSession(
-    context,
-    source.refreshToken,
-  );
   return result;
-}
-
-function adoptPersisted(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-  spent: AuthContext = context,
-): AdoptedRefresh | null {
-  return adoptedRefresh(host, context, host._persistedSessionContext(spent));
 }
 
 function adoptedRefresh(
@@ -360,7 +384,8 @@ function adoptedRefresh(
   context: AuthContext,
   persisted: PersistedAuthContext | null,
 ): AdoptedRefresh | null {
-  if (persisted === null) {
+  // Storage holds no profile, so a client that has not loaded its user refreshes instead.
+  if (persisted === null || host.currentUser === null) {
     return null;
   }
   const expiry = extractExpiryFromToken(persisted.accessToken) ?? 0;

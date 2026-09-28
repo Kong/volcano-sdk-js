@@ -38,6 +38,10 @@ function unexpected(): Promise<string> {
   return Promise.reject(new Error('unexpected lock outcome'));
 }
 
+function unexpectedShared(): Promise<boolean> {
+  return Promise.reject(new Error('unexpected lock outcome'));
+}
+
 beforeEach(() => {
   setGlobal('window', { document: {} });
 });
@@ -57,9 +61,9 @@ it('runs outside a browser without requesting a lock', async () => {
   Reflect.deleteProperty(globalThis, 'window');
   const request = lockRequest(() => unexpected());
 
-  await expect(withRefreshLock(1000, () => Promise.resolve('server'), unexpected)).resolves.toBe(
-    'server',
-  );
+  await expect(
+    withRefreshLock(1000, (shared) => Promise.resolve(shared), unexpectedShared),
+  ).resolves.toBe(false);
   expect(request).not.toHaveBeenCalled();
 });
 
@@ -77,7 +81,7 @@ describe('without Web Locks', () => {
     setGlobal('navigator', browserNavigator);
     const first = deferred<string>();
     const firstStarted = signal();
-    const second = jest.fn(() => Promise.resolve('second'));
+    const second = jest.fn((shared: boolean) => Promise.resolve(`second shared=${String(shared)}`));
 
     const running = withRefreshLock(
       1000,
@@ -96,7 +100,7 @@ describe('without Web Locks', () => {
 
     first.resolve('first');
     await expect(running).resolves.toBe('first');
-    await expect(queued).resolves.toBe('second');
+    await expect(queued).resolves.toBe('second shared=false');
   });
 
   it('continues the queue after a task fails', async () => {
@@ -116,9 +120,9 @@ describe('with Web Locks', () => {
     jest.useFakeTimers();
     const request = lockRequest((_name, _options, callback) => Promise.resolve(callback(null)));
 
-    await expect(withRefreshLock(1000, () => Promise.resolve('locked'), unexpected)).resolves.toBe(
-      'locked',
-    );
+    await expect(
+      withRefreshLock(1000, (shared) => Promise.resolve(shared), unexpectedShared),
+    ).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(
       'volcano-sdk:refresh-token',
       { signal: expect.any(AbortSignal) },
@@ -156,11 +160,11 @@ describe('with Web Locks', () => {
   it('coordinates in this page when the lock request fails', async () => {
     jest.useFakeTimers();
     lockRequest(() => Promise.reject(new DOMException('Opaque origin', 'SecurityError')));
-    const unavailable = jest.fn(unexpected);
+    const unavailable = jest.fn(unexpectedShared);
 
     await expect(
-      withRefreshLock(1000, () => Promise.resolve('in page'), unavailable),
-    ).resolves.toBe('in page');
+      withRefreshLock(1000, (shared) => Promise.resolve(shared), unavailable),
+    ).resolves.toBe(false);
     expect(unavailable).not.toHaveBeenCalled();
     expect(jest.getTimerCount()).toBe(0);
   });

@@ -28,6 +28,17 @@ function uninitializedResolver(): never {
   throw new Error('Refresh promise was not initialized');
 }
 
+// Jest mocks erase generic signatures, so these doubles record calls separately.
+function lockWith(shared: boolean, calls = jest.fn()): AuthLifecycleHost['_withRefreshLock'] {
+  return (task) => {
+    calls();
+    return task(shared);
+  };
+}
+
+const unavailableLock: AuthLifecycleHost['_withRefreshLock'] = (_task, unavailable) =>
+  unavailable();
+
 function fixture(refreshToken: string | null = 'refresh'): {
   host: AuthLifecycleHost;
   context: AuthContext;
@@ -64,7 +75,7 @@ function fixture(refreshToken: string | null = 'refresh'): {
         error: null,
       } satisfies FetchedRefresh),
     ),
-    _withRefreshLock: jest.fn((task: () => Promise<RefreshResult>) => task()),
+    _withRefreshLock: lockWith(true),
     _persistedSessionContext: jest.fn(() => null),
     _adoptPersistedSession: jest.fn(() => true),
     _setRefreshedSession: jest.fn(() => true),
@@ -270,7 +281,7 @@ test('a forbidden refresh clears the captured session', async () => {
   );
 
   await expect(refreshSessionForContext(host, context)).resolves.toEqual({ session: null, error });
-  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'refresh');
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'refresh', true);
   expect(Reflect.get(host, '_clearSession')).not.toHaveBeenCalled();
   expect(context.operations.refreshClearedSession).toBe(true);
 });
@@ -375,7 +386,12 @@ function persistedFrom(
 ): PersistedAuthContext {
   const claims = expiresIn === null ? {} : { exp: nowSeconds + expiresIn };
   const accessToken = `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
-  return { ...context, accessToken, refreshToken };
+  return {
+    ...context,
+    accessToken,
+    refreshToken,
+    sessionId: '00000000-0000-4000-8000-000000000001',
+  };
 }
 
 function persistedSessions(
@@ -431,10 +447,11 @@ test.each([30, -60, null])(
   async (expiresIn) => {
     const { host, context } = fixture();
     const persisted = persistedFrom(context, expiresIn);
-    persistedSessions(host, persisted);
+    persistedSessions(host, persisted, persistedFrom(context, 3600, 'later'));
 
     await expect(refreshSessionForContext(host, context)).resolves.toMatchObject({ error: null });
     expect(Reflect.get(host, '_adoptPersistedSession')).not.toHaveBeenCalled();
+    expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledTimes(1);
     expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledWith(persisted);
     expect(Reflect.get(host, '_setRefreshedSession')).toHaveBeenCalledWith(session, context);
   },
@@ -447,7 +464,7 @@ test.each([
   const { host, context } = fixture();
   const spent = expiresIn === null ? null : persistedFrom(context, expiresIn, 'expired');
   const rotated = persistedFrom(context, 3600, 'winner');
-  const persistedLookup = persistedSessions(host, spent, rotated);
+  const persistedLookup = persistedSessions(host, spent, rotated, rotated);
   rejectRefresh(host);
 
   const result = await refreshSessionForContext(host, context);
@@ -456,7 +473,50 @@ test.each([
     error: null,
   });
   expect(persistedLookup).toHaveBeenLastCalledWith(spent ?? context);
+  expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledTimes(1);
   expect(Reflect.get(host, '_clearRejectedSession')).not.toHaveBeenCalled();
+});
+
+test('a client without a loaded user retries once with a rotation stored during rejection', async () => {
+  const { host, context } = fixture();
+  Object.assign(host, { currentUser: null });
+  const rotated = persistedFrom(context, 3600, 'winner');
+  persistedSessions(host, null, rotated, rotated);
+  const refreshes = jest
+    .fn<(source: AuthContext) => Promise<FetchedRefresh>>()
+    .mockResolvedValueOnce({ ok: false, status: 401, data: null, error: new Error('stale') })
+    .mockResolvedValueOnce({ ok: true, status: 200, data: session, error: null });
+  host._fetchSessionRefresh = refreshes;
+
+  await expect(refreshSessionForContext(host, context)).resolves.toMatchObject({ error: null });
+  expect(refreshes.mock.calls).toEqual([[context], [rotated]]);
+  expect(Reflect.get(host, '_adoptPersistedSession')).not.toHaveBeenCalled();
+  expect(Reflect.get(host, '_setRefreshedSession')).toHaveBeenCalledWith(session, context);
+});
+
+test('a refresh retries a stored rotation only once', async () => {
+  const { host, context } = fixture();
+  const rotated = persistedFrom(context, 0, 'winner');
+  persistedSessions(host, null, rotated, rotated, persistedFrom(context, 3600, 'later'));
+  rejectRefresh(host);
+
+  const result = await refreshSessionForContext(host, context);
+  expect(result.error?.message).toBe('stale');
+  expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledTimes(2);
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'winner', true);
+});
+
+test('a rejection under an in-page lock keeps shared storage', async () => {
+  const { host, context } = fixture();
+  host._withRefreshLock = lockWith(false);
+  rejectRefresh(host);
+
+  await refreshSessionForContext(host, context);
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(
+    context,
+    'refresh',
+    false,
+  );
 });
 
 test('refresh clears the session whose persisted rotation was rejected', async () => {
@@ -467,25 +527,68 @@ test('refresh clears the session whose persisted rotation was rejected', async (
 
   const result = await refreshSessionForContext(host, context);
   expect(result.error?.message).toBe('stale');
-  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'expired');
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'expired', true);
   expect(context.operations.refreshClearedSession).toBe(false);
 });
 
 test.each([
-  ['a fresh persisted rotation', 3600, null],
-  ['an expired persisted rotation', 0, 'Timed out waiting for another session refresh'],
-  ['no persisted rotation', null, 'Timed out waiting for another session refresh'],
-])('an unavailable refresh lock uses %s', async (_label, expiresIn, message) => {
+  ['a fresh persisted rotation', 3600, true, null],
+  [
+    'a fresh rotation without a loaded user',
+    3600,
+    false,
+    'Timed out waiting for another session refresh',
+  ],
+  ['an expired persisted rotation', 0, true, 'Timed out waiting for another session refresh'],
+  ['no persisted rotation', null, true, 'Timed out waiting for another session refresh'],
+])('an unavailable refresh lock uses %s', async (_label, expiresIn, loaded, message) => {
   const { host, context } = fixture();
+  if (!loaded) {
+    Object.assign(host, { currentUser: null });
+  }
   persistedSessions(host, expiresIn === null ? null : persistedFrom(context, expiresIn));
-  host._withRefreshLock = jest.fn(
-    (_task: () => Promise<RefreshResult>, unavailable: () => Promise<RefreshResult>) =>
-      unavailable(),
-  );
+  host._withRefreshLock = unavailableLock;
 
   const result = await refreshSessionForContext(host, context);
   expect(result.error?.message ?? null).toBe(message);
   expect(result.session === null).toBe(message !== null);
   expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
   expect(Reflect.get(host, '_clearRejectedSession')).not.toHaveBeenCalled();
+});
+
+test('sign-out revokes with a rotation another tab stored', async () => {
+  const { host, context } = fixture();
+  const rotated = persistedFrom(context, 3600, 'winner');
+  const lookup = persistedSessions(host, rotated);
+  const lockCalls = jest.fn();
+  host._withRefreshLock = lockWith(true, lockCalls);
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({ ok: true, status: 204, data: null, error: null } satisfies RequestResult),
+  );
+
+  await expect(signOutCaptured(host, context, null)).resolves.toEqual({ error: null });
+  expect(lockCalls).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledWith({
+    ...context,
+    accessToken: 'access',
+    refreshToken: 'refresh',
+  });
+  expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledWith(
+    '/auth/user/sessions/00000000-0000-4000-8000-000000000001',
+    { method: 'DELETE', headers: { Authorization: `Bearer ${rotated.accessToken}` } },
+  );
+});
+
+test('sign-out still revokes when the refresh lock is unavailable', async () => {
+  const { host, context } = fixture();
+  host._withRefreshLock = unavailableLock;
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({ ok: true, status: 204, data: null, error: null } satisfies RequestResult),
+  );
+
+  await expect(signOutCaptured(host, context, null)).resolves.toEqual({ error: null });
+  expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledWith('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: 'refresh' }),
+  });
 });

@@ -199,7 +199,12 @@ test('reads a rotation of the captured server session from storage', () => {
   const { host, context } = rotatedFixture();
 
   const persisted = persistedSessionContext(host, context);
-  expect(persisted).toEqual({ ...context, accessToken: rotatedAccess, refreshToken: 'rotated' });
+  expect(persisted).toEqual({
+    ...context,
+    accessToken: rotatedAccess,
+    refreshToken: 'rotated',
+    sessionId,
+  });
   expect(Object.isFrozen(persisted)).toBe(true);
 });
 
@@ -297,20 +302,25 @@ test.each(['stale generation', 'replaced refresh token', 'sign-out'])(
 );
 
 test.each([
-  ['still holds the rejected token', 'old-refresh', 0],
-  ['holds another token', 'newer-refresh', 2],
-])('clears a rejected session when storage %s', (_label, storedRefresh, storedKeys) => {
+  ['still holds the rejected token', 'old-refresh', true, 0],
+  ['holds another token', 'newer-refresh', true, 2],
+  ['may be changing without a cross-tab lock', 'old-refresh', false, 2],
+])('clears a rejected session when storage %s', (_label, storedRefresh, shared, storedKeys) => {
   const { host, storage } = fixture();
   storage.set('volcano_refresh_token', storedRefresh);
   const notify = jest.fn<(value: unknown) => void>();
   host._authCallbacks.push(notify);
   const context = captureAuthContext(host);
 
-  expect(clearRejectedSession(host, { ...context, generation: 2 }, 'old-refresh')).toBe(false);
-  expect(clearRejectedSession(host, { ...context, refreshToken: 'other' }, 'other')).toBe(false);
+  expect(clearRejectedSession(host, { ...context, generation: 2 }, 'old-refresh', shared)).toBe(
+    false,
+  );
+  expect(clearRejectedSession(host, { ...context, refreshToken: 'other' }, 'other', shared)).toBe(
+    false,
+  );
   expect(host.accessToken).toBe('old-access');
 
-  expect(clearRejectedSession(host, context, 'old-refresh')).toBe(true);
+  expect(clearRejectedSession(host, context, 'old-refresh', shared)).toBe(true);
   expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual([null, null, null]);
   expect(host._sessionGeneration).toBe(4);
   expect(storage.size).toBe(storedKeys);

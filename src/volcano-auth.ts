@@ -861,10 +861,10 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  _withRefreshLock(
-    task: () => Promise<RefreshResult>,
-    unavailable: () => Promise<RefreshResult>,
-  ): Promise<RefreshResult> {
+  _withRefreshLock<Result>(
+    task: (shared: boolean) => Promise<Result>,
+    unavailable: () => Promise<Result>,
+  ): Promise<Result> {
     return withRefreshLock(this.timeout, task, unavailable);
   }
 
@@ -1143,8 +1143,9 @@ class VolcanoAuth {
   _clearRejectedSession(
     context: AuthContext,
     rejectedRefreshToken: string | null,
+    shared: boolean,
   ): ReturnType<typeof clearRejectedSession> {
-    return clearRejectedSession(this, context, rejectedRefreshToken);
+    return clearRejectedSession(this, context, rejectedRefreshToken, shared);
   }
 
   /** @internal */

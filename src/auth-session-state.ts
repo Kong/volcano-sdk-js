@@ -17,6 +17,7 @@ interface SessionInput {
 export interface PersistedAuthContext extends AuthContext {
   readonly accessToken: string;
   readonly refreshToken: string;
+  readonly sessionId: string;
 }
 
 export interface AuthSessionStateHost {
@@ -121,11 +122,13 @@ export function clearRejectedSession(
   host: AuthSessionStateHost,
   context: AuthContext,
   rejectedRefreshToken: string | null,
+  shared: boolean,
 ): boolean {
   if (!host._isAuthContextCurrent(context) || context.refreshToken !== host.refreshToken) {
     return false;
   }
-  const stored = host._getStorageItem(REFRESH_TOKEN_KEY) === rejectedRefreshToken;
+  // Checking storage and then removing it is atomic only under the cross-tab lock.
+  const stored = shared && host._getStorageItem(REFRESH_TOKEN_KEY) === rejectedRefreshToken;
   return clearSessionAtGeneration(host, context.generation, stored);
 }
 
@@ -174,7 +177,7 @@ export function persistedSessionContext(
   if (sessionId === null || !continuesSession(accessToken, sessionId)) {
     return null;
   }
-  return Object.freeze({ ...context, accessToken, refreshToken });
+  return Object.freeze({ ...context, accessToken, refreshToken, sessionId });
 }
 
 function isRotatedToken(stored: string | null, captured: string | null): stored is string {

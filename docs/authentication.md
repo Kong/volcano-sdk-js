@@ -295,7 +295,7 @@ including its user, with `getSession()`.
 
 If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. It removes
 the stored credentials only while storage still holds the rejected refresh token, so a newer
-session stored by another tab remains. A transport error or server failure leaves the current
+session stored by another tab remains (see [Multiple Tabs and Clients](#multiple-tabs-and-clients)). A transport error or server failure leaves the current
 session unchanged so the application can retry. A late refresh response never replaces a newer
 session.
 
@@ -322,7 +322,12 @@ Where the [Web Locks API](https://developer.mozilla.org/docs/Web/API/Web_Locks_A
 the SDK holds the `volcano-sdk:refresh-token` lock while it reads storage, sends the refresh
 request, and stores the result. Other tabs wait for the lock and then adopt the stored result.
 Without Web Locks, the SDK coordinates only the clients in the same page. A client whose refresh
-is rejected still adopts a rotation that another tab stored during the request.
+is rejected still uses a rotation that another tab stored during the request. If none appears, the
+client clears only its own session and leaves storage in place, because another tab could be
+replacing it at that moment.
+
+Sign-out waits for the same lock. If another tab has rotated the session, sign-out revokes it with
+the stored credentials.
 
 If another tab holds the lock longer than the client's request timeout plus one second,
 `refreshSession()` returns an error with no HTTP status and keeps the current session. Web Locks
