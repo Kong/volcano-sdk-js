@@ -8008,8 +8008,8 @@ export interface components {
         /** @description Plan-based limits for realtime features */
         RealtimePlanLimits: {
             /**
-             * @description Stored plan key (`FREE` for HOBBY; `PRO` for SUPERAGENT)
-             * @example FREE
+             * @description Public plan name (HOBBY or SUPERAGENT).
+             * @example HOBBY
              */
             plan?: string;
             /**
