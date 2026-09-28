@@ -28,14 +28,8 @@ npm install @volcano.dev/sdk
 ```
 
 That is the whole list. Checkpointing is done by a runtime the handler never
-imports, and Volcano installs it when it builds a function deployed as durable,
-so it does not belong in your `package.json`.
-
-If you want to see what that runtime is, or pin its version yourself, it is
-[`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js).
-A function that declares it is left exactly as it is by the build — same
-version, same lockfile — so declaring it is how you take that version under your
-own control.
+imports, and Volcano installs and versions it when it builds a function deployed
+as durable, so it does not belong in your `package.json`.
 
 Deploy the result as a durable function — `volcano cloud durable deploy`, or
 `kind: durable` in `volcano-config.yaml`. A durable handler deployed as a
