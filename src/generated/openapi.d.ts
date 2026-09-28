@@ -677,8 +677,8 @@ export interface paths {
          * @description Returns the database's current top queries from pg_stat_statements
          *     ranked by total execution time.
          *
-         *     **PRO plan required.** This endpoint is only available to projects owned
-         *     by users on the PRO billing plan.
+         *     **SUPERAGENT plan required.** This endpoint is only available to projects owned
+         *     by users on the SUPERAGENT billing plan.
          */
         get: operations["getProjectDatabaseQueries"];
         put?: never;
@@ -1053,9 +1053,9 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to count deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The activity window is limited
-         *     to the plan's retention window (FREE: 1 day, PRO: 30 days); older start
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The activity window is limited
+         *     to the plan's retention window (HOBBY: 1 day, SUPERAGENT: 30 days); older start
          *     times are clamped to that window.
          */
         post: operations["getProjectLogActivity"];
@@ -1081,10 +1081,10 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to read deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; requests for
-         *     `resource.type=database` from a FREE-plan project owner return 403.
+         *     databases. Database logs are a SUPERAGENT-plan feature; requests for
+         *     `resource.type=database` from a HOBBY-plan project owner return 403.
          *     Log history (runtime and deployment) is limited to the plan's retention
-         *     window (FREE: 1 day, PRO: 30 days); older time ranges are clamped to that
+         *     window (HOBBY: 1 day, SUPERAGENT: 30 days); older time ranges are clamped to that
          *     window.
          */
         post: operations["searchProjectLogs"];
@@ -1109,12 +1109,12 @@ export interface paths {
          *     resource selector plus `q`, `start_time`, and `limit`,
          *     including runtime logs and function/frontend deployment logs selected
          *     with `resource.deployments`. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The `q` field uses the same
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The `q` field uses the same
          *     syntax as search and activity requests. Do not send `cursor` or
          *     `end_time`; use `/logs/search` for range backfills.
          *     Explicit historical `start_time` values are limited to the plan's
-         *     retention window (FREE: 1 day, PRO: 30 days). Resume with
+         *     retention window (HOBBY: 1 day, SUPERAGENT: 30 days). Resume with
          *     `Last-Event-ID` or the `last_event_id` query parameter. The cursor is
          *     bound to the request body: the resource selector and every filter must
          *     match the original request when reconnecting, otherwise the request is
@@ -1579,7 +1579,7 @@ export interface paths {
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
-         * Configure frontend custom domain (PRO)
+         * Configure frontend custom domain (SUPERAGENT)
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
@@ -1682,7 +1682,7 @@ export interface paths {
         /**
          * Create a new serverless PostgreSQL database
          * @description Creates a serverless PostgreSQL database in the project.
-         *     Each project can hold 1 database on Free and up to 10,000 on Pro.
+         *     Each project can hold 1 database on Hobby and up to 10,000 on Superagent.
          *     Requests over the plan's cap return 403.
          */
         post: operations["createDatabase"];
@@ -3183,8 +3183,8 @@ export interface paths {
         /**
          * Create email template
          * @description Creates a custom email template for the project. Custom email templates
-         *     are a PRO-plan feature: requests from a FREE-plan project owner are
-         *     rejected with 403, and FREE projects always send the built-in default
+         *     are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner are
+         *     rejected with 403, and HOBBY projects always send the built-in default
          *     templates regardless of any previously saved custom rows.
          *     Every project is created with one template per type, so customizing one
          *     is usually a PUT; creating a type the project already has returns 409.
@@ -3208,9 +3208,9 @@ export interface paths {
         get: operations["getEmailTemplate"];
         /**
          * Update email template
-         * @description Updates a custom email template. Custom email templates are a PRO-plan
-         *     feature: requests from a FREE-plan project owner are rejected with 403
-         *     (including after a PRO→FREE downgrade), so a FREE project cannot modify
+         * @description Updates a custom email template. Custom email templates are a SUPERAGENT-plan
+         *     feature: requests from a HOBBY-plan project owner are rejected with 403
+         *     (including after a SUPERAGENT→HOBBY downgrade), so a HOBBY project cannot modify
          *     templates and always sends the built-in defaults.
          */
         put: operations["updateEmailTemplate"];
@@ -3218,7 +3218,7 @@ export interface paths {
         /**
          * Delete email template
          * @description Deletes a custom template, reverting to the default. Custom email
-         *     templates are a PRO-plan feature: requests from a FREE-plan project owner
+         *     templates are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner
          *     are rejected with 403.
          */
         delete: operations["deleteEmailTemplate"];
@@ -4645,9 +4645,9 @@ export interface components {
              *     403, and `allowed_email_domains_mode` decides whether sign-in is
              *     covered as well.
              *
-             *     The allowlist is a PRO feature to configure and to enforce. A
+             *     The allowlist is a SUPERAGENT feature to configure and to enforce. A
              *     downgrade parks it: the domains are still returned here and stop
-             *     being applied until the project is back on PRO.
+             *     being applied until the project is back on SUPERAGENT.
              * @example [
              *       "domain1.com",
              *       "domain2.com"
@@ -7299,7 +7299,7 @@ export interface components {
              * @description Platform plan applied to the project when available
              * @enum {string}
              */
-            plan?: "FREE" | "PRO";
+            plan?: "HOBBY" | "SUPERAGENT";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions
@@ -7510,8 +7510,8 @@ export interface components {
              *     prefix) and must be bare domains such as `domain1.com`. Matching is
              *     exact, so subdomains need their own entry. At most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only declare the list it already has or remove the
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only declare the list it already has or remove the
              *     restriction, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -7560,7 +7560,7 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with BYOC TLS (PRO plan). `tls` is required when the
+         * @description Custom domain with BYOC TLS (SUPERAGENT plan). `tls` is required when the
          *     domain is first created and optional afterwards: providing new TLS
          *     material for the same domain rotates the certificate in place (zero
          *     downtime); omitting `tls` keeps the stored certificate. TLS material is
@@ -7595,16 +7595,16 @@ export interface components {
         };
         ProjectConfigEmailTemplate: {
             subject?: string;
-            /** @description HTML body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description HTML body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             html_body?: string;
-            /** @description Plain-text body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description Plain-text body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             text_body?: string;
         };
         /**
          * @description Email templates keyed by type. Fully synced when declared - template
          *     types absent from a declared map revert to server defaults (custom
          *     bodies deleted, subject overrides cleared). Custom template bodies
-         *     require the PRO plan; subject-only changes are available on FREE.
+         *     require the SUPERAGENT plan; subject-only changes are available on HOBBY.
          */
         ProjectConfigEmailTemplates: {
             confirmation?: components["schemas"]["ProjectConfigEmailTemplate"];
@@ -7666,7 +7666,7 @@ export interface components {
             css?: string;
         };
         /**
-         * @description Hosted auth pages keyed by page type (PRO plan). Upsert-only: omitted
+         * @description Hosted auth pages keyed by page type (SUPERAGENT plan). Upsert-only: omitted
          *     pages are left untouched (there is no delete for hosted pages).
          */
         ProjectConfigHostedPages: {
@@ -7714,7 +7714,7 @@ export interface components {
         /** @description Project-level settings. `name` renames the project. */
         ProjectConfigProject: {
             name?: string;
-            /** @description Region policy. `false` requires `selected_regions` (PRO plan). */
+            /** @description Region policy. `false` requires `selected_regions` (SUPERAGENT plan). */
             all_regions?: boolean;
             /** @description Region subset (bare region names). Requires `all_regions=false`. */
             selected_regions?: string[];
@@ -8008,7 +8008,7 @@ export interface components {
         /** @description Plan-based limits for realtime features */
         RealtimePlanLimits: {
             /**
-             * @description Plan name (FREE or PRO)
+             * @description Stored plan key (`FREE` for HOBBY; `PRO` for SUPERAGENT)
              * @example FREE
              */
             plan?: string;
@@ -8345,8 +8345,8 @@ export interface components {
              *     prefix); matching is exact, so subdomains need their own entry. At
              *     most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only remove the restriction and gets 403 for any
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only remove the restriction and gets 403 for any
              *     other change, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -10227,7 +10227,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden (for example, selecting subset regions on non-PRO plan) */
+            /** @description Forbidden (for example, selecting subset regions on non-SUPERAGENT plan) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14649,7 +14649,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - custom domains require PRO plan */
+            /** @description Forbidden - custom domains require SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15656,7 +15656,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupList"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15735,7 +15735,7 @@ export interface operations {
             };
             /**
              * @description The database has reached its backup allowance, or the owner's plan
-             *     does not include backups, which are PRO-only.
+             *     does not include backups, which are SUPERAGENT-only.
              */
             403: {
                 headers: {
@@ -15809,7 +15809,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackup"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15887,7 +15887,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15952,7 +15952,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupSchedule"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16033,7 +16033,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16098,7 +16098,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestoreList"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16168,7 +16168,7 @@ export interface operations {
             };
             /**
              * @description The owner's plan does not include backups or point-in-time restore.
-             *     Both are PRO-only.
+             *     Both are SUPERAGENT-only.
              */
             403: {
                 headers: {
@@ -16236,7 +16236,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestore"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19109,7 +19109,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19186,7 +19186,7 @@ export interface operations {
                     "application/json": components["schemas"]["EmailTemplate"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19224,7 +19224,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19344,7 +19344,7 @@ export interface operations {
             /**
              * @description The update would turn on, widen, or otherwise edit the email domain
              *     allowlist (`allowed_email_domains`, `allowed_email_domains_mode`)
-             *     for a project that is not on the PRO plan. A FREE project keeps
+             *     for a project that is not on the SUPERAGENT plan. A HOBBY project keeps
              *     whatever allowlist it already has — parked, enforcing nothing until
              *     it upgrades — and may still remove it, so a downgrade never leaves a
              *     project locked out of its own signups.
@@ -22787,7 +22787,7 @@ export interface operations {
             };
             /**
              * @description File size exceeds plan-based limits. This occurs when:
-             *     - File exceeds the plan-based maximum file size (FREE or PRO tier)
+             *     - File exceeds the plan-based maximum file size (HOBBY or SUPERAGENT tier)
              *     - Upload would exceed the project's total storage quota
              */
             413: {

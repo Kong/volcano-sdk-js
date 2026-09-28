@@ -73,6 +73,9 @@ type _ListProjectsAcceptsMetadataExpansions = Assert<
   Equal<NonNullable<ListProjectsQuery['include']>[number], 'git_connection' | 'health'>
 >;
 type Project = OpenAPIComponents['schemas']['Project'];
+type _ProjectPlanUsesPublicNames = Assert<
+  Equal<NonNullable<Project['plan']>, 'HOBBY' | 'SUPERAGENT'>
+>;
 type _ProjectGitConnectionUsesSummary = Assert<
   Equal<
     NonNullable<Project['git_connection']>,
@@ -227,6 +230,7 @@ export type OpenApiContractChecks = [
   _AppMetadataAcceptsProperties,
   _AuthUserBanCanBeNull,
   _ListProjectsAcceptsMetadataExpansions,
+  _ProjectPlanUsesPublicNames,
   _ProjectGitConnectionUsesSummary,
   _ProjectHealthUsesSummary,
   _DefaultedRequestFieldsStayOptional,
