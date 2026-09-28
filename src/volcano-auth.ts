@@ -58,6 +58,7 @@ import {
   consumeSessionFromUrl,
   replaceSessionFromUrl,
 } from './auth-redirect.ts';
+import { withRefreshLock } from './auth-refresh-lock.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import {
   type AuthContext,
@@ -72,12 +73,15 @@ import {
   type SignOutResult,
 } from './auth-session-lifecycle.ts';
 import {
+  adoptPersistedSession,
   adoptSessionInMemory,
   captureAuthContext,
+  clearRejectedSession,
   clearSession,
   clearSessionAtGeneration,
   isAuthContextCurrent,
   notifyAuthCallbacks,
+  persistedSessionContext,
   setRefreshedSession,
   setSession,
 } from './auth-session-state.ts';
@@ -856,6 +860,14 @@ class VolcanoAuth {
     return performSessionRefresh(this, context);
   }
 
+  /** @internal */
+  _withRefreshLock(
+    task: () => Promise<RefreshResult>,
+    unavailable: () => Promise<RefreshResult>,
+  ): Promise<RefreshResult> {
+    return withRefreshLock(this.timeout, task, unavailable);
+  }
+
   /**
    * Register a callback for auth state changes.
    * @param {Function} callback - Called with user object (or null) on auth state change
@@ -1112,6 +1124,27 @@ class VolcanoAuth {
     context: AuthContext,
   ): ReturnType<typeof setRefreshedSession> {
     return setRefreshedSession(this, data, context);
+  }
+
+  /** @internal */
+  _persistedSessionContext(context: AuthContext): ReturnType<typeof persistedSessionContext> {
+    return persistedSessionContext(this, context);
+  }
+
+  /** @internal */
+  _adoptPersistedSession(
+    context: AuthContext,
+    persisted: Parameters<typeof adoptPersistedSession>[2],
+  ): ReturnType<typeof adoptPersistedSession> {
+    return adoptPersistedSession(this, context, persisted);
+  }
+
+  /** @internal */
+  _clearRejectedSession(
+    context: AuthContext,
+    rejectedRefreshToken: string | null,
+  ): ReturnType<typeof clearRejectedSession> {
+    return clearRejectedSession(this, context, rejectedRefreshToken);
   }
 
   /** @internal */

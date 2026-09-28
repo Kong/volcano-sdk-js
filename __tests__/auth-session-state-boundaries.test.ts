@@ -2,16 +2,20 @@ import { expect, jest, test } from '@jest/globals';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
 import {
+  adoptPersistedSession,
   adoptSessionInMemory,
   type AuthSessionStateHost,
   captureAuthContext,
+  clearRejectedSession,
   clearSession,
   clearSessionAtGeneration,
   isAuthContextCurrent,
   notifyAuthCallbacks,
+  persistedSessionContext,
   setRefreshedSession,
   setSession,
 } from '../src/auth-session-state.ts';
+import { sessionToken } from './session-fixtures.ts';
 
 const user = { id: 'user-1', email: 'user@example.com', status: 'active' } as const;
 const nextSession = { access_token: 'new-access', refresh_token: 'new-refresh', user };
@@ -30,6 +34,9 @@ function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> }
     refreshToken: 'old-refresh',
     currentUser: user,
     _authCallbacks: [],
+    _getStorageItem(key) {
+      return storage.get(key) ?? null;
+    },
     _setStorageItem(key, value) {
       storage.set(key, value);
     },
@@ -167,6 +174,118 @@ test('clearSession rejects stale ownership and removes only current credentials'
   expect(host._oauthExchangeError).toBeNull();
   expect(host._pendingUrlAuthNotify).toBe(false);
   expect(storage.size).toBe(0);
+  expect(notify).toHaveBeenCalledWith(null);
+});
+
+const sessionId = '00000000-0000-4000-8000-00000000000a';
+const currentAccess = sessionToken(sessionId);
+const rotatedAccess = sessionToken(sessionId, true);
+
+function rotatedFixture(stored: [string | null, string | null] = [rotatedAccess, 'rotated']) {
+  const fixed = fixture();
+  fixed.host.accessToken = currentAccess;
+  fixed.storage.clear();
+  const [access, refresh] = stored;
+  if (access !== null) {
+    fixed.storage.set('volcano_access_token', access);
+  }
+  if (refresh !== null) {
+    fixed.storage.set('volcano_refresh_token', refresh);
+  }
+  return { ...fixed, context: captureAuthContext(fixed.host) };
+}
+
+test('reads a rotation of the captured server session from storage', () => {
+  const { host, context } = rotatedFixture();
+
+  const persisted = persistedSessionContext(host, context);
+  expect(persisted).toEqual({ ...context, accessToken: rotatedAccess, refreshToken: 'rotated' });
+  expect(Object.isFrozen(persisted)).toBe(true);
+});
+
+test.each([
+  ['no stored refresh token', rotatedAccess, null],
+  ['an empty stored refresh token', rotatedAccess, ''],
+  ['the captured refresh token', rotatedAccess, 'old-refresh'],
+  ['no stored access token', null, 'rotated'],
+  ['another server session', sessionToken('00000000-0000-4000-8000-00000000000b'), 'rotated'],
+  ['an access token without a session', 'opaque-access', 'rotated'],
+])('ignores storage with %s', (_label, access, refresh) => {
+  const { host, context } = rotatedFixture([access, refresh]);
+  expect(persistedSessionContext(host, context)).toBeNull();
+});
+
+test('ignores storage when the captured access token has no session', () => {
+  const { host, storage } = fixture();
+  storage.set('volcano_access_token', 'other-opaque-access');
+  storage.set('volcano_refresh_token', 'rotated');
+  expect(persistedSessionContext(host, captureAuthContext(host))).toBeNull();
+});
+
+test.each([
+  ['a known user', user, [user]],
+  ['an unknown user', null, []],
+])('adopts persisted credentials for %s without writing storage', (_label, currentUser, calls) => {
+  const { host, storage, context } = rotatedFixture();
+  host.currentUser = currentUser;
+  const notify = jest.fn<(value: unknown) => void>();
+  host._authCallbacks.push(notify);
+  const persisted = persistedSessionContext(host, context);
+  if (persisted === null) {
+    throw new Error('Expected a persisted session');
+  }
+  storage.clear();
+
+  expect(adoptPersistedSession(host, context, persisted)).toBe(true);
+  expect([host.accessToken, host.refreshToken, host._sessionGeneration]).toEqual([
+    rotatedAccess,
+    'rotated',
+    3,
+  ]);
+  expect(storage.size).toBe(0);
+  expect(notify.mock.calls).toEqual(calls.map((value) => [value]));
+});
+
+test.each(['stale generation', 'replaced refresh token', 'sign-out'])(
+  'does not adopt persisted credentials after a %s',
+  (change) => {
+    const { host, context } = rotatedFixture();
+    const persisted = persistedSessionContext(host, context);
+    if (persisted === null) {
+      throw new Error('Expected a persisted session');
+    }
+    let captured = context;
+    if (change === 'stale generation') {
+      captured = { ...context, generation: 2 };
+    } else if (change === 'replaced refresh token') {
+      host.refreshToken = 'replacement';
+    } else {
+      void context.operations.signOut(() => Promise.resolve({ error: null }));
+    }
+
+    expect(adoptPersistedSession(host, captured, persisted)).toBe(false);
+    expect(host.accessToken).toBe(currentAccess);
+  },
+);
+
+test.each([
+  ['still holds the rejected token', 'old-refresh', 0],
+  ['holds another token', 'newer-refresh', 2],
+])('clears a rejected session when storage %s', (_label, storedRefresh, storedKeys) => {
+  const { host, storage } = fixture();
+  storage.set('volcano_refresh_token', storedRefresh);
+  const notify = jest.fn<(value: unknown) => void>();
+  host._authCallbacks.push(notify);
+  const context = captureAuthContext(host);
+
+  expect(clearRejectedSession(host, { ...context, generation: 2 }, 'old-refresh')).toBe(false);
+  expect(clearRejectedSession(host, { ...context, refreshToken: 'other' }, 'other')).toBe(false);
+  expect(host.accessToken).toBe('old-access');
+
+  expect(clearRejectedSession(host, context, 'old-refresh')).toBe(true);
+  expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual([null, null, null]);
+  expect(host._sessionGeneration).toBe(4);
+  expect(storage.size).toBe(storedKeys);
   expect(notify).toHaveBeenCalledWith(null);
 });
 

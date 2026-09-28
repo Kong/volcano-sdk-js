@@ -1,9 +1,10 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
-import { expect, jest, test } from '@jest/globals';
+import { beforeEach, expect, jest, test } from '@jest/globals';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import {
   type AuthContext,
   type AuthLifecycleHost,
+  type FetchedRefresh,
   fetchSessionRefresh,
   type RefreshResult,
   refreshSession,
@@ -12,6 +13,7 @@ import {
   signOutCaptured,
   type SignOutResult,
 } from '../src/auth-session-lifecycle.ts';
+import type { PersistedAuthContext } from '../src/auth-session-state.ts';
 
 const session = {
   access_token: 'access',
@@ -60,9 +62,13 @@ function fixture(refreshToken: string | null = 'refresh'): {
         status: 200,
         data: session,
         error: null,
-      } satisfies RefreshResult),
+      } satisfies FetchedRefresh),
     ),
+    _withRefreshLock: jest.fn((task: () => Promise<RefreshResult>) => task()),
+    _persistedSessionContext: jest.fn(() => null),
+    _adoptPersistedSession: jest.fn(() => true),
     _setRefreshedSession: jest.fn(() => true),
+    _clearRejectedSession: jest.fn(() => true),
     _clearSession: jest.fn(() => true),
     _clearSessionAtGeneration: jest.fn(() => true),
   };
@@ -260,18 +266,19 @@ test('a forbidden refresh clears the captured session', async () => {
   const { host, context } = fixture();
   const error = new Error('forbidden');
   host._fetchSessionRefresh = jest.fn(() =>
-    Promise.resolve({ ok: false, status: 403, data: null, error } satisfies RefreshResult),
+    Promise.resolve({ ok: false, status: 403, data: null, error } satisfies FetchedRefresh),
   );
 
   await expect(refreshSessionForContext(host, context)).resolves.toEqual({ session: null, error });
-  expect(Reflect.get(host, '_clearSession')).toHaveBeenCalledWith(context);
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'refresh');
+  expect(Reflect.get(host, '_clearSession')).not.toHaveBeenCalled();
   expect(context.operations.refreshClearedSession).toBe(true);
 });
 
 test('a refresh completing during sign-out cannot return a usable session', async () => {
   const { host, context } = fixture();
-  let complete: (result: RefreshResult) => void = uninitializedResolver;
-  const pending = new Promise<RefreshResult>((resolve) => {
+  let complete: (result: FetchedRefresh) => void = uninitializedResolver;
+  const pending = new Promise<FetchedRefresh>((resolve) => {
     complete = resolve;
   });
   host._fetchSessionRefresh = jest.fn(() => pending);
@@ -290,7 +297,7 @@ test('a refresh completing during sign-out cannot return a usable session', asyn
 test('a nonstandard refresh rejection uses a stable error message', async () => {
   const { host, context } = fixture();
   host._fetchSessionRefresh = jest
-    .fn<() => Promise<RefreshResult>>()
+    .fn<() => Promise<FetchedRefresh>>()
     .mockRejectedValue('transport failed');
 
   await expect(refreshSessionForContext(host, context)).resolves.toEqual({
@@ -319,7 +326,7 @@ test('access-session revocation reports a failed refresh after an unauthorized d
   const { host, context } = fixture();
   const refreshError = new Error('refresh denied');
   host._fetchSessionRefresh = jest.fn(() =>
-    Promise.resolve<RefreshResult>({ ok: false, status: 403, data: null, error: refreshError }),
+    Promise.resolve<FetchedRefresh>({ ok: false, status: 403, data: null, error: refreshError }),
   );
 
   expect(await revokeAccessSession(host, context, 'session-1', null)).toBe(refreshError);
@@ -357,4 +364,117 @@ test('access-session revocation falls back to the delete error for an empty prio
   const preceding = { ok: false, error: null } satisfies Parameters<typeof revokeAccessSession>[3];
 
   expect(await revokeAccessSession(host, context, 'session-1', preceding)).toBe(deleteError);
+});
+
+const nowSeconds = 1_700_000_000;
+
+function persistedFrom(
+  context: AuthContext,
+  expiresIn: number | null,
+  refreshToken = 'rotated',
+): PersistedAuthContext {
+  const claims = expiresIn === null ? {} : { exp: nowSeconds + expiresIn };
+  const accessToken = `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+  return { ...context, accessToken, refreshToken };
+}
+
+function persistedSessions(
+  host: AuthLifecycleHost,
+  ...results: (PersistedAuthContext | null)[]
+): jest.Mock<(context: AuthContext) => PersistedAuthContext | null> {
+  const persisted = jest.fn<(context: AuthContext) => PersistedAuthContext | null>();
+  for (const result of results) {
+    persisted.mockReturnValueOnce(result);
+  }
+  persisted.mockReturnValue(null);
+  host._persistedSessionContext = persisted;
+  return persisted;
+}
+
+function rejectRefresh(host: AuthLifecycleHost, status = 401): void {
+  host._fetchSessionRefresh = jest.fn(() =>
+    Promise.resolve<FetchedRefresh>({ ok: false, status, data: null, error: new Error('stale') }),
+  );
+}
+
+beforeEach(() => {
+  jest.spyOn(Date, 'now').mockReturnValue(nowSeconds * 1000);
+});
+
+test('refresh adopts a persisted rotation instead of spending the captured token', async () => {
+  const { host, context } = fixture();
+  const persisted = persistedFrom(context, 31);
+  const persistedLookup = persistedSessions(host, persisted);
+
+  await expect(refreshSessionForContext(host, context)).resolves.toEqual({
+    session: { access_token: persisted.accessToken, refresh_token: 'rotated', expires_in: 31 },
+    error: null,
+  });
+  expect(persistedLookup).toHaveBeenCalledWith(context);
+  expect(Reflect.get(host, '_adoptPersistedSession')).toHaveBeenCalledWith(context, persisted);
+  expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
+});
+
+test.each([30, -60, null])(
+  'refresh spends a persisted rotation whose access token expires in %p seconds',
+  async (expiresIn) => {
+    const { host, context } = fixture();
+    const persisted = persistedFrom(context, expiresIn);
+    persistedSessions(host, persisted);
+
+    await expect(refreshSessionForContext(host, context)).resolves.toMatchObject({ error: null });
+    expect(Reflect.get(host, '_adoptPersistedSession')).not.toHaveBeenCalled();
+    expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledWith(persisted);
+    expect(Reflect.get(host, '_setRefreshedSession')).toHaveBeenCalledWith(session, context);
+  },
+);
+
+test.each([
+  ['the captured token', null],
+  ['an expired persisted rotation', 0],
+])('refresh adopts a rotation stored while %s was rejected', async (_label, expiresIn) => {
+  const { host, context } = fixture();
+  const spent = expiresIn === null ? null : persistedFrom(context, expiresIn, 'expired');
+  const rotated = persistedFrom(context, 3600, 'winner');
+  const persistedLookup = persistedSessions(host, spent, rotated);
+  rejectRefresh(host);
+
+  const result = await refreshSessionForContext(host, context);
+  expect(result).toEqual({
+    session: { access_token: rotated.accessToken, refresh_token: 'winner', expires_in: 3600 },
+    error: null,
+  });
+  expect(persistedLookup).toHaveBeenLastCalledWith(spent ?? context);
+  expect(Reflect.get(host, '_clearRejectedSession')).not.toHaveBeenCalled();
+});
+
+test('refresh clears the session whose persisted rotation was rejected', async () => {
+  const { host, context } = fixture();
+  persistedSessions(host, persistedFrom(context, 0, 'expired'));
+  rejectRefresh(host, 401);
+  host._clearRejectedSession = jest.fn(() => false);
+
+  const result = await refreshSessionForContext(host, context);
+  expect(result.error?.message).toBe('stale');
+  expect(Reflect.get(host, '_clearRejectedSession')).toHaveBeenCalledWith(context, 'expired');
+  expect(context.operations.refreshClearedSession).toBe(false);
+});
+
+test.each([
+  ['a fresh persisted rotation', 3600, null],
+  ['an expired persisted rotation', 0, 'Timed out waiting for another session refresh'],
+  ['no persisted rotation', null, 'Timed out waiting for another session refresh'],
+])('an unavailable refresh lock uses %s', async (_label, expiresIn, message) => {
+  const { host, context } = fixture();
+  persistedSessions(host, expiresIn === null ? null : persistedFrom(context, expiresIn));
+  host._withRefreshLock = jest.fn(
+    (_task: () => Promise<RefreshResult>, unavailable: () => Promise<RefreshResult>) =>
+      unavailable(),
+  );
+
+  const result = await refreshSessionForContext(host, context);
+  expect(result.error?.message ?? null).toBe(message);
+  expect(result.session === null).toBe(message !== null);
+  expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
+  expect(Reflect.get(host, '_clearRejectedSession')).not.toHaveBeenCalled();
 });

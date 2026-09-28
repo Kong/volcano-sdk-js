@@ -3,6 +3,7 @@ import { AuthSessionOperations } from './auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from './auth-session-lifecycle.ts';
 import { assertAuthUser, type CompleteSessionFields } from './auth-validation.ts';
 import type { User } from './sdk-public-types.ts';
+import { extractSessionIdFromToken } from './token-claims.ts';
 
 const ACCESS_TOKEN_KEY = 'volcano_access_token';
 const REFRESH_TOKEN_KEY = 'volcano_refresh_token';
@@ -11,6 +12,11 @@ interface SessionInput {
   access_token: string;
   refresh_token?: string | null;
   user: unknown;
+}
+
+export interface PersistedAuthContext extends AuthContext {
+  readonly accessToken: string;
+  readonly refreshToken: string;
 }
 
 export interface AuthSessionStateHost {
@@ -22,6 +28,7 @@ export interface AuthSessionStateHost {
   refreshToken: string | null;
   currentUser: User | null;
   _authCallbacks: ((user: User | null) => void)[];
+  _getStorageItem(key: string): string | null;
   _setStorageItem(key: string, value: string): void;
   _removeStorageItem(key: string): void;
   _isAuthContextCurrent(context: AuthContext): boolean;
@@ -109,7 +116,24 @@ export function clearSession(host: AuthSessionStateHost, context: AuthContext): 
   return host._clearSessionAtGeneration(context.generation);
 }
 
-export function clearSessionAtGeneration(host: AuthSessionStateHost, generation: number): boolean {
+/** Clears a rejected session, keeping storage another tab or instance has since replaced. */
+export function clearRejectedSession(
+  host: AuthSessionStateHost,
+  context: AuthContext,
+  rejectedRefreshToken: string | null,
+): boolean {
+  if (!host._isAuthContextCurrent(context) || context.refreshToken !== host.refreshToken) {
+    return false;
+  }
+  const stored = host._getStorageItem(REFRESH_TOKEN_KEY) === rejectedRefreshToken;
+  return clearSessionAtGeneration(host, context.generation, stored);
+}
+
+export function clearSessionAtGeneration(
+  host: AuthSessionStateHost,
+  generation: number,
+  removeStored = true,
+): boolean {
   if (generation !== host._sessionGeneration) {
     return false;
   }
@@ -120,9 +144,61 @@ export function clearSessionAtGeneration(host: AuthSessionStateHost, generation:
   host.currentUser = null;
   host._sessionGeneration += 1;
   host._pendingUrlAuthNotify = false;
-  host._removeStorageItem(ACCESS_TOKEN_KEY);
-  host._removeStorageItem(REFRESH_TOKEN_KEY);
+  if (removeStored) {
+    host._removeStorageItem(ACCESS_TOKEN_KEY);
+    host._removeStorageItem(REFRESH_TOKEN_KEY);
+  }
   host._notifyAuthCallbacks(null);
+  return true;
+}
+
+/**
+ * Returns the captured session as another tab or instance last persisted it,
+ * when that rotation continues the same server session.
+ */
+export function persistedSessionContext(
+  host: AuthSessionStateHost,
+  context: AuthContext,
+): PersistedAuthContext | null {
+  const accessToken = host._getStorageItem(ACCESS_TOKEN_KEY);
+  const refreshToken = host._getStorageItem(REFRESH_TOKEN_KEY);
+  if (!isRotatedToken(refreshToken, context.refreshToken)) {
+    return null;
+  }
+  // Storage may instead hold a separate sign-in, which this client must not adopt.
+  const sessionId = extractSessionIdFromToken(context.accessToken);
+  if (sessionId === null || !continuesSession(accessToken, sessionId)) {
+    return null;
+  }
+  return Object.freeze({ ...context, accessToken, refreshToken });
+}
+
+function isRotatedToken(stored: string | null, captured: string | null): stored is string {
+  return stored !== null && stored !== '' && stored !== captured;
+}
+
+function continuesSession(accessToken: string | null, sessionId: string): accessToken is string {
+  return extractSessionIdFromToken(accessToken) === sessionId;
+}
+
+/** Adopts credentials from persistedSessionContext() without spending a refresh token. */
+export function adoptPersistedSession(
+  host: AuthSessionStateHost,
+  context: AuthContext,
+  persisted: PersistedAuthContext,
+): boolean {
+  if (
+    !host._isAuthContextCurrent(context) ||
+    context.refreshToken !== host.refreshToken ||
+    context.operations.signingOut !== null
+  ) {
+    return false;
+  }
+  host.accessToken = persisted.accessToken;
+  host.refreshToken = persisted.refreshToken;
+  if (host.currentUser !== null) {
+    host._notifyAuthCallbacks(host.currentUser);
+  }
   return true;
 }
 

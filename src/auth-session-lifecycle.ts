@@ -1,6 +1,7 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
 import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
+import type { PersistedAuthContext } from './auth-session-state.ts';
 import {
   assertAuthTokenResponse,
   type AuthTokenFields,
@@ -8,7 +9,7 @@ import {
 } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import type { Session, User } from './sdk-public-types.ts';
-import { extractSessionIdFromToken } from './token-claims.ts';
+import { extractExpiryFromToken, extractSessionIdFromToken } from './token-claims.ts';
 
 interface RequestBase {
   status: number | null;
@@ -24,9 +25,15 @@ export interface SuccessfulRefresh extends SuccessfulRequest {
   data: CompleteSessionFields & AuthTokenFields;
 }
 
+/** Credentials another tab or instance already refreshed for the same server session. */
+export interface AdoptedRefresh extends SuccessfulRequest {
+  data: { access_token: string; refresh_token: string; expires_in: number };
+}
+
 export type FailedRefresh = RequestFailure;
 
-export type RefreshResult = SuccessfulRefresh | FailedRefresh;
+export type FetchedRefresh = SuccessfulRefresh | FailedRefresh;
+export type RefreshResult = FetchedRefresh | AdoptedRefresh;
 export interface SignOutResult {
   error: Error | null;
 }
@@ -48,11 +55,21 @@ export interface AuthLifecycleHost {
   _captureAuthContext(): AuthContext;
   _isAuthContextCurrent(context: AuthContext): boolean;
   _anonFetch(path: string, options: RequestInit): Promise<RequestResult>;
-  _fetchSessionRefresh(context: AuthContext): Promise<RefreshResult>;
+  _fetchSessionRefresh(context: AuthContext): Promise<FetchedRefresh>;
+  _withRefreshLock(
+    task: () => Promise<RefreshResult>,
+    unavailable: () => Promise<RefreshResult>,
+  ): Promise<RefreshResult>;
+  _persistedSessionContext(context: AuthContext): PersistedAuthContext | null;
+  _adoptPersistedSession(context: AuthContext, persisted: PersistedAuthContext): boolean;
   _setRefreshedSession(data: CompleteSessionFields, context: AuthContext): boolean;
+  _clearRejectedSession(context: AuthContext, rejectedRefreshToken: string | null): boolean;
   _clearSession(context: AuthContext): boolean;
   _clearSessionAtGeneration(generation: number): boolean;
 }
+
+// An adopted access token must outlast the request its caller is about to retry.
+const ADOPTED_ACCESS_MIN_SECONDS = 30;
 
 function normalizedError(reason: unknown, fallback: string): Error {
   return reason instanceof Error ? reason : new Error(fallback);
@@ -233,7 +250,7 @@ export async function refreshSessionForContext(
 export async function fetchSessionRefresh(
   host: AuthLifecycleHost,
   context: AuthContext,
-): Promise<RefreshResult> {
+): Promise<FetchedRefresh> {
   const verified = context.operations.hasVerifiedPair(context.accessToken, context.refreshToken);
   context.operations.verifyPair(null);
   const result = await host._anonFetch('/auth/refresh', {
@@ -271,19 +288,105 @@ function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string |
   return host.currentUser?.id ?? null;
 }
 
-async function refreshResult(
+// The server rejects a rotated refresh token, so one that another tab or instance
+// already spent must not be sent again.
+function refreshResult(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {
+  return host._withRefreshLock(
+    () => refreshPersistedSession(host, context),
+    () => Promise.resolve(adoptPersisted(host, context) ?? refreshLockTimeout()),
+  );
+}
+
+async function refreshPersistedSession(
   host: AuthLifecycleHost,
   context: AuthContext,
 ): Promise<RefreshResult> {
-  const result = await host._fetchSessionRefresh(context);
-  if (context.operations.signingOut === null) {
-    if (result.ok === true) {
-      host._setRefreshedSession(result.data, context);
-    } else if (result.status === 401 || result.status === 403) {
-      context.operations.refreshClearedSession = host._clearSession(context);
-    }
+  const persisted = host._persistedSessionContext(context);
+  const adopted = adoptedRefresh(host, context, persisted);
+  if (adopted !== null) {
+    return adopted;
   }
+  const source = persisted ?? context;
+  const result = await host._fetchSessionRefresh(source);
+  return context.operations.signingOut === null
+    ? commitRefresh(host, context, source, result)
+    : result;
+}
+
+function commitRefresh(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  source: AuthContext,
+  result: FetchedRefresh,
+): RefreshResult {
+  if (result.ok === true) {
+    host._setRefreshedSession(result.data, context);
+    return result;
+  }
+  return result.status === 401 || result.status === 403
+    ? rejectedRefresh(host, context, source, result)
+    : result;
+}
+
+function rejectedRefresh(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  source: AuthContext,
+  result: FailedRefresh,
+): RefreshResult {
+  // Without a cross-tab lock, another tab can rotate this session during the request.
+  const rotated = adoptPersisted(host, context, source);
+  if (rotated !== null) {
+    return rotated;
+  }
+  context.operations.refreshClearedSession = host._clearRejectedSession(
+    context,
+    source.refreshToken,
+  );
   return result;
+}
+
+function adoptPersisted(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  spent: AuthContext = context,
+): AdoptedRefresh | null {
+  return adoptedRefresh(host, context, host._persistedSessionContext(spent));
+}
+
+function adoptedRefresh(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  persisted: PersistedAuthContext | null,
+): AdoptedRefresh | null {
+  if (persisted === null) {
+    return null;
+  }
+  const expiry = extractExpiryFromToken(persisted.accessToken) ?? 0;
+  const expiresIn = Math.floor(expiry - Date.now() / 1000);
+  if (expiresIn <= ADOPTED_ACCESS_MIN_SECONDS) {
+    return null;
+  }
+  host._adoptPersistedSession(context, persisted);
+  return {
+    ok: true,
+    status: null,
+    error: null,
+    data: {
+      access_token: persisted.accessToken,
+      refresh_token: persisted.refreshToken,
+      expires_in: expiresIn,
+    },
+  };
+}
+
+function refreshLockTimeout(): FailedRefresh {
+  return {
+    ok: false,
+    status: null,
+    data: null,
+    error: new Error('Timed out waiting for another session refresh'),
+  };
 }
 
 function settledRefresh(

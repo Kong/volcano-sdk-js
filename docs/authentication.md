@@ -293,9 +293,11 @@ On success, `refreshSession()` returns the refreshed token fields in the existin
 `{ session, error }` response and replaces the client's current session. Read the full snapshot,
 including its user, with `getSession()`.
 
-If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. A transport
-error or server failure leaves the current session unchanged so the application can retry. A late
-refresh response never replaces a newer session.
+If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. It removes
+the stored credentials only while storage still holds the rejected refresh token, so a newer
+session stored by another tab remains. A transport error or server failure leaves the current
+session unchanged so the application can retry. A late refresh response never replaces a newer
+session.
 
 Authenticated profile, session-list/deletion, email-change request/cancellation,
 linked-provider, provider-token, and provider-API operations refresh a usable
@@ -303,6 +305,27 @@ session once after HTTP 401 and replay the original request values. They preserv
 an explicitly replaced session and do not retry other HTTP failures or ambiguous
 network failures. Deleting the current server session also clears its refreshed
 local credentials; a separately adopted session remains current.
+
+### Multiple Tabs and Clients
+
+In a browser, tabs and SDK clients on the same origin share the session stored in localStorage.
+Volcano rotates the refresh token on each refresh and rejects the previous token, so only one of
+them can use it.
+
+Before sending a refresh request, the SDK reads the stored session. If another tab or client has
+already rotated the same server session, the SDK adopts the stored credentials instead of sending
+its own refresh token. When the stored access token expires within 30 seconds, the SDK refreshes
+with the stored refresh token. It never adopts a stored session for a different sign-in.
+
+Where the [Web Locks API](https://developer.mozilla.org/docs/Web/API/Web_Locks_API) is available,
+the SDK holds the `volcano-sdk:refresh-token` lock while it reads storage, sends the refresh
+request, and stores the result. Other tabs wait for the lock and then adopt the stored result.
+Without Web Locks, the SDK coordinates only the clients in the same page. A client whose refresh
+is rejected still adopts a rotation that another tab stored during the request.
+
+If another tab holds the lock longer than the client's request timeout plus one second,
+`refreshSession()` returns an error with no HTTP status and keeps the current session. Web Locks
+are not reentrant, so do not use `volcano-sdk:refresh-token` as the name of an application lock.
 
 ## Hosted Auth Pages (Managed Login)
 
