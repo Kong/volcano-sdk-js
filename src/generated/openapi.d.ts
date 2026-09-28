@@ -7296,10 +7296,10 @@ export interface components {
             /** @enum {string} */
             status: "active" | "deleting" | "failed";
             /**
-             * @description Platform plan applied to the project when available
+             * @description Public plan name; FREE and PRO are accepted from older Hosting responses.
              * @enum {string}
              */
-            plan?: "HOBBY" | "SUPERAGENT";
+            plan?: "HOBBY" | "SUPERAGENT" | "FREE" | "PRO";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions
