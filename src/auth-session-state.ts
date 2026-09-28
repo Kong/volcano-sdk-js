@@ -161,10 +161,12 @@ export function persistedSessionContext(
   context: AuthContext,
 ): PersistedAuthContext | null {
   // Writers store the access token first, so an access token read after the refresh
-  // token was stored with it or later; a mixed pair cannot pass the session check.
+  // token was stored with it or later. Rereading the refresh token then rejects a
+  // pair that another tab's write split.
   const refreshToken = host._getStorageItem(REFRESH_TOKEN_KEY);
   const accessToken = host._getStorageItem(ACCESS_TOKEN_KEY);
-  if (!isRotatedToken(refreshToken, context.refreshToken)) {
+  const stable = host._getStorageItem(REFRESH_TOKEN_KEY) === refreshToken;
+  if (!stable || !isRotatedToken(refreshToken, context.refreshToken)) {
     return null;
   }
   // Storage may instead hold a separate sign-in, which this client must not adopt.

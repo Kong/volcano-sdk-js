@@ -229,6 +229,20 @@ test('does not pair a stored refresh token with an older access token', () => {
   expect(persistedSessionContext(host, context)).toBeNull();
 });
 
+test('does not pair a stored access token with the refresh token it replaced', () => {
+  const { host, storage, context } = rotatedFixture();
+  const newerAccess = sessionToken(sessionId, true);
+  // Another tab's rotation lands between this client's reads.
+  host._getStorageItem = (key) => {
+    const value = storage.get(key) ?? null;
+    storage.set('volcano_access_token', newerAccess);
+    storage.set('volcano_refresh_token', 'newer');
+    return value;
+  };
+
+  expect(persistedSessionContext(host, context)).toBeNull();
+});
+
 test('ignores storage when the captured access token has no session', () => {
   const { host, storage } = fixture();
   storage.set('volcano_access_token', 'other-opaque-access');
