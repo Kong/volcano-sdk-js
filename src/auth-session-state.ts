@@ -160,8 +160,10 @@ export function persistedSessionContext(
   host: AuthSessionStateHost,
   context: AuthContext,
 ): PersistedAuthContext | null {
-  const accessToken = host._getStorageItem(ACCESS_TOKEN_KEY);
+  // Writers store the access token first, so an access token read after the refresh
+  // token was stored with it or later; a mixed pair cannot pass the session check.
   const refreshToken = host._getStorageItem(REFRESH_TOKEN_KEY);
+  const accessToken = host._getStorageItem(ACCESS_TOKEN_KEY);
   if (!isRotatedToken(refreshToken, context.refreshToken)) {
     return null;
   }

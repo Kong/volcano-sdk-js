@@ -415,6 +415,17 @@ test('refresh adopts a persisted rotation instead of spending the captured token
   expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
 });
 
+test('refresh spends a persisted rotation for a client without a loaded user', async () => {
+  const { host, context } = fixture();
+  Object.assign(host, { currentUser: null });
+  const persisted = persistedFrom(context, 3600);
+  persistedSessions(host, persisted);
+
+  await expect(refreshSessionForContext(host, context)).resolves.toMatchObject({ error: null });
+  expect(Reflect.get(host, '_adoptPersistedSession')).not.toHaveBeenCalled();
+  expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledWith(persisted);
+});
+
 test.each([30, -60, null])(
   'refresh spends a persisted rotation whose access token expires in %p seconds',
   async (expiresIn) => {

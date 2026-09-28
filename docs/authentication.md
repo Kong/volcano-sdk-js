@@ -314,8 +314,9 @@ them can use it.
 
 Before sending a refresh request, the SDK reads the stored session. If another tab or client has
 already rotated the same server session, the SDK adopts the stored credentials instead of sending
-its own refresh token. When the stored access token expires within 30 seconds, the SDK refreshes
-with the stored refresh token. It never adopts a stored session for a different sign-in.
+its own refresh token. When the stored access token expires within 30 seconds, or the client has
+not loaded its user yet, the SDK refreshes with the stored refresh token instead. It never adopts a
+stored session for a different sign-in.
 
 Where the [Web Locks API](https://developer.mozilla.org/docs/Web/API/Web_Locks_API) is available,
 the SDK holds the `volcano-sdk:refresh-token` lock while it reads storage, sends the refresh

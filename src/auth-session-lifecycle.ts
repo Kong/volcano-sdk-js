@@ -302,7 +302,8 @@ async function refreshPersistedSession(
   context: AuthContext,
 ): Promise<RefreshResult> {
   const persisted = host._persistedSessionContext(context);
-  const adopted = adoptedRefresh(host, context, persisted);
+  // Storage holds no profile, so a client that has not loaded its user refreshes instead.
+  const adopted = host.currentUser === null ? null : adoptedRefresh(host, context, persisted);
   if (adopted !== null) {
     return adopted;
   }

@@ -39,8 +39,11 @@ function stored(): [string | null, string | null] {
   ];
 }
 
-function tab(): VolcanoAuth {
-  return new VolcanoAuth({ apiUrl: 'https://api.test', anonKey: 'anon' });
+function tab(profile: typeof user | null = user): VolcanoAuth {
+  const client = new VolcanoAuth({ apiUrl: 'https://api.test', anonKey: 'anon' });
+  // Stands in for a profile the tab already loaded with getUser().
+  client.currentUser = profile;
+  return client;
 }
 
 function rotation(access: string, refresh: string): Response {
@@ -123,6 +126,20 @@ it('adopts a session another tab already rotated without a request', async () =>
   });
   expect(fetchMock).not.toHaveBeenCalled();
   expect([current.accessToken, current.refreshToken]).toEqual([rotated, 'refresh-2']);
+});
+
+it('refreshes with the stored rotation before its user is loaded', async () => {
+  store(accessToken(1), 'refresh-1');
+  const current = tab(null);
+  store(accessToken(2), 'refresh-2');
+  const renewed = accessToken(3);
+  fetchMock.mockResolvedValueOnce(rotation(renewed, 'refresh-3'));
+
+  const { session, error } = await current.auth.refreshSession();
+  expect([session?.refresh_token, error]).toEqual(['refresh-3', null]);
+  expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-2' });
+  expect(current.currentUser).toEqual(user);
+  expect(stored()).toEqual([renewed, 'refresh-3']);
 });
 
 it('refreshes with the stored rotation when its access token has expired', async () => {
