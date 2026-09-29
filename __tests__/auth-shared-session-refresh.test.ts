@@ -341,6 +341,30 @@ it.each([429, 503])('keeps the stored session after a refresh fails with %i', as
   expect(stored()).toEqual({ access_token: own, refresh_token: 'refresh-1' });
 });
 
+it('keeps refreshing its own rotation when storage rejects it', async () => {
+  const earlier = accessToken(1, -60);
+  store(earlier, 'refresh-1');
+  const current = loadedTab();
+  const full = {
+    getItem: (key: string) => localStorage.getItem(key),
+    removeItem(key: string) {
+      localStorage.removeItem(key);
+    },
+    setItem() {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    },
+  };
+  setGlobal('window', { document: {}, localStorage: full });
+  fetchMock
+    .mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'))
+    .mockResolvedValueOnce(rotation(accessToken(3), 'refresh-3'));
+
+  await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+  await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+  expect(JSON.parse(fetchBody(1))).toEqual({ refresh_token: 'refresh-2' });
+  expect(stored()).toEqual({ access_token: earlier, refresh_token: 'refresh-1' });
+});
+
 it('does not store a session again after another tab removed it', async () => {
   store(accessToken(1, -60), 'refresh-1');
   const current = tab();
@@ -455,6 +479,20 @@ describe('another sign-in in storage', () => {
     await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
     expect(fetchMock).not.toHaveBeenCalled();
     expect([current.accessToken, current.refreshToken]).toEqual([rotated, 'refresh-2']);
+  });
+
+  it('is used after this tab stored a rotation issued in the same second', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    store(accessToken(1, -60), 'refresh-1');
+    const current = loadedTab();
+    fetchMock.mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'));
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    const rotated = accessToken(3, 3600, sessionId, 2);
+    store(rotated, 'refresh-3');
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect([current.accessToken, current.refreshToken]).toEqual([rotated, 'refresh-3']);
   });
 
   it("is refreshed when it holds this tab's access token with a later refresh token", async () => {

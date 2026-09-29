@@ -86,8 +86,9 @@ function recordText(session: StoredSession, imported: boolean): string {
   return JSON.stringify(imported ? { ...record, imported } : record);
 }
 
-function storeImportedSession(host: SessionStorageHost, session: StoredSession): boolean {
-  const text = recordText(session, true);
+// Browsers reject writes past the storage quota, and the host ignores the error.
+function storeRecord(host: SessionStorageHost, session: StoredSession, imported: boolean): boolean {
+  const text = recordText(session, imported);
   host._setStorageItem(SESSION_KEY, text);
   return host._getStorageItem(SESSION_KEY) === text;
 }
@@ -107,7 +108,7 @@ function importLegacySession(
     ? { access_token: session.access_token, refresh_token: refreshToken }
     : session;
   // Keep the refresh token until the record holding it is stored, so a failed write loses nothing.
-  if (storeImportedSession(host, legacySession)) {
+  if (storeRecord(host, legacySession, true)) {
     host._removeStorageItem(LEGACY_REFRESH_TOKEN_KEY);
   }
   return legacySession;
@@ -128,11 +129,9 @@ export function readStoredSession(host: SessionStorageHost): StoredSession | nul
   return importLegacySession(host, stored, refreshToken);
 }
 
-export function writeStoredSession(
-  host: Pick<SessionStorageHost, '_setStorageItem'>,
-  session: StoredSession,
-): void {
-  host._setStorageItem(SESSION_KEY, recordText(session, false));
+/** Stores the session, and reports whether storage now holds it. */
+export function writeStoredSession(host: SessionStorageHost, session: StoredSession): boolean {
+  return storeRecord(host, session, false);
 }
 
 export function removeStoredSession(host: Pick<SessionStorageHost, '_removeStorageItem'>): void {

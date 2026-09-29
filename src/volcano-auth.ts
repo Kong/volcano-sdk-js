@@ -1151,8 +1151,9 @@ class VolcanoAuth {
 
   /** @internal */
   _writeStoredSession(session: StoredSession): void {
-    writeStoredSession(this, session);
-    this._storedRefreshToken = session.refresh_token;
+    if (writeStoredSession(this, session)) {
+      this._storedRefreshToken = session.refresh_token;
+    }
   }
 
   /** @internal */

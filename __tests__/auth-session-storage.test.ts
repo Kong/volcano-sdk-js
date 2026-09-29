@@ -212,6 +212,17 @@ describe('writeStoredSession and removeStoredSession', () => {
     expect(items.size).toBe(0);
   });
 
+  it('reports whether storage accepted the session', () => {
+    const { host } = storage();
+    const session = { access_token: 'access', refresh_token: 'refresh' };
+
+    expect(writeStoredSession(host, session)).toBe(true);
+    jest.spyOn(host, '_setStorageItem').mockImplementation(() => {
+      // Browsers reject writes past the storage quota, and the SDK ignores the error.
+    });
+    expect(writeStoredSession(host, { ...session, refresh_token: 'rotated' })).toBe(false);
+  });
+
   it('does not store fields outside the session', () => {
     const { host, items } = storage();
     const session = { access_token: 'access', refresh_token: 'refresh', expires_in: 60 };
