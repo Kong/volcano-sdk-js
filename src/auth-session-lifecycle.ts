@@ -49,6 +49,8 @@ export interface AuthContext {
 
 export interface AuthLifecycleHost {
   readonly refreshToken: string | null;
+  /** The refresh token this client last restored from or wrote to storage. */
+  readonly _storedRefreshToken: string | null;
   readonly currentUser: User | null;
   _oauthExchangeError: Error | null;
   _oauthExchangePromise: Promise<boolean> | null;
@@ -82,27 +84,46 @@ function isRefreshable(stored: StoredSession | null): stored is StoredLineage {
   return stored !== null && hasToken(stored.refresh_token);
 }
 
-// Access tokens carry the time they were issued, so a later one proves a later rotation.
-function isLaterRotation(stored: StoredSession, context: AuthContext): boolean {
+function isIssuedLater(stored: StoredSession, context: AuthContext): boolean {
   return (
-    sameServerSession(stored.access_token, context.accessToken) &&
     extractIssuedAtFromToken(stored.access_token) >
-      extractIssuedAtFromToken(String(context.accessToken))
+    extractIssuedAtFromToken(String(context.accessToken))
   );
 }
 
-function continuesSession(stored: StoredSession, context: AuthContext): boolean {
+/**
+ * Within one server session, storage replaces a pair only with a rotation of its refresh
+ * token, so once this client's credentials were stored, a different stored pair of their
+ * session is later. Credentials that never were, such as ones passed to the client, are
+ * ordered by when their access token was issued, which a same-second rotation ties.
+ */
+function isLaterRotation(
+  host: AuthLifecycleHost,
+  stored: StoredSession,
+  context: AuthContext,
+): boolean {
+  return (
+    sameServerSession(stored.access_token, context.accessToken) &&
+    (context.refreshToken === host._storedRefreshToken || isIssuedLater(stored, context))
+  );
+}
+
+function continuesSession(
+  host: AuthLifecycleHost,
+  stored: StoredSession,
+  context: AuthContext,
+): boolean {
   return (
     stored.refresh_token === context.refreshToken ||
     stored.access_token === context.accessToken ||
-    isLaterRotation(stored, context)
+    isLaterRotation(host, stored, context)
   );
 }
 
 /** The stored session when it holds this client's credentials or a later rotation of them. */
 function storedLineage(host: AuthLifecycleHost, context: AuthContext): StoredLineage | null {
   const stored = host._readStoredSession();
-  return isRefreshable(stored) && continuesSession(stored, context) ? stored : null;
+  return isRefreshable(stored) && continuesSession(host, stored, context) ? stored : null;
 }
 
 function spendingContext(context: AuthContext, lineage: StoredLineage | null): AuthContext {
@@ -115,9 +136,14 @@ function secondsUntilExpiry(token: string): number {
   return Math.floor(extractExpiryFromToken(token) - Date.now() / 1000);
 }
 
-function isFreshRotation(lineage: StoredLineage, context: AuthContext): boolean {
+function isFreshRotation(
+  host: AuthLifecycleHost,
+  lineage: StoredLineage,
+  context: AuthContext,
+): boolean {
   return (
-    isLaterRotation(lineage, context) &&
+    lineage.access_token !== context.accessToken &&
+    isLaterRotation(host, lineage, context) &&
     secondsUntilExpiry(lineage.access_token) > ADOPTED_ACCESS_MIN_SECONDS
   );
 }
@@ -129,7 +155,7 @@ function adoptedRefresh(
 ): SuccessfulRefresh | null {
   // Without a loaded user, a refresh request returns the current profile.
   const user = host.currentUser;
-  if (user === null || !isFreshRotation(lineage, context)) {
+  if (user === null || !isFreshRotation(host, lineage, context)) {
     return null;
   }
   return {
@@ -409,10 +435,7 @@ async function refreshFromStorage(
 ): Promise<RefreshResult> {
   const lineage = storedLineage(host, context);
   const adopted = lineage === null ? null : adoptedRefresh(host, lineage, context);
-  if (adopted !== null) {
-    return commitRefresh(host, context, adopted, null);
-  }
-  const result = await host._fetchSessionRefresh(spendingContext(context, lineage));
+  const result = adopted ?? (await host._fetchSessionRefresh(spendingContext(context, lineage)));
   return commitRefresh(host, context, result, lineage?.refresh_token ?? null);
 }
 

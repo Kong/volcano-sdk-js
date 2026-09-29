@@ -53,6 +53,7 @@ function fixture(refreshToken: string | null = 'refresh'): {
   };
   const host: AuthLifecycleHost = {
     refreshToken,
+    _storedRefreshToken: null,
     currentUser: session.user,
     _oauthExchangeError: null,
     _oauthExchangePromise: null,

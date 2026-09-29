@@ -278,6 +278,8 @@ class VolcanoAuth {
   accessToken: string | null;
   /** @internal */
   refreshToken: string | null;
+  /** @internal */
+  _storedRefreshToken: string | null;
   auth: Auth;
   functions: Functions;
   durable: Durable;
@@ -320,6 +322,7 @@ class VolcanoAuth {
     this._durableFacade = new DurableFacade(this);
     this.accessToken = null;
     this.refreshToken = null;
+    this._storedRefreshToken = null;
     this._initializeCredentials(config);
     this._beginOAuthCallback(config);
 
@@ -413,6 +416,7 @@ class VolcanoAuth {
     }
     this.accessToken = stored.access_token;
     this.refreshToken = stored.refresh_token;
+    this._storedRefreshToken = stored.refresh_token;
   }
 
   /** @internal */
@@ -1148,6 +1152,7 @@ class VolcanoAuth {
   /** @internal */
   _writeStoredSession(session: StoredSession): void {
     writeStoredSession(this, session);
+    this._storedRefreshToken = session.refresh_token;
   }
 
   /** @internal */

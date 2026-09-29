@@ -319,14 +319,18 @@ live refresh token.
 Before a refresh, the SDK reads the stored session:
 
 - If it holds this client's refresh token, the SDK refreshes with it and stores the result.
-- If another tab or client has already rotated the same server session, so the stored access
-  token was issued after this client's, a client that has loaded its user adopts the stored tokens
-  without a request. When the stored access token expires within 30 seconds, or the client has not
-  loaded its user, the SDK refreshes with the stored refresh token instead, and the response
-  provides the user.
+- If another tab or client has already rotated the same server session, a client that has loaded
+  its user adopts the stored tokens without a request. When the stored access token expires within
+  30 seconds, or the client has not loaded its user, the SDK refreshes with the stored refresh
+  token instead, and the response provides the user.
 - If it holds a different sign-in, an earlier pair of this session, or no session, the SDK
   refreshes with its own token and updates only this client. It never adopts or replaces another
   sign-in.
+
+Within one server session, storage replaces a pair only with a rotation of its refresh token. So
+once a client's tokens have been stored, a different stored pair of that session is a later
+rotation. For tokens passed to the client that were never stored, the stored pair counts as later
+only when its access token was issued later.
 
 A refresh stores its result whenever storage still holds the refresh token it used, even if the
 client signed out or switched sessions meanwhile, because that token is spent. When the refresh is

@@ -23,10 +23,20 @@ function setGlobal(name: string, value: unknown): void {
   Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 }
 
-function accessToken(version: number, expiresIn = 3600, session = sessionId): string {
+function accessToken(
+  version: number,
+  expiresIn = 3600,
+  session = sessionId,
+  issuedWith = version,
+): string {
   const now = Math.floor(Date.now() / 1000);
-  // Later versions are later rotations, so they were issued later.
-  const claims = { session_id: session, iat: now - 100 + version, exp: now + expiresIn, version };
+  // Later versions are later rotations, so by default they were issued later.
+  const claims = {
+    session_id: session,
+    iat: now - 100 + issuedWith,
+    exp: now + expiresIn,
+    version,
+  };
   return `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
 }
 
@@ -435,22 +445,81 @@ describe('another sign-in in storage', () => {
     expect(stored()).toEqual({ access_token: otherSignIn, refresh_token: 'other-refresh' });
   });
 
-  it('is not preferred over newer credentials supplied to the client', async () => {
-    const earlier = accessToken(1);
-    store(earlier, 'refresh-1');
+  it("is used when it was issued in the same second as this tab's token", async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    store(accessToken(1), 'refresh-1');
+    const current = loadedTab();
+    const rotated = accessToken(2, 3600, sessionId, 1);
+    store(rotated, 'refresh-2');
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect([current.accessToken, current.refreshToken]).toEqual([rotated, 'refresh-2']);
+  });
+
+  it("is refreshed when it holds this tab's access token with a later refresh token", async () => {
+    const own = accessToken(1);
+    store(own, 'refresh-1');
+    const current = loadedTab();
+    store(own, 'refresh-1b');
+    fetchMock.mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'));
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-1b' });
+  });
+
+  it.each([
+    ['later', 2],
+    ['in the same second', 1],
+  ])(
+    'is not preferred over credentials supplied to the client and issued %s',
+    async (_label, issuedWith) => {
+      jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+      const earlier = accessToken(1);
+      store(earlier, 'refresh-1');
+      const current = new VolcanoAuth({
+        apiUrl: 'https://api.test',
+        anonKey: 'anon',
+        accessToken: accessToken(2, 3600, sessionId, issuedWith),
+        refreshToken: 'refresh-2',
+      });
+      current.currentUser = user;
+      fetchMock.mockResolvedValueOnce(rotation(accessToken(3), 'refresh-3'));
+
+      await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+      expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-2' });
+      expect(current.refreshToken).toBe('refresh-3');
+      expect(stored()).toEqual({ access_token: earlier, refresh_token: 'refresh-1' });
+    },
+  );
+
+  it('is used by a client with supplied credentials when issued later', async () => {
     const current = new VolcanoAuth({
       apiUrl: 'https://api.test',
       anonKey: 'anon',
-      accessToken: accessToken(2, -60),
-      refreshToken: 'refresh-2',
+      accessToken: accessToken(1, -60),
+      refreshToken: 'refresh-1',
     });
-    current.currentUser = user;
+    store(accessToken(2, -60), 'refresh-2');
     fetchMock.mockResolvedValueOnce(rotation(accessToken(3), 'refresh-3'));
 
     await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
     expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-2' });
-    expect(current.refreshToken).toBe('refresh-3');
-    expect(stored()).toEqual({ access_token: earlier, refresh_token: 'refresh-1' });
+  });
+
+  it('is used by a client with supplied credentials when it holds their access token', async () => {
+    const own = accessToken(1, -60);
+    const current = new VolcanoAuth({
+      apiUrl: 'https://api.test',
+      anonKey: 'anon',
+      accessToken: own,
+      refreshToken: 'refresh-1',
+    });
+    store(own, 'refresh-1b');
+    fetchMock.mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'));
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-1b' });
   });
 
   it('supplies the refresh token stored for this access token', async () => {
