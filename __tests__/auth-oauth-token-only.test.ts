@@ -32,7 +32,7 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
     };
   };
   const localStorage = storage({
-    volcano_auth_session: JSON.stringify({
+    volcano_access_token: JSON.stringify({
       access_token: 'stale-access',
       refresh_token: 'stale-refresh',
     }),
@@ -81,7 +81,7 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
     refresh_token: null,
     user,
   });
-  expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toEqual({
+  expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
     access_token: 'cookie-session-access',
     refresh_token: null,
   });

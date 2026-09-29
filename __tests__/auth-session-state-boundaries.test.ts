@@ -19,12 +19,12 @@ const nextSession = { access_token: 'new-access', refresh_token: 'new-refresh', 
 const oldRecord = { access_token: 'old-access', refresh_token: 'old-refresh' };
 
 function record(storage: Map<string, string>): unknown {
-  const value = storage.get('volcano_auth_session');
+  const value = storage.get('volcano_access_token');
   return value === undefined ? undefined : JSON.parse(value);
 }
 
 function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> } {
-  const storage = new Map<string, string>([['volcano_auth_session', JSON.stringify(oldRecord)]]);
+  const storage = new Map<string, string>([['volcano_access_token', JSON.stringify(oldRecord)]]);
   const host: AuthSessionStateHost = {
     _sessionGeneration: 3,
     _sessionOperations: new AuthSessionOperations<RefreshResult, SignOutResult>(),
@@ -190,12 +190,12 @@ test('clearing removes the stored session only when it holds this server session
   expect(record(kept.storage)).toEqual(oldRecord);
 
   const otherSignIn = fixture();
-  otherSignIn.storage.set('volcano_auth_session', otherRecord);
+  otherSignIn.storage.set('volcano_access_token', otherRecord);
   expect(clearSessionAtGeneration(otherSignIn.host, 3)).toBe(true);
-  expect(otherSignIn.storage.get('volcano_auth_session')).toBe(otherRecord);
+  expect(otherSignIn.storage.get('volcano_access_token')).toBe(otherRecord);
 
   const signedOut = fixture();
-  signedOut.storage.delete('volcano_auth_session');
+  signedOut.storage.delete('volcano_access_token');
   expect(clearSessionAtGeneration(signedOut.host, 3)).toBe(true);
   expect(signedOut.storage.size).toBe(0);
 });

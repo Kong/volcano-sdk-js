@@ -38,7 +38,7 @@ function storage(items: Record<string, string> = {}): {
 }
 
 function withRecord(value: unknown): ReturnType<typeof storage> {
-  return storage({ volcano_auth_session: JSON.stringify(value) });
+  return storage({ volcano_access_token: JSON.stringify(value) });
 }
 
 describe('readStoredSession', () => {
@@ -68,58 +68,82 @@ describe('readStoredSession', () => {
 
   it.each([
     ['unparseable JSON', '{'],
-    ['JSON null', 'null'],
-    ['a primitive', '"access"'],
     ['a missing access token', JSON.stringify({ refresh_token: null })],
     ['an empty access token', JSON.stringify({ access_token: '', refresh_token: null })],
     ['a numeric access token', JSON.stringify({ access_token: 7, refresh_token: null })],
     ['a missing refresh token', JSON.stringify({ access_token: 'access' })],
     ['an empty refresh token', JSON.stringify({ access_token: 'a', refresh_token: '' })],
   ])('ignores a record with %s', (_label, value) => {
-    expect(readStoredSession(storage({ volcano_auth_session: value }).host)).toBeNull();
+    const { host, items } = storage({ volcano_access_token: value });
+
+    expect(readStoredSession(host)).toBeNull();
+    expect(items.get('volcano_access_token')).toBe(value);
   });
 
-  it('imports legacy keys over the stored record and removes them', () => {
+  it('imports a bare access token and its refresh token', () => {
     const { host, items } = storage({
-      volcano_auth_session: JSON.stringify({ access_token: 'old', refresh_token: 'old' }),
       volcano_access_token: 'legacy-access',
       volcano_refresh_token: 'legacy-refresh',
     });
 
     const expected = { access_token: 'legacy-access', refresh_token: 'legacy-refresh' };
     expect(readStoredSession(host)).toEqual(expected);
-    expect(Object.fromEntries(items)).toEqual({ volcano_auth_session: JSON.stringify(expected) });
+    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
   });
 
   it.each([
     ['absent', null],
     ['empty', ''],
-  ])('imports a legacy access token whose refresh token is %s', (_label, refreshToken) => {
+  ])('imports a bare access token whose refresh token is %s', (_label, refreshToken) => {
     const { host, items } = storage({ volcano_access_token: 'legacy-access' });
     if (refreshToken !== null) {
       items.set('volcano_refresh_token', refreshToken);
     }
 
-    expect(readStoredSession(host)).toEqual({
-      access_token: 'legacy-access',
-      refresh_token: null,
-    });
-    expect([...items.keys()]).toEqual(['volcano_auth_session']);
+    const expected = { access_token: 'legacy-access', refresh_token: null };
+    expect(readStoredSession(host)).toEqual(expected);
+    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
+  });
+
+  it('pairs a refresh token written after the stored access token', () => {
+    // An older writer stores the access token first, so a reader can import it alone.
+    const { host, items } = storage({ volcano_access_token: 'legacy-access' });
+    readStoredSession(host);
+    items.set('volcano_refresh_token', 'legacy-refresh');
+
+    const expected = { access_token: 'legacy-access', refresh_token: 'legacy-refresh' };
+    expect(readStoredSession(host)).toEqual(expected);
+    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
+  });
+
+  it('keeps the stored refresh token when an older writer leaves its key empty', () => {
+    const record = { access_token: 'access', refresh_token: 'refresh' };
+    const { host, items } = withRecord(record);
+    items.set('volcano_refresh_token', '');
+
+    expect(readStoredSession(host)).toEqual(record);
+    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(record) });
   });
 
   it.each([
     ['absent', null],
     ['empty', ''],
-  ])('drops a legacy refresh token whose access token is %s', (_label, accessToken) => {
-    const record = { access_token: 'access', refresh_token: 'refresh' };
-    const { host, items } = withRecord(record);
-    items.set('volcano_refresh_token', 'orphan-refresh');
+  ])('drops a refresh token whose access token is %s', (_label, accessToken) => {
+    const { host, items } = storage({ volcano_refresh_token: 'orphan-refresh' });
     if (accessToken !== null) {
       items.set('volcano_access_token', accessToken);
     }
 
-    expect(readStoredSession(host)).toEqual(record);
-    expect([...items.keys()]).toEqual(['volcano_auth_session']);
+    expect(readStoredSession(host)).toBeNull();
+    expect(items.has('volcano_refresh_token')).toBe(false);
+    expect(items.get('volcano_access_token')).toBe(accessToken ?? undefined);
+  });
+
+  it('does not store an empty access token', () => {
+    const { host, items } = storage({ volcano_access_token: '' });
+
+    expect(readStoredSession(host)).toBeNull();
+    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: '' });
   });
 });
 
@@ -139,7 +163,7 @@ describe('writeStoredSession and removeStoredSession', () => {
     const session = { access_token: 'access', refresh_token: 'refresh', expires_in: 60 };
 
     writeStoredSession(host, session);
-    expect(items.get('volcano_auth_session')).toBe(
+    expect(items.get('volcano_access_token')).toBe(
       JSON.stringify({ access_token: 'access', refresh_token: 'refresh' }),
     );
   });

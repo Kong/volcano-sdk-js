@@ -30,13 +30,13 @@ function accessToken(version: number, expiresIn = 3600, session = sessionId): st
 
 function store(access: string, refresh: string | null): void {
   localStorage.setItem(
-    'volcano_auth_session',
+    'volcano_access_token',
     JSON.stringify({ access_token: access, refresh_token: refresh }),
   );
 }
 
 function stored(): unknown {
-  const value = localStorage.getItem('volcano_auth_session');
+  const value = localStorage.getItem('volcano_access_token');
   return value === null ? null : JSON.parse(value);
 }
 
@@ -136,8 +136,36 @@ it('restores a session stored by an earlier release', async () => {
   expect([current.accessToken, current.refreshToken]).toEqual([legacy, 'refresh-1']);
   await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
   expect(stored()).toEqual({ access_token: renewed, refresh_token: 'refresh-2' });
-  expect(localStorage.getItem('volcano_access_token')).toBeNull();
   expect(localStorage.getItem('volcano_refresh_token')).toBeNull();
+});
+
+it('pairs a refresh token an earlier release stores after its access token', async () => {
+  const legacy = accessToken(1, -60);
+  localStorage.setItem('volcano_access_token', legacy);
+  // This tab reads between the earlier release's two writes.
+  tab();
+  localStorage.setItem('volcano_refresh_token', 'refresh-1');
+  const current = tab();
+  fetchMock.mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'));
+
+  expect([current.accessToken, current.refreshToken]).toEqual([legacy, 'refresh-1']);
+
+  await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+  expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-1' });
+});
+
+it('ends the stored session when an application removes the earlier keys', async () => {
+  const signedIn = tab();
+  await signedIn.auth.setSession({
+    access_token: accessToken(1),
+    refresh_token: 'refresh-1',
+    user,
+  });
+  localStorage.removeItem('volcano_access_token');
+  localStorage.removeItem('volcano_refresh_token');
+
+  const next = tab();
+  expect([next.accessToken, next.refreshToken]).toEqual([null, null]);
 });
 
 describe('a stored rotation of this session', () => {
@@ -304,7 +332,7 @@ it.each([429, 503])('keeps the stored session after a refresh fails with %i', as
 it('does not store a session again after another tab removed it', async () => {
   store(accessToken(1, -60), 'refresh-1');
   const current = tab();
-  localStorage.removeItem('volcano_auth_session');
+  localStorage.removeItem('volcano_access_token');
   fetchMock.mockResolvedValueOnce(rotation(accessToken(2), 'refresh-2'));
 
   await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
@@ -316,7 +344,7 @@ it('does not restore a session another tab removed during the refresh', async ()
   store(accessToken(1, -60), 'refresh-1');
   const current = tab();
   fetchMock.mockImplementationOnce(() => {
-    localStorage.removeItem('volcano_auth_session');
+    localStorage.removeItem('volcano_access_token');
     return Promise.resolve(rotation(accessToken(2), 'refresh-2'));
   });
 

@@ -1,10 +1,10 @@
 import { sessionIdsEqual } from './auth-continuity.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
-// One key, so a reader never pairs tokens from different writes.
-const SESSION_KEY = 'volcano_auth_session';
-// Earlier releases stored these separately; applications may still write them directly.
-const LEGACY_ACCESS_TOKEN_KEY = 'volcano_access_token';
+// One record, so a reader never pairs tokens from different writes. It keeps the key
+// earlier releases stored the access token under, because applications still write
+// and remove that key directly, and removing it must still end the stored session.
+const SESSION_KEY = 'volcano_access_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'volcano_refresh_token';
 
 export interface StoredSession {
@@ -20,10 +20,6 @@ export interface SessionStorageHost {
 
 function nonempty(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
-}
-
-function isRecord(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
 }
 
 function isStoredRefreshToken(value: unknown): value is string | null {
@@ -43,7 +39,8 @@ function parseJson(value: string | null): unknown {
 
 function parseStoredSession(value: string | null): StoredSession | null {
   const data = parseJson(value);
-  if (!isRecord(data)) {
+  // Only a missing or unreadable record parses to something other than an object.
+  if (!(data instanceof Object)) {
     return null;
   }
   const accessToken: unknown = Reflect.get(data, 'access_token');
@@ -54,27 +51,48 @@ function parseStoredSession(value: string | null): StoredSession | null {
   return { access_token: accessToken, refresh_token: refreshToken };
 }
 
-function importLegacySession(host: SessionStorageHost): void {
-  const accessToken = host._getStorageItem(LEGACY_ACCESS_TOKEN_KEY);
-  const refreshToken = host._getStorageItem(LEGACY_REFRESH_TOKEN_KEY);
-  if (accessToken === null && refreshToken === null) {
-    return;
+// Earlier releases and applications store a bare access token, never a JSON object.
+function isRecordValue(value: string | null): boolean {
+  return value === null || value.startsWith('{');
+}
+
+function parseStoredValue(value: string | null): StoredSession | null {
+  if (isRecordValue(value)) {
+    return parseStoredSession(value);
   }
-  // A refresh token without its access token is not a usable session.
-  if (nonempty(accessToken)) {
-    writeStoredSession(host, { access_token: accessToken, refresh_token: refreshToken });
-  }
-  host._removeStorageItem(LEGACY_ACCESS_TOKEN_KEY);
+  return nonempty(value) ? { access_token: value, refresh_token: null } : null;
+}
+
+function importLegacySession(
+  host: SessionStorageHost,
+  session: StoredSession | null,
+  refreshToken: string | null,
+): StoredSession | null {
   host._removeStorageItem(LEGACY_REFRESH_TOKEN_KEY);
+  // A refresh token without its access token is not a usable session.
+  if (session === null) {
+    return null;
+  }
+  const imported = nonempty(refreshToken)
+    ? { access_token: session.access_token, refresh_token: refreshToken }
+    : session;
+  writeStoredSession(host, imported);
+  return imported;
 }
 
 /**
- * Reads the session shared by tabs and clients on this origin. Only older
- * writers set the legacy keys, so when present they hold the newest session.
+ * Reads the session shared by tabs and clients on this origin. Only older writers
+ * set the separate refresh token key, and they write it after the access token, so
+ * when present it holds the newest refresh token.
  */
 export function readStoredSession(host: SessionStorageHost): StoredSession | null {
-  importLegacySession(host);
-  return parseStoredSession(host._getStorageItem(SESSION_KEY));
+  const value = host._getStorageItem(SESSION_KEY);
+  const refreshToken = host._getStorageItem(LEGACY_REFRESH_TOKEN_KEY);
+  const session = parseStoredValue(value);
+  if (refreshToken === null && isRecordValue(value)) {
+    return session;
+  }
+  return importLegacySession(host, session, refreshToken);
 }
 
 export function writeStoredSession(

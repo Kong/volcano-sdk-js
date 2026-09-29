@@ -311,7 +311,8 @@ local credentials; a separately adopted session remains current.
 ### Multiple Tabs and Clients
 
 In a browser, tabs and SDK clients on the same origin share one stored session: a single
-localStorage record with the access and refresh tokens. Volcano rotates the refresh token on each
+localStorage record, under the `volcano_access_token` key, with the access and refresh tokens.
+Volcano rotates the refresh token on each
 refresh and rejects the previous token, so the stored record, not each client's copy, holds the
 live refresh token.
 
@@ -339,6 +340,10 @@ is stored, so they spend the refresh token one at a time. Without Web Locks, for
 secure context, the SDK coordinates only the clients in one page. Two tabs can then spend the same
 token at once, which signs one of them out and can remove the stored session.
 
+Signing in, including adopting a redirect session, stores the new session without waiting for the
+lock, so it takes effect even while another tab refreshes. If another tab stores a refresh at the
+same instant, the stored session can remain the earlier one; signing in again replaces it.
+
 If another tab holds the lock longer than the client's request timeout plus one second,
 `refreshSession()` returns an error with no HTTP status and keeps the current session, and an
 authenticated request that needed the refresh returns its original `401` response. A sign-out that
@@ -346,9 +351,11 @@ waits that long revokes without the lock. Web Locks are not reentrant, so do not
 `volcano-sdk:auth-session` as the name of an application lock.
 
 The stored record is internal to the SDK; sign in through the SDK rather than writing it directly.
-Sessions stored by earlier releases under `volcano_access_token` and `volcano_refresh_token` are
-moved into the record the next time the SDK reads storage. An earlier release does not read the
-record, so downgrading the SDK signs users out.
+Earlier releases stored the tokens separately under `volcano_access_token` and
+`volcano_refresh_token`. The SDK moves a session stored that way into the record the next time it
+reads storage, and removing both keys still ends the stored session. An earlier release reads the
+record as an access token, so downgrading the SDK signs users out. While a tab still runs an earlier
+release, a rejected refresh in that tab removes the stored session.
 
 ## Hosted Auth Pages (Managed Login)
 

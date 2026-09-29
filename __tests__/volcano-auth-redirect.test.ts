@@ -61,7 +61,7 @@ describe('VolcanoAuth', () => {
 
       expect(v.accessToken).toBe('hash-access');
       expect(v.refreshToken).toBe('hash-refresh');
-      expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toEqual({
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
         access_token: 'hash-access',
         refresh_token: 'hash-refresh',
       });
@@ -195,7 +195,7 @@ describe('VolcanoAuth', () => {
       seedNonce();
       // A previous session left a refresh token in storage.
       localStorage.setItem(
-        'volcano_auth_session',
+        'volcano_access_token',
         JSON.stringify({
           access_token: 'stale-access',
           refresh_token: 'stale-refresh',
@@ -210,7 +210,7 @@ describe('VolcanoAuth', () => {
       // adopted and is purged so it can't refresh into the previous account.
       expect(v.accessToken).toBe('fresh-access');
       expect(v.refreshToken).toBeNull();
-      expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toEqual({
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
         access_token: 'fresh-access',
         refresh_token: null,
       });

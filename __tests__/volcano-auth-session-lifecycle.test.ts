@@ -182,7 +182,7 @@ describe('VolcanoAuth session lifecycle', () => {
         email: 'fixture@example.com',
         status: 'active',
       });
-      expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toMatchObject({
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toMatchObject({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
       });
@@ -231,7 +231,7 @@ describe('VolcanoAuth session lifecycle', () => {
         email: 'fixture@example.com',
         status: 'active',
       });
-      expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toMatchObject({
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toMatchObject({
         access_token: 'replacement-access',
         refresh_token: 'replacement-refresh',
       });
