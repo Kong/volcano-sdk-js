@@ -3,6 +3,7 @@ import { expect, test } from '@jest/globals';
 import {
   decodeBase64Url,
   extractExpiryFromToken,
+  extractIssuedAtFromToken,
   extractRequiredProjectIdFromToken,
   extractSessionIdFromToken,
 } from '../src/token-claims.ts';
@@ -138,3 +139,10 @@ test.each(['opaque', 'header.!.signature'])(
     expect(extractExpiryFromToken(value)).toBe(0);
   },
 );
+
+test('reads the issued-at claim', () => {
+  expect(extractIssuedAtFromToken(token({ iat: 1_700_000_000, exp: 1_700_003_600 }))).toBe(
+    1_700_000_000,
+  );
+  expect(extractIssuedAtFromToken(token({ exp: 1_700_003_600 }))).toBe(0);
+});

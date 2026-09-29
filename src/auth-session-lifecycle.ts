@@ -1,7 +1,7 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
 import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
-import { isSameSession, sameServerSession, type StoredSession } from './auth-session-storage.ts';
+import { sameServerSession, type StoredSession } from './auth-session-storage.ts';
 import {
   assertAuthTokenResponse,
   type AuthTokenFields,
@@ -9,7 +9,11 @@ import {
 } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import type { Session, User } from './sdk-public-types.ts';
-import { extractExpiryFromToken, extractSessionIdFromToken } from './token-claims.ts';
+import {
+  extractExpiryFromToken,
+  extractIssuedAtFromToken,
+  extractSessionIdFromToken,
+} from './token-claims.ts';
 
 // Another client's rotation is adopted only while its access token outlives a request.
 const ADOPTED_ACCESS_MIN_SECONDS = 30;
@@ -78,12 +82,27 @@ function isRefreshable(stored: StoredSession | null): stored is StoredLineage {
   return stored !== null && hasToken(stored.refresh_token);
 }
 
+// Access tokens carry the time they were issued, so a later one proves a later rotation.
+function isLaterRotation(stored: StoredSession, context: AuthContext): boolean {
+  return (
+    sameServerSession(stored.access_token, context.accessToken) &&
+    extractIssuedAtFromToken(stored.access_token) >
+      extractIssuedAtFromToken(String(context.accessToken))
+  );
+}
+
+function continuesSession(stored: StoredSession, context: AuthContext): boolean {
+  return (
+    stored.refresh_token === context.refreshToken ||
+    stored.access_token === context.accessToken ||
+    isLaterRotation(stored, context)
+  );
+}
+
 /** The stored session when it holds this client's credentials or a later rotation of them. */
 function storedLineage(host: AuthLifecycleHost, context: AuthContext): StoredLineage | null {
   const stored = host._readStoredSession();
-  return isRefreshable(stored) && isSameSession(stored, context.accessToken, context.refreshToken)
-    ? stored
-    : null;
+  return isRefreshable(stored) && continuesSession(stored, context) ? stored : null;
 }
 
 function spendingContext(context: AuthContext, lineage: StoredLineage | null): AuthContext {
@@ -98,8 +117,7 @@ function secondsUntilExpiry(token: string): number {
 
 function isFreshRotation(lineage: StoredLineage, context: AuthContext): boolean {
   return (
-    lineage.access_token !== context.accessToken &&
-    sameServerSession(lineage.access_token, context.accessToken) &&
+    isLaterRotation(lineage, context) &&
     secondsUntilExpiry(lineage.access_token) > ADOPTED_ACCESS_MIN_SECONDS
   );
 }

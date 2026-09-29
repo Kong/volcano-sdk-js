@@ -34,10 +34,19 @@ export function extractSessionIdFromToken(token: unknown): string | null {
   return parsed === null ? null : normalizedSessionId(parsed.payload);
 }
 
+function numericClaim(token: string, name: string): number {
+  const value = claim(parseSessionPayload(token)?.payload, name);
+  return isFiniteNumber(value) ? value : 0;
+}
+
 /** Returns the JWT `exp` claim in seconds, or 0 (already expired) when the token has none. */
 export function extractExpiryFromToken(token: string): number {
-  const expiry = claim(parseSessionPayload(token)?.payload, 'exp');
-  return isFiniteNumber(expiry) ? expiry : 0;
+  return numericClaim(token, 'exp');
+}
+
+/** Returns the JWT `iat` claim in seconds, or 0 when the token has none. */
+export function extractIssuedAtFromToken(token: string): number {
+  return numericClaim(token, 'iat');
 }
 
 function isFiniteNumber(value: unknown): value is number {

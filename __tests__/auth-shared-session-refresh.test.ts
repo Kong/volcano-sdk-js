@@ -24,7 +24,9 @@ function setGlobal(name: string, value: unknown): void {
 }
 
 function accessToken(version: number, expiresIn = 3600, session = sessionId): string {
-  const claims = { session_id: session, exp: Math.floor(Date.now() / 1000) + expiresIn, version };
+  const now = Math.floor(Date.now() / 1000);
+  // Later versions are later rotations, so they were issued later.
+  const claims = { session_id: session, iat: now - 100 + version, exp: now + expiresIn, version };
   return `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
 }
 
@@ -431,6 +433,38 @@ describe('another sign-in in storage', () => {
     await expect(current.auth.signOut()).resolves.toEqual({ error: null });
     expect(fetchCall(0)[1]?.headers).toMatchObject({ Authorization: `Bearer ${own}` });
     expect(stored()).toEqual({ access_token: otherSignIn, refresh_token: 'other-refresh' });
+  });
+
+  it('is not preferred over newer credentials supplied to the client', async () => {
+    const earlier = accessToken(1);
+    store(earlier, 'refresh-1');
+    const current = new VolcanoAuth({
+      apiUrl: 'https://api.test',
+      anonKey: 'anon',
+      accessToken: accessToken(2, -60),
+      refreshToken: 'refresh-2',
+    });
+    current.currentUser = user;
+    fetchMock.mockResolvedValueOnce(rotation(accessToken(3), 'refresh-3'));
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-2' });
+    expect(current.refreshToken).toBe('refresh-3');
+    expect(stored()).toEqual({ access_token: earlier, refresh_token: 'refresh-1' });
+  });
+
+  it('supplies the refresh token stored for this access token', async () => {
+    const own = accessToken(1, -60);
+    store(own, 'refresh-1');
+    const current = tab();
+    // An earlier release's refresh token, paired after this tab read storage.
+    store(own, 'refresh-1b');
+    const renewed = accessToken(2);
+    fetchMock.mockResolvedValueOnce(rotation(renewed, 'refresh-2'));
+
+    await expect(current.auth.refreshSession()).resolves.toMatchObject({ error: null });
+    expect(JSON.parse(fetchBody(0))).toEqual({ refresh_token: 'refresh-1b' });
+    expect(stored()).toEqual({ access_token: renewed, refresh_token: 'refresh-2' });
   });
 
   it('is kept when a client with supplied credentials signs out', async () => {

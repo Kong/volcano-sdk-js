@@ -37,7 +37,13 @@ function parseJson(value: string | null): unknown {
   return data;
 }
 
-function parseStoredSession(value: string | null): StoredSession | null {
+interface StoredValue {
+  readonly session: StoredSession;
+  // Imported from the earlier format, whose writer stores its refresh token after the access token.
+  readonly imported: boolean;
+}
+
+function parseStoredRecord(value: string | null): StoredValue | null {
   const data = parseJson(value);
   // Only a missing or unreadable record parses to something other than an object.
   if (!(data instanceof Object)) {
@@ -48,7 +54,10 @@ function parseStoredSession(value: string | null): StoredSession | null {
   if (!nonempty(accessToken) || !isStoredRefreshToken(refreshToken)) {
     return null;
   }
-  return { access_token: accessToken, refresh_token: refreshToken };
+  return {
+    session: { access_token: accessToken, refresh_token: refreshToken },
+    imported: Reflect.get(data, 'imported') === true,
+  };
 }
 
 // Earlier releases and applications store a bare access token, never a JSON object.
@@ -56,56 +65,74 @@ function isRecordValue(value: string | null): boolean {
   return value === null || value.startsWith('{');
 }
 
-function parseStoredValue(value: string | null): StoredSession | null {
+function parseStoredValue(value: string | null): StoredValue | null {
   if (isRecordValue(value)) {
-    return parseStoredSession(value);
+    return parseStoredRecord(value);
   }
-  return nonempty(value) ? { access_token: value, refresh_token: null } : null;
+  return nonempty(value)
+    ? { session: { access_token: value, refresh_token: null }, imported: true }
+    : null;
+}
+
+function sessionOf(stored: StoredValue | null): StoredSession | null {
+  return stored === null ? null : stored.session;
+}
+
+function recordText(session: StoredSession, imported: boolean): string {
+  const record = {
+    access_token: session.access_token,
+    refresh_token: nonempty(session.refresh_token) ? session.refresh_token : null,
+  };
+  return JSON.stringify(imported ? { ...record, imported } : record);
+}
+
+function storeImportedSession(host: SessionStorageHost, session: StoredSession): boolean {
+  const text = recordText(session, true);
+  host._setStorageItem(SESSION_KEY, text);
+  return host._getStorageItem(SESSION_KEY) === text;
 }
 
 function importLegacySession(
   host: SessionStorageHost,
-  session: StoredSession | null,
+  stored: StoredValue | null,
   refreshToken: string | null,
 ): StoredSession | null {
-  host._removeStorageItem(LEGACY_REFRESH_TOKEN_KEY);
-  // A refresh token without its access token is not a usable session.
-  if (session === null) {
-    return null;
+  // A refresh token without its access token, or stored after a newer session, belongs to neither.
+  if (stored?.imported !== true) {
+    host._removeStorageItem(LEGACY_REFRESH_TOKEN_KEY);
+    return sessionOf(stored);
   }
-  const imported = nonempty(refreshToken)
+  const { session } = stored;
+  const legacySession = nonempty(refreshToken)
     ? { access_token: session.access_token, refresh_token: refreshToken }
     : session;
-  writeStoredSession(host, imported);
-  return imported;
+  // Keep the refresh token until the record holding it is stored, so a failed write loses nothing.
+  if (storeImportedSession(host, legacySession)) {
+    host._removeStorageItem(LEGACY_REFRESH_TOKEN_KEY);
+  }
+  return legacySession;
 }
 
 /**
  * Reads the session shared by tabs and clients on this origin. Only older writers
  * set the separate refresh token key, and they write it after the access token, so
- * when present it holds the newest refresh token.
+ * it completes a session imported from them.
  */
 export function readStoredSession(host: SessionStorageHost): StoredSession | null {
   const value = host._getStorageItem(SESSION_KEY);
   const refreshToken = host._getStorageItem(LEGACY_REFRESH_TOKEN_KEY);
-  const session = parseStoredValue(value);
+  const stored = parseStoredValue(value);
   if (refreshToken === null && isRecordValue(value)) {
-    return session;
+    return sessionOf(stored);
   }
-  return importLegacySession(host, session, refreshToken);
+  return importLegacySession(host, stored, refreshToken);
 }
 
 export function writeStoredSession(
   host: Pick<SessionStorageHost, '_setStorageItem'>,
   session: StoredSession,
 ): void {
-  host._setStorageItem(
-    SESSION_KEY,
-    JSON.stringify({
-      access_token: session.access_token,
-      refresh_token: nonempty(session.refresh_token) ? session.refresh_token : null,
-    }),
-  );
+  host._setStorageItem(SESSION_KEY, recordText(session, false));
 }
 
 export function removeStoredSession(host: Pick<SessionStorageHost, '_removeStorageItem'>): void {

@@ -41,6 +41,10 @@ function withRecord(value: unknown): ReturnType<typeof storage> {
   return storage({ volcano_access_token: JSON.stringify(value) });
 }
 
+function importedRecord(accessToken: string, refreshToken: string | null): string {
+  return JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, imported: true });
+}
+
 describe('readStoredSession', () => {
   it('returns null without a stored session', () => {
     expect(readStoredSession(storage().host)).toBeNull();
@@ -86,9 +90,13 @@ describe('readStoredSession', () => {
       volcano_refresh_token: 'legacy-refresh',
     });
 
-    const expected = { access_token: 'legacy-access', refresh_token: 'legacy-refresh' };
-    expect(readStoredSession(host)).toEqual(expected);
-    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
+    expect(readStoredSession(host)).toEqual({
+      access_token: 'legacy-access',
+      refresh_token: 'legacy-refresh',
+    });
+    expect(Object.fromEntries(items)).toEqual({
+      volcano_access_token: importedRecord('legacy-access', 'legacy-refresh'),
+    });
   });
 
   it.each([
@@ -100,29 +108,75 @@ describe('readStoredSession', () => {
       items.set('volcano_refresh_token', refreshToken);
     }
 
-    const expected = { access_token: 'legacy-access', refresh_token: null };
-    expect(readStoredSession(host)).toEqual(expected);
-    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
+    expect(readStoredSession(host)).toEqual({ access_token: 'legacy-access', refresh_token: null });
+    expect(Object.fromEntries(items)).toEqual({
+      volcano_access_token: importedRecord('legacy-access', null),
+    });
   });
 
-  it('pairs a refresh token written after the stored access token', () => {
+  it('reads an imported record without touching other keys', () => {
+    const { host } = storage({ volcano_access_token: importedRecord('access', 'refresh') });
+    const remove = jest.spyOn(host, '_removeStorageItem');
+    const write = jest.spyOn(host, '_setStorageItem');
+
+    expect(readStoredSession(host)).toEqual({ access_token: 'access', refresh_token: 'refresh' });
+    expect(remove).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('pairs a refresh token written after the imported access token', () => {
     // An older writer stores the access token first, so a reader can import it alone.
     const { host, items } = storage({ volcano_access_token: 'legacy-access' });
     readStoredSession(host);
     items.set('volcano_refresh_token', 'legacy-refresh');
 
-    const expected = { access_token: 'legacy-access', refresh_token: 'legacy-refresh' };
-    expect(readStoredSession(host)).toEqual(expected);
-    expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(expected) });
+    expect(readStoredSession(host)).toEqual({
+      access_token: 'legacy-access',
+      refresh_token: 'legacy-refresh',
+    });
+    expect(Object.fromEntries(items)).toEqual({
+      volcano_access_token: importedRecord('legacy-access', 'legacy-refresh'),
+    });
   });
 
-  it('keeps the stored refresh token when an older writer leaves its key empty', () => {
-    const record = { access_token: 'access', refresh_token: 'refresh' };
+  it('keeps the imported refresh token when an older writer leaves its key empty', () => {
+    const { host, items } = storage({
+      volcano_access_token: importedRecord('access', 'refresh'),
+      volcano_refresh_token: '',
+    });
+
+    expect(readStoredSession(host)).toEqual({ access_token: 'access', refresh_token: 'refresh' });
+    expect(Object.fromEntries(items)).toEqual({
+      volcano_access_token: importedRecord('access', 'refresh'),
+    });
+  });
+
+  it('does not pair an earlier refresh token with a session stored after it', () => {
+    const record = { access_token: 'newer-access', refresh_token: 'newer-refresh' };
     const { host, items } = withRecord(record);
-    items.set('volcano_refresh_token', '');
+    items.set('volcano_refresh_token', 'legacy-refresh');
 
     expect(readStoredSession(host)).toEqual(record);
     expect(Object.fromEntries(items)).toEqual({ volcano_access_token: JSON.stringify(record) });
+  });
+
+  it('keeps the earlier refresh token when the imported record cannot be stored', () => {
+    const { host, items } = storage({
+      volcano_access_token: 'legacy-access',
+      volcano_refresh_token: 'legacy-refresh',
+    });
+    jest.spyOn(host, '_setStorageItem').mockImplementation(() => {
+      // Browsers reject writes past the storage quota, and the SDK ignores the error.
+    });
+
+    expect(readStoredSession(host)).toEqual({
+      access_token: 'legacy-access',
+      refresh_token: 'legacy-refresh',
+    });
+    expect(Object.fromEntries(items)).toEqual({
+      volcano_access_token: 'legacy-access',
+      volcano_refresh_token: 'legacy-refresh',
+    });
   });
 
   it.each([
