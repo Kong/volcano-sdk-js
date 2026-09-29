@@ -111,9 +111,11 @@ if (!error) {
 }
 ```
 
-Sign-out revokes the captured session and clears local storage. For credentials received together
-from a successful sign-in or validated refresh, it uses the refresh token directly, even if the
-access token has expired. For supplied credentials, it revokes the access-token session.
+Sign-out revokes the captured session and clears it locally, including a stored copy of that
+session. For credentials received together from a successful sign-in or validated refresh, it uses
+the refresh token directly, even if the access token has expired. For supplied credentials, it
+revokes the access-token session. If another tab has rotated the session, sign-out revokes it with
+the stored credentials.
 On HTTP 401, that path can refresh once and revoke the same session without adopting the renewed credentials locally.
 Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
 the SDK still clears the captured local session and returns the error so the application can report
@@ -293,9 +295,11 @@ On success, `refreshSession()` returns the refreshed token fields in the existin
 `{ session, error }` response and replaces the client's current session. Read the full snapshot,
 including its user, with `getSession()`.
 
-If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. A transport
-error or server failure leaves the current session unchanged so the application can retry. A late
-refresh response never replaces a newer session.
+If Volcano rejects the refresh token with `401` or `403`, the SDK clears that session. It removes
+the stored session only while storage still holds the rejected refresh token, so a session another
+tab stored in the meantime remains (see [Multiple Tabs and Clients](#multiple-tabs-and-clients)).
+A transport error or server failure leaves the current session unchanged so the application can
+retry. A late refresh response never replaces a newer session.
 
 Authenticated profile, session-list/deletion, email-change request/cancellation,
 linked-provider, provider-token, and provider-API operations refresh a usable
@@ -303,6 +307,61 @@ session once after HTTP 401 and replay the original request values. They preserv
 an explicitly replaced session and do not retry other HTTP failures or ambiguous
 network failures. Deleting the current server session also clears its refreshed
 local credentials; a separately adopted session remains current.
+
+### Multiple Tabs and Clients
+
+In a browser, tabs and SDK clients on the same origin share one stored session: a single
+localStorage record, under the `volcano_access_token` key, with the access and refresh tokens.
+Volcano rotates the refresh token on each
+refresh and rejects the previous token, so the stored record, not each client's copy, holds the
+live refresh token.
+
+Before a refresh, the SDK reads the stored session:
+
+- If it holds this client's refresh token, the SDK refreshes with it and stores the result.
+- If another tab or client has already rotated the same server session, a client that has loaded
+  its user adopts the stored tokens without a request. When the stored access token expires within
+  30 seconds, or the client has not loaded its user, the SDK refreshes with the stored refresh
+  token instead, and the response provides the user.
+- If it holds a different sign-in, an earlier pair of this session, or no session, the SDK
+  refreshes with its own token and updates only this client. It never adopts or replaces another
+  sign-in.
+
+Within one server session, storage replaces a pair only with a rotation of its refresh token. So
+once a client's tokens have been stored, a different stored pair of that session is a later
+rotation. For tokens passed to the client that were never stored, the stored pair counts as later
+only when its access token was issued later.
+
+A refresh stores its result whenever storage still holds the refresh token it used, even if the
+client signed out or switched sessions meanwhile, because that token is spent. When the refresh is
+rejected, the client removes the stored session on the same condition, provided it is still using
+that session. Sign-out and deleting the current session remove the stored session only when it
+holds the server session being ended. Another sign-in stored by a different tab remains, and so
+does a stored session this client switched away from with `setSession()`, because it is still
+live.
+
+Where the [Web Locks API](https://developer.mozilla.org/docs/Web/API/Web_Locks_API) is available,
+refresh and sign-out hold the `volcano-sdk:auth-session` lock from reading storage until the result
+is stored, so they spend the refresh token one at a time. Without Web Locks, for example outside a
+secure context, the SDK coordinates only the clients in one page. Two tabs can then spend the same
+token at once, which signs one of them out and can remove the stored session.
+
+Signing in, including adopting a redirect session, stores the new session without waiting for the
+lock, so it takes effect even while another tab refreshes. If another tab stores a refresh at the
+same instant, the stored session can remain the earlier one; signing in again replaces it.
+
+If another tab holds the lock longer than the client's request timeout plus one second,
+`refreshSession()` returns an error with no HTTP status and keeps the current session, and an
+authenticated request that needed the refresh returns its original `401` response. A sign-out that
+waits that long revokes without the lock. Web Locks are not reentrant, so do not use
+`volcano-sdk:auth-session` as the name of an application lock.
+
+The stored record is internal to the SDK; sign in through the SDK rather than writing it directly.
+Earlier releases stored the tokens separately under `volcano_access_token` and
+`volcano_refresh_token`. The SDK moves a session stored that way into the record the next time it
+reads storage, and removing both keys still ends the stored session. An earlier release reads the
+record as an access token, so downgrading the SDK signs users out. While a tab still runs an earlier
+release, a rejected refresh in that tab removes the stored session.
 
 ## Hosted Auth Pages (Managed Login)
 

@@ -12,6 +12,8 @@ import {
   signOutCaptured,
   type SignOutResult,
 } from '../src/auth-session-lifecycle.ts';
+import type { StoredSession } from '../src/auth-session-storage.ts';
+import { testAccessToken } from './auth-token-fixtures.ts';
 
 const session = {
   access_token: 'access',
@@ -21,6 +23,17 @@ const session = {
 };
 
 type RequestResult = Awaited<ReturnType<AuthLifecycleHost['_anonFetch']>>;
+
+function runLocked<Result>(task: () => Promise<Result>): Promise<Result> {
+  return task();
+}
+
+function lockTimesOut<Result>(
+  _task: () => Promise<Result>,
+  timedOut: () => Promise<Result>,
+): Promise<Result> {
+  return timedOut();
+}
 
 function uninitializedResolver(): never {
   throw new Error('Refresh promise was not initialized');
@@ -40,6 +53,7 @@ function fixture(refreshToken: string | null = 'refresh'): {
   };
   const host: AuthLifecycleHost = {
     refreshToken,
+    _storedRefreshToken: null,
     currentUser: session.user,
     _oauthExchangeError: null,
     _oauthExchangePromise: null,
@@ -65,6 +79,9 @@ function fixture(refreshToken: string | null = 'refresh'): {
     _setRefreshedSession: jest.fn(() => true),
     _clearSession: jest.fn(() => true),
     _clearSessionAtGeneration: jest.fn(() => true),
+    _readStoredSession: jest.fn(() => null),
+    _writeStoredSession: jest.fn(),
+    _withSessionLock: runLocked,
   };
   return { host, context };
 }
@@ -264,7 +281,7 @@ test('a forbidden refresh clears the captured session', async () => {
   );
 
   await expect(refreshSessionForContext(host, context)).resolves.toEqual({ session: null, error });
-  expect(Reflect.get(host, '_clearSession')).toHaveBeenCalledWith(context);
+  expect(Reflect.get(host, '_clearSession')).toHaveBeenCalledWith(context, false);
   expect(context.operations.refreshClearedSession).toBe(true);
 });
 
@@ -357,4 +374,68 @@ test('access-session revocation falls back to the delete error for an empty prio
   const preceding = { ok: false, error: null } satisfies Parameters<typeof revokeAccessSession>[3];
 
   expect(await revokeAccessSession(host, context, 'session-1', preceding)).toBe(deleteError);
+});
+
+test('refresh reports a lock timeout without spending or clearing the session', async () => {
+  const { host, context } = fixture();
+  host._withSessionLock = lockTimesOut;
+
+  await expect(refreshSessionForContext(host, context)).resolves.toEqual({
+    session: null,
+    error: new Error('Timed out waiting for another session refresh'),
+  });
+  expect(Reflect.get(host, '_fetchSessionRefresh')).not.toHaveBeenCalled();
+  expect(Reflect.get(host, '_clearSession')).not.toHaveBeenCalled();
+});
+
+test('refresh spends its own token when the stored session has no refresh token', async () => {
+  const { host, context } = fixture();
+  const stored: StoredSession = { access_token: 'access', refresh_token: null };
+  host._readStoredSession = jest.fn(() => stored);
+
+  await refreshSessionForContext(host, context);
+  expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledWith(context);
+  expect(Reflect.get(host, '_setRefreshedSession')).toHaveBeenCalledWith(session, context);
+  expect(Reflect.get(host, '_writeStoredSession')).not.toHaveBeenCalled();
+});
+
+test('refresh sends a stored rotation it cannot prove belongs to the same server session', async () => {
+  const { host, context } = fixture();
+  const stored: StoredSession = {
+    access_token: testAccessToken(undefined, { exp: Math.floor(Date.now() / 1000) + 3600 }),
+    refresh_token: 'refresh',
+  };
+  host._readStoredSession = jest.fn(() => stored);
+
+  await refreshSessionForContext(host, context);
+  expect(Reflect.get(host, '_fetchSessionRefresh')).toHaveBeenCalledWith({
+    ...context,
+    accessToken: stored.access_token,
+  });
+  expect(Reflect.get(host, '_writeStoredSession')).toHaveBeenCalledWith(session);
+  expect(Reflect.get(host, '_setRefreshedSession')).toHaveBeenCalledWith(session, context);
+});
+
+test('sign-out keeps its preceding refresh failure when storage holds its own credentials', async () => {
+  const { host, context } = fixture();
+  context.operations.verifyPair(null);
+  const stored: StoredSession = { access_token: 'access', refresh_token: 'refresh' };
+  host._readStoredSession = jest.fn(() => stored);
+
+  expect(await signOutCaptured(host, context, Promise.reject(new Error('offline')))).toEqual({
+    error: new Error('offline'),
+  });
+  expect(Reflect.get(host, '_anonFetch')).not.toHaveBeenCalled();
+});
+
+test('sign-out revokes even when another holder keeps the lock', async () => {
+  const { host, context } = fixture();
+  host._withSessionLock = lockTimesOut;
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({ ok: true, status: 204, data: null, error: null } satisfies RequestResult),
+  );
+
+  await expect(signOutCaptured(host, context, null)).resolves.toEqual({ error: null });
+  expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledTimes(1);
+  expect(Reflect.get(host, '_clearSession')).toHaveBeenCalledWith(context);
 });

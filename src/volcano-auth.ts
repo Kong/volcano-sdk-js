@@ -71,6 +71,7 @@ import {
   signOutCaptured,
   type SignOutResult,
 } from './auth-session-lifecycle.ts';
+import { withSessionLock } from './auth-session-lock.ts';
 import {
   adoptSessionInMemory,
   captureAuthContext,
@@ -81,6 +82,11 @@ import {
   setRefreshedSession,
   setSession,
 } from './auth-session-state.ts';
+import {
+  readStoredSession,
+  type StoredSession,
+  writeStoredSession,
+} from './auth-session-storage.ts';
 import {
   deleteAllOtherSessions as deleteAccountOtherSessions,
   deleteSession as deleteAccountSession,
@@ -183,8 +189,6 @@ import { StorageFileApi as RuntimeStorageFileApi } from './storage-file.ts';
 
 const DEFAULT_API_URL = 'https://api.volcano.dev';
 const DEFAULT_TIMEOUT_MS = 60000; // 60 seconds
-const STORAGE_KEY_ACCESS_TOKEN = 'volcano_access_token';
-const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
 // The idempotency header's documented limit. Checked here so a name that is too
 // long fails before the start is sent, rather than coming back as a 400 the
 // caller has to read.
@@ -274,6 +278,8 @@ class VolcanoAuth {
   accessToken: string | null;
   /** @internal */
   refreshToken: string | null;
+  /** @internal */
+  _storedRefreshToken: string | null;
   auth: Auth;
   functions: Functions;
   durable: Durable;
@@ -316,6 +322,7 @@ class VolcanoAuth {
     this._durableFacade = new DurableFacade(this);
     this.accessToken = null;
     this.refreshToken = null;
+    this._storedRefreshToken = null;
     this._initializeCredentials(config);
     this._beginOAuthCallback(config);
 
@@ -397,9 +404,19 @@ class VolcanoAuth {
       this.refreshToken = config.refreshToken === '' ? null : (config.refreshToken ?? null);
       return;
     }
-    this.accessToken = this._getStorageItem(STORAGE_KEY_ACCESS_TOKEN);
-    this.refreshToken = this._getStorageItem(STORAGE_KEY_REFRESH_TOKEN);
+    this._restoreStoredSession();
     this._pendingUrlAuthNotify = this._consumeSessionFromUrl();
+  }
+
+  /** @internal */
+  private _restoreStoredSession(): void {
+    const stored = this._readStoredSession();
+    if (stored === null) {
+      return;
+    }
+    this.accessToken = stored.access_token;
+    this.refreshToken = stored.refresh_token;
+    this._storedRefreshToken = stored.refresh_token;
   }
 
   /** @internal */
@@ -1115,13 +1132,36 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  _clearSession(context: AuthContext): ReturnType<typeof clearSession> {
-    return clearSession(this, context);
+  _clearSession(context: AuthContext, removeStored?: boolean): ReturnType<typeof clearSession> {
+    return clearSession(this, context, removeStored);
   }
 
   /** @internal */
-  _clearSessionAtGeneration(generation: number): ReturnType<typeof clearSessionAtGeneration> {
-    return clearSessionAtGeneration(this, generation);
+  _clearSessionAtGeneration(
+    generation: number,
+    removeStored?: boolean,
+  ): ReturnType<typeof clearSessionAtGeneration> {
+    return clearSessionAtGeneration(this, generation, removeStored);
+  }
+
+  /** @internal */
+  _readStoredSession(): StoredSession | null {
+    return readStoredSession(this);
+  }
+
+  /** @internal */
+  _writeStoredSession(session: StoredSession): void {
+    if (writeStoredSession(this, session)) {
+      this._storedRefreshToken = session.refresh_token;
+    }
+  }
+
+  /** @internal */
+  _withSessionLock<Result>(
+    task: () => Promise<Result>,
+    timedOut: () => Promise<Result>,
+  ): Promise<Result> {
+    return withSessionLock(this.timeout, task, timedOut);
   }
 
   /** @internal */

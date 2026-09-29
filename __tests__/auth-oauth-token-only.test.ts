@@ -31,7 +31,12 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
       },
     };
   };
-  const localStorage = storage({ volcano_refresh_token: 'stale-refresh' });
+  const localStorage = storage({
+    volcano_access_token: JSON.stringify({
+      access_token: 'stale-access',
+      refresh_token: 'stale-refresh',
+    }),
+  });
   const sessionStorage = storage({
     volcano_auth_state: 'oauth-nonce',
     volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
@@ -76,8 +81,10 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
     refresh_token: null,
     user,
   });
-  expect(localStorage.getItem('volcano_refresh_token')).toBeNull();
-  expect(localStorage.getItem('volcano_access_token')).toBe('cookie-session-access');
+  expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
+    access_token: 'cookie-session-access',
+    refresh_token: null,
+  });
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(replaceState).toHaveBeenCalledWith(null, '', '/auth/callback');
 });

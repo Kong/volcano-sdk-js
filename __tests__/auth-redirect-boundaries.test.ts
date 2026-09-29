@@ -46,8 +46,7 @@ function host(): OAuthRedirectHost {
     _takeAuthRedirectURL: jest.fn(() => null),
     _replaceSessionFromUrl: jest.fn(),
     _stripAuthHashFromUrl: jest.fn(),
-    _setStorageItem: jest.fn(),
-    _removeStorageItem: jest.fn(),
+    _writeStoredSession: jest.fn(),
     _oauthExchangeError: null,
     _oauthExchangePromise: null,
     _stripOAuthQueryFromUrl: jest.fn(),
@@ -133,7 +132,10 @@ test('token-only handoff clears an old refresh credential', () => {
   client.refreshToken = 'old-refresh';
   replaceSessionFromUrl(client, 'new-access', '');
   expect(client.refreshToken).toBeNull();
-  expect(Reflect.get(client, '_removeStorageItem')).toHaveBeenCalledWith('volcano_refresh_token');
+  expect(Reflect.get(client, '_writeStoredSession')).toHaveBeenCalledWith({
+    access_token: 'new-access',
+    refresh_token: null,
+  });
   expect(client._sessionGeneration).toBe(1);
 });
 

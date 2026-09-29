@@ -36,6 +36,17 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
 });
 
+// Node's navigator.locks is shared by every test file in a worker, so a lock one
+// file leaves held would stall the next. Tests that need Web Locks install their own.
+const hostNavigator: unknown = Reflect.get(globalThis, 'navigator');
+if (typeof hostNavigator === 'object' && hostNavigator !== null) {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    writable: true,
+    value: Object.create(hostNavigator, { locks: { value: undefined } }),
+  });
+}
+
 // Reset mocks before each test
 beforeEach(() => {
   jest.clearAllMocks();

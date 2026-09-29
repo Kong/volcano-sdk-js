@@ -61,8 +61,10 @@ describe('VolcanoAuth', () => {
 
       expect(v.accessToken).toBe('hash-access');
       expect(v.refreshToken).toBe('hash-refresh');
-      expect(localStorage.getItem('volcano_access_token')).toBe('hash-access');
-      expect(localStorage.getItem('volcano_refresh_token')).toBe('hash-refresh');
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
+        access_token: 'hash-access',
+        refresh_token: 'hash-refresh',
+      });
       // Tokens were removed from the URL immediately.
       expect(replaceSpy).toHaveBeenCalled();
       expect(window.location.hash).toBe('');
@@ -192,7 +194,13 @@ describe('VolcanoAuth', () => {
     it('clears a stored refresh token when the redirect hand-off carries none', () => {
       seedNonce();
       // A previous session left a refresh token in storage.
-      localStorage.setItem('volcano_refresh_token', 'stale-stored-refresh');
+      localStorage.setItem(
+        'volcano_access_token',
+        JSON.stringify({
+          access_token: 'stale-access',
+          refresh_token: 'stale-refresh',
+        }),
+      );
       // The redirect fragment carries a fresh access token but NO refresh token.
       window.location.hash = `#access_token=fresh-access&token_type=bearer&expires_in=3600&state=${NONCE}`;
 
@@ -202,8 +210,10 @@ describe('VolcanoAuth', () => {
       // adopted and is purged so it can't refresh into the previous account.
       expect(v.accessToken).toBe('fresh-access');
       expect(v.refreshToken).toBeNull();
-      expect(localStorage.getItem('volcano_refresh_token')).toBeNull();
-      expect(Reflect.get(localStorage, 'removeItem')).toHaveBeenCalledWith('volcano_refresh_token');
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toEqual({
+        access_token: 'fresh-access',
+        refresh_token: null,
+      });
     });
 
     it('strips the fragment cleanly when only auth params (incl. state) are present', () => {

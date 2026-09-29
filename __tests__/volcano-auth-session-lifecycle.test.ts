@@ -182,8 +182,10 @@ describe('VolcanoAuth session lifecycle', () => {
         email: 'fixture@example.com',
         status: 'active',
       });
-      expect(localStorage.getItem('volcano_access_token')).toBe('replacement-access');
-      expect(localStorage.getItem('volcano_refresh_token')).toBe('replacement-refresh');
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toMatchObject({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+      });
       expect(Reflect.get(localStorage, 'setItem')).not.toHaveBeenCalled();
       expect(Reflect.get(localStorage, 'removeItem')).not.toHaveBeenCalled();
       expect(callback).not.toHaveBeenCalled();
@@ -229,8 +231,10 @@ describe('VolcanoAuth session lifecycle', () => {
         email: 'fixture@example.com',
         status: 'active',
       });
-      expect(localStorage.getItem('volcano_access_token')).toBe('replacement-access');
-      expect(localStorage.getItem('volcano_refresh_token')).toBe('replacement-refresh');
+      expect(JSON.parse(String(localStorage.getItem('volcano_access_token')))).toMatchObject({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+      });
       expect(Reflect.get(localStorage, 'setItem')).not.toHaveBeenCalled();
       expect(Reflect.get(localStorage, 'removeItem')).not.toHaveBeenCalled();
       expect(callback).not.toHaveBeenCalled();

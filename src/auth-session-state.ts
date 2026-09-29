@@ -1,11 +1,15 @@
 import { validateSessionContinuation } from './auth-continuity.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from './auth-session-lifecycle.ts';
+import {
+  isSameSession,
+  readStoredSession,
+  removeStoredSession,
+  type SessionStorageHost,
+  type StoredSession,
+} from './auth-session-storage.ts';
 import { assertAuthUser, type CompleteSessionFields } from './auth-validation.ts';
 import type { User } from './sdk-public-types.ts';
-
-const ACCESS_TOKEN_KEY = 'volcano_access_token';
-const REFRESH_TOKEN_KEY = 'volcano_refresh_token';
 
 interface SessionInput {
   access_token: string;
@@ -13,7 +17,7 @@ interface SessionInput {
   user: unknown;
 }
 
-export interface AuthSessionStateHost {
+export interface AuthSessionStateHost extends SessionStorageHost {
   _sessionGeneration: number;
   _sessionOperations: AuthSessionOperations<RefreshResult, SignOutResult>;
   _oauthExchangeError: unknown;
@@ -22,10 +26,9 @@ export interface AuthSessionStateHost {
   refreshToken: string | null;
   currentUser: User | null;
   _authCallbacks: ((user: User | null) => void)[];
-  _setStorageItem(key: string, value: string): void;
-  _removeStorageItem(key: string): void;
+  _writeStoredSession(session: StoredSession): void;
   _isAuthContextCurrent(context: AuthContext): boolean;
-  _clearSessionAtGeneration(generation: number): boolean;
+  _clearSessionAtGeneration(generation: number, removeStored?: boolean): boolean;
   _notifyAuthCallbacks(user: User | null): void;
 }
 
@@ -72,12 +75,7 @@ export function setSession(
   host._sessionGeneration += 1;
   host._sessionOperations = new AuthSessionOperations(data);
   host._pendingUrlAuthNotify = false;
-  host._setStorageItem(ACCESS_TOKEN_KEY, host.accessToken);
-  if (host.refreshToken !== null && host.refreshToken !== '') {
-    host._setStorageItem(REFRESH_TOKEN_KEY, host.refreshToken);
-  } else {
-    host._removeStorageItem(REFRESH_TOKEN_KEY);
-  }
+  host._writeStoredSession({ access_token: host.accessToken, refresh_token: host.refreshToken });
   host._notifyAuthCallbacks(host.currentUser);
   return true;
 }
@@ -96,20 +94,35 @@ export function setRefreshedSession(
   host.refreshToken = data.refresh_token;
   host.currentUser = data.user;
   host._pendingUrlAuthNotify = false;
-  host._setStorageItem(ACCESS_TOKEN_KEY, host.accessToken);
-  host._setStorageItem(REFRESH_TOKEN_KEY, host.refreshToken);
   host._notifyAuthCallbacks(host.currentUser);
   return true;
 }
 
-export function clearSession(host: AuthSessionStateHost, context: AuthContext): boolean {
+export function clearSession(
+  host: AuthSessionStateHost,
+  context: AuthContext,
+  removeStored?: boolean,
+): boolean {
   if (!host._isAuthContextCurrent(context) || context.refreshToken !== host.refreshToken) {
     return false;
   }
-  return host._clearSessionAtGeneration(context.generation);
+  return host._clearSessionAtGeneration(context.generation, removeStored);
 }
 
-export function clearSessionAtGeneration(host: AuthSessionStateHost, generation: number): boolean {
+function storesCurrentSession(host: AuthSessionStateHost): boolean {
+  const stored = readStoredSession(host);
+  return stored !== null && isSameSession(stored, host.accessToken, host.refreshToken);
+}
+
+/**
+ * By default, removes the stored session only when it holds this client's server
+ * session, so another sign-in stored by a different tab or client stays.
+ */
+export function clearSessionAtGeneration(
+  host: AuthSessionStateHost,
+  generation: number,
+  removeStored = storesCurrentSession(host),
+): boolean {
   if (generation !== host._sessionGeneration) {
     return false;
   }
@@ -120,8 +133,9 @@ export function clearSessionAtGeneration(host: AuthSessionStateHost, generation:
   host.currentUser = null;
   host._sessionGeneration += 1;
   host._pendingUrlAuthNotify = false;
-  host._removeStorageItem(ACCESS_TOKEN_KEY);
-  host._removeStorageItem(REFRESH_TOKEN_KEY);
+  if (removeStored) {
+    removeStoredSession(host);
+  }
   host._notifyAuthCallbacks(null);
   return true;
 }

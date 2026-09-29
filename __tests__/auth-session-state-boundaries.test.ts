@@ -12,15 +12,19 @@ import {
   setRefreshedSession,
   setSession,
 } from '../src/auth-session-state.ts';
+import { writeStoredSession } from '../src/auth-session-storage.ts';
 
 const user = { id: 'user-1', email: 'user@example.com', status: 'active' } as const;
 const nextSession = { access_token: 'new-access', refresh_token: 'new-refresh', user };
+const oldRecord = { access_token: 'old-access', refresh_token: 'old-refresh' };
+
+function record(storage: Map<string, string>): unknown {
+  const value = storage.get('volcano_access_token');
+  return value === undefined ? undefined : JSON.parse(value);
+}
 
 function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> } {
-  const storage = new Map<string, string>([
-    ['volcano_access_token', 'old-access'],
-    ['volcano_refresh_token', 'old-refresh'],
-  ]);
+  const storage = new Map<string, string>([['volcano_access_token', JSON.stringify(oldRecord)]]);
   const host: AuthSessionStateHost = {
     _sessionGeneration: 3,
     _sessionOperations: new AuthSessionOperations<RefreshResult, SignOutResult>(),
@@ -30,6 +34,12 @@ function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> }
     refreshToken: 'old-refresh',
     currentUser: user,
     _authCallbacks: [],
+    _writeStoredSession(session) {
+      writeStoredSession(host, session);
+    },
+    _getStorageItem(key) {
+      return storage.get(key) ?? null;
+    },
     _setStorageItem(key, value) {
       storage.set(key, value);
     },
@@ -39,8 +49,8 @@ function fixture(): { host: AuthSessionStateHost; storage: Map<string, string> }
     _isAuthContextCurrent(context) {
       return isAuthContextCurrent(host, context);
     },
-    _clearSessionAtGeneration(generation) {
-      return clearSessionAtGeneration(host, generation);
+    _clearSessionAtGeneration(generation, removeStored) {
+      return clearSessionAtGeneration(host, generation, removeStored);
     },
     _notifyAuthCallbacks(value) {
       notifyAuthCallbacks(host, value);
@@ -92,13 +102,12 @@ test('setSession rejects stale generations and persists only the accepted creden
 
   expect(setSession(host, nextSession, 2)).toBe(false);
   expect(host.accessToken).toBe('old-access');
-  expect(storage.get('volcano_access_token')).toBe('old-access');
+  expect(record(storage)).toEqual(oldRecord);
   expect(notify).not.toHaveBeenCalled();
 
   expect(setSession(host, nextSession, 3)).toBe(true);
   expect(host._sessionGeneration).toBe(4);
-  expect(storage.get('volcano_access_token')).toBe('new-access');
-  expect(storage.get('volcano_refresh_token')).toBe('new-refresh');
+  expect(record(storage)).toEqual({ access_token: 'new-access', refresh_token: 'new-refresh' });
   expect(host._sessionOperations.hasVerifiedPair('new-access', 'new-refresh')).toBe(true);
   expect(host._oauthExchangeError).toBeNull();
   expect(host._pendingUrlAuthNotify).toBe(false);
@@ -106,15 +115,15 @@ test('setSession rejects stale generations and persists only the accepted creden
 
   expect(setSession(host, { access_token: 'cookie-access', user }, 4)).toBe(true);
   expect(host.refreshToken).toBeNull();
-  expect(storage.has('volcano_refresh_token')).toBe(false);
+  expect(record(storage)).toEqual({ access_token: 'cookie-access', refresh_token: null });
 
   expect(setSession(host, { access_token: 'blank-refresh', refresh_token: '', user }, 5)).toBe(
     true,
   );
-  expect(storage.has('volcano_refresh_token')).toBe(false);
+  expect(record(storage)).toEqual({ access_token: 'blank-refresh', refresh_token: null });
 });
 
-test('refresh adopts only the captured session and preserves its user identity', () => {
+test('refresh adopts only the captured session in memory and preserves its user identity', () => {
   const { host, storage } = fixture();
   const notify = jest.fn<(value: unknown) => void>();
   host._authCallbacks.push(notify);
@@ -131,8 +140,8 @@ test('refresh adopts only the captured session and preserves its user identity',
     'new-refresh',
     user,
   ]);
-  expect(storage.get('volcano_access_token')).toBe('new-access');
-  expect(storage.get('volcano_refresh_token')).toBe('new-refresh');
+  // The refresh flow stores rotations itself, only while storage holds the spent token.
+  expect(record(storage)).toEqual(oldRecord);
   expect(host._pendingUrlAuthNotify).toBe(false);
   expect(notify).toHaveBeenCalledWith(user);
 });
@@ -145,7 +154,7 @@ test('refresh rejects credentials for a different user without replacing the cur
     setRefreshedSession(host, { ...nextSession, user: { ...user, id: 'user-2' } }, context);
   }).toThrow('Refreshed session belongs to a different user');
   expect(host.accessToken).toBe('old-access');
-  expect(storage.get('volcano_refresh_token')).toBe('old-refresh');
+  expect(record(storage)).toEqual(oldRecord);
 });
 
 test('clearSession rejects stale ownership and removes only current credentials', () => {
@@ -158,7 +167,7 @@ test('clearSession rejects stale ownership and removes only current credentials'
   expect(clearSession(host, { ...context, refreshToken: 'other' })).toBe(false);
   expect(clearSession(host, { ...context, generation: 2 })).toBe(false);
   expect(host.accessToken).toBe('old-access');
-  expect(storage.get('volcano_refresh_token')).toBe('old-refresh');
+  expect(record(storage)).toEqual(oldRecord);
 
   expect(clearSession(host, context)).toBe(true);
   expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual([null, null, null]);
@@ -168,6 +177,27 @@ test('clearSession rejects stale ownership and removes only current credentials'
   expect(host._pendingUrlAuthNotify).toBe(false);
   expect(storage.size).toBe(0);
   expect(notify).toHaveBeenCalledWith(null);
+});
+
+test('clearing removes the stored session only when it holds this server session', () => {
+  const otherRecord = JSON.stringify({
+    access_token: 'other-access',
+    refresh_token: 'other-refresh',
+  });
+
+  const kept = fixture();
+  expect(clearSession(kept.host, captureAuthContext(kept.host), false)).toBe(true);
+  expect(record(kept.storage)).toEqual(oldRecord);
+
+  const otherSignIn = fixture();
+  otherSignIn.storage.set('volcano_access_token', otherRecord);
+  expect(clearSessionAtGeneration(otherSignIn.host, 3)).toBe(true);
+  expect(otherSignIn.storage.get('volcano_access_token')).toBe(otherRecord);
+
+  const signedOut = fixture();
+  signedOut.storage.delete('volcano_access_token');
+  expect(clearSessionAtGeneration(signedOut.host, 3)).toBe(true);
+  expect(signedOut.storage.size).toBe(0);
 });
 
 test('a failing auth callback does not prevent later subscribers from receiving state', () => {
