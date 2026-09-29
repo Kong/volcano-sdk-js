@@ -1,8 +1,6 @@
 import { AuthSessionOperations } from './auth-session.ts';
+import type { StoredSession } from './auth-session-storage.ts';
 import { validateOAuthSession } from './auth-validation.ts';
-
-const accessTokenKey = 'volcano_access_token';
-const refreshTokenKey = 'volcano_refresh_token';
 
 export interface RedirectHost {
   _urlSessionConsumed: boolean;
@@ -16,8 +14,7 @@ export interface RedirectHost {
   _takeAuthRedirectURL(): string | null;
   _replaceSessionFromUrl(accessToken: string, refreshToken: string | null): void;
   _stripAuthHashFromUrl(params: URLSearchParams): void;
-  _setStorageItem(key: string, value: string): void;
-  _removeStorageItem(key: string): void;
+  _writeStoredSession(session: StoredSession): void;
 }
 
 export interface OAuthRedirectHost extends RedirectHost {
@@ -98,12 +95,7 @@ export function replaceSessionFromUrl(
   host.currentUser = null;
   host._sessionGeneration += 1;
   host._sessionOperations = new AuthSessionOperations();
-  host._setStorageItem(accessTokenKey, host.accessToken);
-  if (host.refreshToken === null) {
-    host._removeStorageItem(refreshTokenKey);
-    return;
-  }
-  host._setStorageItem(refreshTokenKey, host.refreshToken);
+  host._writeStoredSession({ access_token: host.accessToken, refresh_token: host.refreshToken });
 }
 
 interface OAuthCallback {

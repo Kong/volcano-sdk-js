@@ -34,6 +34,16 @@ export function extractSessionIdFromToken(token: unknown): string | null {
   return parsed === null ? null : normalizedSessionId(parsed.payload);
 }
 
+/** Returns the JWT `exp` claim in seconds, or 0 (already expired) when the token has none. */
+export function extractExpiryFromToken(token: string): number {
+  const expiry = claim(parseSessionPayload(token)?.payload, 'exp');
+  return isFiniteNumber(expiry) ? expiry : 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return Number.isFinite(value);
+}
+
 function parseSessionPayload(token: string): { payload: unknown } | null {
   const parts = token.split('.');
   if (!hasThreeSegments(parts)) {

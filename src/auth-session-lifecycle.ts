@@ -1,6 +1,7 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
 import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
+import { isSameSession, sameServerSession, type StoredSession } from './auth-session-storage.ts';
 import {
   assertAuthTokenResponse,
   type AuthTokenFields,
@@ -8,7 +9,10 @@ import {
 } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import type { Session, User } from './sdk-public-types.ts';
-import { extractSessionIdFromToken } from './token-claims.ts';
+import { extractExpiryFromToken, extractSessionIdFromToken } from './token-claims.ts';
+
+// Another client's rotation is adopted only while its access token outlives a request.
+const ADOPTED_ACCESS_MIN_SECONDS = 30;
 
 interface RequestBase {
   status: number | null;
@@ -50,8 +54,14 @@ export interface AuthLifecycleHost {
   _anonFetch(path: string, options: RequestInit): Promise<RequestResult>;
   _fetchSessionRefresh(context: AuthContext): Promise<RefreshResult>;
   _setRefreshedSession(data: CompleteSessionFields, context: AuthContext): boolean;
-  _clearSession(context: AuthContext): boolean;
+  _clearSession(context: AuthContext, removeStored?: boolean): boolean;
   _clearSessionAtGeneration(generation: number): boolean;
+  _readStoredSession(): StoredSession | null;
+  _writeStoredSession(session: StoredSession): void;
+  _withSessionLock<Result>(
+    task: () => Promise<Result>,
+    timedOut: () => Promise<Result>,
+  ): Promise<Result>;
 }
 
 function normalizedError(reason: unknown, fallback: string): Error {
@@ -60,6 +70,61 @@ function normalizedError(reason: unknown, fallback: string): Error {
 
 function hasToken(token: string | null): token is string {
   return token !== null && token !== '';
+}
+
+type StoredLineage = StoredSession & { readonly refresh_token: string };
+
+function isRefreshable(stored: StoredSession | null): stored is StoredLineage {
+  return stored !== null && hasToken(stored.refresh_token);
+}
+
+/** The stored session when it holds this client's credentials or a later rotation of them. */
+function storedLineage(host: AuthLifecycleHost, context: AuthContext): StoredLineage | null {
+  const stored = host._readStoredSession();
+  return isRefreshable(stored) && isSameSession(stored, context.accessToken, context.refreshToken)
+    ? stored
+    : null;
+}
+
+function spendingContext(context: AuthContext, lineage: StoredLineage | null): AuthContext {
+  return lineage === null
+    ? context
+    : { ...context, accessToken: lineage.access_token, refreshToken: lineage.refresh_token };
+}
+
+function secondsUntilExpiry(token: string): number {
+  return Math.floor(extractExpiryFromToken(token) - Date.now() / 1000);
+}
+
+function isFreshRotation(lineage: StoredLineage, context: AuthContext): boolean {
+  return (
+    lineage.access_token !== context.accessToken &&
+    sameServerSession(lineage.access_token, context.accessToken) &&
+    secondsUntilExpiry(lineage.access_token) > ADOPTED_ACCESS_MIN_SECONDS
+  );
+}
+
+function adoptedRefresh(
+  host: AuthLifecycleHost,
+  lineage: StoredLineage,
+  context: AuthContext,
+): SuccessfulRefresh | null {
+  // Without a loaded user, a refresh request returns the current profile.
+  const user = host.currentUser;
+  if (user === null || !isFreshRotation(lineage, context)) {
+    return null;
+  }
+  return {
+    ok: true,
+    status: null,
+    error: null,
+    data: {
+      access_token: lineage.access_token,
+      refresh_token: lineage.refresh_token,
+      user,
+      expires_in: secondsUntilExpiry(lineage.access_token),
+    },
+  };
 }
 
 export async function signOut(host: AuthLifecycleHost): Promise<SignOutResult> {
@@ -93,12 +158,33 @@ function credentialsForSignOut(
   };
 }
 
+function rotatedElsewhere(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  preceding: PrecedingRefresh,
+): StoredLineage | null {
+  const lineage = storedLineage(host, context);
+  const { refreshToken } = credentialsForSignOut(context, preceding);
+  return lineage !== null && lineage.refresh_token !== refreshToken ? lineage : null;
+}
+
 async function logoutError(
   host: AuthLifecycleHost,
   context: AuthContext,
-  refreshing: Promise<RefreshResult> | null,
+  preceding: PrecedingRefresh,
 ): Promise<unknown> {
-  const preceding = await precedingRefresh(refreshing);
+  // When another client rotated this session, only its stored credentials are still live.
+  const rotated = rotatedElsewhere(host, context, preceding);
+  return rotated === null
+    ? revokeCredentials(host, context, preceding)
+    : revokeCredentials(host, spendingContext(context, rotated), null);
+}
+
+async function revokeCredentials(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  preceding: PrecedingRefresh,
+): Promise<unknown> {
   const { accessToken, refreshToken } = credentialsForSignOut(context, preceding);
   const verified = context.operations.hasVerifiedPair(accessToken, refreshToken);
   const sessionId = extractSessionIdFromToken(context.accessToken);
@@ -146,9 +232,21 @@ export async function signOutCaptured(
   context: AuthContext,
   refreshing: Promise<RefreshResult> | null,
 ): Promise<SignOutResult> {
+  // Wait outside the lock: the running refresh holds it until it settles.
+  const preceding = await precedingRefresh(refreshing);
+  // Revocation spends the session too, so a lock timeout must not skip it.
+  const revoke = (): Promise<SignOutResult> => revokeAndClear(host, context, preceding);
+  return host._withSessionLock(revoke, revoke);
+}
+
+async function revokeAndClear(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  preceding: PrecedingRefresh,
+): Promise<SignOutResult> {
   let error: unknown;
   try {
-    error = await logoutError(host, context, refreshing);
+    error = await logoutError(host, context, preceding);
   } catch (reason) {
     error = normalizedError(reason, 'Session revocation failed');
   }
@@ -271,17 +369,70 @@ function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string |
   return host.currentUser?.id ?? null;
 }
 
+function refreshLockTimedOut(): Promise<FailedRefresh> {
+  return Promise.resolve({
+    ok: false,
+    status: null,
+    data: null,
+    error: new Error('Timed out waiting for another session refresh'),
+  });
+}
+
 async function refreshResult(
   host: AuthLifecycleHost,
   context: AuthContext,
 ): Promise<RefreshResult> {
-  const result = await host._fetchSessionRefresh(context);
-  if (context.operations.signingOut === null) {
-    if (result.ok === true) {
-      host._setRefreshedSession(result.data, context);
-    } else if (result.status === 401 || result.status === 403) {
-      context.operations.refreshClearedSession = host._clearSession(context);
-    }
+  return host._withSessionLock(() => refreshFromStorage(host, context), refreshLockTimedOut);
+}
+
+async function refreshFromStorage(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+): Promise<RefreshResult> {
+  const lineage = storedLineage(host, context);
+  const adopted = lineage === null ? null : adoptedRefresh(host, lineage, context);
+  if (adopted !== null) {
+    return commitRefresh(host, context, adopted, null);
+  }
+  const result = await host._fetchSessionRefresh(spendingContext(context, lineage));
+  return commitRefresh(host, context, result, lineage?.refresh_token ?? null);
+}
+
+function storageHolds(host: AuthLifecycleHost, refreshToken: string | null): boolean {
+  return refreshToken !== null && host._readStoredSession()?.refresh_token === refreshToken;
+}
+
+/**
+ * Stores a rotation of the stored session even when this client no longer uses
+ * it, because the stored token it replaces is already spent.
+ */
+function storeRotation(
+  host: AuthLifecycleHost,
+  result: RefreshResult,
+  spentStoredToken: string | null,
+): boolean {
+  // Another client may have replaced storage since the read; only the spent token is ours to replace.
+  const ownsStorage = storageHolds(host, spentStoredToken);
+  if (ownsStorage && result.ok === true) {
+    host._writeStoredSession(result.data);
+  }
+  return ownsStorage;
+}
+
+function commitRefresh(
+  host: AuthLifecycleHost,
+  context: AuthContext,
+  result: RefreshResult,
+  spentStoredToken: string | null,
+): RefreshResult {
+  const ownsStorage = storeRotation(host, result, spentStoredToken);
+  if (context.operations.signingOut !== null) {
+    return result;
+  }
+  if (result.ok === true) {
+    host._setRefreshedSession(result.data, context);
+  } else if (result.status === 401 || result.status === 403) {
+    context.operations.refreshClearedSession = host._clearSession(context, ownsStorage);
   }
   return result;
 }

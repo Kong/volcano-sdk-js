@@ -176,12 +176,12 @@ export async function anonFetch(
   options: RequestInit = {},
 ): Promise<RequestResult> {
   try {
-    const response = await fetchWithTimeout(
+    const { response, data } = await requestOnce(
+      host,
       `${host.apiUrl}${path}`,
-      { ...options, headers: requestHeaders(host.anonKey, options.headers) },
-      host.timeout,
+      options,
+      host.anonKey,
     );
-    const data = await safeJsonParse(response);
     return resultFromResponse(response, data);
   } catch (error) {
     return failed(error instanceof Error ? error : new Error('Request failed'));

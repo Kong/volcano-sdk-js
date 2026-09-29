@@ -2,6 +2,7 @@
 import { expect, test } from '@jest/globals';
 import {
   decodeBase64Url,
+  extractExpiryFromToken,
   extractRequiredProjectIdFromToken,
   extractSessionIdFromToken,
 } from '../src/token-claims.ts';
@@ -114,3 +115,26 @@ test('reports when neither platform decoder exists', () => {
     withoutGlobal('atob', () => withoutGlobal('Buffer', () => decodeBase64Url('Zg'))),
   ).toThrow('No base64 decoder available');
 });
+
+test.each([1, 1_700_000_000, 1_700_000_000.5])('reads a numeric expiry claim: %p', (exp) => {
+  expect(extractExpiryFromToken(token({ exp }))).toBe(exp);
+});
+
+test.each([{}, { exp: '1700000000' }, { exp: null }, null])(
+  'treats a token as expired without a numeric claim: %p',
+  (payload) => {
+    expect(extractExpiryFromToken(token(payload))).toBe(0);
+  },
+);
+
+test('treats a token as expired for an unbounded claim', () => {
+  const payload = Buffer.from('{"exp":1e999}').toString('base64url');
+  expect(extractExpiryFromToken(`header.${payload}.signature`)).toBe(0);
+});
+
+test.each(['opaque', 'header.!.signature'])(
+  'treats a token as expired for a malformed token: %s',
+  (value) => {
+    expect(extractExpiryFromToken(value)).toBe(0);
+  },
+);

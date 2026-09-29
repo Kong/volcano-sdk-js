@@ -65,8 +65,7 @@ describe('VolcanoAuth credentials', () => {
       expect(result.error).toBeNull();
       // No session is issued, so neither token key is persisted (any value, incl. undefined/null).
       const persistedKeys = storageWriteKeys();
-      expect(persistedKeys).not.toContain('volcano_access_token');
-      expect(persistedKeys).not.toContain('volcano_refresh_token');
+      expect(persistedKeys).not.toContain('volcano_auth_session');
     });
 
     it('should return error on signup failure', async () => {
@@ -125,10 +124,10 @@ describe('VolcanoAuth credentials', () => {
       expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com', status: 'active' });
       expect(result.session?.access_token).toBe('access-token-123');
       expect(result.error).toBeNull();
-      expect(Reflect.get(localStorage, 'setItem')).toHaveBeenCalledWith(
-        'volcano_access_token',
-        'access-token-123',
-      );
+      expect(JSON.parse(String(localStorage.getItem('volcano_auth_session')))).toEqual({
+        access_token: 'access-token-123',
+        refresh_token: 'refresh-token-123',
+      });
     });
 
     it('does not sign in when confirmation is required, even with signInWhenAllowed', async () => {
@@ -148,8 +147,7 @@ describe('VolcanoAuth credentials', () => {
       expect(result.user).toBeNull();
       expect(result.session).toBeNull();
       const persistedKeys = storageWriteKeys();
-      expect(persistedKeys).not.toContain('volcano_access_token');
-      expect(persistedKeys).not.toContain('volcano_refresh_token');
+      expect(persistedKeys).not.toContain('volcano_auth_session');
     });
 
     it('surfaces the sign-in error when the follow-up sign-in fails', async () => {
@@ -449,6 +447,10 @@ describe('VolcanoAuth credentials', () => {
     });
 
     it('should clear session on signout', async () => {
+      localStorage.setItem(
+        'volcano_auth_session',
+        JSON.stringify({ access_token: 'test-access-token', refresh_token: 'test-refresh' }),
+      );
       volcano.accessToken = 'test-access-token';
       volcano.refreshToken = 'test-refresh';
 
@@ -458,8 +460,7 @@ describe('VolcanoAuth credentials', () => {
 
       expect(volcano.accessToken).toBeNull();
       expect(volcano.refreshToken).toBeNull();
-      expect(Reflect.get(localStorage, 'removeItem')).toHaveBeenCalledWith('volcano_access_token');
-      expect(Reflect.get(localStorage, 'removeItem')).toHaveBeenCalledWith('volcano_refresh_token');
+      expect(Reflect.get(localStorage, 'removeItem')).toHaveBeenCalledWith('volcano_auth_session');
     });
   });
 });

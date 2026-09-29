@@ -194,3 +194,21 @@ test('non-Error transport failures use a stable error in either auth mode', asyn
     error: new Error('Request failed'),
   });
 });
+
+test('an anonymous request times out while its response body stalls', async () => {
+  jest.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+    const body = new ReadableStream({
+      start(stream) {
+        init?.signal?.addEventListener('abort', () => {
+          stream.error(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      },
+    });
+    return Promise.resolve(new Response(body, { status: 200 }));
+  });
+  const host = { ...fixture(), timeout: 20 };
+
+  const result = await anonFetch(host, '/auth/refresh', { method: 'POST' });
+  expect(result).toMatchObject({ ok: false, status: null, data: null });
+  expect(result.error?.message).toBe('Request timeout after 20ms');
+});
