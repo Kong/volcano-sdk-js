@@ -127,6 +127,7 @@ import {
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
 import { logActivityResult, logSearchResult } from './project-logs.ts';
+import { SandboxesApi } from './sandboxes.ts';
 import type {
   Auth,
   Durable,
@@ -136,6 +137,7 @@ import type {
   MutationBuilder as PublicMutationBuilder,
   ProjectLocks,
   QueryBuilder as PublicQueryBuilder,
+  Sandboxes,
   Storage,
   StorageFileApi as PublicStorageFileApi,
   User,
@@ -280,6 +282,7 @@ class VolcanoAuth {
   logs: Logs;
   storage: Storage;
   locks: ProjectLocks;
+  sandboxes: Sandboxes;
 
   constructor(config: VolcanoAuthConfig);
   constructor(
@@ -388,6 +391,7 @@ class VolcanoAuth {
     };
 
     this.locks = new ProjectLocksApi(this);
+    this.sandboxes = new SandboxesApi(this);
   }
 
   /** @internal */
