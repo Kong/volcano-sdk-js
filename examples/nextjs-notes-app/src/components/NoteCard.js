@@ -42,6 +42,10 @@ function formatDate(dateString) {
     return `${diffDays}d ago`;
   }
 
+  return formatCalendarDate(date, now);
+}
+
+function formatCalendarDate(date, now) {
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

@@ -1,5 +1,5 @@
 import type { executeSandbox } from './generated/client.ts';
-import type { SandboxCommandOptions, SandboxRequestOptions, SandboxResult } from './index.js';
+import type { SandboxCommandOptions, SandboxRequestOptions, SandboxResult } from './index.ts';
 
 type TransportOptions = NonNullable<Parameters<typeof executeSandbox>[2]>;
 export interface SandboxClient {

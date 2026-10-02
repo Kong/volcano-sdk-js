@@ -38,11 +38,12 @@ test('rejects a non-string JSON error and honors an explicit message', () => {
 test.each([{}, { code: '' }, { code: 42 }, { code: null }])(
   'ignores non-string or empty error codes: %p',
   (data) => {
-    expect(apiRequestError({ status: 400 }, data).code).toBeUndefined();
+    const error = apiRequestError({ status: 400 }, data);
+    expect(Object.hasOwn(error, 'code')).toBe(false);
   },
 );
 
 test.each(['not-a-delay', '', 4, null])('ignores invalid retry-after metadata: %p', (header) => {
   const error = apiRequestError({ status: 429, headers: { get: () => header } }, null);
-  expect(error.retryAfter).toBeUndefined();
+  expect(Object.hasOwn(error, 'retryAfter')).toBe(false);
 });

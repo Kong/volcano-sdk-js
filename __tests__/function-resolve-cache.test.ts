@@ -75,6 +75,16 @@ test('forced scans reject stale and malformed shared entries', () => {
   expect(state.lastPruneAtMs).toBe(6000);
 });
 
+test('rejects malformed shared entries even with a negative test clock', () => {
+  const state = getSharedFunctionResolveState();
+  state.cache.set('malformed', { expiresAt: 'invalid' });
+  state.cache.set('future', { expiresAt: 1 });
+
+  pruneFunctionResolveCache(state, -1, true);
+
+  expect([...state.cache.keys()]).toEqual(['future']);
+});
+
 test('evicts earliest expirations first when the shared cache reaches its bound', () => {
   const state = getSharedFunctionResolveState();
   state.maxEntries = 2;
@@ -84,6 +94,17 @@ test('evicts earliest expirations first when the shared cache reaches its bound'
 
   pruneFunctionResolveCache(state, 6000, true);
   expect([...state.cache.keys()]).toEqual(['latest', 'middle']);
+});
+
+test('eviction preserves a later-expiring entry with a single-character key', () => {
+  const state = getSharedFunctionResolveState();
+  state.maxEntries = 1;
+  state.cache.set('S', { expiresAt: 9000 });
+  state.cache.set('expired-first', { expiresAt: 7000 });
+
+  pruneFunctionResolveCache(state, 6000, true);
+
+  expect([...state.cache.keys()]).toEqual(['S']);
 });
 
 test('retains every live entry while the cache remains below its bound', () => {

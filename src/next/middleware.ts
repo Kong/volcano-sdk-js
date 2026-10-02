@@ -133,12 +133,10 @@ async function userResponse(response: Response): Promise<GetUserResult> {
       error: new Error(await errorMessage(response, `Auth failed: ${String(response.status)}`)),
     };
   }
-  try {
-    const payload: unknown = await response.json();
-    return { user: userFromPayload(payload), error: null };
-  } catch {
-    return { user: null, error: null };
-  }
+  return response.json().then(
+    (payload: unknown): GetUserResult => ({ user: userFromPayload(payload), error: null }),
+    (): GetUserResult => ({ user: null, error: null }),
+  );
 }
 
 function refreshPair(

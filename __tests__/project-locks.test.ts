@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
-import type { ProjectLockLease } from '../src/index.js';
+import type { ProjectLockLease } from '../src/index.ts';
 import { type LockClient, ProjectLocksApi } from '../src/project-locks.ts';
 
 const LEASE_DATA = { expires_at: '2026-09-23T12:00:30Z', fencing_token: 7 };
@@ -15,7 +15,7 @@ function fixture() {
   const options = jest.fn<LockClient['_generatedOptions']>();
   acquire.mockResolvedValue({ data: LEASE_DATA });
   release.mockImplementation(() => Promise.resolve());
-  fetch.mockResolvedValue({ ok: true, data: LEASE_DATA, error: null });
+  fetch.mockResolvedValue({ ok: true, status: 200, data: LEASE_DATA, error: null });
   exchange.mockImplementation(() => Promise.resolve());
   options.mockImplementation((mode, headers) => ({ mode, headers }));
   const client: LockClient = {
@@ -179,7 +179,12 @@ test('renews the same lease with an explicit cancellation signal', async () => {
 
 test('renewal keeps the prior fencing token when the response omits it', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue({ ok: true, data: { expires_at: 'later' }, error: null });
+  given.fetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: { expires_at: 'later' },
+    error: null,
+  });
   const previous = lease();
   await given.locks.renew('leader', previous, { ttl: 5 });
   expect(previous.fencingToken).toBe(3);
@@ -189,7 +194,7 @@ test('renewal keeps the prior fencing token when the response omits it', async (
 test('renewal returns a server error without changing the lease', async () => {
   const given = fixture();
   const failure = new Error('lost');
-  given.fetch.mockResolvedValue({ ok: false, data: null, error: failure });
+  given.fetch.mockResolvedValue({ ok: false, status: 503, data: null, error: failure });
   const previous = lease();
   await expect(given.locks.renew('leader', previous, { ttl: 5 })).resolves.toEqual({
     lease: previous,
@@ -222,6 +227,7 @@ test('get validates lock state and reports a failed request', async () => {
   const given = fixture();
   given.fetch.mockResolvedValueOnce({
     ok: true,
+    status: 200,
     data: { held: true, expires_at: 'later', fencing_token: 8 },
     error: null,
   });
@@ -233,13 +239,13 @@ test('get validates lock state and reports a failed request', async () => {
     method: 'GET',
     headers: { 'X-Volcano-Request-Id': 'get-id' },
   });
-  given.fetch.mockResolvedValueOnce({ ok: true, data: {}, error: null });
+  given.fetch.mockResolvedValueOnce({ ok: true, status: 200, data: {}, error: null });
   await expect(given.locks.get('leader')).resolves.toEqual({
     state: { held: false, expiresAt: null, fencingToken: null },
     error: null,
   });
   const failure = new Error('refused');
-  given.fetch.mockResolvedValueOnce({ ok: false, data: null, error: failure });
+  given.fetch.mockResolvedValueOnce({ ok: false, status: 503, data: null, error: failure });
   await expect(given.locks.get('leader')).resolves.toEqual({ state: null, error: failure });
 });
 
@@ -247,7 +253,7 @@ test.each([null, { expires_at: 42 }, { fencing_token: 'bad' }])(
   'rejects a malformed lock state: %p',
   async (data) => {
     const given = fixture();
-    given.fetch.mockResolvedValue({ ok: true, data, error: null });
+    given.fetch.mockResolvedValue({ ok: true, status: 200, data, error: null });
     await expect(given.locks.get('leader')).rejects.toThrow(TypeError);
   },
 );
@@ -262,7 +268,7 @@ test('force release preserves a success or failure result', async () => {
     headers: { 'X-Volcano-Request-Id': 'forced' },
   });
   const failure = new Error('denied');
-  given.fetch.mockResolvedValueOnce({ ok: false, data: null, error: failure });
+  given.fetch.mockResolvedValueOnce({ ok: false, status: 403, data: null, error: failure });
   await expect(given.locks.forceRelease('leader')).resolves.toEqual({ error: failure });
 });
 

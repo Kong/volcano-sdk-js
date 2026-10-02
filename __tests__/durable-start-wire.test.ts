@@ -1,7 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 
 import { describe, expect, jest, test } from '@jest/globals';
-import { VolcanoClient } from '../src/index.js';
+import { VolcanoClient } from '../src/index.ts';
 
 const execution = {
   id: 'exec-1',

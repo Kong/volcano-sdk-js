@@ -4,6 +4,13 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Generate public declarations from the TypeScript implementation. Nine response
+  types now represent optional or nullable values already returned at runtime;
+  strict consumers may need additional presence checks. See
+  [TypeScript compatibility](./docs/typescript-compatibility.md).
+
 ### Added
 
 - `@volcano.dev/sdk/durable` for authoring durable functions: `durable(handler)`
@@ -43,6 +50,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   it sends one, and `retryAfter` parsed from the `Retry-After` header. The
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
+
+## [1.15.1](https://github.com/Kong/volcano-sdk-js/compare/v1.15.0...v1.15.1) (2026-09-28)
+
+### Bug Fixes
+
+- **api:** accept public project plan names ([#279](https://github.com/Kong/volcano-sdk-js/issues/279)) ([c1c7767](https://github.com/Kong/volcano-sdk-js/commit/c1c77677549f33a1bcaa78aad1ba93c89987e30e))
 
 ## [1.15.0](https://github.com/Kong/volcano-sdk-js/compare/v1.14.0...v1.15.0) (2026-09-23)
 

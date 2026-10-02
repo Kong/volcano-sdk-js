@@ -1,6 +1,11 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
-import { QueryBuilder, type QueryClient, queryError } from '../src/database-query.ts';
+import {
+  QueryBuilder,
+  type QueryClient,
+  queryDatabaseSelectTransport,
+  queryError,
+} from '../src/database-query.ts';
 
 function fixture(
   payload: unknown,
@@ -15,10 +20,58 @@ function fixture(
     _oauthExchangeError: error,
     _transport: { queryDatabaseSelect: query },
     _completeOAuthExchange: () => Promise.resolve(),
-    _generatedOptions: () => ({ authorization: 'session' }),
+    _generatedOptions: (mode) => ({ volcanoAuthorization: mode }),
   };
   return { client, query };
 }
+
+test.each([undefined, 'application/vnd.volcano+json'])(
+  'typed SELECT transport preserves filter JSON and content type %p',
+  async (contentType) => {
+    const fetchResponse = Response.json(
+      { data: [{ id: 1 }] },
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+    const generatedFetch = jest
+      .fn<(path: string, options: RequestInit, mode: 'anon' | 'session') => Promise<Response>>()
+      .mockResolvedValue(fetchResponse);
+    const client = { _generatedFetch: generatedFetch };
+    const date = new Date('2026-09-23T12:00:00.000Z');
+    const request = {
+      table: 'events',
+      filters: [
+        { column: 'created_at', operator: 'gte' as const, value: date },
+        { column: 'id', operator: 'in' as const, value: [null, 1] },
+      ],
+    };
+    const headers = contentType === undefined ? undefined : { 'Content-Type': contentType };
+
+    await expect(
+      queryDatabaseSelectTransport('db%20one', request, {
+        volcanoAuthorization: 'session',
+        volcanoClient: client,
+        ...(headers === undefined ? {} : { headers }),
+      }),
+    ).resolves.toMatchObject({ data: { data: [{ id: 1 }] } });
+
+    expect(generatedFetch).toHaveBeenCalledWith(
+      '/databases/db%20one/query/select',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(request),
+        headers: expect.any(Headers),
+      }),
+      'session',
+    );
+    const call = generatedFetch.mock.calls[0];
+    expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(
+      contentType ?? 'application/json',
+    );
+  },
+);
 
 test('builds a SELECT request with encoded database, projections, filters, order and pagination', async () => {
   const { client, query } = fixture({ data: [{ id: 1 }], count: 2 });
@@ -37,7 +90,7 @@ test('builds a SELECT request with encoded database, projections, filters, order
       limit: 0,
       offset: 2,
     },
-    { authorization: 'session' },
+    { volcanoAuthorization: 'session' },
   );
 });
 
@@ -46,7 +99,28 @@ test('keeps a bare SELECT body and derives its count from rows', async () => {
   const builder = new QueryBuilder(client, 'records', 'db');
   builder.select('*');
   await expect(builder.execute()).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 1 });
-  expect(query).toHaveBeenCalledWith('db', { table: 'records' }, { authorization: 'session' });
+  expect(query).toHaveBeenCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
+});
+
+test('a new builder defaults to all columns and a later wildcard clears an earlier projection', async () => {
+  const { client, query } = fixture({ data: [] });
+  await new QueryBuilder(client, 'records', 'db').execute();
+  expect(query).toHaveBeenLastCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
+
+  await new QueryBuilder(client, 'records', 'db').select('id').select('*').execute();
+  expect(query).toHaveBeenLastCalledWith(
+    'db',
+    { table: 'records' },
+    { volcanoAuthorization: 'session' },
+  );
 });
 
 test('accepts an array projection and defaults order to ascending', async () => {
@@ -67,7 +141,7 @@ test('accepts an array projection and defaults order to ascending', async () => 
       limit: 1,
       offset: 0,
     },
-    { authorization: 'session' },
+    { volcanoAuthorization: 'session' },
   );
 });
 
@@ -104,17 +178,20 @@ test.each([null, ''])('rejects an absent database: %p', async (databaseName) => 
   expect(query).not.toHaveBeenCalled();
 });
 
-test.each([null, 12, {}, { data: null }])(
-  'rejects a malformed SELECT payload: %p',
-  async (payload) => {
-    const { client } = fixture(payload);
-    const builder = new QueryBuilder(client, 'records', 'db');
-    const result = await builder.execute();
-    expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(TypeError);
-    expect(result.count).toBe(0);
-  },
-);
+test.each([
+  [null, 'Query response is not an object'],
+  [12, 'Query response is not an object'],
+  [{}, 'Query response has no rows'],
+  [{ data: null }, 'Query response has no rows'],
+] as const)('rejects a malformed SELECT payload: %p', async (payload, expectedMessage) => {
+  const { client } = fixture(payload);
+  const builder = new QueryBuilder(client, 'records', 'db');
+  const result = await builder.execute();
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(TypeError);
+  expect(result.error?.message).toBe(expectedMessage);
+  expect(result.count).toBe(0);
+});
 
 test.each([undefined, 0, 'bad'])(
   'uses row count for absent or invalid counts: %p',

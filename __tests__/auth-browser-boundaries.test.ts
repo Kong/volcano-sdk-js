@@ -7,6 +7,7 @@ import {
   hasSessionInUrl,
   peekAuthRedirectUrl,
   peekAuthState,
+  removeOAuthResponseParams,
   removeStorageItem,
   setStorageItem,
   storeAuthState,
@@ -79,6 +80,34 @@ test('server-side browser helpers leave state untouched', () => {
   expect(hasOAuthCallbackInUrl('https://app.example.com/callback', true)).toBe(false);
 });
 
+test('server-like globals with a window do not read browser storage or location', () => {
+  const getItem = jest.fn(() => 'nonce');
+  const setItem = jest.fn();
+  const removeItem = jest.fn();
+  setGlobal('window', {
+    sessionStorage: { getItem, setItem, removeItem },
+    localStorage: { getItem, setItem, removeItem },
+    location: {
+      href: 'https://app.example.com/callback?code=one&state=nonce',
+      hash: '#access_token=token',
+    },
+  });
+
+  storeAuthState('nonce', 'https://app.example.com/callback');
+  expect(takeAuthState()).toBeNull();
+  expect(peekAuthState()).toBeNull();
+  expect(takeAuthRedirectUrl()).toBeNull();
+  expect(peekAuthRedirectUrl()).toBeNull();
+  expect(getStorageItem('token')).toBeNull();
+  setStorageItem('token', 'value');
+  removeStorageItem('token');
+  expect(hasSessionInUrl()).toBe(false);
+  expect(hasOAuthCallbackInUrl('https://app.example.com/callback', true)).toBe(false);
+  expect(getItem).not.toHaveBeenCalled();
+  expect(setItem).not.toHaveBeenCalled();
+  expect(removeItem).not.toHaveBeenCalled();
+});
+
 test('nonce generation accepts browser and server Web Crypto and rejects unavailable sources', () => {
   setGlobal('window', undefined);
   setGlobal('crypto', { getRandomValues: (bytes: Uint8Array) => bytes.fill(7) });
@@ -142,6 +171,23 @@ test('URL cleanup keeps application fragments and handles unavailable history', 
   }).not.toThrow();
 });
 
+test('OAuth cleanup strips every protocol response parameter and preserves application query', () => {
+  const url = new URL(
+    'https://app.example.com/callback?keep=one&code=c&state=s&error=e&error_description=d&error_uri=u&iss=i&vh_state=v#app',
+  );
+  removeOAuthResponseParams(url, false);
+  expect(url.toString()).toBe('https://app.example.com/callback?keep=one#app');
+  removeOAuthResponseParams(url);
+  expect(url.toString()).toBe('https://app.example.com/callback?keep=one');
+});
+
+test('auth hash cleanup accepts provider errors as authentication fragments', () => {
+  const replaceState = jest.fn();
+  browser({ history: { state: null, replaceState } });
+  stripAuthHashFromUrl(new URLSearchParams('error=denied&error_description=cancelled'));
+  expect(replaceState).toHaveBeenCalledWith(null, '', '/callback');
+});
+
 test('broken location getters fail closed for session and OAuth callback peeks', () => {
   browser({
     location: {
@@ -159,10 +205,15 @@ test('broken location getters fail closed for session and OAuth callback peeks',
 
 test('OAuth callback matching rejects malformed redirect targets and absent state', () => {
   browser();
+  expect(hasOAuthCallbackInUrl('https://app.example.com/callback', true)).toBe(true);
+  expect(hasOAuthCallbackInUrl('https://app.example.com/callback', false)).toBe(false);
   expect(hasOAuthCallbackInUrl('not a URL', true)).toBe(false);
   expect(hasOAuthCallbackInUrl('', true)).toBe(false);
   expect(hasOAuthCallbackInUrl(null, true)).toBe(false);
-  expect(hasOAuthCallbackInUrl('https://app.example.com/callback', false)).toBe(false);
   browser({ location: { href: 'https://app.example.com/callback?state=nonce' } });
   expect(hasOAuthCallbackInUrl('https://app.example.com/callback', true)).toBe(false);
+  for (const query of ['?code=&state=nonce', '?error=&state=nonce', '?code=one&state=']) {
+    browser({ location: { href: `https://app.example.com/callback${query}` } });
+    expect(hasOAuthCallbackInUrl('https://app.example.com/callback', true)).toBe(false);
+  }
 });

@@ -111,6 +111,9 @@ describe('databaseConnectionString', () => {
     expect(databaseConnectionString('postgres://u:password?@host')).toBe(
       'postgres://u:password?@host?application_name=volcano_full_access',
     );
+    expect(databaseConnectionString('postgres://u:password?@')).toBe(
+      'postgres://u:password?@?application_name=volcano_full_access',
+    );
   });
 
   it('accepts a multi-host IPv6 Postgres URI', () => {

@@ -23,11 +23,9 @@ export async function parseResponseBody(
 }
 
 async function parseJsonResponse(response: BodyResponse): Promise<unknown> {
-  if (typeof response.json !== 'function') {
-    return null;
-  }
+  const readJson = response.json ?? (() => Promise.resolve(null));
   try {
-    return await response.json();
+    return await readJson.call(response);
   } catch {
     return null;
   }

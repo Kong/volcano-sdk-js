@@ -18,6 +18,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 test('starts without verified credentials or pending operations', () => {
   const operations = new AuthSessionOperations();
+  expect(operations.verifiedPair).toBeNull();
   expect(operations.hasVerifiedPair('access', 'refresh')).toBe(false);
   expect(operations.pendingSignOut()).toBeNull();
   expect(operations.refreshClearedSession).toBe(false);

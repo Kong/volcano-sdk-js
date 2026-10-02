@@ -139,12 +139,18 @@ function applyPresenceSnapshot(
 
 async function refreshPresence(state: ChannelLifecycleState, version: number): Promise<void> {
   state._presenceTimeoutId = null;
+  let client: ChannelClient | null;
   try {
-    const client = state._realtime.getClient();
-    if (client === null || state._subscription === null) {
-      return;
-    }
-    applyPresenceSnapshot(state, await client.presence(state._name), version);
+    client = state._realtime.getClient();
+  } catch {
+    return;
+  }
+  if (client === null || state._subscription === null) {
+    return;
+  }
+  const presence = client.presence.bind(client);
+  try {
+    applyPresenceSnapshot(state, await presence(state._name), version);
   } catch {
     // A presence snapshot is best effort; later events still update state.
   }
@@ -232,10 +238,8 @@ export async function subscribeChannel(state: ChannelLifecycleState): Promise<vo
 export function unsubscribeChannel(state: ChannelLifecycleState): void {
   state._paused = true;
   state._lifecycleVersion += 1;
-  if (state._presenceTimeoutId !== null) {
-    clearTimeout(state._presenceTimeoutId);
-    state._presenceTimeoutId = null;
-  }
+  clearTimeout(state._presenceTimeoutId ?? undefined);
+  state._presenceTimeoutId = null;
   cancelPendingFetches(state);
   state._subscription?.unsubscribe();
   state._presenceState = {};
@@ -243,9 +247,7 @@ export function unsubscribeChannel(state: ChannelLifecycleState): void {
 
 function cancelPendingFetches(state: ChannelLifecycleState): void {
   for (const batch of state._pendingFetches.values()) {
-    if (batch.timer !== null) {
-      clearTimeout(batch.timer);
-    }
+    clearTimeout(batch.timer ?? undefined);
     for (const pending of batch.ids.values()) {
       pending.reject(new Error('Channel unsubscribed'));
     }
@@ -280,12 +282,14 @@ function detachSubscriptionHandlers(
 
 function removeSubscription(state: ChannelLifecycleState, subscription: ChannelSubscription): void {
   const client = state._realtime.getClient();
-  if (client !== null) {
-    try {
-      client.removeSubscription(subscription);
-    } catch {
-      // The client may already have removed this subscription.
-    }
+  if (client === null) {
+    return;
+  }
+  const remove = client.removeSubscription.bind(client);
+  try {
+    remove(subscription);
+  } catch {
+    // The client may already have removed this subscription.
   }
 }
 

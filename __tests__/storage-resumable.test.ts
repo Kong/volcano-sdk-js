@@ -10,15 +10,31 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+function expectedPartCount(session: unknown): number {
+  return typeof session === 'object' &&
+    session !== null &&
+    'total_parts' in session &&
+    typeof session.total_parts === 'number'
+    ? session.total_parts
+    : 0;
+}
+
 function fixture(session: unknown = SESSION) {
   const checkAuth = jest.fn<ResumableStorageHost['_checkAuth']>();
   const create = jest.fn<ResumableStorageHost['createUploadSession']>();
   const upload = jest.fn<ResumableStorageHost['uploadPart']>();
   const abort = jest.fn<ResumableStorageHost['abortUploadSession']>();
   const complete = jest.fn<ResumableStorageHost['completeUploadSession']>();
+  const expectedParts = expectedPartCount(session);
   checkAuth.mockResolvedValue(null);
   create.mockResolvedValue({ data: session, error: null });
-  upload.mockResolvedValue({ data: {}, error: null });
+  upload.mockImplementation((...args) => {
+    const partNumber = args[2];
+    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > expectedParts) {
+      throw new Error('Upload part number exceeded the accepted session range');
+    }
+    return Promise.resolve({ data: {}, error: null });
+  });
   abort.mockResolvedValue({ error: null });
   complete.mockResolvedValue({ data: { id: 'stored' }, error: null });
   const host: ResumableStorageHost = {
@@ -55,6 +71,8 @@ test('session-start failure returns its error without uploading', async () => {
 
 test.each([
   [null, 'not an object'],
+  [7, 'not an object'],
+  ['invalid', 'not an object'],
   [{}, 'no ID'],
   [{ session_id: 4 }, 'no ID'],
   [{ session_id: 's' }, 'part count'],

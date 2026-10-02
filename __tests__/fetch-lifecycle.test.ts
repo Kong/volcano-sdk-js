@@ -4,6 +4,10 @@ import { fetchWithTimeout } from '../src/fetch-lifecycle.ts';
 
 const endpoint = 'https://api.example.test/resource';
 
+function AbortError(): string {
+  return 'aborted';
+}
+
 function uninitializedResolver(): never {
   throw new Error('Promise executor did not initialize');
 }
@@ -196,6 +200,30 @@ test('preserves an AbortError when the timer did not expire', async () => {
   const error = new DOMException('transport cancelled', 'AbortError');
   jest.spyOn(globalThis, 'fetch').mockRejectedValue(error);
   await expect(fetchWithTimeout(endpoint)).rejects.toBe(error);
+});
+
+test.each([undefined, null, 'failure', 5, {}, { name: 'OtherError' }, () => 'failure'])(
+  'preserves a non-abort rejection after the timer expires: %p',
+  async (reason) => {
+    const pending = deferred<Response>();
+    jest.spyOn(globalThis, 'fetch').mockReturnValue(pending.promise);
+    const running = fetchWithTimeout(endpoint, {}, 50);
+    await jest.advanceTimersByTimeAsync(50);
+    pending.reject(reason);
+    await expect(running).rejects.toBe(reason);
+  },
+);
+
+test('recognizes a function-valued AbortError after a timeout', async () => {
+  const pending = deferred<Response>();
+  jest.spyOn(globalThis, 'fetch').mockReturnValue(pending.promise);
+  const running = fetchWithTimeout(endpoint, {}, 50);
+  await jest.advanceTimersByTimeAsync(50);
+  pending.reject(AbortError);
+  await expect(running).rejects.toMatchObject({
+    message: 'Request timeout after 50ms',
+    cause: AbortError,
+  });
 });
 
 test('cleans up when the response consumer throws', async () => {

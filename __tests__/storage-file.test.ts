@@ -1,6 +1,13 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { type StorageAuthHost, StorageFileApi } from '../src/storage-file.ts';
+import {
+  completedUpload,
+  storageObject,
+  uploadPart,
+  uploadSession,
+  uploadStatus,
+} from './storage-response-fixtures.ts';
 
 type Upload = StorageAuthHost['_transport']['uploadStorageObject'];
 type Download = StorageAuthHost['_transport']['downloadStorageObject'];
@@ -21,7 +28,7 @@ function fixture(accessToken: string | null = 'token'): Fixture {
   globalThis.fetch = request;
   const upload = jest.fn<Upload>();
   const download = jest.fn<Download>();
-  upload.mockResolvedValue({ data: { name: 'file.bin' } });
+  upload.mockResolvedValue({ data: storageObject() });
   download.mockResolvedValue({ data: new Blob(['data']) });
   const host: StorageAuthHost = {
     apiUrl,
@@ -30,8 +37,8 @@ function fixture(accessToken: string | null = 'token'): Fixture {
     accessToken,
     _oauthExchangeError: null,
     _transport: { uploadStorageObject: upload, downloadStorageObject: download },
-    _generatedOptions(_mode, headers, responseType) {
-      return { headers, responseType };
+    _generatedOptions(mode, headers, responseType) {
+      return { volcanoAuthorization: mode, headers, responseType };
     },
     _completeOAuthExchange: () => Promise.resolve(),
     _captureAuthContext() {
@@ -110,15 +117,24 @@ test('uploads a File unchanged through the generated transport', async () => {
   const given = fixture();
   const file = new File(['data'], 'file.bin', { type: 'text/plain' });
   await expect(given.api.upload('folder/file.bin', file)).resolves.toEqual({
-    data: { name: 'file.bin' },
+    data: storageObject(),
     error: null,
   });
   expect(given.upload).toHaveBeenCalledWith(
     'bucket',
     'folder/file.bin',
     { file },
-    expect.anything(),
+    expect.objectContaining({ volcanoAuthorization: 'session' }),
   );
+});
+
+test('rejects an incomplete successful upload object', async () => {
+  const given = fixture();
+  given.upload.mockResolvedValue({ data: { name: 'incomplete' } });
+  await expect(given.api.upload('file.bin', new Blob(['data']))).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid storage upload response'),
+  });
 });
 
 test.each([
@@ -162,6 +178,9 @@ test.each([new Error('upload failed'), 'upload failed'])(
     const result = await given.api.upload('file.bin', new Blob(['data']));
     expect(result.data).toBeNull();
     expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe(
+      failure instanceof Error ? failure.message : 'Upload failed',
+    );
   },
 );
 
@@ -184,6 +203,7 @@ test('downloads binary data and forwards a range header', async () => {
   expect(given.download).toHaveBeenCalledWith('bucket', 'folder/file.bin', {
     headers: { Range: 'bytes=0-2' },
     responseType: 'blob',
+    volcanoAuthorization: 'session',
   });
 });
 
@@ -200,6 +220,7 @@ test('omits a falsy range while preserving JavaScript caller behavior', async ()
   expect(given.download).toHaveBeenCalledWith('bucket', 'file.bin', {
     headers: undefined,
     responseType: 'blob',
+    volcanoAuthorization: 'session',
   });
 });
 
@@ -210,9 +231,22 @@ test.each([new Error('download failed'), 'download failed'])(
     given.download.mockRejectedValue(failure);
     const result = await given.api.download('file.bin');
     expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe(
+      failure instanceof Error ? 'download failed' : 'Download failed',
+    );
   },
 );
+
+test('rejects a malformed binary result from a custom transport', async () => {
+  const given = fixture();
+  Reflect.set(given.host._transport, 'downloadStorageObject', () =>
+    Promise.resolve({ data: 'not a Blob' }),
+  );
+  await expect(given.api.download('file.bin')).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid storage download response'),
+  });
+});
 
 test('does not download without a session', async () => {
   const given = fixture(null);
@@ -222,15 +256,21 @@ test('does not download without a session', async () => {
 
 test('lists objects with the same prefix, limit, and cursor query shape', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ objects: [{ name: 'one' }], next_cursor: 'next' }));
+  given.fetch.mockResolvedValue(
+    Response.json({ objects: [storageObject({ name: 'one' })], next_cursor: 'next' }),
+  );
   await expect(given.api.list('photos/', { limit: 2, cursor: 'last' })).resolves.toEqual({
-    data: [{ name: 'one' }],
+    data: [storageObject({ name: 'one' })],
     error: null,
     nextCursor: 'next',
   });
   expect(given.fetch.mock.calls[0]?.[0]).toBe(
     `${apiUrl}/storage/bucket?prefix=photos%2F&limit=2&cursor=last`,
   );
+  expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
+    method: 'GET',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+  });
 });
 
 test.each([undefined, null, false, 0, Number.NaN, ''])(
@@ -279,7 +319,11 @@ test.each([null, 3, { objects: 'not an array' }])(
     given.fetch.mockResolvedValue(Response.json(payload));
     const result = await given.api.list();
     expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(TypeError);
+    expect(result.error?.message).toBe(
+      typeof payload !== 'object' || payload === null
+        ? 'Storage list response is not an object'
+        : 'Storage list response has invalid objects',
+    );
     expect(result.nextCursor).toBeNull();
   },
 );
@@ -341,6 +385,13 @@ test('partial removal preserves the first HTTP error and every failed path', asy
   });
 });
 
+test('partial removal names each failed path in order', async () => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({ error: 'denied' }, { status: 403 }));
+  const result = await given.api.remove(['first.bin', 'second.bin']);
+  expect(result.error?.message).toBe('Failed to delete 2 file(s): first.bin, second.bin');
+});
+
 test('remove does not copy absent or undefined error metadata', async () => {
   const given = fixture();
   jest.spyOn(given.api, '_storageRequest').mockResolvedValue({
@@ -369,18 +420,79 @@ test.each(['move', 'copy'] as const)(
   '%s sends an authenticated transfer request',
   async (operation) => {
     const given = fixture();
-    given.fetch.mockResolvedValue(Response.json({ name: 'destination.bin' }));
+    given.fetch.mockResolvedValue(Response.json(storageObject({ name: 'destination.bin' })));
     await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toEqual({
-      data: { name: 'destination.bin' },
+      data: storageObject({ name: 'destination.bin' }),
       error: null,
     });
     expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/${operation}`);
     expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ from: 'source.bin', to: 'destination.bin' }),
     });
   },
 );
+
+test.each([
+  {
+    operation: 'move',
+    run: (api: StorageFileApi) => api.move('source.bin', 'destination.bin'),
+    error: 'Invalid storage move response',
+    payload: {},
+  },
+  {
+    operation: 'copy',
+    run: (api: StorageFileApi) => api.copy('source.bin', 'destination.bin'),
+    error: 'Invalid storage copy response',
+    payload: {},
+  },
+  {
+    operation: 'visibility',
+    run: (api: StorageFileApi) => api.updateVisibility('file.bin', true),
+    error: 'Invalid storage visibility response',
+    payload: {},
+  },
+  {
+    operation: 'upload session creation',
+    run: (api: StorageFileApi) => api.createUploadSession('file.bin', { totalSize: 4 }),
+    error: 'Invalid upload session creation response',
+    payload: null,
+  },
+  {
+    operation: 'upload part',
+    run: (api: StorageFileApi) => api.uploadPart('file.bin', 'session-1', 1, new Blob()),
+    error: 'Invalid upload part response',
+    payload: null,
+  },
+  {
+    operation: 'completed upload',
+    run: (api: StorageFileApi) => api.completeUploadSession('file.bin', 'session-1'),
+    error: 'Invalid completed upload response',
+    payload: null,
+  },
+  {
+    operation: 'upload session status',
+    run: (api: StorageFileApi) => api.getUploadSession('file.bin', 'session-1'),
+    error: 'Invalid upload session status response',
+    payload: null,
+  },
+])('$operation reports malformed successful responses', async ({ run, error, payload }) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json(payload));
+  await expect(run(given.api)).resolves.toMatchObject({ data: null, error: new TypeError(error) });
+});
+
+test.each([
+  (api: StorageFileApi) => api.createUploadSession('file.bin', { totalSize: 4 }),
+  (api: StorageFileApi) => api.uploadPart('file.bin', 'session-1', 1, new Blob()),
+  (api: StorageFileApi) => api.completeUploadSession('file.bin', 'session-1'),
+  (api: StorageFileApi) => api.getUploadSession('file.bin', 'session-1'),
+])('preserves a conforming upload response with omitted fields', async (run) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({}));
+  await expect(run(given.api)).resolves.toEqual({ data: {}, error: null });
+});
 
 test.each(['move', 'copy'] as const)(
   '%s does not request storage without a session',
@@ -403,14 +515,15 @@ test('returns a bucket-scoped public URL', () => {
 
 test('updates visibility through the storage route', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ is_public: true }));
+  given.fetch.mockResolvedValue(Response.json(storageObject({ is_public: true })));
   await expect(given.api.updateVisibility('file.bin', true)).resolves.toEqual({
-    data: { is_public: true },
+    data: storageObject({ is_public: true }),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/file.bin/visibility`);
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'PATCH',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ is_public: true }),
   });
 });
@@ -440,22 +553,23 @@ test.each([undefined, null, false, 0, Number.NaN, ''])(
   },
 );
 
-test('rejects absent session options locally', async () => {
+test.each([null, undefined])('rejects absent session options locally', async (options) => {
   const given = fixture();
-  await expect(given.api.createUploadSession('file.bin', null)).resolves.toMatchObject({
+  await expect(given.api.createUploadSession('file.bin', options)).resolves.toMatchObject({
     error: { message: 'totalSize is required' },
   });
 });
 
 test('creates an upload session with the legacy body defaults', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ session_id: 'session-1' }));
+  given.fetch.mockResolvedValue(Response.json(uploadSession()));
   await expect(given.api.createUploadSession('', { totalSize: 4 })).resolves.toEqual({
-    data: { session_id: 'session-1' },
+    data: uploadSession(),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'POST',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       filename: '',
       content_type: 'application/octet-stream',
@@ -466,7 +580,7 @@ test('creates an upload session with the legacy body defaults', async () => {
 
 test('creates a session with explicit content type and part size', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ session_id: 'session-1' }));
+  given.fetch.mockResolvedValue(Response.json(uploadSession()));
   await given.api.createUploadSession('folder/file.bin', {
     totalSize: 10,
     contentType: 'application/custom',
@@ -492,16 +606,17 @@ test('does not create an upload session without authentication', async () => {
 
 test('uploads a binary part with ownership and part-number headers', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ part_number: 2 }));
+  given.fetch.mockResolvedValue(Response.json(uploadPart({ part_number: 2 })));
   const part = new Blob(['data']);
   await expect(given.api.uploadPart('file.bin', 'session-1', 2, part)).resolves.toEqual({
-    data: { part_number: 2 },
+    data: uploadPart({ part_number: 2 }),
     error: null,
   });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'PUT',
     body: part,
     headers: expect.objectContaining({
+      'Content-Type': 'application/octet-stream',
       'X-Upload-Session': 'session-1',
       'X-Part-Number': '2',
     }),
@@ -510,12 +625,16 @@ test('uploads a binary part with ownership and part-number headers', async () =>
 
 test('completes an upload session with its owner header', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ object: { name: 'file.bin' } }));
-  await given.api.completeUploadSession('file.bin', 'session-1');
+  given.fetch.mockResolvedValue(Response.json(completedUpload()));
+  await expect(given.api.completeUploadSession('file.bin', 'session-1')).resolves.toEqual({
+    data: completedUpload(),
+    error: null,
+  });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'POST',
     body: '{}',
     headers: expect.objectContaining({
+      'Content-Type': 'application/json',
       'X-Upload-Session': 'session-1',
       'X-Upload-Complete': 'true',
     }),
@@ -524,8 +643,11 @@ test('completes an upload session with its owner header', async () => {
 
 test('reads an upload session with its owner header', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(Response.json({ status: 'uploading' }));
-  await given.api.getUploadSession('file.bin', 'session-1');
+  given.fetch.mockResolvedValue(Response.json(uploadStatus()));
+  await expect(given.api.getUploadSession('file.bin', 'session-1')).resolves.toEqual({
+    data: uploadStatus(),
+    error: null,
+  });
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'GET',
     headers: expect.objectContaining({ 'X-Upload-Session': 'session-1' }),
@@ -564,15 +686,28 @@ test.each([
 test('resumable upload delegates through the typed session facade', async () => {
   const given = fixture();
   const create = jest.spyOn(given.api, 'createUploadSession').mockResolvedValue({
-    data: { session_id: 'session-1', total_parts: 0, part_size: 1 },
+    data: {
+      session_id: 'session-1',
+      total_parts: 0,
+      part_size: 1,
+      expires_at: '2026-09-24T00:00:00Z',
+    },
     error: null,
   });
+  const object = {
+    id: 'object-1',
+    bucket_id: 'bucket-1',
+    name: 'file.bin',
+    is_public: false,
+    size: 4,
+    mime_type: 'application/octet-stream',
+  };
   const complete = jest.spyOn(given.api, 'completeUploadSession').mockResolvedValue({
-    data: { object: { name: 'file.bin' } },
+    data: { object },
     error: null,
   });
   await expect(given.api.uploadResumable('file.bin', new Blob(['data']))).resolves.toEqual({
-    data: { object: { name: 'file.bin' } },
+    data: { object },
     error: null,
   });
   expect(create).toHaveBeenCalledWith('file.bin', {
@@ -581,4 +716,22 @@ test('resumable upload delegates through the typed session facade', async () => 
     partSize: 25 * 1024 * 1024,
   });
   expect(complete).toHaveBeenCalledWith('file.bin', 'session-1');
+});
+
+test('resumable upload rejects an incomplete successful completion', async () => {
+  const given = fixture();
+  jest.spyOn(given.api, 'createUploadSession').mockResolvedValue({
+    data: {
+      session_id: 'session-1',
+      total_parts: 0,
+      part_size: 1,
+      expires_at: '2026-09-24T00:00:00Z',
+    },
+    error: null,
+  });
+  jest.spyOn(given.api, 'completeUploadSession').mockResolvedValue({ data: null, error: null });
+  await expect(given.api.uploadResumable('file.bin', new Blob(['data']))).resolves.toEqual({
+    data: null,
+    error: new TypeError('Invalid resumable upload response'),
+  });
 });

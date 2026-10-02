@@ -82,11 +82,8 @@ function validateConnectionString(value: unknown): [string, number] {
 
 function userInfoBoundary(base: string, prefixLength: number): number {
   const authorityEnd = base.indexOf('/', prefixLength);
-  const possibleUserInfoEnd = base.indexOf('@', prefixLength);
-  if (possibleUserInfoEnd !== -1 && (authorityEnd === -1 || possibleUserInfoEnd < authorityEnd)) {
-    return possibleUserInfoEnd + 1;
-  }
-  return prefixLength;
+  const authority = base.slice(prefixLength, authorityEnd === -1 ? base.length : authorityEnd);
+  return prefixLength + authority.indexOf('@') + 1;
 }
 
 function connectionParameters(rawQuery: string): string[] {

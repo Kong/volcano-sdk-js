@@ -13,7 +13,7 @@ import type {
   SandboxRequestOptions,
   SandboxSession,
   SandboxState,
-} from './index.js';
+} from './index.ts';
 import {
   commandRequest,
   pathId,

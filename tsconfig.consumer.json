@@ -7,9 +7,12 @@
   },
   "include": [
     "test/types/package-errors.ts",
+    "test/types/package-auth-surface.ts",
     "test/types/package-database-filters.ts",
     "test/types/package-durable.ts",
     "test/types/package-next-middleware.ts",
-    "test/types/package-realtime-surface.ts"
+    "test/types/package-realtime-surface.ts",
+    "test/fixtures/**/*.d.ts",
+    "test/types/package-optional-responses.ts"
   ]
 }

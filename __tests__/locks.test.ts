@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.js';
+import { VolcanoAuth } from '../src/index.ts';
 import { LeaseClock } from '../src/lock-session.ts';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -240,6 +240,7 @@ describe('project locks', () => {
   });
 
   test('withLock releases after callback success and failure', async () => {
+    const timers = jest.spyOn(globalThis, 'setTimeout');
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000004');
     fetchMock
       .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z' }))
@@ -256,10 +257,18 @@ describe('project locks', () => {
     );
     expect(failed.error).toBe(failure);
     expect(methodsSeen().filter((method) => method === 'DELETE')).toHaveLength(2);
+    const leaseTimerDelays = timers.mock.calls
+      .map((call) => call[1])
+      .filter((delay) => delay !== 60000);
+    expect(leaseTimerDelays).not.toHaveLength(0);
+    for (const delay of leaseTimerDelays) {
+      expect(delay).toBeGreaterThan(1000);
+      expect(delay).toBeLessThanOrEqual(10000);
+    }
   });
 
   test('withLock aborts the callback after renewal loses ownership', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000005');
     fetchMock
@@ -294,7 +303,7 @@ describe('project locks', () => {
   });
 
   test('withLock renews a slow acquisition before running the callback', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000c');
     fetchMock
@@ -323,7 +332,7 @@ describe('project locks', () => {
   });
 
   test('withLock cancels a preparatory renewal when the acquired lease expires', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000d');
     let finishRenewal: ((value: Response) => void) | undefined;
@@ -358,7 +367,7 @@ describe('project locks', () => {
   });
 
   test('withLock keeps preparatory cancellation active while reading the renewal body', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000f');
     let finishBody: ((value: unknown) => void) | undefined;
@@ -473,7 +482,7 @@ describe('project locks', () => {
   });
 
   test('withLock derives renewal cadence from elapsed ttl despite wall-clock skew', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000007');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
@@ -505,7 +514,7 @@ describe('project locks', () => {
   });
 
   test('withLock aborts at ttl and cleans up without waiting for a stalled renewal', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-00000000000b');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
@@ -557,7 +566,8 @@ describe('project locks', () => {
   });
 
   test('withLock caps long JavaScript timers at one day', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ timerLimit: 100 });
+    const timers = jest.spyOn(globalThis, 'setTimeout');
     jest.setSystemTime(Date.parse('2026-07-20T12:00:00Z'));
     jest.spyOn(global.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000008');
     jest.spyOn(global.crypto, 'getRandomValues').mockImplementation((values) => {
@@ -582,6 +592,15 @@ describe('project locks', () => {
           signal.addEventListener('abort', resolve, { once: true });
         }),
     );
+    await jest.advanceTimersByTimeAsync(0);
+    const leaseTimerDelays = timers.mock.calls
+      .map((call) => call[1])
+      .filter((delay) => delay !== 60000);
+    expect(leaseTimerDelays).not.toHaveLength(0);
+    for (const delay of leaseTimerDelays) {
+      expect(delay).toBeGreaterThan(60 * 60 * 1000);
+      expect(delay).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
+    }
     await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000 - 1);
     expect(methodsSeen().filter((method) => method === 'PATCH')).toHaveLength(0);
     await jest.advanceTimersByTimeAsync(1);

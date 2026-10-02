@@ -12,7 +12,7 @@
 
 import * as http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { VolcanoAuth, VolcanoSystemError } from '../src/index.js';
+import { VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import { realFetch } from './setup.ts';
 
 const FUNCTION_ID = '3cd3e058-e3ff-42a5-ae4d-650ef9b45746';

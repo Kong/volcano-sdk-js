@@ -14,7 +14,10 @@ export type CreateSandboxSessionRequest = (unknown & {
   preset?: CreateSandboxSessionRequestPreset;
   sandbox_id?: string;
   memory_mb?: CreateSandboxSessionRequestMemoryMb;
-  /** @pattern ^aws-[a-z0-9-]+$ */
+  /**
+     * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
+     * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
+     */
   region: string;
   /**
      * @minimum 30

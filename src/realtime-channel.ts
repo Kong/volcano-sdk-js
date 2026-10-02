@@ -80,20 +80,9 @@ class RealtimeChannel {
     this._name = name;
     this._type = type;
     this._options = options;
-    this._subscription = null;
-    this._lifecycleVersion = 0;
-    this._paused = false;
-    this._callbacks = new Map();
-    this._presenceState = {};
-
     // Auto-fetch support (Phase 3)
     const parentFetchConfig = realtime._fetchConfig;
     this._fetchConfig = channelFetchConfig(parentFetchConfig, options);
-    this._pendingFetches = new Map(); // table -> { ids: Map<id, {resolve, reject}>, timer }
-
-    // Event handler references for cleanup
-    this._eventHandlers = {};
-    this._presenceTimeoutId = null;
   }
 
   /**
@@ -315,10 +304,12 @@ class RealtimeChannel {
     const deliver: ChannelCallback = (data, context) => {
       callback(data, isPublicationContext(context) ? context : undefined);
     };
-    if (!this._callbacks.has(event)) {
-      this._callbacks.set(event, []);
+    let callbacks = this._callbacks.get(event);
+    if (callbacks === undefined) {
+      callbacks = [];
+      this._callbacks.set(event, callbacks);
     }
-    this._callbacks.get(event)?.push(deliver);
+    callbacks.push(deliver);
 
     // Return unsubscribe function
     return () => {

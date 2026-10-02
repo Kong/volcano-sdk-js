@@ -14,6 +14,17 @@ import { useNotes } from '@/hooks/useNotes';
 import { NoteCard } from './NoteCard';
 import { NoteEditor } from './NoteEditor';
 
+function NotesCount({ count }) {
+  if (count === 0) {
+    return null;
+  }
+  return (
+    <p className="text-center text-sm text-gray-500">
+      {count} {count === 1 ? 'note' : 'notes'}
+    </p>
+  );
+}
+
 export function NotesList() {
   // ---------------------------------------------------------------------------
   // DATA
@@ -116,11 +127,7 @@ export function NotesList() {
       )}
 
       {/* Notes count */}
-      {notes.length > 0 && (
-        <p className="text-center text-sm text-gray-500">
-          {notes.length} {notes.length === 1 ? 'note' : 'notes'}
-        </p>
-      )}
+      <NotesCount count={notes.length} />
     </div>
   );
 }

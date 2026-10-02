@@ -11,7 +11,7 @@ import type {
   Sandboxes,
   SandboxExecOptions,
   SandboxRequestOptions,
-} from './index.js';
+} from './index.ts';
 import {
   commandRequest,
   pathId,

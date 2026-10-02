@@ -21,7 +21,8 @@ const context: AuthContext = {
 
 test('provider methods route to their distinct endpoints with exact method and body', async () => {
   const data = {
-    providers: ['github'],
+    providers: [{ provider: 'github' }],
+    authorization_url: 'https://accounts.example/link',
     message: 'ready',
     provider: 'github',
     expires_in: 120,
@@ -38,7 +39,10 @@ test('provider methods route to their distinct endpoints with exact method and b
 
   expect(await linkOAuthProvider(host, 'github')).toEqual({ data, error: null });
   expect(await unlinkOAuthProvider(host, 'github')).toEqual({ error: null });
-  expect(await getLinkedOAuthProviders(host)).toEqual({ providers: ['github'], error: null });
+  expect(await getLinkedOAuthProviders(host)).toEqual({
+    providers: [{ provider: 'github' }],
+    error: null,
+  });
   expect(await refreshOAuthToken(host, 'github')).toEqual({
     message: 'ready',
     provider: 'github',

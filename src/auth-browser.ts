@@ -176,23 +176,12 @@ export function hasSessionInUrl(): boolean {
   }
 }
 
-function canReplaceHistory(value: unknown): value is History {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof Reflect.get(value, 'replaceState') === 'function'
-  );
-}
-
 export function stripAuthHashFromUrl(params: URLSearchParams): void {
   try {
     if (!Array.from(params.keys()).every((key) => authHashKeys.has(key))) {
       return;
     }
-    const history: unknown = Reflect.get(window, 'history');
-    if (!canReplaceHistory(history)) {
-      return;
-    }
+    const history = window.history;
     const location = window.location;
     const cleanUrl = (location.pathname === '' ? '/' : location.pathname) + location.search;
     history.replaceState(history.state, '', cleanUrl);
@@ -212,13 +201,13 @@ function hasOAuthResponse(params: URLSearchParams): boolean {
   );
 }
 
-function matchingOAuthCallback(storedRedirectUrl: string): boolean {
+function matchingOAuthCallback(storedRedirectUrl: string | null): boolean {
   try {
     const callbackUrl = new URL(window.location.href);
     if (!hasOAuthResponse(callbackUrl.searchParams)) {
       return false;
     }
-    const expectedUrl = new URL(storedRedirectUrl);
+    const expectedUrl = new URL(String(storedRedirectUrl));
     removeOAuthResponseParams(callbackUrl);
     removeOAuthResponseParams(expectedUrl);
     return callbackUrl.toString() === expectedUrl.toString();
@@ -231,7 +220,7 @@ export function hasOAuthCallbackInUrl(
   storedRedirectUrl: string | null,
   hasState: boolean,
 ): boolean {
-  if (!isBrowser() || !hasState || storedRedirectUrl === null || storedRedirectUrl === '') {
+  if (!isBrowser() || !hasState) {
     return false;
   }
   return matchingOAuthCallback(storedRedirectUrl);

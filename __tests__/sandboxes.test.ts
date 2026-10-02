@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.js';
+import { VolcanoAuth } from '../src/index.ts';
 import { requestOptions, sandboxResult } from '../src/sandbox-request.ts';
 
 const projectId = '11111111-1111-4111-8111-111111111111';

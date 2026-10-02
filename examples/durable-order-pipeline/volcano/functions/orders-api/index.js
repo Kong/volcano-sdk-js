@@ -15,28 +15,49 @@ const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY } = process.env;
 const DURABLE_FUNCTION = 'order-pipeline';
 
 exports.handler = async (event) => {
-  const input = event && typeof event === 'object' ? event : {};
+  const input = requestInput(event);
   const auth = input.__volcano_auth;
   if (!auth) {
     return json(401, { error: 'sign in first' });
   }
 
   try {
-    switch (input.action) {
-      case 'submit':
-        return json(202, await submitOrder(auth, input));
-      case 'status':
-        return json(200, await orderStatus(auth, input));
-      case 'review':
-        return json(200, await review(auth, input));
-      default:
-        return json(400, { error: "action must be 'submit', 'status' or 'review'" });
-    }
+    return await requestedAction(auth, input);
   } catch (error) {
     console.error('orders-api failed', error);
     return json(error.status ?? 500, { error: error.message });
   }
 };
+
+function requestInput(event) {
+  return event && typeof event === 'object' ? event : {};
+}
+
+async function requestedAction(auth, input) {
+  switch (input.action) {
+    case 'submit': {
+      return json(202, await submitOrder(auth, input));
+    }
+    case 'status': {
+      return json(200, await orderStatus(auth, input));
+    }
+    case 'review': {
+      return json(200, await review(auth, input));
+    }
+    default: {
+      return json(400, { error: "action must be 'submit', 'status' or 'review'" });
+    }
+  }
+}
+
+async function insertOrderItem(volcano, order, item) {
+  return volcano.insert('order_items', {
+    order_id: order.id,
+    sku: item.sku,
+    quantity: item.quantity ?? 1,
+    price_cents: item.price_cents ?? 0,
+  });
+}
 
 // Creating the order and starting the execution are two writes, so the order id
 // is the execution name: one order gets one pipeline however many times the
@@ -54,14 +75,7 @@ async function submitOrder(auth, input) {
     await volcano.insert('orders', { user_id: auth.user_id, status: 'submitted' }),
   );
   for (const item of items) {
-    unwrap(
-      await volcano.insert('order_items', {
-        order_id: order.id,
-        sku: item.sku,
-        quantity: item.quantity ?? 1,
-        price_cents: item.price_cents ?? 0,
-      }),
-    );
+    unwrap(await insertOrderItem(volcano, order, item));
   }
 
   const execution = await startExecution(order.id);

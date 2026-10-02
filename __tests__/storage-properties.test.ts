@@ -1,7 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { assert, asyncProperty, constantFrom, property, string, uint8Array } from 'fast-check';
-import { VolcanoClient } from '../src/index.js';
+import { VolcanoClient } from '../src/index.ts';
 import { propertyOptions } from './support/property-options.ts';
 
 const payload = Buffer.from(JSON.stringify({ project_id: 'property-project' })).toString(

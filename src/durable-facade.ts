@@ -1,14 +1,16 @@
 import { durablePathSegments } from './durable-paths.ts';
+import { isDurableExecution, isDurablePage } from './durable-response.ts';
+import type { DurableExecution, PaginatedDurableExecutions } from './sdk-public-types.ts';
 
 const MAX_EXECUTION_NAME_LENGTH = 255;
 
-interface DurableResult {
-  data: unknown;
+interface DurableResult<T> {
+  data: T | null;
   status: number | null;
   error: Error | null;
 }
 interface DurableOptions {
-  status?: string;
+  status?: import('./generated/model/durableExecutionStatus.ts').DurableExecutionStatus;
   page?: number;
   limit?: number;
 }
@@ -53,7 +55,7 @@ export class DurableFacade {
     functionName: unknown,
     input: unknown,
     options: { executionName?: unknown },
-  ): Promise<DurableResult> {
+  ): Promise<DurableResult<DurableExecution>> {
     const path = durablePathSegments({ functionName });
     if (path.error !== undefined) {
       return failure(path.error);
@@ -64,7 +66,7 @@ export class DurableFacade {
     }
     await this.client._completeOAuthExchange();
     const mode = credentialMode(this.client._captureAuthContext().accessToken);
-    return durableResult('Failed to start durable execution', () =>
+    return durableResult('Failed to start durable execution', isDurableExecution, () =>
       this.client._transport.startDurableExecutionFromApplication(
         path.segments.functionName,
         input,
@@ -77,7 +79,7 @@ export class DurableFacade {
     projectId: unknown,
     functionName: unknown,
     executionId: unknown,
-  ): Promise<DurableResult> {
+  ): Promise<DurableResult<DurableExecution>> {
     const path = durablePathSegments({ projectId, functionName, executionId });
     if (path.error !== undefined) {
       return failure(path.error);
@@ -86,7 +88,7 @@ export class DurableFacade {
     if (sessionError !== null) {
       return failure(sessionError);
     }
-    return durableResult('Failed to read durable execution', () =>
+    return durableResult('Failed to read durable execution', isDurableExecution, () =>
       this.client._transport.getDurableExecution(
         path.segments.projectId,
         path.segments.functionName,
@@ -100,7 +102,7 @@ export class DurableFacade {
     projectId: unknown,
     functionName: unknown,
     options: DurableOptions,
-  ): Promise<DurableResult> {
+  ): Promise<DurableResult<PaginatedDurableExecutions>> {
     const path = durablePathSegments({ projectId, functionName });
     if (path.error !== undefined) {
       return failure(path.error);
@@ -109,7 +111,7 @@ export class DurableFacade {
     if (sessionError !== null) {
       return failure(sessionError);
     }
-    return durableResult('Failed to list durable executions', () =>
+    return durableResult('Failed to list durable executions', isDurablePage, () =>
       this.client._transport.listDurableExecutions(
         path.segments.projectId,
         path.segments.functionName,
@@ -123,7 +125,7 @@ export class DurableFacade {
     projectId: unknown,
     functionName: unknown,
     executionId: unknown,
-  ): Promise<DurableResult> {
+  ): Promise<DurableResult<DurableExecution>> {
     const path = durablePathSegments({ projectId, functionName, executionId });
     if (path.error !== undefined) {
       return failure(path.error);
@@ -132,7 +134,7 @@ export class DurableFacade {
     if (sessionError !== null) {
       return failure(sessionError);
     }
-    return durableResult('Failed to stop durable execution', () =>
+    return durableResult('Failed to stop durable execution', isDurableExecution, () =>
       this.client._transport.stopDurableExecution(
         path.segments.projectId,
         path.segments.functionName,
@@ -143,7 +145,7 @@ export class DurableFacade {
   }
 }
 
-function failure(error: Error): DurableResult {
+function failure<T>(error: Error): DurableResult<T> {
   return { data: null, status: null, error };
 }
 
@@ -198,20 +200,28 @@ async function ownerSession(client: DurableClient): Promise<Error | null> {
   return null;
 }
 
-async function durableResult(
+async function durableResult<T>(
   message: string,
+  validate: (value: unknown) => value is T,
   call: () => Promise<unknown>,
-): Promise<DurableResult> {
+): Promise<DurableResult<T>> {
   try {
-    return responseResult(await call(), message);
+    return responseResult(await call(), message, validate);
   } catch (error) {
     return thrownResult(error, message);
   }
 }
 
-function responseResult(response: unknown, message: string): DurableResult {
+function responseResult<T>(
+  response: unknown,
+  message: string,
+  validate: (value: unknown) => value is T,
+): DurableResult<T> {
   if (!responseHasStatus(response)) {
     throw new Error(message);
+  }
+  if (!validate(response.data)) {
+    throw new TypeError(`Invalid durable response: ${message}`);
   }
   return {
     data: response.data,
@@ -229,7 +239,7 @@ function responseHasStatus(response: unknown): response is { status: number; dat
   );
 }
 
-function thrownResult(error: unknown, message: string): DurableResult {
+function thrownResult<T>(error: unknown, message: string): DurableResult<T> {
   return {
     data: null,
     status: thrownStatus(error),

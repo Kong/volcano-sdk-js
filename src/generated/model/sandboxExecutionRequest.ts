@@ -15,7 +15,10 @@ export type SandboxExecutionRequest = (unknown & {
   preset?: SandboxExecutionRequestPreset;
   sandbox_id?: string;
   memory_mb?: SandboxExecutionRequestMemoryMb;
-  /** @pattern ^aws-[a-z0-9-]+$ */
+  /**
+     * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
+     * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
+     */
   region: string;
   /**
      * @minLength 1

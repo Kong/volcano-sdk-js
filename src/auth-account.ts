@@ -1,7 +1,9 @@
 import type { ContextRequest, RequestResult } from './auth-request.ts';
-import { optionalField, requiredField } from './auth-response.ts';
+import { optionalStringField, optionalTokenField, requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import {
+  assertAuthTokenResponse,
+  assertAuthUser,
   assertCompleteSession,
   type CompleteSessionFields,
   validateCompleteSession,
@@ -9,14 +11,15 @@ import {
 import { AuthSessionChangedError } from './errors.ts';
 import type { authSignin } from './generated/client.ts';
 import { cloneJsonValue } from './json-clone.ts';
+import type { Session, User } from './sdk-public-types.ts';
 
 export interface AuthAccountHost {
   _sessionGeneration: number;
   _pendingUrlAuthNotify: boolean;
-  currentUser: unknown;
+  currentUser: User | null;
   accessToken: string | null;
   refreshToken: string | null;
-  _authCallbacks: ((user: unknown) => void)[];
+  _authCallbacks: ((user: User | null) => void)[];
   readonly _transport: { authSignin: typeof authSignin };
   _generatedOptions(authorization: 'anon'): Parameters<typeof authSignin>[1];
   _anonFetch(path: string, options: RequestInit): Promise<RequestResult>;
@@ -28,7 +31,7 @@ export interface AuthAccountHost {
   _adoptSessionInMemory(data: CompleteSessionFields): void;
   _consumeSessionFromUrl(): boolean;
   _isAuthContextCurrent(context: AuthContext): boolean;
-  _notifyAuthCallbacks(user: unknown): void;
+  _notifyAuthCallbacks(user: User | null): void;
   signIn(options: { email: string; password: string }): Promise<AuthResult>;
   signInAnonymously(metadata?: Record<string, unknown>): Promise<AuthResult>;
   forgotPassword(email: string): Promise<MessageResult>;
@@ -36,23 +39,21 @@ export interface AuthAccountHost {
 }
 
 interface AuthResult {
-  user: unknown;
-  session: { access_token: string; refresh_token: string | undefined; expires_in: unknown } | null;
+  user: User | null;
+  session: Session | null;
   error: Error | null;
 }
 
 interface CurrentSessionResult {
-  data: { session: { access_token: string; refresh_token: string | null; user: unknown } | null };
+  data: {
+    session: { access_token: string; refresh_token: string | null; user: User | null } | null;
+  };
   error: Error | null;
 }
 
 interface MessageResult {
-  message: unknown;
+  message: string | null;
   error: Error | null;
-}
-
-function userId(user: unknown): unknown {
-  return optionalField(user, 'id');
 }
 
 export async function signUp(
@@ -64,10 +65,10 @@ export async function signUp(
     signInWhenAllowed?: boolean;
   },
 ): Promise<{
-  user: unknown;
+  user: User | null;
   session: AuthResult['session'];
   confirmationRequired: boolean;
-  message: unknown;
+  message: string | null;
   error: Error | null;
 }> {
   const { email, password, metadata = {} } = options;
@@ -93,8 +94,11 @@ async function finishSignUp(
   data: unknown,
 ): ReturnType<typeof signUp> {
   // The signup response is deliberately session-less to avoid account enumeration.
-  const confirmationRequired = Boolean(optionalField(data, 'confirmation_required'));
-  const message = optionalField(data, 'message') ?? null;
+  const confirmationRequired = requiredField(data, 'confirmation_required');
+  if (typeof confirmationRequired !== 'boolean') {
+    throw new TypeError('Auth response confirmation_required must be a boolean');
+  }
+  const message = optionalStringField(data, 'message');
   if (options.signInWhenAllowed === true && !confirmationRequired) {
     const signedIn = await host.signIn({ email: options.email, password: options.password });
     return {
@@ -129,6 +133,7 @@ export async function signIn(
   if (response.data === undefined) {
     throw new TypeError('Sign in returned no session');
   }
+  assertAuthTokenResponse(response.data);
   if (!host._setSession(response.data, expectedGeneration)) {
     return { user: null, session: null, error: new AuthSessionChangedError() };
   }
@@ -148,6 +153,9 @@ export function getSession(host: AuthAccountHost): Promise<CurrentSessionResult>
     return Promise.resolve({ data: { session: null }, error: null });
   }
   const user = cloneJsonValue(host.currentUser);
+  if (user !== null) {
+    assertAuthUser(user);
+  }
   return Promise.resolve({
     data: {
       session: {
@@ -179,18 +187,14 @@ export function setSession(host: AuthAccountHost, session: unknown): Promise<Cur
   return host.getSession();
 }
 
-function isUserResponseCurrent(
-  host: AuthAccountHost,
-  context: AuthContext,
-  user: unknown,
-): boolean {
-  const currentId = userId(host.currentUser);
-  return host._isAuthContextCurrent(context) && (!Boolean(currentId) || userId(user) === currentId);
+function isUserResponseCurrent(host: AuthAccountHost, context: AuthContext, user: User): boolean {
+  const currentId = host.currentUser?.id;
+  return host._isAuthContextCurrent(context) && (!Boolean(currentId) || user.id === currentId);
 }
 
 export function onAuthStateChange(
   host: AuthAccountHost,
-  callback: (user: unknown) => void,
+  callback: (user: User | null) => void,
 ): () => void {
   host._authCallbacks.push(callback);
   try {
@@ -205,13 +209,14 @@ export function onAuthStateChange(
 
 export async function getUser(
   host: AuthAccountHost,
-): Promise<{ user: unknown; error: Error | null }> {
+): Promise<{ user: User | null; error: Error | null }> {
   const adoptedFromUrl = host._consumeSessionFromUrl();
   const { result, context } = await host._authFetchWithContext('/auth/user');
   if (result.ok !== true) {
     return { user: null, error: result.error };
   }
   const user = requiredField(result.data, 'user');
+  assertAuthUser(user);
   if (!isUserResponseCurrent(host, context, user)) {
     return { user: null, error: new AuthSessionChangedError() };
   }
@@ -226,7 +231,7 @@ export async function getUser(
 export async function updateUser(
   host: AuthAccountHost,
   options: { password?: string; metadata?: Record<string, unknown> },
-): Promise<{ user: unknown; error: Error | null }> {
+): Promise<{ user: User | null; error: Error | null }> {
   const { result, context } = await host._authFetchWithContext('/auth/user', () => {
     const { password, metadata } = options;
     return { method: 'PUT', body: JSON.stringify({ password, user_metadata: metadata }) };
@@ -235,6 +240,7 @@ export async function updateUser(
     return { user: null, error: result.error };
   }
   const user = requiredField(result.data, 'user');
+  assertAuthUser(user);
   if (!isUserResponseCurrent(host, context, user)) {
     return { user: null, error: new AuthSessionChangedError() };
   }
@@ -255,6 +261,7 @@ export async function signInAnonymously(
     return { user: null, session: null, error: result.error };
   }
   assertCompleteSession(result.data);
+  assertAuthTokenResponse(result.data);
   if (!host._setSession(result.data, expectedGeneration)) {
     return { user: null, session: null, error: new AuthSessionChangedError() };
   }
@@ -263,7 +270,7 @@ export async function signInAnonymously(
     session: {
       access_token: result.data.access_token,
       refresh_token: result.data.refresh_token,
-      expires_in: requiredField(result.data, 'expires_in'),
+      expires_in: result.data.expires_in,
     },
     error: null,
   };
@@ -279,7 +286,7 @@ export function signUpAnonymous(
 export async function convertAnonymous(
   host: AuthAccountHost,
   options: { email: string; password: string; metadata?: Record<string, unknown> },
-): Promise<{ user: unknown; error: Error | null }> {
+): Promise<{ user: User | null; error: Error | null }> {
   const { result, context } = await host._authFetchWithContext(
     '/auth/user/convert-anonymous',
     () => {
@@ -297,7 +304,7 @@ function adoptedUser(
   host: AuthAccountHost,
   context: AuthContext,
   result: RequestResult,
-): { user: unknown; error: Error | null } {
+): { user: User | null; error: Error | null } {
   if (result.ok !== true) {
     return { user: null, error: result.error };
   }
@@ -305,6 +312,7 @@ function adoptedUser(
     return { user: null, error: new AuthSessionChangedError() };
   }
   const user = requiredField(result.data, 'user');
+  assertAuthUser(user);
   host.currentUser = user;
   return { user, error: null };
 }
@@ -316,7 +324,7 @@ async function messageRequest(
 ): Promise<MessageResult> {
   const result = await host._anonFetch(path, { method: 'POST', body: JSON.stringify(body) });
   return result.ok === true
-    ? { message: optionalField(result.data, 'message') ?? null, error: null }
+    ? { message: optionalStringField(result.data, 'message'), error: null }
     : { message: null, error: result.error };
 }
 
@@ -347,9 +355,9 @@ export function resetPassword(
 }
 
 interface EmailChangeResult {
-  message: unknown;
-  newEmail: unknown;
-  emailChangeToken?: unknown;
+  message: string | null;
+  newEmail: string | null;
+  emailChangeToken?: string | undefined;
   error: Error | null;
 }
 
@@ -368,9 +376,9 @@ export async function requestEmailChange(
     return { message: null, newEmail: null, error: new AuthSessionChangedError() };
   }
   return {
-    message: optionalField(result.data, 'message') ?? null,
-    newEmail: optionalField(result.data, 'new_email') ?? null,
-    emailChangeToken: optionalField(result.data, 'email_change_token'),
+    message: optionalStringField(result.data, 'message'),
+    newEmail: optionalStringField(result.data, 'new_email'),
+    emailChangeToken: optionalTokenField(result.data, 'email_change_token'),
     error: null,
   };
 }
@@ -378,7 +386,7 @@ export async function requestEmailChange(
 export async function confirmEmailChange(
   host: AuthAccountHost,
   emailChangeToken: string,
-): Promise<{ user: unknown; error: Error | null }> {
+): Promise<{ user: User | null; error: Error | null }> {
   const { result, context } = await host._authFetchWithContext(
     '/auth/user/confirm-email-change',
     () => ({
@@ -399,5 +407,5 @@ export async function cancelEmailChange(host: AuthAccountHost): Promise<MessageR
   if (!host._isAuthContextCurrent(context)) {
     return { message: null, error: new AuthSessionChangedError() };
   }
-  return { message: optionalField(result.data, 'message') ?? null, error: null };
+  return { message: optionalStringField(result.data, 'message'), error: null };
 }

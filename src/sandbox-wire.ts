@@ -5,7 +5,7 @@ import type {
   SandboxExecutionResult,
   SandboxPreset,
   SandboxState,
-} from './index.js';
+} from './index.ts';
 
 export function record(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) {

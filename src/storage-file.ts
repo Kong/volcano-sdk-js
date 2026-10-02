@@ -1,30 +1,60 @@
 import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import type {
+  CompleteUploadSessionResponse,
   CreateUploadSessionOptions,
+  CreateUploadSessionResponse,
   ResumableUploadOptions,
   StorageDownloadOptions,
+  StorageDownloadResponse,
+  StorageError,
   StorageListOptions,
+  StorageListResponse,
+  StorageMoveResponse,
+  StorageObject,
+  StorageRemoveError,
+  StorageRemoveResponse,
   StorageUploadOptions,
+  StorageUploadResponse,
+  StorageVisibilityResponse,
+  UploadPartResponse,
+  UploadSessionStatusResponse,
 } from './index.js';
 import { buildStorageUrl, encodeStoragePath } from './storage-paths.ts';
 import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
+import {
+  isBlob,
+  isCompletedUpload,
+  isStorageObject,
+  isStorageObjects,
+  isUploadPart,
+  isUploadSession,
+  isUploadSessionStatus,
+} from './storage-shapes.ts';
 import {
   storageRequest,
   type StorageRequestOptions,
   type StorageRequestResult,
 } from './storage-transport.ts';
 
-interface StorageResult {
-  data: unknown;
-  error: Error | null;
+interface StorageResult<T> {
+  data: T | null;
+  error: StorageError | null;
 }
 
-interface StorageListResult {
-  data: unknown[] | null;
-  error: Error | null;
-  nextCursor: string | null;
+function validatedResult<T>(
+  result: StorageRequestResult,
+  guard: (value: unknown) => value is T,
+  responseName: string,
+): StorageResult<T> {
+  if (result.error !== null) {
+    return { data: null, error: result.error };
+  }
+  if (!guard(result.data)) {
+    return { data: null, error: new TypeError(`Invalid ${responseName} response`) };
+  }
+  return { data: result.data, error: null };
 }
 
 interface StorageAuthContext {
@@ -100,16 +130,16 @@ function listUrl(host: StorageFileApi, prefix: unknown, options: StorageListOpti
   return query.length > 0 ? `${base}?${query}` : base;
 }
 
-function listFailure(error: Error): StorageListResult {
+function listFailure(error: Error): StorageListResponse {
   return { data: null, error, nextCursor: null };
 }
 
-function listObjects(value: object): unknown[] | null {
+function listObjects(value: object): StorageObject[] | null {
   const objects: unknown = Reflect.get(value, 'objects');
   if (!Boolean(objects)) {
     return [];
   }
-  return Array.isArray(objects) ? objects : null;
+  return isStorageObjects(objects) ? objects : null;
 }
 
 function listCursor(value: object): string | null {
@@ -117,7 +147,7 @@ function listCursor(value: object): string | null {
   return typeof cursor === 'string' && cursor.length > 0 ? cursor : null;
 }
 
-function listPayload(value: unknown): StorageListResult {
+function listPayload(value: unknown): StorageListResponse {
   if (typeof value !== 'object' || value === null) {
     return listFailure(new TypeError('Storage list response is not an object'));
   }
@@ -133,7 +163,7 @@ async function uploadWithFile(
   path: string,
   fileBody: unknown,
   options: StorageUploadOptions,
-): Promise<StorageResult> {
+): Promise<StorageUploadResponse> {
   try {
     const file = uploadFileBody(path, fileBody, options);
     if (file === null) {
@@ -145,7 +175,7 @@ async function uploadWithFile(
       { file },
       host.volcanoAuth._generatedOptions('session'),
     );
-    return { data: response.data, error: null };
+    return validatedResult({ data: response.data, error: null }, isStorageObject, 'storage upload');
   } catch (error) {
     return { data: null, error: error instanceof Error ? error : new Error('Upload failed') };
   }
@@ -173,19 +203,19 @@ async function deletePaths(
   return { deleted, failures };
 }
 
-function uploadSessionBody(
-  path: string,
-  options: Partial<CreateUploadSessionOptions> | null | undefined,
-): object {
+function uploadSessionBody(path: string, options: Partial<CreateUploadSessionOptions>): object {
   return {
     filename: legacyStringDefault(path.split('/').pop(), path),
-    content_type: legacyValueDefault(options?.contentType, 'application/octet-stream'),
-    total_size: options?.totalSize,
-    part_size: options?.partSize,
+    content_type: legacyValueDefault(options.contentType, 'application/octet-stream'),
+    total_size: options.totalSize,
+    part_size: options.partSize,
   };
 }
 
-function removeError(failures: { path: string; error: Error }[], firstError: Error): Error {
+function removeError(
+  failures: { path: string; error: Error }[],
+  firstError: Error,
+): StorageRemoveError {
   const error = Object.assign(
     new Error(
       `Failed to delete ${String(failures.length)} file(s): ${failures.map((item) => item.path).join(', ')}`,
@@ -193,11 +223,9 @@ function removeError(failures: { path: string; error: Error }[], firstError: Err
     { failures },
   );
   for (const field of ['status', 'code', 'retryAfter']) {
-    if (field in firstError) {
-      const value: unknown = Reflect.get(firstError, field);
-      if (value !== undefined) {
-        Reflect.set(error, field, value);
-      }
+    const value: unknown = Reflect.get(firstError, field);
+    if (value !== undefined) {
+      Reflect.set(error, field, value);
     }
   }
   return error;
@@ -216,7 +244,7 @@ export class StorageFileApi {
    * Check if user is authenticated
    * @private
    */
-  async _checkAuth(): Promise<StorageResult | null> {
+  async _checkAuth(): Promise<StorageResult<never> | null> {
     await this.volcanoAuth._completeOAuthExchange();
     if (!Boolean(this.volcanoAuth.accessToken)) {
       const exchangeError = this.volcanoAuth._oauthExchangeError;
@@ -268,7 +296,7 @@ export class StorageFileApi {
     path: string,
     fileBody: unknown,
     options: StorageUploadOptions = {},
-  ): Promise<StorageResult> {
+  ): Promise<StorageUploadResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
@@ -279,7 +307,10 @@ export class StorageFileApi {
   /**
    * Download a file from the bucket
    */
-  async download(path: string, options: StorageDownloadOptions = {}): Promise<StorageResult> {
+  async download(
+    path: string,
+    options: StorageDownloadOptions = {},
+  ): Promise<StorageDownloadResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
@@ -291,7 +322,7 @@ export class StorageFileApi {
         this._encodePath(path),
         this.volcanoAuth._generatedOptions('session', downloadHeaders(options), 'blob'),
       );
-      return { data: response.data, error: null };
+      return validatedResult({ data: response.data, error: null }, isBlob, 'storage download');
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error('Download failed') };
     }
@@ -300,7 +331,7 @@ export class StorageFileApi {
   /**
    * List files in the bucket
    */
-  async list(prefix: unknown = '', options: StorageListOptions = {}): Promise<StorageListResult> {
+  async list(prefix: unknown = '', options: StorageListOptions = {}): Promise<StorageListResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return { data: null, error: authError.error, nextCursor: null };
@@ -321,7 +352,7 @@ export class StorageFileApi {
   /**
    * Delete one or more files from the bucket
    */
-  async remove(paths: string | string[]): Promise<StorageResult> {
+  async remove(paths: string | string[]): Promise<StorageRemoveResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
@@ -339,38 +370,46 @@ export class StorageFileApi {
   /**
    * Move/rename a file within the bucket
    */
-  async move(fromPath: string, toPath: string): Promise<StorageResult> {
+  async move(fromPath: string, toPath: string): Promise<StorageMoveResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
+    return validatedResult(
+      await this._storageRequest(
+        `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: fromPath, to: toPath }),
+        },
+      ),
+      isStorageObject,
+      'storage move',
     );
   }
 
   /**
    * Copy a file within the bucket
    */
-  async copy(fromPath: string, toPath: string): Promise<StorageResult> {
+  async copy(fromPath: string, toPath: string): Promise<StorageMoveResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(
-      `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromPath, to: toPath }),
-      },
+    return validatedResult(
+      await this._storageRequest(
+        `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: fromPath, to: toPath }),
+        },
+      ),
+      isStorageObject,
+      'storage copy',
     );
   }
 
@@ -389,17 +428,21 @@ export class StorageFileApi {
   /**
    * Update the visibility (public/private) of a file
    */
-  async updateVisibility(path: string, isPublic: boolean): Promise<StorageResult> {
+  async updateVisibility(path: string, isPublic: boolean): Promise<StorageVisibilityResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(`${this._buildUrl(path)}/visibility`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_public: isPublic }),
-    });
+    return validatedResult(
+      await this._storageRequest(`${this._buildUrl(path)}/visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_public: isPublic }),
+      }),
+      isStorageObject,
+      'storage visibility',
+    );
   }
 
   // ========================================================================
@@ -409,21 +452,25 @@ export class StorageFileApi {
   async createUploadSession(
     path: string,
     options: Partial<CreateUploadSessionOptions> | null | undefined,
-  ): Promise<StorageResult> {
+  ): Promise<CreateUploadSessionResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    if (!Boolean(options?.totalSize)) {
+    if (options === null || options === undefined || !Boolean(options.totalSize)) {
       return errorResult('totalSize is required');
     }
 
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uploadSessionBody(path, options)),
-    });
+    return validatedResult(
+      await this._storageRequest(this._buildUrl(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(uploadSessionBody(path, options)),
+      }),
+      isUploadSession,
+      'upload session creation',
+    );
   }
 
   async uploadPart(
@@ -431,53 +478,71 @@ export class StorageFileApi {
     sessionId: string,
     partNumber: number,
     partData: ArrayBuffer | Blob,
-  ): Promise<StorageResult> {
+  ): Promise<UploadPartResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Upload-Session': sessionId,
-        'X-Part-Number': String(partNumber),
-      },
-      body: partData,
-    });
+    return validatedResult(
+      await this._storageRequest(this._buildUrl(path), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Upload-Session': sessionId,
+          'X-Part-Number': String(partNumber),
+        },
+        body: partData,
+      }),
+      isUploadPart,
+      'upload part',
+    );
   }
 
-  async completeUploadSession(path: string, sessionId: string): Promise<StorageResult> {
+  async completeUploadSession(
+    path: string,
+    sessionId: string,
+  ): Promise<CompleteUploadSessionResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Upload-Session': sessionId,
-        'X-Upload-Complete': 'true',
-      },
-      body: JSON.stringify({}),
-    });
+    return validatedResult(
+      await this._storageRequest(this._buildUrl(path), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Upload-Session': sessionId,
+          'X-Upload-Complete': 'true',
+        },
+        body: JSON.stringify({}),
+      }),
+      isCompletedUpload,
+      'completed upload',
+    );
   }
 
-  async getUploadSession(path: string, sessionId: string): Promise<StorageResult> {
+  async getUploadSession(path: string, sessionId: string): Promise<UploadSessionStatusResponse> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return authError;
     }
 
-    return this._storageRequest(this._buildUrl(path), {
-      method: 'GET',
-      headers: { 'X-Upload-Session': sessionId },
-    });
+    return validatedResult(
+      await this._storageRequest(this._buildUrl(path), {
+        method: 'GET',
+        headers: { 'X-Upload-Session': sessionId },
+      }),
+      isUploadSessionStatus,
+      'upload session status',
+    );
   }
 
-  async abortUploadSession(path: string, sessionId: string): Promise<{ error: Error | null }> {
+  async abortUploadSession(
+    path: string,
+    sessionId: string,
+  ): Promise<{ error: StorageError | null }> {
     const authError = await this._checkAuth();
     if (authError !== null) {
       return { error: authError.error };
@@ -491,11 +556,15 @@ export class StorageFileApi {
     return { error: result.error };
   }
 
-  uploadResumable(
+  async uploadResumable(
     path: string,
     fileBody: File | Blob,
     options: ResumableUploadOptions = {},
-  ): Promise<StorageResult> {
-    return runResumableUpload(this, path, fileBody, options);
+  ): Promise<CompleteUploadSessionResponse> {
+    return validatedResult(
+      await runResumableUpload(this, path, fileBody, options),
+      isCompletedUpload,
+      'resumable upload',
+    );
   }
 }

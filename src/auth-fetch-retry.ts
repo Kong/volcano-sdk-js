@@ -10,7 +10,7 @@ export interface AuthRetryClient<Context extends AuthContext> {
   readonly accessToken: string | null;
   _completeOAuthExchange(): Promise<unknown>;
   _captureAuthContext(): Context;
-  _refreshSessionForContext(context: Context): Promise<{ error: Error | null | undefined }>;
+  _refreshSessionForContext(context: Context): Promise<{ error: unknown }>;
   _isAuthContextCurrent(context: Context): boolean;
 }
 

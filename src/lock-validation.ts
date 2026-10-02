@@ -1,4 +1,4 @@
-const MAX_LOCK_TTL_SECONDS = 90 * 24 * 60 * 60;
+const MAX_LOCK_TTL_SECONDS = 7_776_000; // 90 days
 
 export function validateLockOptions(key: unknown, options: unknown): number {
   validateLockKey(key);
@@ -10,9 +10,7 @@ export function validateLockOptions(key: unknown, options: unknown): number {
 }
 
 function validTtl(ttl: unknown): ttl is number {
-  return (
-    typeof ttl === 'number' && Number.isInteger(ttl) && ttl >= 5 && ttl <= MAX_LOCK_TTL_SECONDS
-  );
+  return typeof ttl === 'number' && ttl % 1 === 0 && ttl >= 5 && ttl <= MAX_LOCK_TTL_SECONDS;
 }
 
 export function validateLockKey(key: unknown): void {

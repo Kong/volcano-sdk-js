@@ -27,7 +27,7 @@ function context(accessToken: string | null, verified = false): RefreshContext {
 const session = {
   access_token: token(sessionId),
   refresh_token: 'renewed-refresh',
-  user: { id: 'user' },
+  user: { id: 'user', email: 'user@example.com', status: 'active' },
 };
 
 describe('refresh source', () => {
@@ -98,7 +98,10 @@ describe('session continuation', () => {
     [{}, 'Session access_token must be a non-empty string'],
     [{ access_token: 'access' }, 'Session refresh_token must be a non-empty string'],
     [{ ...session, user: null }, 'Session user must be an object'],
-    [{ ...session, user: { id: '' } }, 'Session user ID must be a non-empty string'],
+    [
+      { ...session, user: { ...session.user, id: '' } },
+      'Session user ID must be a non-empty string',
+    ],
   ])('validates complete credentials before continuity: %p', (data, message) => {
     expect(() => {
       validateSessionContinuation(data, context(token(otherSessionId)), 'other-user');

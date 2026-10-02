@@ -9,6 +9,8 @@ test('reports a missing durable runtime with its original cause', () => {
   expect(error.name).toBe('DurableRuntimeMissingError');
   expect(error.message).toContain('Durable execution is not available here.');
   expect(error.message).toContain('`kind: durable`');
+  expect(error.message).toContain('builds a function deployed as durable');
+  expect(error.message).toContain('does not run locally');
   expect(error.cause).toBe(cause);
 });
 

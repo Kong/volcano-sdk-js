@@ -137,14 +137,30 @@ describe('Next.js middleware helpers', () => {
 
   test.each([
     ['record without a name', { message: 'offline' }],
+    ['record without a string message', { message: 42 }],
     ['string', 'offline'],
   ])('getUser normalizes a rejected %s to an Error', async (_case, failure) => {
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
 
+    const message =
+      typeof failure === 'object' && typeof failure.message !== 'string'
+        ? '[object Object]'
+        : 'offline';
     await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
       user: null,
-      error: new Error('offline'),
+      error: new Error(message),
     });
+  });
+
+  test.each([
+    ['NetworkError', 'NetworkError'],
+    [42, 'Error'],
+  ])('getUser preserves a rejected record name %p when valid', async (name, expectedName) => {
+    jest.mocked(globalThis.fetch).mockRejectedValueOnce({ message: 'offline', name });
+
+    const result = await createServerClient(config).getUser('access-token');
+    expect(result.error?.message).toBe('offline');
+    expect(result.error?.name).toBe(expectedName);
   });
 
   test('refreshToken refuses a missing token without making a request', async () => {
@@ -266,8 +282,12 @@ describe('Next.js middleware helpers', () => {
 
   test('withAuth returns null without a request when no token is present', async () => {
     const request = new Request('https://app.test.com/dashboard');
+    const client = {
+      getUser: () => Promise.reject(new Error('Unexpected validation request')),
+      refreshToken: () => Promise.reject(new Error('Unexpected refresh request')),
+    };
 
-    await expect(withAuth(request, createServerClient(config))).resolves.toBeNull();
+    await expect(withAuth(request, client)).resolves.toBeNull();
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 

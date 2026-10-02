@@ -46,17 +46,17 @@ describe('session validation', () => {
     );
   });
 
-  test('accepts non-empty fields without changing whitespace or requiring extra user properties', () => {
+  test('accepts complete user fields without changing whitespace', () => {
     const session = {
       access_token: ' access ',
       refresh_token: ' refresh ',
-      user: { id: ' user ' },
+      user: { id: ' user ', email: 'user@example.com', status: 'active' },
     };
     expect(validateCompleteSession(session)).toBeNull();
     expect(session).toEqual({
       access_token: ' access ',
       refresh_token: ' refresh ',
-      user: { id: ' user ' },
+      user: { id: ' user ', email: 'user@example.com', status: 'active' },
     });
   });
 
@@ -74,7 +74,10 @@ describe('session validation', () => {
 });
 
 describe('OAuth token response validation', () => {
-  const response = { access_token: 'access', user: { id: 'user-1' } };
+  const response = {
+    access_token: 'access',
+    user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+  };
 
   test.each([response, { ...response, refresh_token: 'refresh' }])(
     'accepts a valid token response with optional refresh credentials',

@@ -47,7 +47,7 @@ export function batchResult<Result>(batch: EngineBatch<Result>): BatchResult<Res
   };
 }
 
-const completionReasons = new Map<string, BatchCompletionReason>([
+const completionReasons = new Map<unknown, BatchCompletionReason>([
   ['ALL_COMPLETED', 'all_completed'],
   ['MIN_SUCCESSFUL_REACHED', 'min_successful_reached'],
   ['FAILURE_TOLERANCE_EXCEEDED', 'failure_tolerance_exceeded'],
@@ -56,7 +56,5 @@ const completionReasons = new Map<string, BatchCompletionReason>([
 ]);
 
 function completionReason(batch: EngineBatch<unknown>): BatchCompletionReason | undefined {
-  return typeof batch.completionReason === 'string'
-    ? completionReasons.get(batch.completionReason)
-    : undefined;
+  return completionReasons.get(batch.completionReason);
 }

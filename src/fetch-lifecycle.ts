@@ -68,7 +68,7 @@ function followCaller(
   if (signal.aborted) {
     abort();
   } else {
-    signal.addEventListener('abort', abort, { once: true });
+    signal.addEventListener('abort', abort);
   }
   return (): void => {
     signal.removeEventListener('abort', abort);
