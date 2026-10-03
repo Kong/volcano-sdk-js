@@ -17,7 +17,7 @@ machine. Here it is four lines in the middle of the handler.
 | `volcano/functions/order-pipeline/db.js`    | The work each step does, behind one object, so the handler reads as a flow.      |
 | `volcano/functions/orders-api/index.js`     | A standard function that starts executions, reports status, and records reviews. |
 | `volcano/migrations/001_orders.sql`         | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.      |
-| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`.                                    |
+| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`, and who can call each function.    |
 
 ## The pipeline
 

@@ -4,8 +4,11 @@ functions:
   # kind: durable is what separates the two collections. It is asserted rather
   # than applied: `volcano cloud durable deploy` deploys this one, and
   # `volcano cloud functions deploy --all` skips it.
+  #
+  # orders-api starts order-pipeline with the service key, so the pipeline stays
+  # private. Signed-in users call orders-api, which needs authenticated.
   - name: order-pipeline
     kind: durable
-    public: false
+    visibility: private
   - name: orders-api
-    public: false
+    visibility: authenticated
