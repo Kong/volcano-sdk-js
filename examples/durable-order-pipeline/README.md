@@ -77,10 +77,40 @@ volcano cloud migrations deploy --all -d app
 
 ## Run it
 
-Submit an order as a signed-in user:
+`orders-api` acts for the user in `__volcano_auth`, so call it as a signed-in
+user of the project. `volcano cloud functions invoke` sends the CLI's service
+key, which carries no user, so `orders-api` answers it with `401` by design.
+
+Enable email and password sign-in, create a user, and set `VOLCANO_ANON_KEY`,
+`VOLCANO_USER_EMAIL`, and `VOLCANO_USER_PASSWORD`, as in
+[Getting started](../../docs/getting-started.md). Then save this as
+`call-orders-api.mjs` next to an install of `@volcano.dev/sdk`:
+
+```javascript
+import { VolcanoClient } from '@volcano.dev/sdk';
+
+const volcano = new VolcanoClient({
+  apiUrl: process.env.VOLCANO_API_URL ?? 'https://api.volcano.dev',
+  anonKey: process.env.VOLCANO_ANON_KEY,
+});
+const { error: signInError } = await volcano.auth.signIn({
+  email: process.env.VOLCANO_USER_EMAIL,
+  password: process.env.VOLCANO_USER_PASSWORD,
+});
+if (signInError) throw signInError;
+
+const { data, status, error } = await volcano.functions.invoke(
+  'orders-api',
+  JSON.parse(process.argv[2]),
+);
+if (error) throw error;
+console.log(status, data);
+```
+
+Submit an order:
 
 ```bash
-volcano cloud functions invoke orders-api --payload '{
+node call-orders-api.mjs '{
   "action": "submit",
   "items": [
     { "sku": "VOL-1", "quantity": 2, "price_cents": 1999 },
@@ -107,7 +137,7 @@ volcano cloud durable executions get order-pipeline <execution-id>
 Approve the order, and the same execution resumes and dispatches it:
 
 ```bash
-volcano cloud functions invoke orders-api --payload '{
+node call-orders-api.mjs '{
   "action": "review", "order_id": "9c1f…", "decision": "approved"
 }'
 

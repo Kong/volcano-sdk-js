@@ -392,8 +392,8 @@ if (error) {
       break;
     case 403:
     case 404:
-      // A private function started with an anon key, or a name this project
-      // has no durable function for. Neither improves on a retry.
+      // A caller the function's visibility does not admit, or a name this
+      // project has no durable function for. Neither improves on a retry.
       console.error('Developer error:', error.message);
       break;
     case null:

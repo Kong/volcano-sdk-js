@@ -101,7 +101,35 @@ invoke through the API host instead. Same call, same result.
 
 ## Authentication
 
-The SDK uses the user's access token when a user is signed in. The function receives the user's context and can:
+A function's [visibility](/platform/functions/creating-functions#choose-who-can-invoke-it)
+decides which credentials can invoke it. New functions are `private`.
+
+| Visibility          | Service keys and schedulers | Your project's signed-in users | Anon keys with `functions.invoke` |
+| ------------------- | --------------------------- | ------------------------------ | --------------------------------- |
+| `private` (default) | Yes                         | No                             | No                                |
+| `authenticated`     | Yes                         | Yes                            | No                                |
+| `public`            | Yes                         | Yes                            | Yes                               |
+
+Signed-in users include anonymous sign-ins. Set the level in
+`volcano-config.yaml` for every function your app calls:
+
+```yaml
+# volcano-config.yaml
+version: 1
+functions:
+  - name: get-my-profile
+    visibility: authenticated
+  - name: contact-form
+    visibility: public
+```
+
+A caller the level does not admit gets `status: 403` and an `error`, and the
+function does not run.
+
+### As a signed-in user
+
+When a user is signed in, the SDK sends their access token. The function must be
+`authenticated` or `public`. It receives the user's context and can:
 
 1. Verify the user's identity
 2. Query the database with Row-Level Security
@@ -116,7 +144,12 @@ const { data } = await volcano.functions.invoke('get-my-profile');
 // Returns Alice's profile data
 ```
 
-When no user is signed in, the SDK uses the project's anon key. This works only for functions configured as public. Public invocations do not receive user context.
+### With the anon key
+
+When no user is signed in, the SDK sends the project's anon key. This works only
+for `public` functions, and the anon key needs the `functions.invoke`
+permission. These invocations do not receive user context. Anon keys ship in
+browser code, so treat a `public` function as internet-facing.
 
 ```javascript
 const volcano = new VolcanoAuth({ anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY });
