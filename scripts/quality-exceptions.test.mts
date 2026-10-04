@@ -13,6 +13,7 @@ const boundaryRules = [
   '@typescript-eslint/consistent-type-assertions',
   '@typescript-eslint/no-unsafe-type-assertion',
 ];
+const auditRule = 'pnpm audit';
 
 await test('legacy public generic exceptions are exact and remain in use', async () => {
   const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
@@ -41,7 +42,9 @@ await test('Orval boundary exceptions apply only to its generic response express
     (value) => record(value),
   );
   assert.deepEqual(
-    exceptions.filter((item) => item['rule'] !== rule).map(({ rule, scope }) => ({ rule, scope })),
+    exceptions
+      .filter((item) => item['rule'] !== rule && item['rule'] !== auditRule)
+      .map(({ rule, scope }) => ({ rule, scope })),
     boundaryRules.map((rule) => ({ rule, scope: 'src/volcano-fetch.ts:volcanoFetch:return' })),
   );
   const results = await new ESLint().lintFiles(['src/volcano-fetch.ts']);
@@ -63,6 +66,16 @@ await test('Orval boundary exceptions apply only to its generic response express
       'return { data, status: response.status, headers: response.headers } as T;',
     );
   }
+});
+
+await test('dependency audit exceptions name one advisory at one version', async () => {
+  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
+    (value) => record(value),
+  );
+  assert.deepEqual(
+    exceptions.filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
+    ['GHSA-vfj7-8cjw-p6xm:braces@3.0.3'],
+  );
 });
 
 async function verifiedScopes(results: readonly ESLint.LintResult[]): Promise<string[]> {

@@ -39,6 +39,7 @@ const vulnerableReport = {
   advisories: {
     1: {
       id: 1,
+      github_advisory_id: 'GHSA-fixture',
       module_name: 'quality-fixture',
       title: 'Fixture vulnerability',
       severity: 'low',
@@ -54,16 +55,27 @@ const vulnerableReport = {
   },
 };
 
+function auditException(scope: string): Record<string, string> {
+  return {
+    rule: 'pnpm audit',
+    scope,
+    rationale: 'Fixture approval for a development-only advisory without a fix.',
+    evidence: 'Fixture evidence recorded for the dependency audit policy tests.',
+  };
+}
+
 async function auditFixture(
   context: TestContext,
   status: number,
   report: unknown,
+  exceptions: readonly unknown[] = [],
 ): Promise<AuditResult> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-audit-policy-'));
   context.after(() => rm(directory, { recursive: true, force: true }));
   await mkdir(join(directory, '.quality-tools'));
   await writeFile(join(directory, '.quality-tools/audit-dependencies.mjs'), auditScript);
   await writeFile(join(directory, '.quality-tools/values.mjs'), valueScript);
+  await writeFile(join(directory, 'quality-exceptions.json'), JSON.stringify(exceptions));
   await writeFile(
     join(directory, 'package.json'),
     JSON.stringify({
@@ -183,6 +195,29 @@ await test('dependency audit rejects informational development advisories', asyn
   const result = await auditFixture(context, 200, report);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /zero advisories at every severity/);
+});
+
+await test('dependency audit accepts an approved advisory at its approved version', async (context) => {
+  const result = await auditFixture(context, 200, vulnerableReport, [
+    auditException('GHSA-fixture:quality-fixture@1.0.0'),
+  ]);
+  assert.equal(result.code, 0, result.stdout);
+});
+
+await test('dependency audit rejects an approved advisory at another version', async (context) => {
+  const result = await auditFixture(context, 200, vulnerableReport, [
+    auditException('GHSA-fixture:quality-fixture@0.9.0'),
+  ]);
+  assert.equal(result.code, 1, result.stdout);
+  assert.match(result.stdout, /zero advisories at every severity/);
+});
+
+await test('dependency audit rejects an approval it no longer needs', async (context) => {
+  const result = await auditFixture(context, 200, cleanReport, [
+    auditException('GHSA-fixture:quality-fixture@1.0.0'),
+  ]);
+  assert.equal(result.code, 1, result.stdout);
+  assert.match(result.stdout, /no longer reports: GHSA-fixture:quality-fixture@1\.0\.0/);
 });
 
 await test('dependency audit rejects an incomplete registry report', async (context) => {
