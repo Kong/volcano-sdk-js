@@ -483,11 +483,10 @@ is at most 255 characters; a longer one is refused by `start` itself, with
 `start` resolves rather than throws when the platform refuses. `status` carries
 why — `400` for input that is not JSON, or an execution name holding anything
 but letters, digits, `-`, `_` and `.`,
-`401` for a credential the endpoint does not accept, `403` for a caller the
-function's visibility does not admit (a signed-in user on a `private` function,
-an anon key on one that is not `public`, or an anon key without
-`functions.invoke`), `404` for a name that is not a durable function in this
-project, `409` while the function is still
+`401` for a credential the endpoint does not accept, `403` for an anon key on an
+`authenticated` function or without `functions.invoke`, `404` for a name that
+is not a durable function in this project or is a `private` one and the caller
+is not a service key, `409` while the function is still
 provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
 for a project with too many executions in flight for its plan or out of either
 durable allowance, and `503` where durable execution is unavailable. `409` is

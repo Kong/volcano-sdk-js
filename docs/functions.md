@@ -123,8 +123,10 @@ functions:
     visibility: public
 ```
 
-A caller the level does not admit gets `status: 403` and an `error`, and the
-function does not run.
+A caller the level does not admit gets an `error`, and the function does not
+run. A `private` function answers `status: 404`, exactly as a missing one does,
+so a signed-in user or a visitor can't tell it exists. An anon key on an
+`authenticated` function gets `status: 403`.
 
 ### As a signed-in user
 
