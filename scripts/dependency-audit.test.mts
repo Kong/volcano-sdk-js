@@ -212,6 +212,26 @@ await test('dependency audit rejects an approved advisory at another version', a
   assert.match(result.stdout, /zero advisories at every severity/);
 });
 
+await test('dependency audit rejects an approval when the advisory spans versions', async (context) => {
+  const report = {
+    ...vulnerableReport,
+    advisories: {
+      1: {
+        ...vulnerableReport.advisories[1],
+        findings: [
+          { version: '1.0.0', paths: ['.>quality-fixture'] },
+          { version: '1.1.0', paths: ['.>quality-wrapper>quality-fixture'] },
+        ],
+      },
+    },
+  };
+  const result = await auditFixture(context, 200, report, [
+    auditException('GHSA-fixture:quality-fixture@1.0.0'),
+  ]);
+  assert.equal(result.code, 1, result.stdout);
+  assert.match(result.stdout, /zero advisories at every severity/);
+});
+
 await test('dependency audit rejects an approval it no longer needs', async (context) => {
   const result = await auditFixture(context, 200, cleanReport, [
     auditException('GHSA-fixture:quality-fixture@1.0.0'),
