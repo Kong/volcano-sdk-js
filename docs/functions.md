@@ -123,10 +123,22 @@ functions:
     visibility: public
 ```
 
+Deploying `visibility` needs a Volcano CLI release after 0.36.0; 0.36.0 rejects
+the field. `public: false` still means `authenticated` on any version.
+
 A caller the level does not admit gets an `error`, and the function does not
-run. A `private` function answers `status: 404`, exactly as a missing one does,
-so a signed-in user or a visitor can't tell it exists. An anon key on an
-`authenticated` function gets `status: 403`.
+run. `invoke` looks the name up first, and the lookup answers a refused caller
+exactly as it answers a missing function: `error.status` is `404` and `status`
+is `null`, because the invocation was never sent. So a signed-in user can't
+tell a `private` function exists, and neither can an anon key on any function
+that isn't `public`. `403` comes only from requests that skip the lookup: a
+direct `POST /functions/{id}/invoke` with an anon key on an `authenticated`
+function, and
+[`durable.start`](./durable-functions.md#starting-and-reading-executions).
+
+The SDK remembers a failed lookup for about 30 seconds per credential. After you
+widen a function's level, a client that was just refused keeps getting `404`
+until that passes.
 
 ### As a signed-in user
 

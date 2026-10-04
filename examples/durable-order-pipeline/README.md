@@ -54,7 +54,9 @@ Three things this demonstrates:
 ## Deploy it
 
 Needs the [Volcano CLI](https://volcano.dev/cli), a project, and `volcano login`
-plus `volcano use <project>`.
+plus `volcano use <project>`. The manifest declares `visibility`, which needs a
+CLI release after 0.36.0: 0.36.0 rejects the field, and every command that reads
+the manifest fails with it, `volcano cloud functions deploy` included.
 
 ```bash
 # 1. Variables first, so the handlers have them on their first run.
