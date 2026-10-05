@@ -22,7 +22,12 @@ import type {
 } from '../../src/realtime.ts';
 
 type Assert<T extends true> = T;
-type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
+// Mutual assignability alone ignores optional fields that only one side declares.
+type Equal<Left, Right> = [Left, Required<Left>] extends [Right, Required<Right>]
+  ? [Right, Required<Right>] extends [Left, Required<Left>]
+    ? true
+    : false
+  : false;
 
 type SetSessionParameter = Parameters<Auth['setSession']>[0];
 type _CompleteSessionCanBeAdopted = Assert<
@@ -233,11 +238,8 @@ interface CustomDomainTLSShape {
   private_key_pem?: string;
   certificate_chain_pem?: string;
 }
-// Mutual assignability ignores a missing optional field, so compare the keys too.
 type _CustomDomainTLSMatchesHosting = Assert<
-  Equal<CustomDomainRequest['tls'], CustomDomainTLSShape> extends true
-    ? Equal<keyof CustomDomainRequest['tls'], keyof CustomDomainTLSShape>
-    : false
+  Equal<CustomDomainRequest['tls'], CustomDomainTLSShape>
 >;
 
 type CustomDomainResponse = OpenAPIComponents['schemas']['FrontendCustomDomainResponse'];
@@ -266,24 +268,30 @@ type CustomDomainVerificationRecord = NonNullable<
   CustomDomainResponse['verification_records']
 >[number];
 type _VerificationRecordExposesOnlyDNSFields = Assert<
-  Equal<keyof CustomDomainVerificationRecord, 'name' | 'type' | 'value'>
+  Equal<CustomDomainVerificationRecord, { name: string; type: string; value: string }>
 >;
 type CustomDomainRoutingRecord = NonNullable<CustomDomainResponse['required_routing_record']>;
 type _RoutingRecordNamesZoneApexAlternative = Assert<
   Equal<
-    Pick<CustomDomainRoutingRecord, 'record_type' | 'zone_apex_record_type'>,
-    { record_type: 'CNAME'; zone_apex_record_type: 'ALIAS' }
+    CustomDomainRoutingRecord,
+    { record_type: 'CNAME'; zone_apex_record_type: 'ALIAS'; name: string; value: string }
   >
 >;
 
 type ProjectConfigCustomDomainTLS = NonNullable<
   OpenAPIComponents['schemas']['ProjectConfigCustomDomain']['tls']
 >;
-type _ProjectConfigTLSModesMatchHosting = Assert<
-  Equal<ProjectConfigCustomDomainTLS['mode'], 'managed' | 'byoc'>
->;
-type _ManagedProjectConfigTLSHasNoCertificate = Assert<
-  Equal<keyof Extract<ProjectConfigCustomDomainTLS, { mode: 'managed' }>, 'mode'>
+type _ProjectConfigTLSMatchesHosting = Assert<
+  Equal<
+    ProjectConfigCustomDomainTLS,
+    | { mode: 'managed' }
+    | {
+        mode: 'byoc';
+        certificate_pem?: string;
+        private_key_pem?: string;
+        certificate_chain_pem?: string;
+      }
+  >
 >;
 
 export type OpenApiContractChecks = [
@@ -319,8 +327,7 @@ export type OpenApiContractChecks = [
   _CustomDomainResponseExposesOnlyPublicFields,
   _VerificationRecordExposesOnlyDNSFields,
   _RoutingRecordNamesZoneApexAlternative,
-  _ProjectConfigTLSModesMatchHosting,
-  _ManagedProjectConfigTLSHasNoCertificate,
+  _ProjectConfigTLSMatchesHosting,
 ];
 
 declare const refreshError: unknown;
