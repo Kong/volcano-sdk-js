@@ -15,7 +15,7 @@ export function pathId(value: string): string {
 export function requestOptions(
   client: SandboxClient,
   options: SandboxReplayOptions = {},
-  mode: 'anon' | 'session' | 'replayable' = 'session',
+  mode?: 'anon' | 'session' | 'replayable',
 ): TransportOptions {
   const result = client._generatedOptions(
     mode === 'anon' ? 'anon' : 'session',
