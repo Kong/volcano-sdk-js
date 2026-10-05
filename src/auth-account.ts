@@ -72,6 +72,13 @@ export async function signUp(
   error: Error | null;
 }> {
   const { email, password, metadata = {} } = options;
+  if (options.signInWhenAllowed === true) {
+    const signedIn = await host.signIn({ email, password });
+    if (!isInvalidCredentials(signedIn.error)) {
+      return { ...signedIn, confirmationRequired: false, message: null };
+    }
+  }
+
   const result = await host._anonFetch('/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, user_metadata: metadata }),
@@ -86,6 +93,10 @@ export async function signUp(
     };
   }
   return finishSignUp(host, options, result.data);
+}
+
+function isInvalidCredentials(error: Error | null): boolean {
+  return error !== null && 'status' in error && error.status === 401;
 }
 
 async function finishSignUp(

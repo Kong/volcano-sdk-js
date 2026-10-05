@@ -111,13 +111,11 @@ export interface SignUpOptions {
   password: string;
   metadata?: UserMetadata;
   /**
-   * Opt-in: when the project does not require email confirmation
-   * (`confirmationRequired === false`), perform a follow-up {@link VolcanoAuth.signIn}
-   * with the same credentials so the returned {@link SignUpResponse} carries a live
-   * `user`/`session`. Defaults to `false`, matching the server's session-less signup
-   * contract. When confirmation is required this flag has no effect. If the follow-up
-   * sign-in fails, `error` is populated and `user`/`session` remain `null` (the
-   * account is still created).
+   * Opt-in: try {@link VolcanoAuth.signIn} with the supplied credentials first.
+   * An existing account returns its live `user`/`session` without another signup.
+   * Invalid credentials proceed to session-less signup, then sign in if the signup
+   * acknowledgement does not require confirmation. Other sign-in errors are returned.
+   * Defaults to `false`, matching the server's session-less signup contract.
    */
   signInWhenAllowed?: boolean;
 }

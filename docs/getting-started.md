@@ -151,7 +151,7 @@ if (error) {
 console.log(message ?? 'Account created!');
 ```
 
-Sign up is session-less: it creates the account but does not start a session, so you sign in next (see below) to authenticate. Pass `signInWhenAllowed: true` to have the SDK sign in automatically when the project does not require email confirmation.
+Sign up is session-less: it creates the account but does not start a session, so you sign in next (see below) to authenticate. Pass `signInWhenAllowed: true` to sign in first if the credentials match an existing account. Otherwise the SDK signs up and signs in only when email confirmation is not required.
 
 ### 2. Sign In an Existing User
 

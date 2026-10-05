@@ -56,7 +56,9 @@ if (confirmationRequired) {
 
 The `metadata` field is optional and lets you store additional user information like display names, profile pictures, or preferences. This data is stored securely and accessible via `user.user_metadata` once the user is signed in.
 
-If your project does not require email confirmation and you want the user signed in immediately, pass `signInWhenAllowed: true`. When confirmation is not required, the SDK then performs the follow-up `signIn` for you and the response carries a live `user`/`session`:
+Pass `signInWhenAllowed: true` to try signing in with the supplied email and password first. If they match an existing account, the SDK returns its session without creating an account or changing its password or metadata. This also works for a confirmed account in a project that requires email confirmation. The platform can resolve aliases for password sign-in; the SDK sends the email unchanged.
+
+If sign-in returns invalid credentials, the SDK proceeds with signup. A new account must confirm its email when the project requires confirmation; otherwise the SDK signs it in. Other sign-in errors, such as a banned account or a rate limit, stop the operation. The default remains session-less signup:
 
 ```javascript
 const { user, session, error } = await volcano.auth.signUp({

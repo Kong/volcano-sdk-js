@@ -1,7 +1,15 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
-import { deferred, fetchCall, reply, signal, within } from './auth-concurrency-fixtures.ts';
+import {
+  deferred,
+  fetchCall,
+  fetchPath,
+  jsonField,
+  reply,
+  signal,
+  within,
+} from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 const config = { apiUrl: 'https://api.test.com', anonKey: 'ak-test-anon-key' };
@@ -101,8 +109,35 @@ describe('VolcanoAuth credentials', () => {
       expect(result.message).toBe(mockResponse.message);
     });
 
+    it('signs into an existing account with alias credentials without signing up again', async () => {
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'existing-user', email: 'owner@example.com', status: 'active' },
+          access_token: 'existing-access',
+          refresh_token: 'existing-refresh',
+          expires_in: 3600,
+        }),
+      );
+      const result = await volcano.auth.signUp({
+        email: 'owner+tag@example.com',
+        password: 'existing-password',
+        signInWhenAllowed: true,
+        metadata: { name: 'must not overwrite the owner' },
+      });
+      expect(result.user?.id).toBe('existing-user');
+      expect(result.session?.access_token).toBe('existing-access');
+      expect(result.error).toBeNull();
+      expect(result.confirmationRequired).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [input, options] = fetchCall(0);
+      expect(fetchPath(input)).toBe('/auth/signin');
+      expect(jsonField(options, 'email')).toBe('owner+tag@example.com');
+      expect(jsonField(options, 'password')).toBe('existing-password');
+    });
+
     it('signs in after signup when confirmation is not required and signInWhenAllowed is set', async () => {
       fetchMock
+        .mockResolvedValueOnce(reply(401, { error: 'invalid email or password' }))
         .mockResolvedValueOnce(reply(200, { confirmation_required: false, message: 'ok' }))
         .mockResolvedValueOnce(
           reply(200, {
@@ -120,7 +155,7 @@ describe('VolcanoAuth credentials', () => {
       });
 
       // A follow-up signin was issued, establishing and persisting a session.
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
       expect(result.confirmationRequired).toBe(false);
       expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com', status: 'active' });
       expect(result.session?.access_token).toBe('access-token-123');
@@ -131,10 +166,12 @@ describe('VolcanoAuth credentials', () => {
       );
     });
 
-    it('does not sign in when confirmation is required, even with signInWhenAllowed', async () => {
-      fetchMock.mockResolvedValueOnce(
-        reply(200, { confirmation_required: true, message: 'check your email' }),
-      );
+    it('keeps a fresh signup session-less when confirmation is required', async () => {
+      fetchMock
+        .mockResolvedValueOnce(reply(401, { error: 'invalid email or password' }))
+        .mockResolvedValueOnce(
+          reply(200, { confirmation_required: true, message: 'check your email' }),
+        );
 
       const result = await volcano.auth.signUp({
         email: 'test@example.com',
@@ -142,8 +179,8 @@ describe('VolcanoAuth credentials', () => {
         signInWhenAllowed: true,
       });
 
-      // Only the signup request is made; no session is established.
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      // The first sign-in failed; signup requires confirmation, so no session is established.
+      expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(result.confirmationRequired).toBe(true);
       expect(result.user).toBeNull();
       expect(result.session).toBeNull();
@@ -152,8 +189,43 @@ describe('VolcanoAuth credentials', () => {
       expect(persistedKeys).not.toContain('volcano_refresh_token');
     });
 
+    it.each([403, 409, 429, 503])(
+      'does not try signup after a sign-in refusal with status %s',
+      async (status) => {
+        fetchMock.mockResolvedValueOnce(reply(status, { error: 'sign-in refused' }));
+        const result = await volcano.auth.signUp({
+          email: 'owner+tag@example.com',
+          password: 'existing-password',
+          signInWhenAllowed: true,
+        });
+        expect(result.error?.message).toBe('sign-in refused');
+        expect(result.session).toBeNull();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('does not grant a session after invalid alias credentials', async () => {
+      fetchMock
+        .mockResolvedValueOnce(reply(401, { error: 'invalid email or password' }))
+        .mockResolvedValueOnce(reply(201, { confirmation_required: false, message: 'ok' }))
+        .mockResolvedValueOnce(reply(401, { error: 'invalid email or password' }));
+      const result = await volcano.auth.signUp({
+        email: 'owner+tag@example.com',
+        password: 'wrong-password',
+        signInWhenAllowed: true,
+      });
+      expect(result.error?.message).toBe('invalid email or password');
+      expect(result.user).toBeNull();
+      expect(result.session).toBeNull();
+      const [input, options] = fetchCall(1);
+      expect(fetchPath(input)).toBe('/auth/signup');
+      expect(jsonField(options, 'password')).toBe('wrong-password');
+      expect(storageWriteKeys()).not.toContain('volcano_access_token');
+    });
+
     it('surfaces the sign-in error when the follow-up sign-in fails', async () => {
       fetchMock
+        .mockResolvedValueOnce(reply(401, { error: 'invalid email or password' }))
         .mockResolvedValueOnce(reply(200, { confirmation_required: false, message: 'ok' }))
         .mockResolvedValueOnce(reply(429, { error: 'rate limit exceeded' }));
 
