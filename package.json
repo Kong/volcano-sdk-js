@@ -170,7 +170,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "jest-environment-node": "30.3.0",
-    "knip": "5.80.0",
+    "knip": "6.39.0",
     "openapi-typescript": "7.13.0",
     "orval": "8.26.0",
     "prettier": "^3.8.3",
