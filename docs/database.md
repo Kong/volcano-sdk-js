@@ -70,6 +70,11 @@ const { data } = await volcano.from('posts').select('id, title, created_at');
 
 This reduces data transfer and improves performance, especially for tables with many columns.
 
+Projection includes only the requested columns. Filters apply before pagination;
+multiple `order()` clauses apply in the order you add them. Include a unique final
+sort column before using `limit()` and `offset()` so page boundaries are stable.
+Pass native `null`, `true`, or `false` to `is()`; string values are different SQL values.
+
 ### Filtering
 
 The query builder supports a variety of filter operators:
@@ -280,8 +285,13 @@ if (error) {
 }
 
 const updatedPost = data[0];
-console.log('Post updated:', updatedPost.title);
+if (updatedPost) {
+  console.log('Post updated:', updatedPost.title);
+}
 ```
+
+Updates return a list of changed rows. When the filter matches no rows, the
+operation succeeds with `data: []` and leaves existing rows unchanged.
 
 ### Update Multiple Rows
 
@@ -314,8 +324,13 @@ if (error) {
   return;
 }
 
-console.log('Deleted post:', data[0].id);
+if (data.length > 0) {
+  console.log('Deleted post:', data[0].id);
+}
 ```
+
+Deletes return a list of removed rows. When the filter matches no rows, the
+operation succeeds with `data: []` and leaves existing rows unchanged.
 
 ### Soft Delete Pattern
 

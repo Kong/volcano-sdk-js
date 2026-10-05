@@ -3,10 +3,9 @@ title: 'Getting Started'
 description: 'This guide walks you through installing the Volcano SDK and making your first authenticated request.'
 ---
 
-This guide walks you through installing the Volcano SDK and making your first authenticated request.
-
-Use `VolcanoClient` for new applications. `VolcanoAuth` remains a compatible
-alias for existing applications.
+Install the SDK, sign in, and read a server-validated user profile.
+Use Node.js 20 or later for the runnable quickstart below. `VolcanoClient` is the
+client for new applications; `VolcanoAuth` remains a compatible alias.
 
 ## Installation
 
@@ -22,6 +21,51 @@ pnpm add @volcano.dev/sdk
 # yarn
 yarn add @volcano.dev/sdk
 ```
+
+## Sign in and read a profile
+
+Create a project, enable [email and password authentication](/platform/authentication/configuring-auth-methods), and create a user with a confirmed email when your project requires confirmation.
+Use that project's [anonymous key](/platform/authentication/security/anon-keys).
+Set `VOLCANO_ANON_KEY`, `VOLCANO_USER_EMAIL`, and `VOLCANO_USER_PASSWORD` in your environment.
+Set `VOLCANO_API_URL` only when using a different endpoint, such as local mode.
+
+Save this as `quickstart.mjs`:
+
+```javascript
+import { VolcanoClient } from '@volcano.dev/sdk';
+
+const { VOLCANO_ANON_KEY, VOLCANO_USER_EMAIL, VOLCANO_USER_PASSWORD } = process.env;
+if (!VOLCANO_ANON_KEY || !VOLCANO_USER_EMAIL || !VOLCANO_USER_PASSWORD) {
+  throw new Error('Set VOLCANO_ANON_KEY, VOLCANO_USER_EMAIL, and VOLCANO_USER_PASSWORD');
+}
+
+const client = new VolcanoClient({
+  anonKey: VOLCANO_ANON_KEY,
+  apiUrl: process.env.VOLCANO_API_URL ?? 'https://api.volcano.dev',
+});
+const { user: signedInUser, error: signInError } = await client.auth.signIn({
+  email: VOLCANO_USER_EMAIL,
+  password: VOLCANO_USER_PASSWORD,
+});
+if (signInError) throw signInError;
+
+try {
+  const { user, error } = await client.auth.getUser();
+  if (error) throw error;
+  if (!user || user.id !== signedInUser.id) throw new Error('Unexpected user');
+  console.log(`Signed in as ${user.email}`);
+} finally {
+  const { error } = await client.auth.signOut();
+  if (error) throw error;
+}
+```
+
+Run it with `node quickstart.mjs`.
+It signs in, fetches the profile, prints the user's email, revokes its server session, and clears the local session. JavaScript auth methods return `{ user, error }` or `{ error }`; check `error` before using a result. Python and Ruby use typed exceptions for the [equivalent Python](/sdk/python) and [Ruby](/sdk/ruby) quickstarts.
+
+Use a separate client for each independent user session.
+Do not share one mutable client across users in a server application.
+Keep service keys and user passwords out of browser code and source control.
 
 ### Realtime Support
 
@@ -43,7 +87,7 @@ For quick prototyping or simple HTML pages, you can load the SDK directly from a
 <script src="https://unpkg.com/@volcano.dev/sdk@latest/dist/index.js"></script>
 <script>
   const volcano = new VolcanoClient({
-    apiUrl: 'https://api.yourproject.volcano.dev',
+    apiUrl: 'https://api.volcano.dev',
     anonKey: 'your-anon-key',
   });
 </script>
@@ -51,12 +95,9 @@ For quick prototyping or simple HTML pages, you can load the SDK directly from a
 
 ## Configuration
 
-Every Volcano project has two keys you'll need:
-
-1. **API URL** - Your project's API endpoint (e.g., `https://api.yourproject.volcano.dev`)
-2. **Anon Key** - A public key that identifies your project
-
-You can find both in your project's settings dashboard.
+Use `https://api.volcano.dev` for the hosted API and your project's anonymous key from the dashboard.
+The API URL is shared; the key identifies the project.
+Override `apiUrl` when connecting to another environment.
 
 ### Initialize the Client
 
@@ -64,12 +105,13 @@ You can find both in your project's settings dashboard.
 import { VolcanoClient } from '@volcano.dev/sdk';
 
 const volcano = new VolcanoClient({
-  apiUrl: 'https://api.yourproject.volcano.dev',
+  apiUrl: 'https://api.volcano.dev',
   anonKey: 'your-anon-key',
 });
 ```
 
-The anon key is safe to include in client-side code. It identifies your project but doesn't grant any special privileges - all access is controlled by Row-Level Security policies.
+The anonymous key is safe to include in client-side code.
+Project permissions and Row-Level Security policies control the data and operations available to each caller.
 
 ### Environment Variables
 
@@ -85,7 +127,7 @@ const volcano = new VolcanoClient({
 For Next.js applications, prefix your environment variables with `NEXT_PUBLIC_` to make them available in the browser:
 
 ```env
-NEXT_PUBLIC_VOLCANO_API_URL=https://api.yourproject.volcano.dev
+NEXT_PUBLIC_VOLCANO_API_URL=https://api.volcano.dev
 NEXT_PUBLIC_VOLCANO_ANON_KEY=ak-your-anon-key
 ```
 

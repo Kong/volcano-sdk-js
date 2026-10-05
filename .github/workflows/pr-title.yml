@@ -28,10 +28,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: .+$'
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))!?: .+$'
 
           if [[ ! "$PR_TITLE" =~ $pattern ]]; then
-            printf 'PR title must use Conventional Commit format.\n'
+            printf 'PR title must use scoped Conventional Commit format: type(scope): description.\n'
             printf 'Examples: feat(api): add token refresh\n'
             printf '          fix(auth): handle expired sessions\n'
             printf 'Current title: %s\n' "$PR_TITLE"

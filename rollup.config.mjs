@@ -1,3 +1,5 @@
+import typescript from '@rollup/plugin-typescript';
+
 // UMD (browser <script>) only. rollup's named UMD sets the global
 // `VolcanoAuth` to the export namespace ({ VolcanoAuth, QueryBuilder, ... });
 // restore the documented `new VolcanoAuth()` CDN ergonomic by making the
@@ -23,11 +25,13 @@ const umdBrowserGlobalFooter = `;(function () {
 export default [
   // Main SDK bundle
   {
-    input: 'src/index.js',
+    input: 'src/index.ts',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [
       {
-        file: 'dist/index.js',
+        dir: 'dist',
+        entryFileNames: 'index.js',
         format: 'umd',
         name: 'VolcanoAuth',
         exports: 'named',
@@ -35,12 +39,14 @@ export default [
         footer: umdBrowserGlobalFooter,
       },
       {
-        file: 'dist/index.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'index.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
       },
       {
-        file: 'dist/index.cjs.js',
+        dir: 'dist',
+        entryFileNames: 'index.cjs.js',
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
@@ -49,11 +55,13 @@ export default [
   },
   // Realtime module bundle
   {
-    input: 'src/realtime.js',
+    input: 'src/realtime.ts',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
     external: ['centrifuge', 'ws'],
     output: [
       {
-        file: 'dist/realtime.js',
+        dir: 'dist',
+        entryFileNames: 'realtime.js',
         format: 'umd',
         name: 'VolcanoRealtime',
         exports: 'named',
@@ -64,29 +72,55 @@ export default [
         },
       },
       {
-        file: 'dist/realtime.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'realtime.esm.mjs',
         format: 'es',
         inlineDynamicImports: true,
       },
       {
-        file: 'dist/realtime.cjs.js',
+        dir: 'dist',
+        entryFileNames: 'realtime.cjs.js',
         format: 'cjs',
         exports: 'named',
         inlineDynamicImports: true,
       },
     ],
   },
-  // Next.js middleware helpers bundle
+  // Durable function authoring bundle. The durable runtime stays external and
+  // is imported lazily at runtime: it is an optional peer dependency only a
+  // durable function installs.
   {
-    input: 'src/next/middleware.js',
+    input: 'src/durable.ts',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
+    external: ['@aws/durable-execution-sdk-js'],
     output: [
       {
-        file: 'dist/next/middleware.js',
+        dir: 'dist',
+        entryFileNames: 'durable.js',
         format: 'cjs',
         exports: 'named',
       },
       {
-        file: 'dist/next/middleware.esm.mjs',
+        dir: 'dist',
+        entryFileNames: 'durable.esm.mjs',
+        format: 'es',
+      },
+    ],
+  },
+  // Next.js middleware helpers bundle
+  {
+    input: 'src/next/middleware.ts',
+    plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
+    output: [
+      {
+        dir: 'dist',
+        entryFileNames: 'next/middleware.js',
+        format: 'cjs',
+        exports: 'named',
+      },
+      {
+        dir: 'dist',
+        entryFileNames: 'next/middleware.esm.mjs',
         format: 'es',
       },
     ],

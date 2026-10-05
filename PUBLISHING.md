@@ -1,92 +1,11 @@
 # Publishing the Volcano SDK to npm
 
-The package is published as `@volcano.dev/sdk`. Do not rename it without a
-coordinated package migration.
+Release Please creates version/changelog PRs and enables auto-merge after required
+CI passes. Merging a release PR creates a GitHub release, which triggers
+[publish.yml](.github/workflows/publish.yml) to test, build, and publish
+`@volcano.dev/sdk` to npm using trusted publishing in `npm-production`.
 
-## Publishing Model
-
-Publishing uses npm trusted publishing from GitHub Actions. The workflow
-authenticates to npm with GitHub OIDC, so no long-lived `NPM_TOKEN` secret is
-required for normal package publishing.
-
-The workflow is `.github/workflows/publish.yml`.
-
-- Merges to `main` publish the `package.json` version to the `latest` dist-tag
-  automatically, with no additional manual approval step after the PR is
-  merged.
-- Published versions must use stable `MAJOR.MINOR.PATCH` SemVer, such as
-  `1.2.0`.
-- The workflow's `push.branches` trigger in `publish.yml` restricts publishing
-  to `main`; the `npm-production` GitHub environment does not enforce a
-  `main`-only restriction itself (its `deployment_branch_policy` allows any
-  currently protected branch, not just `main`).
-- Publishing uses the `npm-production` GitHub environment to scope the OIDC
-  trusted-publishing credentials. The environment does not require manual
-  reviewer approval, so publishing runs immediately once a PR merges to
-  `main`.
-
-## npm Trusted Publisher Setup
-
-Configure the package on npmjs.com:
-
-- Package: `@volcano.dev/sdk`
-- Publisher: GitHub Actions
-- Organization or user: `Kong`
-- Repository: `volcano-sdk-js`
-- Workflow filename: `publish.yml`
-- Package environment: `npm-production`
-- Allowed action: `npm publish`
-
-The npm package environment must match the GitHub environment used by the
-publishing job.
-
-After trusted publishing works, set npm package publishing access to require 2FA
-and disallow traditional token publishing where possible.
-
-## Stable Releases
-
-To publish a stable release:
-
-1. Update `package.json` to the target stable SemVer version.
-2. Run local verification:
-
-   ```bash
-   pnpm install --frozen-lockfile
-   pnpm lint
-   pnpm test
-   pnpm build
-   pnpm test:package
-   npm pack --dry-run
-   ```
-
-3. Merge the version change to `main`.
-4. The `Publish SDK` workflow publishes the version with the `latest` dist-tag
-   automatically once the merge lands, with no manual approval step.
-
-The publish workflow verifies that `package.json` uses stable
-`MAJOR.MINOR.PATCH` SemVer. For example, `"version": "1.2.0"` is valid, while
-`"version": "1.2.0-beta.1"` is not.
-
-Optionally create a matching Git tag after the publish succeeds if source
-history should retain a release marker:
-
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-## One-Time Dist-Tag Repair
-
-If the npm `latest` dist-tag points at the wrong version, a maintainer with npm
-package access can repair it after publishing the intended version:
-
-```bash
-npm dist-tag add @volcano.dev/sdk@1.2.0 latest
-npm dist-tag ls @volcano.dev/sdk
-```
-
-Use this only for dist-tag maintenance. Normal publishing should happen through
-the trusted publishing workflow.
+Re-run the original failed release workflow to retry. Never move released tags.
 
 ## Package Contents
 
@@ -107,18 +26,3 @@ After publishing, the package is available via CDN:
 <script src="https://unpkg.com/@volcano.dev/sdk@latest/dist/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@volcano.dev/sdk@latest/dist/index.js"></script>
 ```
-
-## Troubleshooting
-
-If npm reports an authentication error, check that:
-
-- npm trusted publishing is configured for `Kong/volcano-sdk-js`.
-- The configured workflow filename is exactly `publish.yml`.
-- The workflow has `id-token: write`.
-- The job runs on a GitHub-hosted runner.
-- The package repository URL in `package.json` points to
-  `https://github.com/Kong/volcano-sdk-js.git`.
-
-If publishing fails because the package version already exists on npm, update
-`package.json` to the next stable SemVer version and merge that change to
-`main`.

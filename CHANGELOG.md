@@ -4,7 +4,32 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Generate public declarations from the TypeScript implementation. Nine response
+  types now represent optional or nullable values already returned at runtime;
+  strict consumers may need additional presence checks. See
+  [TypeScript compatibility](./docs/typescript-compatibility.md).
+
 ### Added
+
+- `@volcano.dev/sdk/durable` for authoring durable functions: `durable(handler)`
+  and a context with `step`, `wait`, `child`, `waitUntil`, `map`, `parallel`, and
+  `log`.
+  Durations are written as `'30s'` or `'1m30s'`, retries as
+  `{ attempts, initialDelay, maxDelay }`, and batches resolve to plain results.
+  The durable runtime (`@aws/durable-execution-sdk-js`) is an optional peer
+  dependency loaded on first invocation, so browser bundles and standard
+  functions are unaffected. See [docs/durable-functions.md](./docs/durable-functions.md).
+
+- `volcano.durable.start(name, input, { executionName })` starts a durable
+  execution with an application credential and returns its handle. The durable
+  counterpart of `functions.invoke`, and the only durable operation an anon or
+  service key can perform.
+
+- `volcano.durable.get`, `list` and `stop` follow an execution afterwards. They
+  are owner-scoped — project id plus a platform token — so they belong on a
+  backend rather than in a browser.
 
 - `volcano.locks.acquire`, `renew`, `release`, and `withLock` for
   service-role-only project leases. `withLock` renews automatically, aborts its
@@ -25,6 +50,188 @@ All notable changes to the Volcano SDK will be documented in this file.
   it sends one, and `retryAfter` parsed from the `Retry-After` header. The
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
+
+## [1.15.1](https://github.com/Kong/volcano-sdk-js/compare/v1.15.0...v1.15.1) (2026-09-28)
+
+### Bug Fixes
+
+- **api:** accept public project plan names ([#279](https://github.com/Kong/volcano-sdk-js/issues/279)) ([c1c7767](https://github.com/Kong/volcano-sdk-js/commit/c1c77677549f33a1bcaa78aad1ba93c89987e30e))
+
+## [1.15.0](https://github.com/Kong/volcano-sdk-js/compare/v1.14.0...v1.15.0) (2026-09-23)
+
+### Features
+
+- **sdk:** type auth and function transport boundaries ([#265](https://github.com/Kong/volcano-sdk-js/issues/265)) ([26b5afe](https://github.com/Kong/volcano-sdk-js/commit/26b5afe219ec7752ff671aae1c87d4f78727d383))
+
+## [1.14.0](https://github.com/Kong/volcano-sdk-js/compare/v1.13.0...v1.14.0) (2026-09-23)
+
+### Features
+
+- **auth:** type session lifecycle and revocation ([#262](https://github.com/Kong/volcano-sdk-js/issues/262)) ([33574e6](https://github.com/Kong/volcano-sdk-js/commit/33574e64a72ceb98c76b55e5f24c0f0cb1ff31c2))
+
+## [1.13.0](https://github.com/Kong/volcano-sdk-js/compare/v1.12.0...v1.13.0) (2026-09-23)
+
+### Features
+
+- **auth:** type browser redirect and session handoff ([#260](https://github.com/Kong/volcano-sdk-js/issues/260)) ([7f6833c](https://github.com/Kong/volcano-sdk-js/commit/7f6833ca0cf0cbc2d260f15703b48c9afee200c6))
+
+## [1.12.0](https://github.com/Kong/volcano-sdk-js/compare/v1.11.1...v1.12.0) (2026-09-23)
+
+### Features
+
+- **realtime:** migrate typed facade and preserve transport errors ([#257](https://github.com/Kong/volcano-sdk-js/issues/257)) ([4aa1039](https://github.com/Kong/volcano-sdk-js/commit/4aa1039399c52324f5efdc4e37b3045f31903715))
+
+## [1.11.1](https://github.com/Kong/volcano-sdk-js/compare/v1.11.0...v1.11.1) (2026-09-23)
+
+### Bug Fixes
+
+- **durable:** preserve optional runtime import in package ([#242](https://github.com/Kong/volcano-sdk-js/issues/242)) ([5c23c00](https://github.com/Kong/volcano-sdk-js/commit/5c23c0015d802c66238f0aa1102e373cd63f9734))
+
+## [1.11.0](https://github.com/Kong/volcano-sdk-js/compare/v1.10.5...v1.11.0) (2026-09-23)
+
+### Features
+
+- **next:** migrate middleware to TypeScript ([#206](https://github.com/Kong/volcano-sdk-js/issues/206)) ([a21ccb4](https://github.com/Kong/volcano-sdk-js/commit/a21ccb45ecbaeeca3eabba198481ac430e0e469b))
+
+## [1.10.5](https://github.com/Kong/volcano-sdk-js/compare/v1.10.4...v1.10.5) (2026-09-22)
+
+### Bug Fixes
+
+- **transport:** type and clean up request cancellation ([#177](https://github.com/Kong/volcano-sdk-js/issues/177)) ([bd1fafd](https://github.com/Kong/volcano-sdk-js/commit/bd1fafd159e86c924ee09aa3ae5974327fedc6c1))
+
+## [1.10.4](https://github.com/Kong/volcano-sdk-js/compare/v1.10.3...v1.10.4) (2026-09-21)
+
+### Bug Fixes
+
+- **durable:** type duration parsing and reject numeric overflow ([#175](https://github.com/Kong/volcano-sdk-js/issues/175)) ([22ce831](https://github.com/Kong/volcano-sdk-js/commit/22ce83195a11d9df8f16ec36615cb53a53af27d4))
+
+## [1.10.3](https://github.com/Kong/volcano-sdk-js/compare/v1.10.2...v1.10.3) (2026-09-21)
+
+### Bug Fixes
+
+- **packaging:** align realtime exports and validate packed types ([#172](https://github.com/Kong/volcano-sdk-js/issues/172)) ([bdaaa78](https://github.com/Kong/volcano-sdk-js/commit/bdaaa78a2f7c58bc84b8833341e155ab5e1b61fc))
+
+## [1.10.2](https://github.com/Kong/volcano-sdk-js/compare/v1.10.1...v1.10.2) (2026-09-21)
+
+### Bug Fixes
+
+- **example:** update Next.js past known advisories ([#158](https://github.com/Kong/volcano-sdk-js/issues/158)) ([85c9b5d](https://github.com/Kong/volcano-sdk-js/commit/85c9b5dac2922df7795ffc53487bae325d4c609a))
+
+## [1.10.1](https://github.com/Kong/volcano-sdk-js/compare/v1.10.0...v1.10.1) (2026-09-21)
+
+### Bug Fixes
+
+- **deps:** update realtime dependencies past known advisories ([#155](https://github.com/Kong/volcano-sdk-js/issues/155)) ([0c0b15a](https://github.com/Kong/volcano-sdk-js/commit/0c0b15af2b66109a46258415f334c6ce8a2f8561))
+
+## [1.10.0](https://github.com/Kong/volcano-sdk-js/compare/v1.9.7...v1.10.0) (2026-09-19)
+
+### Features
+
+- **durable:** durable function authoring module and client operations ([#93](https://github.com/Kong/volcano-sdk-js/issues/93)) ([b42c637](https://github.com/Kong/volcano-sdk-js/commit/b42c637e7dbdcdd9bc6adbf41e07ca456a7f5aca))
+
+## [1.9.7](https://github.com/Kong/volcano-sdk-js/compare/v1.9.6...v1.9.7) (2026-09-18)
+
+### Bug Fixes
+
+- **functions:** preserve payload and auth rejection metadata ([#139](https://github.com/Kong/volcano-sdk-js/issues/139)) ([23bb2c2](https://github.com/Kong/volcano-sdk-js/commit/23bb2c23f68fe731f5e8bef04472e33d1788bccd))
+
+## [1.9.6](https://github.com/Kong/volcano-sdk-js/compare/v1.9.5...v1.9.6) (2026-09-18)
+
+### Bug Fixes
+
+- **realtime:** retain presence identity across membership changes ([#134](https://github.com/Kong/volcano-sdk-js/issues/134)) ([e1defa2](https://github.com/Kong/volcano-sdk-js/commit/e1defa2e0c7aecea68c28b5d46c94fef0661e149))
+
+## [1.9.5](https://github.com/Kong/volcano-sdk-js/compare/v1.9.4...v1.9.5) (2026-09-18)
+
+### Bug Fixes
+
+- **auth:** retain metadata on unrefreshed rejections ([#133](https://github.com/Kong/volcano-sdk-js/issues/133)) ([fa080ba](https://github.com/Kong/volcano-sdk-js/commit/fa080ba96703427d29641351b4c2b7e519d4f960))
+
+## [1.9.4](https://github.com/Kong/volcano-sdk-js/compare/v1.9.3...v1.9.4) (2026-09-18)
+
+### Bug Fixes
+
+- **storage:** align upload envelopes and preserve HTTP errors ([#130](https://github.com/Kong/volcano-sdk-js/issues/130)) ([f4fe72f](https://github.com/Kong/volcano-sdk-js/commit/f4fe72fcc8112b6b6d8803fe466aafc4cd636b65))
+
+## [1.9.3](https://github.com/Kong/volcano-sdk-js/compare/v1.9.2...v1.9.3) (2026-09-18)
+
+### Bug Fixes
+
+- **auth:** capture authenticated request ownership before yielding ([#127](https://github.com/Kong/volcano-sdk-js/issues/127)) ([3c1f34f](https://github.com/Kong/volcano-sdk-js/commit/3c1f34f446a177e54f3be445b3eaa1af8d3396a1))
+
+## [1.9.2](https://github.com/Kong/volcano-sdk-js/compare/v1.9.1...v1.9.2) (2026-09-18)
+
+### Bug Fixes
+
+- **auth:** enforce session continuity through refresh and sign-out ([#123](https://github.com/Kong/volcano-sdk-js/issues/123)) ([fd50562](https://github.com/Kong/volcano-sdk-js/commit/fd5056290f2a69dc693a584bcc516cd817d24732))
+
+## [1.9.1](https://github.com/Kong/volcano-sdk-js/compare/v1.9.0...v1.9.1) (2026-09-18)
+
+### Bug Fixes
+
+- **locks:** preserve acquisition identity through recovery ([#124](https://github.com/Kong/volcano-sdk-js/issues/124)) ([cdfa379](https://github.com/Kong/volcano-sdk-js/commit/cdfa379de842e2d34769a5f20f3be32eb96a71a8))
+
+## [1.9.0](https://github.com/Kong/volcano-sdk-js/compare/v1.8.0...v1.9.0) (2026-09-17)
+
+### Features
+
+- **functions:** invoke the URL the server resolves ([#118](https://github.com/Kong/volcano-sdk-js/issues/118)) ([62f67de](https://github.com/Kong/volcano-sdk-js/commit/62f67de9b1af4adf60b2320bb4812ded594a8f75))
+
+## [1.8.0](https://github.com/Kong/volcano-sdk-js/compare/v1.7.6...v1.8.0) (2026-09-14)
+
+### Features
+
+- **projects:** add list metadata expansions ([#78](https://github.com/Kong/volcano-sdk-js/issues/78)) ([5b095e2](https://github.com/Kong/volcano-sdk-js/commit/5b095e263b2691e3191306d6a73f85cff32631c9))
+
+## [1.7.6](https://github.com/Kong/volcano-sdk-js/compare/v1.7.5...v1.7.6) (2026-09-11)
+
+### Bug Fixes
+
+- **storage:** align upload session response types with Hosting ([#114](https://github.com/Kong/volcano-sdk-js/issues/114)) ([02e3f15](https://github.com/Kong/volcano-sdk-js/commit/02e3f15d0cc0ddecd859e6b5775bd1dda307e276))
+
+## [1.7.5](https://github.com/Kong/volcano-sdk-js/compare/v1.7.4...v1.7.5) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** retain subscriptions across pause and resume ([#110](https://github.com/Kong/volcano-sdk-js/issues/110)) ([9b4b0b6](https://github.com/Kong/volcano-sdk-js/commit/9b4b0b61d71f3b03c0a9361ef37aafdd71c3febf))
+
+## [1.7.4](https://github.com/Kong/volcano-sdk-js/compare/v1.7.3...v1.7.4) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** reset subscriptions when auth identity changes ([#108](https://github.com/Kong/volcano-sdk-js/issues/108)) ([1ced832](https://github.com/Kong/volcano-sdk-js/commit/1ced8322cc8112348719c97bf7bd266b9d3bb574))
+
+## [1.7.3](https://github.com/Kong/volcano-sdk-js/compare/v1.7.2...v1.7.3) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** discard stale asynchronous channel results ([#106](https://github.com/Kong/volcano-sdk-js/issues/106)) ([a65058d](https://github.com/Kong/volcano-sdk-js/commit/a65058de0431f2eaf8928ea4653000851f3d5828))
+
+## [1.7.2](https://github.com/Kong/volcano-sdk-js/compare/v1.7.1...v1.7.2) (2026-09-11)
+
+### Bug Fixes
+
+- **realtime:** await subscription readiness ([#104](https://github.com/Kong/volcano-sdk-js/issues/104)) ([46159a9](https://github.com/Kong/volcano-sdk-js/commit/46159a906eb53f7576a769f6dffe3c8a3cb5fc7e))
+
+## [1.7.1](https://github.com/Kong/volcano-sdk-js/compare/v1.7.0...v1.7.1) (2026-09-09)
+
+### Bug Fixes
+
+- **release:** publish the artifact as a local npm tarball ([#100](https://github.com/Kong/volcano-sdk-js/issues/100)) ([b8b5e9d](https://github.com/Kong/volcano-sdk-js/commit/b8b5e9df79c5adcc1ff99cdf5e62d4b01f0a86b7))
+
+## [1.7.0](https://github.com/Kong/volcano-sdk-js/compare/v1.6.3...v1.7.0) (2026-09-09)
+
+### Features
+
+- **openapi:** generate managed auth page clients ([#76](https://github.com/Kong/volcano-sdk-js/issues/76)) ([f1ad158](https://github.com/Kong/volcano-sdk-js/commit/f1ad1588d854c07fdf7b0d013883975b3c701c0c))
+
+### Bug Fixes
+
+- **openapi:** accept null OAuth provider data ([#89](https://github.com/Kong/volcano-sdk-js/issues/89)) ([5fd79b7](https://github.com/Kong/volcano-sdk-js/commit/5fd79b7993965f0a88e1b16fd2556c06b3089fc3))
+- **realtime:** bind recovery to auth identity ([#88](https://github.com/Kong/volcano-sdk-js/issues/88)) ([52abfcd](https://github.com/Kong/volcano-sdk-js/commit/52abfcd596a158153707e80c579f268ce386112a))
+- **realtime:** preserve broadcast recovery state ([#87](https://github.com/Kong/volcano-sdk-js/issues/87)) ([adcaf51](https://github.com/Kong/volcano-sdk-js/commit/adcaf5182f853096b6263e72b23d95561d5c300e))
+- **realtime:** revert recovery lifecycle to unblock hosting CI ([#92](https://github.com/Kong/volcano-sdk-js/issues/92)) ([5e28b96](https://github.com/Kong/volcano-sdk-js/commit/5e28b96bb5c800868f34ee17ca0a7c3f9062865a))
+- **release:** format generated changelogs before auto-merge ([#98](https://github.com/Kong/volcano-sdk-js/issues/98)) ([0c1dabd](https://github.com/Kong/volcano-sdk-js/commit/0c1dabd459fdda4cf19781329c0b633def0082c6))
 
 ## [1.6.0] - 2026-07-28
 

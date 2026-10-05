@@ -1,33 +1,72 @@
-import { defineConfig } from 'orval';
+import { defineConfig, defineTransformer } from 'orval';
+
+const sdkOperations = new Set([
+  'acquireProjectLock',
+  'authSignin',
+  'downloadStorageObject',
+  'getDurableExecution',
+  'listDurableExecutions',
+  'queryDatabaseSelect',
+  'releaseProjectLock',
+  'startDurableExecutionFromApplication',
+  'stopDurableExecution',
+  'uploadStorageObject',
+]);
+
+const runtimeTag = 'Volcano SDK Runtime';
+
+function markRuntimeOperation(operation) {
+  if (!sdkOperations.has(operation?.operationId)) {
+    return false;
+  }
+  operation.tags = [runtimeTag];
+  return true;
+}
+
+function runtimePathItems(document) {
+  return Object.values(document.paths ?? {});
+}
+
+// Orval filters endpoints by tag; SDK operations share their original tags with
+// unrelated API routes. Mark the runtime set before Orval selects its schemas.
+const selectRuntimeOperations = defineTransformer((document) => {
+  const found = new Set();
+  for (const pathItem of runtimePathItems(document)) {
+    for (const operation of Object.values(pathItem)) {
+      if (markRuntimeOperation(operation)) {
+        found.add(operation.operationId);
+      }
+    }
+  }
+  if (found.size !== sdkOperations.size) {
+    throw new Error('The SDK runtime operation set does not match the OpenAPI spec');
+  }
+  return document;
+});
 
 export default defineConfig({
   volcano: {
-    hooks: {
-      afterAllFilesWrite:
-        'openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write',
-    },
     input: {
-      parserOptions: {
-        externalRefs: {
-          allow: [
-            './components/common/parameters.yaml',
-            './components/common/schemas.yaml',
-            './components/common/security-schemes.yaml',
-          ],
-        },
-      },
+      // The vendored spec is a single bundled file: hosting's own spec is split
+      // across components, but what lands here is already resolved, so there is
+      // nothing external to allow. A second copy of those components used to
+      // sit beside it, unread by any tool and free to drift from the bundle,
+      // which is exactly what it did.
       target: './openapi/openapi.yaml',
+      override: { transformer: selectRuntimeOperations },
+      filters: { tags: [runtimeTag] },
     },
     output: {
       client: 'fetch',
       mode: 'single',
+      tsconfig: './tsconfig.generated.json',
       override: {
         fetch: {
           includeHttpResponseReturnType: true,
         },
         mutator: {
           name: 'volcanoFetch',
-          path: './src/generated/volcano-fetch.ts',
+          path: './src/volcano-fetch.ts',
         },
         operations: {
           uploadStorageObject: {

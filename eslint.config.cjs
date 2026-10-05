@@ -1,8 +1,10 @@
 const js = require('@eslint/js');
+const { createTypeScriptImportResolver } = require('eslint-import-resolver-typescript');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const prettierConfig = require('eslint-config-prettier/flat');
 const importX = require('eslint-plugin-import-x');
 const jest = require('eslint-plugin-jest');
+const next = require('@next/eslint-plugin-next');
 const nModule = require('eslint-plugin-n');
 const promise = require('eslint-plugin-promise');
 const reactHooks = require('eslint-plugin-react-hooks');
@@ -22,22 +24,40 @@ const unicorn = unicornModule.default || unicornModule;
 
 const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
-const testFiles = ['__tests__/**/*.js'];
-const integrationTestFiles = ['__tests__/integration/**/*.js'];
+const testFiles = ['__tests__/**/*.{js,ts}'];
+const testSupportFiles = ['__tests__/**/*.cjs'];
+const typescriptFiles = [
+  'src/**/!(*.d).ts',
+  '__tests__/**/*.ts',
+  'test/types/**/*.ts',
+  'scripts/**/*.{mts,cts}',
+];
 const sdkFiles = ['src/**/*.js'];
-const moduleScriptFiles = ['scripts/**/*.mjs', 'rollup.config.mjs'];
+const commonjsScriptFiles = ['scripts/**/*.cjs'];
+const moduleScriptFiles = ['scripts/**/*.mjs', '*.config.mjs'];
 const rootConfigFiles = ['*.config.js', '*.config.cjs', 'eslint.config.cjs'];
 const exampleFiles = ['examples/nextjs-notes-app/src/**/*.js'];
 const exampleConfigFiles = ['examples/nextjs-notes-app/*.config.js'];
-const commonjsFiles = [...rootConfigFiles, ...exampleConfigFiles, ...testFiles];
+const durableExampleFiles = ['examples/durable-order-pipeline/**/*.js'];
+const commonjsFiles = [
+  ...rootConfigFiles,
+  ...exampleConfigFiles,
+  ...testFiles,
+  ...testSupportFiles,
+  ...commonjsScriptFiles,
+];
 const strictFiles = [
+  ...typescriptFiles,
   ...sdkFiles,
   ...moduleScriptFiles,
+  ...commonjsScriptFiles,
   ...rootConfigFiles,
   ...exampleConfigFiles,
   ...exampleFiles,
+  ...durableExampleFiles,
+  ...testSupportFiles,
 ];
-const lintedFiles = [...jsFiles, ...declarationFiles];
+const lintedFiles = [...jsFiles, ...declarationFiles, ...typescriptFiles];
 
 const asArray = (config) => (Array.isArray(config) ? config : [config]);
 const scopeConfig = (config, files) => asArray(config).map((item) => ({ ...item, files }));
@@ -54,8 +74,10 @@ module.exports = [
   {
     ignores: [
       'coverage/**',
+      '.quality-tools/**',
       'dist/**',
       'node_modules/**',
+      '.stryker-tmp/**',
       'src/generated/**',
       'src/generated-runtime/**',
       'examples/nextjs-notes-app/.next/**',
@@ -65,6 +87,7 @@ module.exports = [
   },
   {
     linterOptions: {
+      noInlineConfig: true,
       reportUnusedDisableDirectives: 'error',
       reportUnusedInlineConfigs: 'error',
     },
@@ -86,11 +109,12 @@ module.exports = [
       },
     },
     settings: {
-      'import-x/resolver': {
-        node: {
-          extensions: ['.js', '.mjs', '.cjs', '.ts', '.d.ts'],
-        },
-      },
+      'import-x/resolver-next': [
+        createTypeScriptImportResolver({ project: './tsconfig.eslint.json' }),
+        importPlugin.createNodeResolver({
+          extensions: ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '.d.ts'],
+        }),
+      ],
     },
   },
   {
@@ -114,10 +138,29 @@ module.exports = [
   ...scopeConfig(unicorn.configs['flat/recommended'], strictFiles),
   scopedRules(jest.configs['flat/recommended'], testFiles, {
     'jest/expect-expect': 'off',
+    'jest/no-disabled-tests': 'error',
+    'jest/no-focused-tests': 'error',
+    'no-restricted-properties': [
+      'error',
+      {
+        object: 'jest',
+        property: 'retryTimes',
+        message: 'Fix flaky tests instead of retrying them.',
+      },
+      { object: 'test', property: 'todo', message: 'Implement the test before merging.' },
+      { object: 'it', property: 'todo', message: 'Implement the test before merging.' },
+    ],
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
+  scopedRules(next.flatConfig.coreWebVitals, exampleFiles),
+  {
+    files: exampleFiles,
+    settings: { next: { rootDir: 'examples/nextjs-notes-app/' } },
+  },
   ...scopeConfig(tsPlugin.configs['flat/recommended'], declarationFiles),
   ...scopeConfig(tsPlugin.configs['flat/stylistic'], declarationFiles),
+  ...scopeConfig(tsPlugin.configs['flat/strict-type-checked'], typescriptFiles),
+  ...scopeConfig(tsPlugin.configs['flat/stylistic-type-checked'], typescriptFiles),
   prettierConfig,
 
   {
@@ -130,6 +173,7 @@ module.exports = [
     },
     rules: {
       'array-callback-return': ['error', { checkForEach: true }],
+      complexity: ['error', 5],
       curly: ['error', 'all'],
       'dot-notation': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
@@ -217,14 +261,6 @@ module.exports = [
     },
   },
   {
-    files: integrationTestFiles,
-    rules: {
-      // dotenv and pg are runtime-only deps of the hosting-owned integration
-      // harness, not the SDK package, so they aren't resolvable here.
-      'import-x/no-unresolved': ['error', { commonjs: true, ignore: ['^dotenv$', '^pg$'] }],
-    },
-  },
-  {
     files: exampleFiles,
     rules: {
       'import-x/no-unresolved': 'off',
@@ -238,6 +274,66 @@ module.exports = [
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: typescriptFiles,
+    languageOptions: {
+      sourceType: 'module',
+      parserOptions: {
+        project: ['./tsconfig.json', './tsconfig.consumer.json', './tsconfig.tooling.json'],
+        tsconfigRootDir: __dirname,
+      },
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      'dot-notation': 'off',
+      '@typescript-eslint/dot-notation': 'error',
+      'sonarjs/cognitive-complexity': ['error', 10],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/no-unsafe-type-assertion': 'error',
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        {
+          allowString: false,
+          allowNumber: false,
+          allowNullableObject: false,
+        },
+      ],
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
+    },
+  },
+  {
+    files: ['scripts/**/*.test.mts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'MemberExpression[property.name=/^(skip|only|todo|runOnly)$/]',
+          message: 'Every tooling test must run without focus, skipping, or pending cases.',
+        },
+        {
+          selector: 'Property[key.name=/^(skip|only|todo)$/]',
+          message: 'Every tooling test must run without focus, skipping, or pending cases.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/sdk-public-types.ts'],
+    linterOptions: {
+      noInlineConfig: false,
+    },
+  },
+  {
+    files: ['src/volcano-fetch.ts'],
+    linterOptions: {
+      noInlineConfig: false,
     },
   },
 ];

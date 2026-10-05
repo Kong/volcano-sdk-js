@@ -69,18 +69,47 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 
 ## Documentation
 
-| Guide                                        | Description                       |
-| -------------------------------------------- | --------------------------------- |
-| [Getting Started](./docs/getting-started.md) | Installation and setup            |
-| [Authentication](./docs/authentication.md)   | Sign-up, sign-in, OAuth, sessions |
-| [Database](./docs/database.md)               | Query builder and CRUD operations |
-| [Storage](./docs/storage.md)                 | File upload and management        |
-| [Realtime](./docs/realtime.md)               | Live subscriptions and presence   |
-| [Functions](./docs/functions.md)             | Serverless function invocation    |
-| [Project locks](./docs/locks.md)             | Renewable backend leases          |
-| [Next.js](./docs/nextjs.md)                  | Server components and middleware  |
-| [TypeScript](./docs/typescript.md)           | Type definitions                  |
-| [Error Handling](./docs/error-handling.md)   | Error patterns                    |
+| Guide                                            | Description                       |
+| ------------------------------------------------ | --------------------------------- |
+| [Getting Started](./docs/getting-started.md)     | Installation and setup            |
+| [Authentication](./docs/authentication.md)       | Sign-up, sign-in, OAuth, sessions |
+| [Database](./docs/database.md)                   | Query builder and CRUD operations |
+| [Storage](./docs/storage.md)                     | File upload and management        |
+| [Realtime](./docs/realtime.md)                   | Live subscriptions and presence   |
+| [Functions](./docs/functions.md)                 | Serverless function invocation    |
+| [Durable functions](./docs/durable-functions.md) | Checkpointed, long-running work   |
+| [Project locks](./docs/locks.md)                 | Renewable backend leases          |
+| [Next.js](./docs/nextjs.md)                      | Server components and middleware  |
+| [TypeScript](./docs/typescript.md)               | Type definitions                  |
+| [Error Handling](./docs/error-handling.md)       | Error patterns                    |
+
+## Dependencies
+
+Installing `@volcano.dev/sdk` pulls in two packages, both for realtime:
+
+| Package                                                  | Why                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`centrifuge`](https://www.npmjs.com/package/centrifuge) | The realtime protocol client                                         |
+| [`ws`](https://www.npmjs.com/package/ws)                 | WebSocket transport outside the browser, loaded only when it is used |
+
+Writing a [durable function](./docs/durable-functions.md) needs one more, and
+you do not install it: Volcano adds it when it builds a function deployed as
+durable.
+
+| Package                                                                                        | Why                                             |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [`@aws/durable-execution-sdk-js`](https://www.npmjs.com/package/@aws/durable-execution-sdk-js) | Checkpointing, under `@volcano.dev/sdk/durable` |
+
+The SDK declares it as an optional peer dependency, which is what lets the SDK
+resolve it in the deployed function without anything else installing it: a
+browser bundle and a standard function stay as small as they were. Its install
+closure is ~19 MB, which is why it belongs in durable functions rather than in
+everyone's `node_modules`. It also requires Node 22, where this SDK supports
+Node 20, so it is only ever installed on the runtimes that can host a durable
+function (`nodejs22.x` and `nodejs24.x`).
+
+A function that declares it explicitly is left alone by the build, version
+included, which is the way to pin a specific runtime.
 
 ## Contributing
 

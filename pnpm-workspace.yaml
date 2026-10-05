@@ -1,6 +1,23 @@
 packages:
   - examples/nextjs-notes-app
 
+# The durable runtime is an optional peer that Volcano installs into a durable
+# function at build time, and nothing here loads it — the durable tests stand a
+# double in its place. pnpm installs optional peers anyway (pnpm/pnpm#11155),
+# which pulled a package requiring Node >=22 into a workspace tested on Node 20.
+autoInstallPeers: false
+
+# Next 15 pins PostCSS 8.4.31, which predates its file-disclosure and XSS fixes.
+overrides:
+  'next>postcss': ^8.5.28
+  # Both Cucumber consumers use v4; uuid 11 retains their CommonJS API.
+  'jest-cucumber>uuid': ^11.1.1
+  '@cucumber/messages>uuid': ^11.1.1
+  # Generator dependencies pin older vulnerable js-yaml 4 releases.
+  'js-yaml@>=4.0.0 <4.3.2': ^4.3.2
+  # Stryker's HTTP client resolves a qs release with DoS advisories.
+  'typed-rest-client>qs': 6.16.0
+
 allowBuilds:
   protobufjs: true
   sharp: true

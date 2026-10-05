@@ -13,35 +13,39 @@ Volcano is a backend-as-a-service platform that provides everything you need to 
 - **PostgreSQL Database** with Row-Level Security and a browser-friendly query builder
 - **File Storage** with access control policies
 - **Realtime** subscriptions for database changes, presence, and broadcast messaging
-- **Serverless Functions** for custom backend logic
+- **Serverless Functions** for custom backend logic, including durable
+  functions that checkpoint and resume across hours
 
 The SDK is designed to work seamlessly in browsers, React/Next.js applications, and Node.js environments.
 
 ## Documentation
 
-| Guide                                   | Description                                                   |
-| --------------------------------------- | ------------------------------------------------------------- |
-| [Getting Started](./getting-started.md) | Installation, configuration, and your first request           |
-| [Authentication](./authentication.md)   | User sign-up, sign-in, OAuth, sessions, and password recovery |
-| [Database](./database.md)               | Query builder for PostgreSQL with Row-Level Security          |
-| [Storage](./storage.md)                 | Upload, download, and manage files                            |
-| [Realtime](./realtime.md)               | WebSocket subscriptions, presence, and broadcast              |
-| [Functions](./functions.md)             | Invoke serverless functions                                   |
-| [Project locks](./locks.md)             | Leases that keep one holder at a time on backend work         |
-| [Next.js Integration](./nextjs.md)      | Server components, middleware, and SSR considerations         |
-| [TypeScript](./typescript.md)           | Type definitions and best practices                           |
-| [Error Handling](./error-handling.md)   | Error patterns and troubleshooting                            |
+| Guide                                       | Description                                                   |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| [Getting Started](./getting-started.md)     | Installation, configuration, and your first request           |
+| [Authentication](./authentication.md)       | User sign-up, sign-in, OAuth, sessions, and password recovery |
+| [Database](./database.md)                   | Query builder for PostgreSQL with Row-Level Security          |
+| [Storage](./storage.md)                     | Upload, download, and manage files                            |
+| [Realtime](./realtime.md)                   | WebSocket subscriptions, presence, and broadcast              |
+| [Functions](./functions.md)                 | Invoke serverless functions                                   |
+| [Durable functions](./durable-functions.md) | Write functions that checkpoint and resume for up to 366 days |
+| [Project locks](./locks.md)                 | Leases that keep one holder at a time on backend work         |
+| [Logs](./logs.md)                           | Search project logs and read activity buckets                 |
+| [Next.js Integration](./nextjs.md)          | Server components, middleware, and SSR considerations         |
+| [TypeScript](./typescript.md)               | Type definitions and best practices                           |
+| [Error Handling](./error-handling.md)       | Error patterns and troubleshooting                            |
+| [Versions](./versions.md)                   | Runtime support, upgrades, and tested dependency sets         |
 
 ## Quick Example
 
 Here's a complete example showing authentication and database queries:
 
 ```javascript
-import { VolcanoAuth } from '@volcano.dev/sdk';
+import { VolcanoClient } from '@volcano.dev/sdk';
 
 // Initialize the client
-const volcano = new VolcanoAuth({
-  apiUrl: 'https://api.yourproject.volcano.dev',
+const volcano = new VolcanoClient({
+  apiUrl: 'https://api.volcano.dev',
   anonKey: 'your-anon-key',
 });
 

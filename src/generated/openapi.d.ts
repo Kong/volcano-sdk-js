@@ -295,7 +295,9 @@ export interface paths {
          *     `limit`, returns `next_cursor`/`prev_cursor`, and supports a bounded
          *     `offset` past the cursor anchor. Supplying `limit` without `page`
          *     selects cursor mode. `search` applies a case-insensitive project-name
-         *     filter in either mode. Sending `page` with `cursor` or `ending_before`,
+         *     filter in either mode. `include` optionally expands each returned
+         *     project with its Git connection and/or aggregate health summary using
+         *     `git_connection` and `health`. Sending `page` with `cursor` or `ending_before`,
          *     or sending both cursor directions, returns 400.
          */
         get: operations["listProjects"];
@@ -439,6 +441,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/shared-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace shared variable names
+         * @description Atomically replaces the complete shared function-variable list without
+         *     changing values. Names must already exist. Validates final affected
+         *     function environments before membership or propagation side effects.
+         *     An empty list clears membership. Omitted names remain stored as non-shared variables.
+         */
+        put: operations["replaceSharedVariables"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/config": {
         parameters: {
             query?: never;
@@ -453,8 +478,8 @@ export interface paths {
          *     volcano-config.yaml rendering with `Accept: application/yaml` or
          *     `?format=yaml`; the YAML is returned verbatim as the raw response body
          *     (`Content-Type: application/yaml`) and is meant to be saved as-is.
-         *     Write-only secrets (SMTP password, OAuth client secrets, TLS material)
-         *     are omitted from the export; the YAML rendering adds a header comment
+         *     Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
+         *     are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
          *     describing how to set them via CLI environment interpolation.
          */
         get: operations["getProjectConfig"];
@@ -477,6 +502,72 @@ export interface paths {
         put: operations["applyProjectConfig"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/source-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report the project's source-of-truth state
+         * @description Volcano stores the source of the functions and frontend it runs for a
+         *     project. This reports whether that source has been written to the
+         *     connected repository, and whether the repository has taken over as the
+         *     project's source of truth.
+         *
+         *     `mode` is `platform`, `git_exporting`, `git_pending`, or `git`. Export
+         *     enters `git_exporting` before reading stored source. GitHub's signed
+         *     push event confirms that the initial commit reached the production
+         *     branch. That push or a newer production push changes the mode to
+         *     `git_pending` when it starts a deployment. `exported_at` records that
+         *     transition.
+         *
+         *     A successful Git run completes the transition when it matches the
+         *     recorded repository, production branch, and root directory and actually
+         *     dispatches every recorded resource. Ordinary production-branch pushes
+         *     deploy without changing a platform-managed project's source ownership.
+         */
+        get: operations["getProjectSourceExport"];
+        put?: never;
+        /**
+         * Initialize an empty repository with a project's stored source
+         * @description Creates the first commit in the connected repository and pushes it
+         *     directly to the configured production branch. The push enters the
+         *     ordinary Git auto-deploy flow. Direct source writes remain frozen until
+         *     that deployment succeeds and the repository becomes the source of truth.
+         *
+         *     The caller confirms the production branch shown before export. Starting
+         *     export pins that branch: later GitHub default-branch changes do not
+         *     repoint the project. If the configured branch changed after the caller
+         *     read it, the request fails without exporting so the caller can show and
+         *     confirm the new value.
+         *
+         *     The response lists what the export could not carry: resources with no
+         *     successful deployment to take source from (`skipped`), and things no
+         *     export can hand back (`omitted`) — migrations, which Volcano stores no
+         *     copy of, and credential-shaped files, which are left for their owner to
+         *     add.
+         *
+         *     Requires a connected repository with no commits or branches, and runs
+         *     once. Volcano never creates the repository. If GitHub did not confirm
+         *     the push, retrying creates the same commit and adopts it when it already
+         *     reached the repository.
+         */
+        post: operations["exportProjectSource"];
+        /**
+         * Cancel an incomplete source export
+         * @description Restores platform source writes while the project is in
+         *     `git_exporting` or `git_pending`. If Volcano reserved or deployed the
+         *     root commit, export remains consumed and cannot be run again. The
+         *     connected repository and any commit already pushed to it are unchanged.
+         */
+        delete: operations["cancelProjectSourceExport"];
         options?: never;
         head?: never;
         patch?: never;
@@ -586,8 +677,8 @@ export interface paths {
          * @description Returns the database's current top queries from pg_stat_statements
          *     ranked by total execution time.
          *
-         *     **PRO plan required.** This endpoint is only available to projects owned
-         *     by users on the PRO billing plan.
+         *     **SUPERAGENT plan required.** This endpoint is only available to projects owned
+         *     by users on the SUPERAGENT billing plan.
          */
         get: operations["getProjectDatabaseQueries"];
         put?: never;
@@ -836,11 +927,74 @@ export interface paths {
          *     - Function receives payload only (no `__volcano_auth`)
          *
          *     **Transport and CORS:**
-         *     - Direct invocation endpoint is intended for `http://api.<domain>/functions/{functionId}/invoke`
-         *     - DNS invocation endpoint is `https://{functionId}.functions.<domain>/`
-         *     - CORS preflight for invocation allows only `POST, OPTIONS`
+         *     - This operation is the authenticated direct RPC endpoint and always uses the
+         *       POST `{payload: ...}` contract, including for functions whose DNS ingress is
+         *       configured in HTTP mode.
+         *     - The geo-routed DNS ingress is the function's `invoke_url`. It is on a
+         *       different domain from this API, so it cannot be derived from the API host.
+         *     - RPC-mode DNS ingress accepts POST at `/`. HTTP-mode DNS ingress accepts GET,
+         *       HEAD, POST, PUT, PATCH, and DELETE at `/` and nested paths.
+         *     - Direct and RPC-mode CORS preflight advertises `POST, OPTIONS`. HTTP-mode DNS
+         *       preflight advertises `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
+         *     - `http_auth_mode: none` applies only to public HTTP-mode DNS ingress; this
+         *       direct operation always requires a Volcano credential.
+         *
+         *     **Durable functions are not invocable here.** A durable function's id
+         *     answers 404, whatever its visibility, because a synchronous call would
+         *     run it with no execution record, no idempotency and no concurrency
+         *     accounting. Start one with
+         *     `POST /durable-functions/{functionId}/executions`.
          */
         post: operations["invokeFunction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-functions/{functionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a durable execution from an application
+         * @description Starts an execution of a durable function using an application
+         *     credential, and returns its handle.
+         *
+         *     This is the durable counterpart of `POST /functions/{functionId}/invoke`,
+         *     and it is the endpoint an application calls. Like that one, it is not
+         *     project-scoped: an anon key, a service key and an auth user token each
+         *     carry their own project. The project-scoped collection under
+         *     `/projects/{id}/durable-functions/...` remains the owner's management
+         *     surface.
+         *
+         *     **With a service key or an auth user token:** any durable function in
+         *     the project.
+         *
+         *     **With an anon key:** requires the `functions.invoke` permission, and
+         *     the function must have `is_public: true`.
+         *
+         *     Starting is all this endpoint does. Reading a result or stopping an
+         *     execution requires the project owner's token, because an anon key is
+         *     shared by everyone who loads the page and an execution is addressed by
+         *     id alone.
+         *
+         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
+         *     a start with the same name returns the existing execution instead of
+         *     beginning a second one.
+         *
+         *     Each execution counts once against the project's durable execution
+         *     allowance, however many times the start is retried under the same
+         *     execution name, and the number in flight at once is capped by the plan.
+         *     The operations the execution performs are counted against the durable
+         *     operations allowance when it finishes.
+         */
+        post: operations["startDurableExecutionFromApplication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -856,9 +1010,13 @@ export interface paths {
         };
         /**
          * Resolve function name for invocation
-         * @description Resolves a DNS-safe function name to its function ID within the caller's project.
+         * @description Resolves a DNS-safe function name to its function ID and invocation URL within the caller's project.
          *
          *     SDKs use this endpoint internally to invoke by function name while routing by function ID.
+         *     Invoke the returned `invoke_url` as-is. It does not share a domain with the API, so a host
+         *     built from the API URL will not reach the function. When the deployment serves no public
+         *     invocation domain, as in local development, `invoke_url` is omitted and callers invoke
+         *     through `POST /functions/{functionId}/invoke`.
          *
          *     **With Service Key**:
          *     - Allowed
@@ -895,9 +1053,9 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to count deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The activity window is limited
-         *     to the plan's retention window (FREE: 1 day, PRO: 30 days); older start
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The activity window is limited
+         *     to the plan's retention window (HOBBY: 1 day, SUPERAGENT: 30 days); older start
          *     times are clamped to that window.
          */
         post: operations["getProjectLogActivity"];
@@ -923,10 +1081,10 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to read deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; requests for
-         *     `resource.type=database` from a FREE-plan project owner return 403.
+         *     databases. Database logs are a SUPERAGENT-plan feature; requests for
+         *     `resource.type=database` from a HOBBY-plan project owner return 403.
          *     Log history (runtime and deployment) is limited to the plan's retention
-         *     window (FREE: 1 day, PRO: 30 days); older time ranges are clamped to that
+         *     window (HOBBY: 1 day, SUPERAGENT: 30 days); older time ranges are clamped to that
          *     window.
          */
         post: operations["searchProjectLogs"];
@@ -951,12 +1109,12 @@ export interface paths {
          *     resource selector plus `q`, `start_time`, and `limit`,
          *     including runtime logs and function/frontend deployment logs selected
          *     with `resource.deployments`. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The `q` field uses the same
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The `q` field uses the same
          *     syntax as search and activity requests. Do not send `cursor` or
          *     `end_time`; use `/logs/search` for range backfills.
          *     Explicit historical `start_time` values are limited to the plan's
-         *     retention window (FREE: 1 day, PRO: 30 days). Resume with
+         *     retention window (HOBBY: 1 day, SUPERAGENT: 30 days). Resume with
          *     `Last-Event-ID` or the `last_event_id` query parameter. The cursor is
          *     bound to the request body: the resource selector and every filter must
          *     match the original request when reconnecting, otherwise the request is
@@ -1084,6 +1242,229 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/durable-functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all durable functions in a project
+         * @description Standard functions never appear here, and durable functions never appear
+         *     under `/projects/{id}/functions`. The two are separate collections.
+         */
+        get: operations["listDurableFunctions"];
+        put?: never;
+        /**
+         * Create or update a durable function
+         * @description Upload a durable function source bundle. Creates the function on the
+         *     first call for a name and redeploys it on every call after that, the
+         *     same create-or-update contract `POST /projects/{id}/functions` has.
+         *
+         *     Volcano builds and deploys asynchronously. A deployment that starts
+         *     immediately returns `status: provisioning`, then transitions to `active`
+         *     or `failed`; a deployment that has to wait for a running one is exposed
+         *     through `pending_deployment_id`. Existing executions keep running
+         *     against the runtime they started on.
+         *
+         *     The `durable` configuration is derived from the project's plan rather
+         *     than supplied here, and is fixed once the function exists. A name
+         *     already held by a standard function is rejected with 409: a function
+         *     cannot change kind.
+         */
+        post: operations["createDurableFunction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get durable function by ID or name */
+        get: operations["getDurableFunction"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a durable function
+         * @description Accepted for asynchronous teardown; the work continues after the
+         *     response. The function's executions go with it: history stops being
+         *     readable whatever `retention_days` had left, and the executions still
+         *     running stop counting against the project's concurrency cap. Stop an
+         *     execution first if you need it to end before the function does.
+         */
+        delete: operations["deleteDurableFunction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List durable function deployments */
+        get: operations["listDurableFunctionDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/schedulers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List schedulers for a durable function
+         * @description The durable collection's counterpart to
+         *     `/projects/{id}/functions/{functionId}/schedulers`. A standard
+         *     function's id is not accepted here, and a durable function's id is not
+         *     accepted there.
+         */
+        get: operations["listDurableFunctionSchedulers"];
+        put?: never;
+        /**
+         * Create a scheduler for a durable function
+         * @description Each tick starts an execution rather than invoking the function, under
+         *     an execution name derived from the run, so a retried tick resolves to
+         *     the execution it already started. Requested regions must be a subset of
+         *     the function's deployed regions.
+         *
+         *     A tick draws on the same durable allowances and concurrency cap a
+         *     manual start does, and a tick that would exceed the cap fails that run.
+         */
+        post: operations["createDurableFunctionScheduler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/schedulers/{schedulerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a durable function scheduler */
+        get: operations["getDurableFunctionScheduler"];
+        put?: never;
+        post?: never;
+        /** Delete a durable function scheduler */
+        delete: operations["deleteDurableFunctionScheduler"];
+        options?: never;
+        head?: never;
+        /** Update a durable function scheduler */
+        patch: operations["updateDurableFunctionScheduler"];
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable function's executions
+         * @description Returns the platform's last observed status for each execution; listing
+         *     does not poll each one. Fetch a single execution for its live state.
+         */
+        get: operations["listDurableExecutions"];
+        put?: never;
+        /**
+         * Start a durable execution
+         * @description Starts an execution and returns its handle. Never returns a result: an
+         *     execution can outlive any request a client could hold open, so the
+         *     result is read back from
+         *     `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`.
+         *
+         *     The request body is the execution's input and must be valid JSON if
+         *     present. An empty body starts the execution with no input.
+         *
+         *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating a
+         *     start with the same name returns the existing execution instead of
+         *     beginning a second one.
+         *
+         *     Each execution counts against the project's durable execution
+         *     allowance, the operations it performs count against the durable
+         *     operations allowance when it finishes, and the number of executions in
+         *     flight at once is capped by the plan.
+         */
+        post: operations["startDurableExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a durable execution
+         * @description Returns the execution's current state, including its `result` once it has
+         *     succeeded. Poll this to wait for an execution to finish.
+         */
+        get: operations["getDurableExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a durable execution
+         * @description Cancels a running execution. Its completed steps are not undone.
+         *
+         *     The call is accepted rather than awaited: cancellation happens behind
+         *     it, so the response reports the execution as it was read back and may
+         *     still say `running`. Do not branch on that status — the execution
+         *     settles into `stopped` shortly after, and polling
+         *     `GET /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+         *     is how you see it get there.
+         *
+         *     Stopping an execution that already finished is not an error: the
+         *     response carries the state it settled in.
+         */
+        post: operations["stopDurableExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/frontends": {
         parameters: {
             query?: never;
@@ -1123,7 +1504,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.24 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.3 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1198,10 +1579,11 @@ export interface paths {
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
-         * Configure frontend custom domain (PRO)
+         * Configure frontend custom domain (SUPERAGENT)
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
+         *     Managed TLS returns the DNS records currently required for setup. Volcano may require a tenant-specific TXT ownership challenge before returning the certificate authority's validation record. After ownership verification succeeds, Volcano permanently assigns the hostname to the account. A required but unverified ownership reservation expires after 72 hours.
          */
         post: operations["createFrontendCustomDomain"];
         /** Delete frontend custom domain */
@@ -1301,7 +1683,8 @@ export interface paths {
         /**
          * Create a new serverless PostgreSQL database
          * @description Creates a serverless PostgreSQL database in the project.
-         *     Each project can contain up to 100 databases. Requests over this cap return 403.
+         *     Each project can hold 1 database on Hobby and up to 10,000 on Superagent.
+         *     Requests over the plan's cap return 403.
          */
         post: operations["createDatabase"];
         delete?: never;
@@ -1456,11 +1839,161 @@ export interface paths {
          * Rotate a branch's password
          * @description Issues a new password for the branch and invalidates the previous
          *     connection string. Existing connections are not interrupted; new ones
-         *     must use the returned string.
+         *     must use the returned string. Proxies pick the rotation up within a few
+         *     seconds, so the previous password can still open new connections until
+         *     then.
          *
          *     The parent database's credentials are untouched.
          */
         post: operations["resetDatabaseBranchPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's backups
+         * @description Returns every backup of the database, newest first, together with the
+         *     window a point-in-time restore may target.
+         *
+         *     Both backups you took and backups the schedule produced are listed;
+         *     `source` tells them apart. Only manual backups count against the plan's
+         *     backup allowance.
+         */
+        get: operations["listDatabaseBackups"];
+        put?: never;
+        /**
+         * Back up a database
+         * @description Captures the database as it is now. The backup is available immediately;
+         *     its `size_bytes` appears once the storage provider has costed it.
+         *
+         *     Backups are rate-limited to one per minute per database, and capped by
+         *     the owner's plan.
+         */
+        post: operations["createDatabaseBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backups/{backupName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a backup
+         * @description Returns one backup of the database.
+         */
+        get: operations["getDatabaseBackup"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a backup
+         * @description Deletes the backup and frees its storage. Scheduled backups can be
+         *     deleted too. A backup that is already gone reports `404`, so a name
+         *     that never existed and a name that no longer does read the same.
+         *     Refused with `409` while the database is being restored.
+         */
+        delete: operations["deleteDatabaseBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/backup-schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the automated backup schedule
+         * @description Returns the database's backup schedule. An empty list means no scheduled
+         *     backups.
+         */
+        get: operations["getDatabaseBackupSchedule"];
+        /**
+         * Replace the automated backup schedule
+         * @description Replaces the schedule wholesale. Send an empty `entries` list to stop
+         *     scheduled backups.
+         *
+         *     Scheduled backups do not count against the plan's backup allowance, but
+         *     their retention is clamped to the plan's.
+         */
+        put: operations["updateDatabaseBackupSchedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/restores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's restores
+         * @description Returns the database's restore history, newest first, capped at the 50
+         *     most recent. There is no pagination: a database that has been restored
+         *     more than 50 times keeps the older records but does not return them.
+         */
+        get: operations["listDatabaseRestores"];
+        put?: never;
+        /**
+         * Restore a database
+         * @description Replaces the database's data, either with a named backup or with its
+         *     state at a point in time. This is destructive: everything written after
+         *     that point is discarded.
+         *
+         *     Asynchronous: the response is `202` with the restore `pending` and the
+         *     database `restoring`. The database does not accept connections until the
+         *     restore reports `completed`; its connection string is unchanged
+         *     throughout, so nothing holding it needs updating.
+         *
+         *     Restores are in place. There is no way to restore into a second
+         *     database, and a database's branches are never restored — they keep
+         *     serving their own data, but resetting a branch from its parent is
+         *     refused by the storage provider for up to 24 hours afterwards.
+         */
+        post: operations["createDatabaseRestore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/restores/{restoreId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a restore
+         * @description Returns the restore. Poll this after starting one; the database is
+         *     connectable again once it reports `completed`.
+         */
+        get: operations["getDatabaseRestore"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1482,6 +2015,10 @@ export interface paths {
          *     through pgproxy. This does not rotate or expose the internal owner password.
          *     The returned password and connection string are the only client credentials that
          *     will authenticate through pgproxy after reset.
+         *
+         *     Existing connections are not interrupted; new ones must use the returned
+         *     string. Proxies pick the rotation up within a few seconds, so the previous
+         *     password can still open new connections until then.
          */
         post: operations["resetDatabasePassword"];
         delete?: never;
@@ -1851,6 +2388,8 @@ export interface paths {
         /**
          * List platform-supported regions for database provisioning
          * @description Returns the regions enabled for database provisioning in this platform environment.
+         *     These are the same regions offered for function deployment, and the only values
+         *     the `region` field of a database accepts.
          *     This is a public endpoint that doesn't require authentication.
          */
         get: operations["listDatabaseRegions"];
@@ -2026,7 +2565,9 @@ export interface paths {
          *     Set `session_mode` to `cookie` to request HttpOnly refresh-token
          *     storage. Cookie mode is honored only for an exact, credentialed CORS
          *     origin on the same schemeful site as this API. Otherwise the response
-         *     retains the refresh token in its body.
+         *     retains the refresh token in its body. A frontend on its default
+         *     Volcano URL is cross-site with this API and so always gets the body
+         *     token.
          */
         post: operations["authSignin"];
         delete?: never;
@@ -2643,8 +3184,8 @@ export interface paths {
         /**
          * Create email template
          * @description Creates a custom email template for the project. Custom email templates
-         *     are a PRO-plan feature: requests from a FREE-plan project owner are
-         *     rejected with 403, and FREE projects always send the built-in default
+         *     are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner are
+         *     rejected with 403, and HOBBY projects always send the built-in default
          *     templates regardless of any previously saved custom rows.
          *     Every project is created with one template per type, so customizing one
          *     is usually a PUT; creating a type the project already has returns 409.
@@ -2668,9 +3209,9 @@ export interface paths {
         get: operations["getEmailTemplate"];
         /**
          * Update email template
-         * @description Updates a custom email template. Custom email templates are a PRO-plan
-         *     feature: requests from a FREE-plan project owner are rejected with 403
-         *     (including after a PRO→FREE downgrade), so a FREE project cannot modify
+         * @description Updates a custom email template. Custom email templates are a SUPERAGENT-plan
+         *     feature: requests from a HOBBY-plan project owner are rejected with 403
+         *     (including after a SUPERAGENT→HOBBY downgrade), so a HOBBY project cannot modify
          *     templates and always sends the built-in defaults.
          */
         put: operations["updateEmailTemplate"];
@@ -2678,7 +3219,7 @@ export interface paths {
         /**
          * Delete email template
          * @description Deletes a custom template, reverting to the default. Custom email
-         *     templates are a PRO-plan feature: requests from a FREE-plan project owner
+         *     templates are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner
          *     are rejected with 403.
          */
         delete: operations["deleteEmailTemplate"];
@@ -2806,6 +3347,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/auth/pages/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get managed auth page appearance */
+        get: operations["getAuthPageAppearance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the managed auth page theme */
+        put: operations["updateAuthPageTheme"];
+        post?: never;
+        /** Clear the managed auth page theme */
+        delete: operations["deleteAuthPageTheme"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/{pageType}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Save one managed auth page layout */
+        put: operations["updateAuthPageLayout"];
+        post?: never;
+        /** Clear one managed auth page layout */
+        delete: operations["deleteAuthPageLayout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/auth/pages/{pageType}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Render a short-lived managed auth page preview
+         * @description Public HTML endpoint for a preview URL returned by the POST operation.
+         *     The signed ticket contains the unsaved appearance, expires shortly, and
+         *     runs the production page runtime against mocked authentication responses.
+         */
+        get: operations["renderAuthPagePreview"];
+        put?: never;
+        /** Preview an unsaved managed auth page appearance */
+        post: operations["previewAuthPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/auth/hosted/{pageType}": {
         parameters: {
             query?: never;
@@ -2814,8 +3435,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Render managed reset-password page
-         * @description Public HTML endpoint for the managed reset-password page.
+         * Render a managed auth page
+         * @description Public HTML endpoint for signup, forgot-password, device approval,
+         *     verify-email, and reset-password pages. Login uses the path without a
+         *     page type.
          *     Requires `Accept: text/html`.
          *     Returns 404 when managed hosted pages are disabled for the project.
          */
@@ -3285,6 +3908,12 @@ export interface paths {
          *     - Microsoft Graph profile: `/me`
          *
          *     The response wraps the provider's raw JSON value with request metadata.
+         *     An empty provider body is represented as `data: null`; the envelope
+         *     preserves the provider's HTTP status in `status_code`, including errors.
+         *     Provider response bodies are limited to 8 MiB after decompression.
+         *     Transport failures, invalid JSON (including invalid UTF-8), and oversized
+         *     bodies return `502`. Provider redirects to another origin are blocked and
+         *     return `400`.
          */
         post: operations["callOAuthProviderAPI"];
         delete?: never;
@@ -3757,6 +4386,7 @@ export interface paths {
          *
          *     **Session Status (with X-Upload-Session header):**
          *     Returns the status of a resumable upload session, including which parts have been uploaded.
+         *     Anonymous sessions must reuse the exact anon key that created the session.
          */
         get: operations["downloadStorageObject"];
         /**
@@ -3769,6 +4399,7 @@ export interface paths {
          *     - Maximum part size is 25MB
          *     - Parts can be uploaded in any order
          *     - Re-uploading a part overwrites the previous upload
+         *     - Anonymous sessions must reuse the exact anon key that created the session
          */
         put: operations["uploadPart"];
         /**
@@ -3785,6 +4416,12 @@ export interface paths {
          *     **Complete Resumable Session:**
          *     Complete a session after all parts are uploaded.
          *     Requires: `X-Upload-Session` header with session ID and `X-Upload-Complete: true` header.
+         *
+         *     **Resumable Session Ownership:**
+         *     A session created with a user access token remains bound to that user. A session
+         *     created with an anon key remains bound to that exact anon key. Reuse the same
+         *     identity or anon key for part uploads, status, completion, and abort requests;
+         *     an ownership mismatch returns `404`.
          */
         post: operations["uploadStorageObject"];
         /**
@@ -3796,6 +4433,7 @@ export interface paths {
          *
          *     **Abort Session (with X-Upload-Session header):**
          *     Aborts a resumable upload session and cleans up any uploaded parts.
+         *     Anonymous sessions must reuse the exact anon key that created the session.
          */
         delete: operations["deleteStorageObject"];
         options?: never;
@@ -4008,9 +4646,9 @@ export interface components {
              *     403, and `allowed_email_domains_mode` decides whether sign-in is
              *     covered as well.
              *
-             *     The allowlist is a PRO feature to configure and to enforce. A
+             *     The allowlist is a SUPERAGENT feature to configure and to enforce. A
              *     downgrade parks it: the domains are still returned here and stop
-             *     being applied until the project is back on PRO.
+             *     being applied until the project is back on SUPERAGENT.
              * @example [
              *       "domain1.com",
              *       "domain2.com"
@@ -4174,6 +4812,38 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        AuthPageAppearanceResponse: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layouts: {
+                [key: string]: components["schemas"]["AuthPageLayout"];
+            };
+            customisation_allowed: boolean;
+            /** @description Per-page saved-but-not-live state. */
+            parked: {
+                [key: string]: boolean;
+            };
+            defaults: components["schemas"]["AuthPageAppearanceDefaults"];
+            options: components["schemas"]["AuthPageAppearanceOptions"];
+        };
+        /** @enum {string} */
+        AuthPageDensity: "compact" | "comfortable" | "spacious";
+        /** @enum {string} */
+        AuthPageFont: "system" | "humanist" | "geometric" | "slab" | "mono";
+        /** @enum {string} */
+        AuthPageLayout: "centered" | "split-left" | "split-right";
+        /** @enum {string} */
+        AuthPageRadius: "none" | "small" | "medium" | "large";
+        /** @enum {string} */
+        AuthPageScale: "small" | "default" | "large";
+        AuthPageTheme: {
+            /** @enum {integer} */
+            version: 1;
+            colors: components["schemas"]["AuthPageThemeColors"];
+            font: components["schemas"]["AuthPageFont"];
+            scale: components["schemas"]["AuthPageScale"];
+            density: components["schemas"]["AuthPageDensity"];
+            radius: components["schemas"]["AuthPageRadius"];
         };
         AuthHostedPageResponse: {
             /** @description The saved page, or null when the project has not customized this page type yet. */
@@ -4425,6 +5095,14 @@ export interface components {
         CompleteUploadSessionResponse: {
             object?: components["schemas"]["StorageObject"];
         };
+        CreateDatabaseBackupRequest: {
+            /**
+             * @description Backup name, unique within the database. Names beginning with
+             *     `volcano-` are reserved for the platform's own snapshots.
+             * @example before_migration
+             */
+            name: string;
+        };
         CreateDatabaseBranchRequest: {
             /**
              * @description Branch name (must be unique within the parent database)
@@ -4440,6 +5118,29 @@ export interface components {
             ttl_seconds?: number;
         };
         /**
+         * @description Names what to restore. Supply exactly one of `backup_name` or
+         *     `restore_to`.
+         */
+        CreateDatabaseRestoreRequest: {
+            /**
+             * @description A backup of this database to restore, exactly as returned by the list
+             *     endpoint.
+             *
+             *     Deliberately looser than the names you can create, like the backup
+             *     path parameter: a backup made by a schedule is named for you, so
+             *     restoring one accepts any name a backup can have.
+             * @example before_migration
+             */
+            backup_name?: string;
+            /**
+             * Format: date-time
+             * @description A point in time to restore to, which must fall inside the
+             *     `restore_window` reported when listing backups.
+             * @example 2026-01-15T09:30:00Z
+             */
+            restore_to?: string;
+        };
+        /**
          * @description Create a new PostgreSQL database. Volcano automatically sets up:
          *     - Auth helpers (auth.uid(), auth.email(), auth.role())
          *     - Database roles (anon for unauthenticated, authenticated for signed-in users)
@@ -4453,11 +5154,13 @@ export interface components {
              */
             name: string;
             /**
-             * @description Region for database hosting
+             * @description Region for database hosting. The accepted values are the regions this
+             *     environment runs in, so read them from `GET /databases/regions` rather
+             *     than hardcoding a list. A region the environment does not offer is
+             *     rejected with 400.
              * @example aws-us-east-1
-             * @enum {string}
              */
-            region: "aws-us-east-1" | "aws-us-east-2" | "aws-us-west-2" | "aws-eu-central-1" | "aws-eu-west-2" | "aws-ap-southeast-1" | "aws-ap-southeast-2" | "aws-sa-east-1";
+            region: string;
             /**
              * @description PostgreSQL major version
              * @example 16
@@ -4500,7 +5203,7 @@ export interface components {
              * @example app.example.com
              */
             domain: string;
-            tls: components["schemas"]["CreateFrontendCustomDomainTLSConfig"];
+            tls: components["schemas"]["FrontendCustomDomainTLSConfig"];
         };
         CreateFunctionSchedulerRequest: {
             name: string;
@@ -4643,6 +5346,8 @@ export interface components {
             expires_at?: string;
         };
         CreateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -4655,10 +5360,13 @@ export interface components {
             /** @description Database name */
             name: string;
             /**
-             * @description Database provisioning status
+             * @description Database status. `restoring` means a restore is replacing the
+             *     database's data: it does not accept connections, and the operations
+             *     that would race the restore are rejected until it finishes. Its
+             *     branches keep serving throughout.
              * @enum {string}
              */
-            status: "provisioning" | "active" | "failed" | "deleting";
+            status: "provisioning" | "active" | "failed" | "restoring" | "deleting";
             /**
              * Format: date-time
              * @description Timestamp when the current provisioning phase started
@@ -4693,8 +5401,13 @@ export interface components {
             database_type?: "volcano-db-xs" | "volcano-db-s" | "volcano-db-m" | "volcano-db-l" | "volcano-db-xl" | "volcano-db-2xl";
             /**
              * Format: int64
-             * @description Latest observed on-disk size from `pg_database_size`, in bytes. This
-             *     point-in-time gauge may be absent until the database has been sampled.
+             * @description Latest observed storage for this database, in bytes: its own on-disk
+             *     size, plus what each branch has diverged from it, plus what its
+             *     backups cost to hold. This is the figure the storage allowance is
+             *     enforced against, and the stats endpoint breaks it down. A
+             *     point-in-time gauge recorded by a background pass, so it may be
+             *     absent until the database has been sampled, and it can trail the
+             *     stats endpoint's `current_storage_bytes`, which measures on request.
              *     Summing the latest samples for every database in a project produces
              *     the project's "Database Storage (Bytes)" usage gauge. Populated on
              *     database list responses; single-database responses omit it.
@@ -4709,6 +5422,76 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description A point-in-time copy of a database, kept by the storage provider and
+         *     restorable in place.
+         *
+         *     Backups cover the database itself, not its branches. Restoring one
+         *     replaces the database's data and keeps its connection string.
+         */
+        DatabaseBackup: {
+            /**
+             * @description Backup name, unique within the database. Backups you create are
+             *     named by you; scheduled backups are named by the storage provider.
+             */
+            name: string;
+            /**
+             * @description Whether the backup was requested explicitly or produced by the
+             *     backup schedule. Only `manual` backups count against the plan's
+             *     backup allowance.
+             * @enum {string}
+             */
+            source: "manual" | "scheduled";
+            /**
+             * Format: int64
+             * @description Storage the backup occupies. Absent until the provider has costed
+             *     it, which takes a few minutes after the backup is taken; absent is
+             *     not the same as empty.
+             */
+            size_bytes?: number;
+            /**
+             * Format: date-time
+             * @description When the backup is deleted automatically, from the plan's retention.
+             *     Absent means it is kept until deleted explicitly.
+             */
+            expires_at?: string;
+            /**
+             * Format: date-time
+             * @description The point in time the backup captures.
+             */
+            created_at: string;
+        };
+        DatabaseBackupList: {
+            data: components["schemas"]["DatabaseBackup"][];
+            restore_window?: components["schemas"]["DatabaseRestoreWindow"];
+        };
+        /**
+         * @description The database's automated backup schedule. An empty list means no
+         *     scheduled backups; sending one clears the schedule.
+         */
+        DatabaseBackupSchedule: {
+            entries: components["schemas"]["DatabaseBackupScheduleEntry"][];
+        };
+        /** @description One recurrence of the automated backup schedule. */
+        DatabaseBackupScheduleEntry: {
+            /** @enum {string} */
+            frequency: "daily" | "weekly" | "monthly";
+            /** @description Hour of the day in UTC. */
+            hour: number;
+            /**
+             * @description Day of the week (1-7, Monday to Sunday) for a weekly schedule, or day
+             *     of the month (1-28) for a monthly one. Required for both, ignored for
+             *     a daily schedule. Monthly stops at 28 so the schedule fires in every
+             *     month.
+             */
+            day?: number;
+            /**
+             * Format: int64
+             * @description How long each backup from this recurrence is kept. Clamped to the
+             *     plan's retention, and defaulted to it when omitted.
+             */
+            retention_seconds?: number;
         };
         /**
          * @description A copy-on-write fork of a database, for development and testing.
@@ -4937,12 +5720,87 @@ export interface components {
             /** @description Number of rows returned */
             count?: number;
         };
+        /**
+         * @description A restore of a database, either from a named backup or to a point in
+         *     time. Restores run in the background and take longer than a request, so
+         *     the database is unavailable until this reports `completed`.
+         */
+        DatabaseRestore: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            database_id: string;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * @description Whether the restore targets a named backup or an arbitrary point in
+             *     time. Both replace the database's data in place.
+             * @enum {string}
+             */
+            kind: "snapshot" | "point_in_time";
+            /**
+             * @description Restore status. `pending` and `running` both mean the restore is
+             *     still in flight and the database is not connectable; an attempt that
+             *     fails with tries left goes back to `pending`. `failed` and
+             *     `exhausted` both mean Volcano gave up: the database is left `failed`
+             *     if its data may already have been replaced, and `active` if the
+             *     restore never started — a backup that no longer exists at the
+             *     provider ends the restore without touching the database. A restore
+             *     cannot be cancelled once it starts.
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed" | "exhausted";
+            /**
+             * @description The backup restored, kept even if that backup is later deleted.
+             *     Absent for a point-in-time restore.
+             */
+            backup_name?: string;
+            /**
+             * Format: date-time
+             * @description The point in time restored to. Absent for a backup restore.
+             */
+            restore_to?: string;
+            /** @description Why the most recent attempt failed, when one has. */
+            error?: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatabaseRestoreList: {
+            data: components["schemas"]["DatabaseRestore"][];
+        };
+        /**
+         * @description The span a point-in-time restore may target. Absent from the response
+         *     when the owner's plan does not include point-in-time restore, and while
+         *     the storage provider has no history window in place yet — briefly the
+         *     case after an upgrade, since the window is applied asynchronously. The
+         *     window is read from the provider rather than from the plan, so it never
+         *     advertises a point a restore could not actually reach.
+         */
+        DatabaseRestoreWindow: {
+            /**
+             * Format: date-time
+             * @description The oldest point that can still be restored. Moves forward
+             *     continuously as history ages out, so treat it as a lower bound at
+             *     the moment it was read rather than a fixed value.
+             */
+            earliest_restore_at?: string;
+            /**
+             * Format: date-time
+             * @description The most recent point that can be restored, which is now.
+             */
+            latest_restore_at?: string;
+        };
         DatabaseStats: {
             /**
              * Format: int64
-             * @description On-disk size right now, in bytes: the database itself plus every
-             *     branch's divergence from it. This is the figure the storage
-             *     allowance is enforced against. `branches` breaks it down.
+             * @description On-disk size right now, in bytes: the database itself, plus every
+             *     branch's divergence from it, plus what its backups cost to hold. This
+             *     is the figure the storage allowance is enforced against. `branches`
+             *     and `backup_storage_bytes` break it down.
              */
             current_storage_bytes: number;
             /**
@@ -4956,6 +5814,21 @@ export interface components {
              *     parent contributes nothing.
              */
             branches?: components["schemas"]["DatabaseBranchStorage"][];
+            /**
+             * Format: int64
+             * @description What this database's backups contribute to `current_storage_bytes`.
+             *
+             *     A backup taken on request is charged as a full copy of the database
+             *     as it was at that moment, so two backups of a 2 GB database are 4 GB.
+             *     A backup schedule is charged its first snapshot in full and each
+             *     later one only for the storage it adds. Deleting a backup releases
+             *     its storage immediately.
+             *
+             *     Sampled from the provider rather than measured live, so it can lag a
+             *     change by a few minutes, and a backup taken seconds ago may not be
+             *     costed yet. Zero on a plan without backups.
+             */
+            backup_storage_bytes: number;
             /**
              * Format: int64
              * @description Total storage used in bytes (data + WAL)
@@ -5224,6 +6097,8 @@ export interface components {
             full_name: string;
             default_branch: string;
             private: boolean;
+            /** @description Whether the repository has no commits and can receive an initial source export. */
+            is_empty: boolean;
         };
         GitRepositoriesResponse: {
             repositories: components["schemas"]["GitRepository"][];
@@ -5308,6 +6183,55 @@ export interface components {
              */
             fencing_token?: number;
         };
+        /** @description The project's source of truth and any pending Git transition. */
+        ProjectSourceExportState: {
+            /** @enum {string} */
+            mode: "platform" | "git_exporting" | "git_pending" | "git";
+            /**
+             * Format: date-time
+             * @description When source export started, cleared if an incomplete transition is canceled.
+             */
+            transition_started_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the initial export push entered deployment, or when a transition was canceled after its commit was reserved. Once set, the one-time export is consumed.
+             */
+            exported_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a complete production-branch deployment first proved the repository could drive the project, null until then. Once set, the repository is the project's source of truth.
+             */
+            handed_over_at: string | null;
+        };
+        /** @description The initial production-branch commit, and everything export could not carry. */
+        ProjectSourceExport: {
+            repo_full_name: string;
+            /** @description The production branch that was created. */
+            branch: string;
+            commit_sha: string;
+            file_count: number;
+            /** @description Resources whose source could not be taken, with the reason. Most often a resource that has never deployed successfully. */
+            skipped: components["schemas"]["ProjectSourceExportSkip"][];
+            /** @description Things deliberately left out of the branch. */
+            omitted: components["schemas"]["ProjectSourceExportOmission"][];
+        };
+        ExportProjectSourceRequest: {
+            /** @description The currently configured production branch the user confirmed for export. */
+            production_branch: string;
+        };
+        ProjectSourceExportSkip: {
+            /** @description The kind of resource, "function" or "frontend". Deliberately not an enum: the generated constants would collide with an existing resource-type enum and rename its members. */
+            kind: string;
+            name: string;
+            reason: string;
+        };
+        ProjectSourceExportOmission: {
+            /** @description What was left out: migrations Volcano stores no copy of, variable values, a credential-shaped file, installed dependencies, or an archive entry a repository cannot carry. */
+            kind: string;
+            /** @description The resource it came from, empty when project-wide. */
+            resource: string;
+            path: string;
+        };
         SetProjectGitProductionBranchRequest: {
             /** @description The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. */
             production_branch: string;
@@ -5387,21 +6311,17 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description Use certificate material that you manage. */
-        BYOCFrontendCustomDomainTLSConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            mode: "byoc";
+        /** @description Set mode to managed for Volcano-issued TLS, or byoc with certificate_pem and private_key_pem. */
+        FrontendCustomDomainTLSConfig: {
+            /** @enum {string} */
+            mode: "managed" | "byoc";
             /** @description Required. PEM-encoded certificate. */
-            certificate_pem: string;
+            certificate_pem?: string;
             /** @description Required. PEM-encoded private key. */
-            private_key_pem: string;
+            private_key_pem?: string;
             /** @description Optional PEM-encoded certificate chain. */
             certificate_chain_pem?: string;
         };
-        CreateFrontendCustomDomainTLSConfig: components["schemas"]["ManagedFrontendCustomDomainTLSConfig"] | components["schemas"]["BYOCFrontendCustomDomainTLSConfig"];
         FrontendCustomDomainResponse: {
             domain: string;
             /** @enum {string} */
@@ -5410,6 +6330,8 @@ export interface components {
             domain_status: "pending_verification" | "provisioning" | "active" | "detaching" | "failed" | "deleted";
             /** @enum {string} */
             verification_status: "pending" | "verified" | "failed";
+            /** @description Safe failure category returned for failed managed TLS provisioning. One of provider, certificate, ownership, or internal. Ownership means another account has already verified the hostname. */
+            failure_reason?: string;
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             required_routing_record?: components["schemas"]["FrontendDomainRoutingRecord"];
             effective_urls: string[];
@@ -5417,20 +6339,6 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
-        };
-        /**
-         * @deprecated
-         * @description Deprecated compatibility model. Use BYOCFrontendCustomDomainTLSConfig.
-         */
-        FrontendCustomDomainTLSConfig: {
-            /**
-             * @default byoc
-             * @enum {string}
-             */
-            mode: "byoc";
-            certificate_pem: string;
-            private_key_pem: string;
-            certificate_chain_pem?: string;
         };
         FrontendDeployment: {
             /** Format: uuid */
@@ -5491,6 +6399,7 @@ export interface components {
             name: string;
             value: string;
         };
+        /** @description The DNS records currently required for managed TLS. Volcano may require a tenant-specific TXT ownership record before returning a CNAME that authorizes certificate issuance and renewal. Clients must follow the records returned for the current lifecycle state instead of assuming a fixed sequence. */
         FrontendDomainVerificationRecord: {
             name: string;
             type: string;
@@ -5548,14 +6457,6 @@ export interface components {
             /** Format: int64 */
             total_page_views: number;
         };
-        /** @description Volcano issues and renews the certificate. Do not send certificate material. */
-        ManagedFrontendCustomDomainTLSConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            mode: "managed";
-        };
         Function: {
             /** Format: uuid */
             id: string;
@@ -5575,8 +6476,16 @@ export interface components {
              *     - `true`: anon keys with `functions.invoke` can invoke
              */
             is_public: boolean;
+            invocation_mode: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description Optional OpenAPI 3.0 or 3.1 document describing an HTTP-mode function. */
+            openapi_spec: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Whether OpenAPI metadata is configured; list responses omit the document itself. */
+            has_openapi_spec: boolean;
             aws_function_arn?: string;
-            /** @description Canonical GeoDNS endpoint URL for invoking this function (always HTTPS) */
+            /** @description Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development, so a client testing for an empty string never matches. */
             invoke_url?: string;
             /** @description Regions where this function is currently deployed */
             deployed_regions: string[];
@@ -5602,6 +6511,176 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description A durable function. Separate from `Function` because a durable function
+         *     is invoked only through its own execution endpoints, so it has no
+         *     invocation mode, HTTP auth mode, OpenAPI document or invoke URL, and it
+         *     carries a `durable` configuration that a standard function has no field
+         *     for.
+         */
+        DurableFunction: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            /** @enum {string} */
+            status: "provisioning" | "active" | "failed" | "deleting";
+            /**
+             * Format: date-time
+             * @description Timestamp when the current provisioning phase started
+             */
+            provisioning_started_at?: string;
+            /**
+             * @description Whether anon keys may start executions of this function through
+             *     `POST /durable-functions/{functionId}/executions`.
+             *
+             *     When `true`, an anon key holding `functions.invoke` can start an
+             *     execution. When `false` (the default) only service keys and auth
+             *     user tokens can. Reading and stopping an execution always require
+             *     the project owner's token, whatever this is set to.
+             *
+             *     Set it when the function is created. Durable functions have no
+             *     update endpoint, so changing visibility later means redeploying.
+             *
+             *     A public durable function is startable, never invocable: it is not
+             *     reachable through `POST /functions/{functionId}/invoke` or a
+             *     function URL, which answer `404` for either visibility.
+             */
+            is_public: boolean;
+            durable: components["schemas"]["DurableFunctionConfig"];
+            /** @description Regions where this function is currently deployed */
+            deployed_regions: string[];
+            runtime?: string;
+            handler?: string;
+            /**
+             * Format: uuid
+             * @description Identifier of the latest deployment operation
+             */
+            current_deployment_id?: string;
+            /**
+             * Format: uuid
+             * @description Newest queued deployment that will run after the current operation
+             */
+            pending_deployment_id?: string;
+            /**
+             * Format: date-time
+             * @description Most recent successful invocation timestamp
+             */
+            last_invoked_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @description Execution limits the function was created with, derived from the
+         *     project's plan. Fixed for the life of the function: changing them means
+         *     creating a new one.
+         *
+         *     The memory the function runs at, and the timeout on one attempt within
+         *     an execution, also come from the plan but are not reported here: they
+         *     are applied to the deployed function rather than recorded on it. Both
+         *     are published per plan in the plans and limits guide.
+         */
+        DurableFunctionConfig: {
+            /**
+             * Format: int64
+             * @description How long a whole execution may run, including time suspended in a
+             *     wait. This is not a limit on one attempt: an execution outlives any
+             *     single attempt by checkpointing and resuming, and the per-attempt
+             *     timeout is the plan's own, smaller number.
+             */
+            execution_timeout_seconds: number;
+            /**
+             * Format: int64
+             * @description How long a finished execution's result and history are retained, for
+             *     as long as the function exists. Deleting the function, or its
+             *     project, ends retention early and takes the history with it.
+             */
+            retention_days: number;
+        };
+        DurableExecution: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            function_id: string;
+            /**
+             * @description Idempotency key for the execution. Supplied by the client through
+             *     `X-Volcano-Execution-Name`, otherwise generated.
+             */
+            name: string;
+            status: components["schemas"]["DurableExecutionStatus"];
+            /**
+             * @description Region the execution runs in. An execution is pinned to one region
+             *     for its whole life because its checkpoints live there.
+             */
+            region: string;
+            /**
+             * @description Whatever the function returned, verbatim. Absent while the execution
+             *     is still running, absent when the result was too large to return and
+             *     was checkpointed instead, and absent once the retention period has
+             *     lapsed.
+             */
+            result?: unknown;
+            /**
+             * @description `true` when the execution is terminal but its result is no longer
+             *     retained, which distinguishes a discarded result from an empty one.
+             *     Shortly after that the execution itself is dropped and reads answer
+             *     `404`.
+             *
+             *     A result that was checkpointed rather than returned leaves this
+             *     unset, so it reads like a function that returned nothing.
+             */
+            result_expired?: boolean;
+            error?: components["schemas"]["DurableExecutionError"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Present once the execution has reached a terminal status.
+             */
+            completed_at?: string;
+        };
+        /**
+         * @description Lifecycle state of an execution. `pending` covers the window between the
+         *     platform reserving the execution name and the function accepting the
+         *     start, and has no counterpart once the execution is under way.
+         *     `succeeded`, `failed`, `timed_out`, `stopped` and `unknown` are
+         *     terminal.
+         *
+         *     `unknown` means the execution's outcome cannot be established, so no
+         *     result or error can be given for it. Either it was under way and was
+         *     never seen to finish, or its start failed with a `500` without the
+         *     platform establishing whether the execution began — which is why a
+         *     name whose start returned an error can later read as `unknown` rather
+         *     than not being found. It is terminal because nothing can settle it
+         *     later, and it is rare — treat it as an outcome to retry rather than a
+         *     state to wait on. A retry under the same name picks this execution back
+         *     up instead of starting a second one, and needs a free concurrency slot
+         *     because an `unknown` execution has given its own up. `completed_at` on
+         *     an `unknown` execution is when the platform gave up, not when the work
+         *     ended.
+         * @enum {string}
+         */
+        DurableExecutionStatus: "pending" | "running" | "succeeded" | "failed" | "timed_out" | "stopped" | "unknown";
+        /** @description Why a failed or timed-out execution ended. */
+        DurableExecutionError: {
+            type?: string;
+            message?: string;
+        };
+        /**
+         * @description Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
+         *     `http` forwards HTTP request semantics to the function runtime.
+         * @enum {string}
+         */
+        FunctionInvocationMode: "rpc" | "http";
+        /**
+         * @description Authentication applied by the HTTP ingress. `none` is valid only for public
+         *     HTTP-mode functions and is intended for externally signed webhooks.
+         * @enum {string}
+         */
+        FunctionHTTPAuthMode: "volcano" | "none";
         FunctionDeployment: {
             /** Format: uuid */
             id: string;
@@ -5807,6 +6886,8 @@ export interface components {
             language: string;
             /** @description Whether this runtime is the CLI default for its language. */
             default: boolean;
+            /** @description Whether a durable function can be authored on this runtime. Only runtimes with a durable authoring API report true, and a durable deploy naming any other runtime is rejected. */
+            durable_capable: boolean;
             deployment: components["schemas"]["FunctionRuntimeDeployment"];
         };
         FunctionRuntimesResponse: {
@@ -5819,6 +6900,14 @@ export interface components {
             project_id?: string;
             /** Format: uuid */
             function_id?: string;
+            /**
+             * @description Which collection the scheduled function belongs to. A project-wide
+             *     scheduler list mixes both kinds, and this is what says whether the
+             *     function is read back from `/projects/{id}/functions` or
+             *     `/projects/{id}/durable-functions` — and whether a tick invokes it
+             *     or starts a durable execution.
+             */
+            function_kind?: components["schemas"]["FunctionKind"];
             name?: string;
             enabled?: boolean;
             /** @enum {string} */
@@ -5858,7 +6947,7 @@ export interface components {
             prev_cursor?: string;
         };
         /** @enum {string} */
-        HostedAuthPageType: "login" | "reset-password";
+        HostedAuthPageType: "login" | "signup" | "forgot-password" | "device" | "verify-email" | "reset-password";
         HostedLoginEmailCheckRequest: {
             /** Format: email */
             email: string;
@@ -5874,7 +6963,7 @@ export interface components {
             oauth_providers?: string[];
         };
         /** @enum {string} */
-        HostedRenderablePageType: "reset-password";
+        HostedRenderablePageType: "signup" | "forgot-password" | "device" | "verify-email" | "reset-password";
         /** @description Historical log event returned by log APIs. */
         LogEvent: {
             /** @description Opaque stable log event ID for pagination, deduplication, and display. */
@@ -5905,12 +6994,23 @@ export interface components {
         MetricUsageData: {
             /**
              * @description Metric name (for example, "Function & Frontend Invocations", "Frontend Requests",
-             *     "CodeBuild Build Seconds", "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
+             *     "Durable Executions", "Durable Operations", "Durable Compute (MB-Seconds)",
+             *     "CodeBuild Build Seconds",
+             *     "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
              *     "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
              *     reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
-             *     is not billed separately. "Database Storage (Bytes)" is a current observed gauge,
-             *     not a cumulative counter. It is the sum of the latest `pg_database_size` samples
-             *     exposed as `storage_bytes` by the project's database list.
+             *     is not billed separately. The three durable metrics are
+             *     counted separately from "Function & Frontend Invocations", which covers standard
+             *     invocations only. Operations and compute are counted when an execution finishes,
+             *     so they appear in the window the execution completed in rather than the one it
+             *     started in. "Durable Compute (MB-Seconds)" reports the memory the execution ran
+             *     at times the time it spent running, in megabyte-seconds; the allowance for it is
+             *     published in gigabyte-seconds, which is 1024 of these.
+             *     "Database Storage (Bytes)" is a current observed gauge,
+             *     not a cumulative counter. It is the sum of the latest samples exposed as
+             *     `storage_bytes` by the project's database list, so it includes what each
+             *     database's branches and backups hold, and it inherits that field's lag
+             *     behind a live measurement.
              */
             metric: string;
             /**
@@ -6053,6 +7153,28 @@ export interface components {
             /** @description Opaque cursor for the previous page (cursor pagination only; present when a previous page exists). Send as `ending_before`. */
             prev_cursor?: string;
         };
+        PaginatedDurableFunctions: {
+            data: components["schemas"]["DurableFunction"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
+        };
+        PaginatedDurableExecutions: {
+            data: components["schemas"]["DurableExecution"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
+        };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
             /** @description Current page number (1-indexed) */
@@ -6183,10 +7305,10 @@ export interface components {
             /** @enum {string} */
             status: "active" | "deleting" | "failed";
             /**
-             * @description Platform plan applied to the project when available
+             * @description Public plan name; FREE and PRO are accepted from older Hosting responses.
              * @enum {string}
              */
-            plan?: "FREE" | "PRO";
+            plan?: "HOBBY" | "SUPERAGENT" | "FREE" | "PRO";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions
@@ -6209,6 +7331,10 @@ export interface components {
              * @example /projects/3fa85f64-5717-4562-b3fc-2c963f66afa6/logo?v=1718524800
              */
             logo_url?: string;
+            /** @description Present for connected projects when `git_connection` is requested through the list endpoint's `include` parameter. */
+            git_connection?: components["schemas"]["ProjectGitConnectionSummary"];
+            /** @description Present when `health` is requested through the list endpoint's `include` parameter. */
+            health?: components["schemas"]["ProjectHealthSummary"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -6234,6 +7360,8 @@ export interface components {
             version: 1;
             project?: components["schemas"]["ProjectConfigProject"];
             databases?: components["schemas"]["ProjectConfigDatabase"][];
+            /** @description Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it. */
+            shared_variables?: string[];
             /** @description Fully synced when declared - variables absent from this list are deleted. */
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
@@ -6337,6 +7465,7 @@ export interface components {
             enabled?: boolean;
             redirects?: components["schemas"]["ProjectConfigAuthRedirects"];
             pages?: components["schemas"]["ProjectConfigHostedPages"];
+            appearance?: components["schemas"]["ProjectConfigAuthPageAppearance"];
         };
         ProjectConfigAuthPassword: {
             min_length?: number;
@@ -6390,8 +7519,8 @@ export interface components {
              *     prefix) and must be bare domains such as `domain1.com`. Matching is
              *     exact, so subdomains need their own entry. At most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only declare the list it already has or remove the
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only declare the list it already has or remove the
              *     restriction, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -6440,7 +7569,7 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with managed or BYOC TLS (PRO plan). `tls` is required
+         * @description Custom domain with managed or BYOC TLS (SUPERAGENT plan). `tls` is required
          *     when the domain is first created and optional afterwards. BYOC TLS
          *     material is write-only and omitted from config export.
          */
@@ -6473,16 +7602,16 @@ export interface components {
         };
         ProjectConfigEmailTemplate: {
             subject?: string;
-            /** @description HTML body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description HTML body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             html_body?: string;
-            /** @description Plain-text body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description Plain-text body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             text_body?: string;
         };
         /**
          * @description Email templates keyed by type. Fully synced when declared - template
          *     types absent from a declared map revert to server defaults (custom
          *     bodies deleted, subject overrides cleared). Custom template bodies
-         *     require the PRO plan; subject-only changes are available on FREE.
+         *     require the SUPERAGENT plan; subject-only changes are available on HOBBY.
          */
         ProjectConfigEmailTemplates: {
             confirmation?: components["schemas"]["ProjectConfigEmailTemplate"];
@@ -6503,12 +7632,38 @@ export interface components {
          * @description Configuration for an existing (deployed) function. Functions are never
          *     created or deleted through the manifest. When `schedulers` is declared
          *     it is fully synced (schedulers absent from the list are deleted);
-         *     omitting `schedulers` leaves the function's schedulers untouched.
+         *     omitting `schedulers` leaves the function's schedulers untouched. The
+         *     same applies to `variables`: declaring it replaces the function's
+         *     declared variable names, and omitting it leaves them untouched.
          */
         ProjectConfigFunction: {
             name: string;
+            kind?: components["schemas"]["FunctionKind"];
             /** @description Function visibility for anon-key invocation */
             public?: boolean;
+            /**
+             * @description Which project variables this function receives. `all` (the default)
+             *     gives it the project variables marked `shared: true`. `scoped` gives it only the variables
+             *     it selects: every name declared in `variables`, plus the names
+             *     Volcano detects in its source that the project defines.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "scoped";
+            /**
+             * @description Project variable names this function requires, on top of the ones
+             *     detected in its source. Declare a name here when the function reads
+             *     it through a computed key, which detection cannot see, or when the
+             *     function must not deploy without it: a declared name the project does
+             *     not define fails the apply, while a detected name it does not define
+             *     is ignored. Only used when `variable_scope` is `scoped`.
+             */
+            variables?: string[];
+            invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function */
+            openapi_spec?: {
+                [key: string]: unknown;
+            } | null;
             schedulers?: components["schemas"]["ProjectConfigScheduler"][];
         };
         ProjectConfigHostedPage: {
@@ -6518,12 +7673,27 @@ export interface components {
             css?: string;
         };
         /**
-         * @description Hosted auth pages keyed by page type (PRO plan). Upsert-only: omitted
+         * @description Hosted auth pages keyed by page type (SUPERAGENT plan). Upsert-only: omitted
          *     pages are left untouched (there is no delete for hosted pages).
          */
         ProjectConfigHostedPages: {
             login?: components["schemas"]["ProjectConfigHostedPage"];
             reset_password?: components["schemas"]["ProjectConfigHostedPage"];
+            signup?: components["schemas"]["ProjectConfigHostedPage"];
+            forgot_password?: components["schemas"]["ProjectConfigHostedPage"];
+            device?: components["schemas"]["ProjectConfigHostedPage"];
+            verify_email?: components["schemas"]["ProjectConfigHostedPage"];
+        };
+        PreviewAuthPageRequest: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layout: components["schemas"]["AuthPageLayout"];
+            action?: string;
+        };
+        PreviewAuthPageResponse: {
+            /** Format: uri */
+            preview_url: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         ProjectConfigMissingResource: {
             /** @enum {string} */
@@ -6551,7 +7721,7 @@ export interface components {
         /** @description Project-level settings. `name` renames the project. */
         ProjectConfigProject: {
             name?: string;
-            /** @description Region policy. `false` requires `selected_regions` (PRO plan). */
+            /** @description Region policy. `false` requires `selected_regions` (SUPERAGENT plan). */
             all_regions?: boolean;
             /** @description Region subset (bare region names). Requires `all_regions=false`. */
             selected_regions?: string[];
@@ -6590,6 +7760,8 @@ export interface components {
             errors: components["schemas"]["ProjectConfigValidationError"][];
         };
         ProjectConfigVariable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             name: string;
             value: string;
         };
@@ -6599,6 +7771,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description Which kind of function this check is about. Present only when `type`
+             *     is `function`, where both kinds share the name space and this is
+             *     what tells them apart.
+             */
+            kind?: components["schemas"]["FunctionKind"];
         };
         /** @description Stable reference to a Volcano resource. */
         ResourceReference: {
@@ -6747,6 +7925,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description Which kind of function this deployment belongs to. Both kinds appear
+             *     in this feed under `type: function`, because a deployment means the
+             *     same thing for either, so this is what tells them apart. Absent when
+             *     `type` is `frontend`.
+             */
+            kind?: components["schemas"]["FunctionKind"];
         };
         /** @description Aggregate deployment statistics for one resource pipeline. */
         ProjectDeploymentSummary: {
@@ -6830,8 +8015,8 @@ export interface components {
         /** @description Plan-based limits for realtime features */
         RealtimePlanLimits: {
             /**
-             * @description Plan name (FREE or PRO)
-             * @example FREE
+             * @description Public plan name (HOBBY or SUPERAGENT).
+             * @example HOBBY
              */
             plan?: string;
             /**
@@ -6876,6 +8061,8 @@ export interface components {
              * @description Canonical function ID used for invocation routing
              */
             function_id: string;
+            /** @description Canonical HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development; invoke through POST /functions/{functionId}/invoke instead. */
+            invoke_url?: string;
             /** @description Suggested SDK cache TTL for this name-to-ID mapping */
             cache_ttl_seconds: number;
         };
@@ -7165,8 +8352,8 @@ export interface components {
              *     prefix); matching is exact, so subdomains need their own entry. At
              *     most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only remove the restriction and gets 403 for any
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only remove the restriction and gets 403 for any
              *     other change, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -7230,6 +8417,12 @@ export interface components {
             /** @description Optional CSS injected at render time. Max 256 KiB. */
             css?: string;
         };
+        UpdateAuthPageLayoutRequest: {
+            layout: components["schemas"]["AuthPageLayout"];
+        };
+        UpdateAuthPageThemeRequest: {
+            theme: components["schemas"]["AuthPageTheme"];
+        };
         /** @description Update database compute size tier */
         UpdateDatabaseTypeRequest: {
             /**
@@ -7250,7 +8443,13 @@ export interface components {
              *     - `false` (default): private function
              *     - `true`: public function (anon keys with `functions.invoke` can invoke)
              */
-            is_public: boolean;
+            is_public?: boolean;
+            invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+            http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+            /** @description OpenAPI 3.0 or 3.1 metadata for HTTP mode. Send null to clear it. */
+            openapi_spec?: {
+                [key: string]: unknown;
+            } | null;
         };
         UpdateFunctionSchedulerRequest: {
             name?: string;
@@ -7309,6 +8508,8 @@ export interface components {
             allowed_mime_types?: string[];
         };
         UpdateVariableRequest: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             value: string;
         };
         /** @description Information about an uploaded part */
@@ -7382,6 +8583,8 @@ export interface components {
             value: number;
         };
         Variable: {
+            /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
+            shared?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -7412,6 +8615,49 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ProjectGitConnectionSummary: {
+            /** Format: int64 */
+            repo_installation_id: number;
+            /** Format: int64 */
+            repo_id: number;
+            repo_full_name: string;
+            root_directory: string;
+            production_branch: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProjectHealthSummary: {
+            status: components["schemas"]["ProjectHealthStatus"];
+        };
+        /**
+         * @description Which kind of function this is. `standard` runs once per invocation.
+         *     `durable` checkpoints its progress and resumes from the last completed
+         *     step, and is invoked asynchronously through its own executions
+         *     collection. A function's kind is fixed when it is created and cannot be
+         *     changed afterwards. Omitting this field means `standard`.
+         * @default standard
+         * @enum {string}
+         */
+        FunctionKind: "standard" | "durable";
+        AuthPageThemeColors: {
+            background: string;
+            surface: string;
+            text: string;
+            accent: string;
+            accent_text: string;
+        };
+        ProjectConfigAuthPageLayouts: {
+            login?: components["schemas"]["AuthPageLayout"];
+            signup?: components["schemas"]["AuthPageLayout"];
+            forgot_password?: components["schemas"]["AuthPageLayout"];
+            device?: components["schemas"]["AuthPageLayout"];
+            verify_email?: components["schemas"]["AuthPageLayout"];
+            reset_password?: components["schemas"]["AuthPageLayout"];
+        };
+        ProjectConfigAuthPageAppearance: {
+            theme?: components["schemas"]["AuthPageTheme"];
+            layouts?: components["schemas"]["ProjectConfigAuthPageLayouts"];
         };
         ManagedProjectConfigFrontendCustomDomainTLSConfig: {
             /**
@@ -7644,6 +8890,18 @@ export interface components {
             /** @description Preview harness that supplies request params and stubs the hosted-auth API. Never served on a real page. */
             mock_prelude: string;
         };
+        AuthPageAppearanceDefaults: {
+            theme: components["schemas"]["AuthPageTheme"];
+            layout: components["schemas"]["AuthPageLayout"];
+        };
+        AuthPageAppearanceOptions: {
+            pages: components["schemas"]["HostedAuthPageType"][];
+            fonts: components["schemas"]["AuthPageFont"][];
+            scales: components["schemas"]["AuthPageScale"][];
+            densities: components["schemas"]["AuthPageDensity"][];
+            radii: components["schemas"]["AuthPageRadius"][];
+            layouts: components["schemas"]["AuthPageLayout"][];
+        };
     };
     responses: {
         /**
@@ -7675,8 +8933,30 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The branch exists but cannot serve queries: it is still provisioning,
+         *     being reset, expired, or its parent is being restored. Distinct from
+         *     `404` so a caller waiting on a branch can tell it apart from a typo.
+         */
+        DatabaseBranchQueryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
+        /**
+         * @description Backup name, unique within the database, exactly as returned by the list
+         *     endpoint.
+         *
+         *     Deliberately looser than the names you can create: a backup made by a
+         *     schedule is named for you, so reading or deleting one accepts any name a
+         *     backup can have.
+         */
+        BackupName: string;
         /** @description Branch name (unique within the parent database, lowercase letters, numbers, and underscores only) */
         BranchName: string;
         /** @description Storage bucket name */
@@ -7704,6 +8984,10 @@ export interface components {
         FrontendId: string;
         /** @description Function ID */
         FunctionId: string;
+        /** @description Durable function ID, or its name within the project */
+        DurableFunctionId: string;
+        /** @description Durable execution ID */
+        DurableExecutionId: string;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -7760,6 +9044,8 @@ export interface components {
          *     endpoint description for supported pagination modes.
          */
         Search: string;
+        /** @description Database restore ID */
+        RestoreId: string;
         /** @description Function scheduler ID */
         SchedulerId: string;
         /** @description Variable name */
@@ -8798,6 +10084,8 @@ export interface operations {
                  *     endpoint description for supported pagination modes.
                  */
                 search?: components["parameters"]["Search"];
+                /** @description Optional comma-separated project metadata expansions. */
+                include?: ("git_connection" | "health")[];
             };
             header?: never;
             path?: never;
@@ -8954,7 +10242,11 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description Bad request */
+            /**
+             * @description Bad request (no region selected, an unknown region, or — for a
+             *     project holding durable functions — a region that does not offer
+             *     durable execution)
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8963,7 +10255,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden (for example, selecting subset regions on non-PRO plan) */
+            /** @description Forbidden (for example, selecting subset regions on non-SUPERAGENT plan) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9346,6 +10638,94 @@ export interface operations {
             };
         };
     };
+    replaceSharedVariables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    shared_variables: string[];
+                    /** @description When present, replace only if the current complete shared list matches this list. */
+                    expected_shared_variables?: string[];
+                    /** @description SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_shared_variables for a compact conditional replacement. */
+                    expected_shared_variables_digest?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Shared list replaced and affected function synchronization started. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid names or final function environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared list changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,194,304 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Persistence or synchronization failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getProjectConfig: {
         parameters: {
             query?: {
@@ -9386,6 +10766,15 @@ export interface operations {
             };
             /** @description Project not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Canonical YAML export exceeds 4,194,304 bytes */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9472,6 +10861,284 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectConfigValidationErrorResponse"];
                 };
             };
+            /** @description Shared variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getProjectSourceExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's source-of-truth state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSourceExportState"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    exportProjectSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportProjectSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description The initial production-branch commit that was pushed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSourceExport"];
+                };
+            };
+            /** @description Malformed request body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found, or it has no repository connected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The source has already been exported, the repository has already
+             *     taken over as the source of truth, the confirmed production branch
+             *     is stale, a function or frontend deployment is still in progress,
+             *     or the project has no stored source to export
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The repository refused the branch, or its contents cannot be laid
+             *     out as a repository — a stored file that only ever carries
+             *     credentials, or a layout Git auto-deploy would not read back
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub rate limited the request */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub integration is not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelProjectSourceExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The incomplete source transition was canceled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No incomplete transition exists, or Git already took ownership */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source export is not available in this deployment mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     setProjectGitProductionBranch: {
@@ -9535,6 +11202,15 @@ export interface operations {
              *     exists.
              */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A Git source transition is pending */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9683,6 +11359,18 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /**
+             * @description A Git source transition is pending or complete, so the recorded
+             *     repository and root cannot be changed
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Failed to connect project git */
             500: {
                 headers: {
@@ -9742,6 +11430,18 @@ export interface operations {
             };
             /** @description Project not found, or has no repo connection */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A Git source transition is pending or complete, so the recorded
+             *     repository cannot be disconnected
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9873,6 +11573,18 @@ export interface operations {
             };
             /** @description Project not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A Git source transition is pending, or this change would remove
+             *     deploy coverage after Git has taken over
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10462,6 +12174,23 @@ export interface operations {
                      * @example handler
                      */
                     handler?: string;
+                    /**
+                     * @description Whether the function can be reached through public invocation
+                     *     ingress. Omit it to keep the function's current visibility; a
+                     *     new function starts private.
+                     */
+                    is_public?: boolean;
+                    invocation_mode?: components["schemas"]["FunctionInvocationMode"];
+                    http_auth_mode?: components["schemas"]["FunctionHTTPAuthMode"];
+                    /** @description JSON-encoded OpenAPI 3.0 or 3.1 metadata for an HTTP-mode function. */
+                    openapi_spec?: string;
+                    /**
+                     * @description Which project variables this function receives. `all` (the default) gives it only project variables marked `shared: true`; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+                    variables?: string;
                 };
             };
         };
@@ -10502,7 +12231,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function deletion is queued or running */
+            /**
+             * @description Function deletion is queued or running, or the name is already held
+             *     by a durable function — a function cannot change kind.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10744,6 +12476,144 @@ export interface operations {
             };
         };
     };
+    startDurableExecutionFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Idempotency key for this execution. Generated when omitted. A repeat
+                 *     under a name that already names a running execution returns that
+                 *     execution and is not charged again.
+                 *
+                 *     Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+                 *     else is rejected with `400`.
+                 */
+                "X-Volcano-Execution-Name"?: string;
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Execution accepted and started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Payload is not valid JSON, or the execution name is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Missing or invalid credential. Also returned for a platform user
+             *     token, which is not an application credential; project owners start
+             *     executions through the project-scoped collection.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the function is not public,
+             *     or the request's origin is refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function not found. Also returned for a standard function's
+             *     id and for a durable function in another project, so the response
+             *     cannot be used to tell those apart.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Function is not deployed yet, or has no deployed region. Also
+             *     returned when two starts under the same execution name raced and
+             *     both released it, which is retryable as it stands.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Payload is larger than 256 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The project has too many executions in flight for its plan, the
+             *     function invocation rate limit was exceeded, the project is over
+             *     its bandwidth cap, or the account is out of one of its
+             *     billing-cycle durable allowances: executions, operations, or
+             *     compute. Operations and compute are counted once an execution
+             *     finishes, so a refusal on either never interrupts an execution
+             *     already running — it declines the next start.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment, or the
+             *     usage limit service could not be reached to charge the start. The
+             *     first is returned by a deployment that has no durable execution
+             *     engine, such as a local one, and is not retryable there; the second
+             *     is transient.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resolveFunctionForInvocation: {
         parameters: {
             query: {
@@ -10795,7 +12665,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function not found (or private function with anon key) */
+            /**
+             * @description Function not found (or private function with anon key). A durable
+             *     function is never resolvable here: it is started through
+             *     `POST /durable-functions/{functionId}/executions`, not invoked.
+             */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -11023,7 +12897,11 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle. */
+                    /**
+                     * @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
+                     *
+                     *     Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
+                     */
                     functions: string;
                     /**
                      * Format: binary
@@ -11054,6 +12932,28 @@ export interface operations {
             };
             /** @description Bad request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function limit exceeded for the project */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A name in the batch is held by a function of the other kind — a
+             *     function cannot change kind — or the project's source is managed by
+             *     Git, where deploys come from a push to the production branch.
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11148,6 +13048,15 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionSchedulerListResponse"];
                 };
             };
+            /** @description Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createFunctionScheduler: {
@@ -11177,8 +13086,33 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionScheduler"];
                 };
             };
-            /** @description Invalid schedule or geofenced region */
+            /**
+             * @description Invalid schedule, geofenced region, a scheduler of this name
+             *     already exists on the function, or the function is not active.
+             */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Schedulers are not available on this plan, or the project already
+             *     holds as many as the plan allows. The cap counts standard and
+             *     durable function schedulers together.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11213,6 +13147,15 @@ export interface operations {
                     "application/json": components["schemas"]["FunctionScheduler"];
                 };
             };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     deleteFunctionScheduler: {
@@ -11237,6 +13180,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -11267,6 +13219,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, or a scheduler of this name
+             *     already exists on the function.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -11307,6 +13280,807 @@ export interface operations {
             };
             /** @description Function not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Case-insensitive substring match on the resource `name`. See the
+                 *     endpoint description for supported pagination modes.
+                 */
+                search?: components["parameters"]["Search"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableFunctions"];
+                };
+            };
+            /** @description Bad request - invalid pagination parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * @description DNS-safe function name (lowercase letters, numbers, hyphens; cannot start or end with hyphen)
+                     * @example order-pipeline
+                     */
+                    name: string;
+                    /**
+                     * Format: binary
+                     * @description ZIP or tar.gz archive containing function source code plus dependency manifests/lockfiles.
+                     */
+                    code: string;
+                    /**
+                     * @description Runtime environment. Required. Durable execution needs the
+                     *     durable authoring API, which ships for these runtimes only;
+                     *     any other runtime is rejected with 400 and the response
+                     *     names the ones that work. Note that a durable Python
+                     *     function needs a newer runtime than a standard one defaults
+                     *     to. `GET /functions/runtimes` reports `durable_capable` per
+                     *     runtime.
+                     * @example nodejs24.x
+                     * @enum {string}
+                     */
+                    runtime: "nodejs22.x" | "nodejs24.x" | "python3.13" | "python3.14";
+                    /**
+                     * @description The name of the function to invoke. Defaults to "handler" if not specified.
+                     * @default handler
+                     * @example handler
+                     */
+                    handler?: string;
+                    /**
+                     * @description Whether anon keys with `functions.invoke` may start an
+                     *     execution. Redeploying is the only way to change it, since
+                     *     the collection has no update endpoint; omit it to keep the
+                     *     current visibility, and a new function starts private.
+                     *
+                     *     The standard collection's synchronous invocation fields —
+                     *     `invocation_mode`, `http_auth_mode`, `openapi_spec` —
+                     *     configure a request path no durable route serves, and are
+                     *     rejected with 400 rather than ignored.
+                     */
+                    is_public?: boolean;
+                    /**
+                     * @description Which project variables this function receives. `all` (the default) gives it every project variable; `scoped` gives it only the variables it selects. Omitting this leaves an existing function's scope unchanged.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
+                    variables?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Existing durable function updated; its deployment was started or queued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /** @description Durable function created and deployment workflow started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /**
+             * @description Bad request (invalid archive, unsupported runtime, invalid name, or a
+             *     project region that does not offer durable execution — a durable
+             *     function deploys to every region of its project)
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function limit exceeded for the project */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name is held by a standard function, or a deletion is queued or running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error (function deployment failed) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable deploys are paused platform-wide. The same request succeeds
+             *     once they are re-enabled; executions already running are unaffected.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableFunction"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDurableFunction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deletion accepted and teardown started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description Durable function not found. Also returned for an id that names a
+             *     durable function in another project, so the response cannot be used
+             *     to tell the two apart.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctionDeployments: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedFunctionDeployments"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableFunctionSchedulers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable function schedulers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionSchedulerListResponse"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFunctionSchedulerRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduler created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, a scheduler of this name
+             *     already exists on the function, or the function is not active.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Schedulers are not available on this plan, or the project already
+             *     holds as many as the plan allows. The cap counts standard and
+             *     durable function schedulers together.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable function scheduler */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scheduler deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateDurableFunctionScheduler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Function scheduler ID */
+                schedulerId: components["parameters"]["SchedulerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFunctionSchedulerRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduler updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionScheduler"];
+                };
+            };
+            /**
+             * @description Invalid schedule, geofenced region, or a scheduler of this name
+             *     already exists on the function.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or scheduler not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableExecutions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /** @description Return only executions in this status. */
+                status?: components["schemas"]["DurableExecutionStatus"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableExecutions"];
+                };
+            };
+            /** @description Unsupported status filter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Idempotency key for this execution. Generated when omitted. A repeat
+                 *     under a name that already names a running execution returns that
+                 *     execution and is not charged again.
+                 *
+                 *     Letters, digits, `-`, `_` and `.`, up to 255 characters. Anything
+                 *     else is rejected with `400`.
+                 */
+                "X-Volcano-Execution-Name"?: string;
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Execution accepted and started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Payload is not valid JSON, or the execution name is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Function is not deployed yet, or has no deployed region. Also
+             *     returned when two starts under the same execution name raced and
+             *     both released it, which is retryable as it stands.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Payload exceeds the maximum execution input size */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Too many executions already in flight for this project, or the
+             *     account is out of one of its billing-cycle durable allowances:
+             *     executions, operations, or compute. An owner-started execution is
+             *     metered exactly like an application-started one.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment, or the
+             *     usage limit service could not be reached to charge the start. The
+             *     first is returned by a deployment that has no durable execution
+             *     engine, such as a local one, and is not retryable there; the second
+             *     is transient.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Returned by
+             *     a deployment that has no durable execution engine, such as a local
+             *     one; the request is not retryable there.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stopDurableExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Stop accepted. The body is the execution as it was read back, which
+             *     may still report `running`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Execution has not started yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Returned by
+             *     a deployment that has no durable execution engine, such as a local
+             *     one; the request is not retryable there.
+             */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11903,7 +14677,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - custom domains require PRO plan */
+            /** @description Forbidden - custom domains require SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11921,7 +14695,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - custom domain already in use or frontend already has a custom domain */
+            /** @description Conflict - custom domain already in use, still detaching, or frontend already has a custom domain */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12277,6 +15051,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listDatabases: {
@@ -12320,6 +15103,8 @@ export interface operations {
                  *     endpoint description for supported pagination modes.
                  */
                 search?: components["parameters"]["Search"];
+                /** @description Return only the databases in this status. */
+                status?: "provisioning" | "active" | "restoring" | "failed" | "deleting";
             };
             header?: never;
             path: {
@@ -12441,6 +15226,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is running on the database. Deleting it while a worker is
+             *     replacing its data would race that worker, so wait for the restore
+             *     to finish.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     delete a database that might be mid-restore. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listDatabaseBranches: {
@@ -12546,7 +15365,7 @@ export interface operations {
             /**
              * @description A branch of that name already exists on this database, or the
              *     database cannot be branched right now because it is still
-             *     provisioning, failed, or being deleted.
+             *     provisioning, being restored, failed, or being deleted.
              */
             409: {
                 headers: {
@@ -12763,7 +15582,12 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The branch is not active, or a reset is already in progress. */
+            /**
+             * @description The branch is not active, a reset is already in progress, the parent
+             *     database is being restored, or the parent was restored within the
+             *     last 24 hours — a reset re-forks from the parent, and the provider
+             *     holds a child's reset shut for that long afterwards.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -12837,6 +15661,638 @@ export interface operations {
             };
         };
     };
+    listDatabaseBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupList"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so there is nothing to
+             *     list. A database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDatabaseBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description Backup created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            /** @description Invalid backup name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has reached its backup allowance, or the owner's plan
+             *     does not include backups, which are SUPERAGENT-only.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A backup of that name already exists, the database is not active, a
+             *     restore is running on it, or a backup was taken too recently.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /**
+                 * @description Backup name, unique within the database, exactly as returned by the list
+                 *     endpoint.
+                 *
+                 *     Deliberately looser than the names you can create: a backup made by a
+                 *     schedule is named for you, so reading or deleting one accepts any name a
+                 *     backup can have.
+                 */
+                backupName: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so it holds no backups. A
+             *     database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDatabaseBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /**
+                 * @description Backup name, unique within the database, exactly as returned by the list
+                 *     endpoint.
+                 *
+                 *     Deliberately looser than the names you can create: a backup made by a
+                 *     schedule is named for you, so reading or deleting one accepts any name a
+                 *     backup can have.
+                 */
+                backupName: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example deleted */
+                        status: string;
+                        /** @example backup deleted */
+                        message: string;
+                    };
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database is being restored. A restore is pinned to a backup it
+             *     may not have restored yet, so deleting one is refused until the
+             *     restore finishes.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupSchedule"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database has no storage project yet, so it has no schedule. A
+             *     database reports this while it is still provisioning.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateDatabaseBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseBackupSchedule"];
+            };
+        };
+        responses: {
+            /** @description Schedule replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackupSchedule"];
+                };
+            };
+            /**
+             * @description The schedule names a recurrence that cannot fire: a weekly or
+             *     monthly one with no `day`, or a `day` outside its frequency's range
+             *     (1-7 for weekly, 1-28 for monthly). The response says which.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The database is not active, or a restore is running on it — a restore
+             *     moves the data to a new branch, and the provider keeps the schedule
+             *     per branch.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDatabaseRestores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestoreList"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDatabaseRestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Restore accepted and in progress */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestore"];
+                };
+            };
+            /**
+             * @description Neither or both restore targets were named, or the requested time is
+             *     outside the available window.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The owner's plan does not include backups or point-in-time restore.
+             *     Both are SUPERAGENT-only.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or backup not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is already in progress, the database is not active,
+             *     another database operation is still running, or the database is
+             *     holding as many pre-restore branches as it may.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /** @description Database restore ID */
+                restoreId: components["parameters"]["RestoreId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRestore"];
+                };
+            };
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project, database, or restore not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Backups are temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resetDatabasePassword: {
         parameters: {
             query?: never;
@@ -12869,6 +16325,48 @@ export interface operations {
                         /** @description Updated pgproxy connection string using Volcano-managed credentials. */
                         connection_string?: string;
                     };
+                };
+            };
+            /** @description Database is not active */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A restore is running on the database. A restore replaces the
+             *     credentials as it finishes, so wait for it and rotate afterwards.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     rotate a credential a restore might be about to replace. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -12913,6 +16411,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /**
+             * @description The database is not active — being provisioned, deleted, or
+             *     restored. Compute can only be changed while it is active.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Volcano could not check whether a restore is running, and will not
+             *     reconfigure compute a restore might be moving. Retry.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -13407,6 +16929,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchSelect: {
@@ -13488,6 +17011,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchInsert: {
@@ -13569,6 +17093,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchUpdate: {
@@ -13648,6 +17173,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     queryDatabaseBranchDelete: {
@@ -13725,6 +17251,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["DatabaseQueryCapExceeded"];
+            503: components["responses"]["DatabaseBranchQueryUnavailable"];
         };
     };
     listDatabaseRegions: {
@@ -13749,8 +17276,8 @@ export interface operations {
                          */
                         id?: string;
                         /**
-                         * @description Human-readable region name
-                         * @example AWS US East 1 (N. Virginia)
+                         * @description Human-readable region location
+                         * @example US East (N. Virginia)
                          */
                         name?: string;
                     }[];
@@ -13896,6 +17423,15 @@ export interface operations {
             };
             /** @description Variable not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Private variable membership writes are disabled during rollout */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15601,7 +19137,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15678,7 +19214,7 @@ export interface operations {
                     "application/json": components["schemas"]["EmailTemplate"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15716,7 +19252,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15836,7 +19372,7 @@ export interface operations {
             /**
              * @description The update would turn on, widen, or otherwise edit the email domain
              *     allowlist (`allowed_email_domains`, `allowed_email_domains_mode`)
-             *     for a project that is not on the PRO plan. A FREE project keeps
+             *     for a project that is not on the SUPERAGENT plan. A HOBBY project keeps
              *     whatever allowlist it already has — parked, enforcing nothing until
              *     it upgrades — and may still remove it, so a downgrade never leaves a
              *     project locked out of its own signups.
@@ -15990,6 +19526,452 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getAuthPageAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved appearance and effective plan state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthPageAppearanceResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Appearance could not be read */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAuthPageTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthPageThemeRequest"];
+            };
+        };
+        responses: {
+            /** @description Theme saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateAuthPageThemeRequest"];
+                };
+            };
+            /** @description Invalid or unreadable theme */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Theme could not be saved */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAuthPageTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Theme cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Theme could not be cleared */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAuthPageLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuthPageLayoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Layout saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateAuthPageLayoutRequest"];
+                };
+            };
+            /** @description Invalid page type or layout */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Layout could not be saved */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAuthPageLayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Layout cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid page type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Plan does not permit customisation */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Layout could not be cleared */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renderAuthPagePreview: {
+        parameters: {
+            query: {
+                /** @description Short-lived signed preview ticket returned by the POST operation. */
+                ticket: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rendered preview document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Ticket is invalid or expired, its path does not match, or managed authentication is disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Preview could not be rendered */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    previewAuthPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                pageType: components["schemas"]["HostedAuthPageType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewAuthPageRequest"];
+            };
+        };
+        responses: {
+            /** @description Short-lived URL for the rendered preview document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewAuthPageResponse"];
+                };
+            };
+            /** @description Invalid page type or draft */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found or managed authentication is disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Preview could not be rendered */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -17107,14 +21089,15 @@ export interface operations {
                         provider: "google" | "github" | "microsoft" | "apple";
                         endpoint: string;
                         status_code: number;
-                        /** @description Raw JSON value returned by the OAuth provider's API */
+                        /** @description Raw provider JSON value, or null when the provider returns no body */
                         data: unknown;
                     };
                 };
             };
             /**
              * @description Invalid request (for example: missing `endpoint`, an `endpoint` that is
-             *     not a relative path, or an unsupported HTTP method).
+             *     not a relative path, or an unsupported HTTP method), or a provider
+             *     redirect to another origin.
              */
             400: {
                 headers: {
@@ -17124,7 +21107,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Not authenticated or provider not linked */
+            /** @description Not authenticated */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -17133,7 +21116,25 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Provider API error */
+            /** @description OAuth provider configuration not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the provider API request */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider transport failure, invalid JSON, or response body larger than 8 MiB */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -18672,7 +22673,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Object or session not found */
+            /** @description Object or session not found, or session not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -18728,7 +22729,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Session not found */
+            /** @description Session not found or not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -18805,9 +22806,16 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Resumable upload session not found or not owned by this credential */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /**
              * @description File size exceeds plan-based limits. This occurs when:
-             *     - File exceeds the plan-based maximum file size (FREE or PRO tier)
+             *     - File exceeds the plan-based maximum file size (HOBBY or SUPERAGENT tier)
              *     - Upload would exceed the project's total storage quota
              */
             413: {
@@ -18850,7 +22858,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Object or session not found */
+            /** @description Object or session not found, or session not owned by this credential */
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -37,6 +37,16 @@ console.log('Result:', data);
 
 `version` maps to the `X-Volcano-Version` response header (`<version>` in production, `<env>-<version>` in non-production).
 
+Function resolution and invocation recover from a platform HTTP 401 before dispatch:
+the SDK refreshes the captured session and retries the rejected request once.
+Concurrent calls share successful recovery. Replacing or signing out that session
+prevents replay under another identity. The call preserves its original payload values.
+A function's own response, HTTP 403, or a network failure never triggers this retry.
+Anonymous and service keys do not refresh.
+
+Starting sign-out prevents a pending invocation from dispatching. An invocation
+already sent to the function cannot be cancelled by changing the local session.
+
 ### With Typed Response
 
 ```typescript
@@ -66,6 +76,28 @@ if (data) {
 ```javascript
 const { data, status, headers, version, error } = await volcano.functions.invoke('health-check');
 ```
+
+### Where the request goes
+
+Functions answer on their own domain, not on your API URL. `invoke` looks the
+name up once, then sends the invocation to the endpoint the platform returned:
+
+```text
+https://<function-id>.functions.volcano.run/
+```
+
+If you restrict outbound requests, allow that domain alongside your API host.
+In a browser, it needs a `connect-src` entry in your Content Security Policy;
+on a server, it needs an egress rule. A request blocked here comes back as a
+`VolcanoSystemError` with `status: null`, which is how you tell it apart from a
+function that ran and returned an error of its own.
+
+The lookup is cached for as long as the platform says it is valid, so repeated
+calls to the same function do not repeat it. Nothing to configure: the SDK never
+builds the host from `apiUrl`, because the two differ per deployment.
+
+Deployments without a public function domain — local development, for one —
+invoke through the API host instead. Same call, same result.
 
 ## Authentication
 
@@ -240,6 +272,16 @@ exports.handler = async (event) => {
 };
 ```
 
+### Work That Runs for Hours
+
+A function invocation is bounded by its timeout, so work that has to survive
+longer — a multi-step pipeline, an approval that arrives tomorrow, a batch job
+over a flaky API — belongs in a
+[durable function](./durable-functions.md), which checkpoints its progress and
+resumes where it left off. Those are started with `volcano.durable.start`
+instead of `functions.invoke`, and answer with an execution to follow rather
+than a result.
+
 ## Use Cases
 
 ### When to Use Functions
@@ -269,6 +311,13 @@ The browser-based query builder is better for:
 ## Error Handling
 
 ### Client-Side
+
+Resolution and pre-dispatch HTTP errors retain `error.status`, plus `error.code`
+and `error.retryAfter` when the server supplies them. `retryAfter` is a delay in
+seconds. These fields remain available after narrowing an invocation error with
+`VolcanoSystemError.is(error)`. Transport failures have a null status and no HTTP
+metadata. A function's own HTTP response remains in `data` and `status`, with
+`error` set to null.
 
 ```javascript
 const { data, error } = await volcano.functions.invoke('process-payment', {

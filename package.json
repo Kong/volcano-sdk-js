@@ -1,6 +1,6 @@
 {
   "name": "@volcano.dev/sdk",
-  "version": "1.6.0",
+  "version": "1.15.1",
   "packageManager": "pnpm@10.34.1",
   "description": "Official JavaScript SDK for Volcano - Authentication, Database, Functions, Realtime, and more",
   "type": "commonjs",
@@ -28,6 +28,16 @@
         "default": "./dist/realtime.js"
       }
     },
+    "./durable": {
+      "import": {
+        "types": "./dist/durable.esm.d.mts",
+        "default": "./dist/durable.esm.mjs"
+      },
+      "require": {
+        "types": "./dist/durable.d.ts",
+        "default": "./dist/durable.js"
+      }
+    },
     "./next/middleware": {
       "import": {
         "types": "./dist/next/middleware.esm.d.mts",
@@ -51,22 +61,32 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "rollup -c rollup.config.mjs && node scripts/copy-types.mjs",
-    "generate:openapi": "node scripts/generate-openapi.mjs",
-    "check:openapi": "pnpm generate:openapi && node scripts/check-openapi.mjs",
+    "build": "pnpm build:tooling && rollup -c rollup.config.mjs && node .quality-tools/copy-types.mjs",
+    "generate:openapi": "pnpm build:tooling && node .quality-tools/clean-openapi.mjs && orval --config orval.config.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write && tsc -p tsconfig.generated.json",
+    "check:openapi": "pnpm generate:openapi && node .quality-tools/check-openapi.mjs",
     "dev": "rollup -c -w",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "lint": "eslint . --max-warnings=0 && pnpm format:check",
-    "lint:fix": "eslint . --fix && pnpm format",
-    "test": "jest",
-    "test:types": "tsc --noEmit --strictNullChecks --skipLibCheck false --moduleResolution bundler --module esnext --target es2022 src/index.d.ts test/types/auth-contract.ts test/types/openapi-contract.ts",
-    "test:package": "publint --pack npm --strict",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPatterns=integration --passWithNoTests --testTimeout=120000 --forceExit",
-    "test:contract": "jest --config jest.contract.config.cjs --runInBand",
-    "prepublishOnly": "npm run build"
+    "format": "prettier . --config prettier.config.cjs --write",
+    "format:check": "prettier . --config prettier.config.cjs --check",
+    "check:unused": "knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries",
+    "lint": "pnpm build && eslint . --max-warnings=0 && pnpm format:check",
+    "lint:fix": "pnpm build && eslint . --fix && pnpm format",
+    "test": "pnpm build && jest",
+    "test:types": "pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json",
+    "test:package": "pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz",
+    "test:watch": "pnpm build && jest --watch",
+    "test:coverage": "pnpm build && jest --coverage",
+    "prepublishOnly": "npm run build",
+    "test:quickstart": "pnpm test:package && pnpm test:types:package && node .quality-tools/test-package-quickstart.mjs reports/volcano-sdk.tgz",
+    "test:types:package": "pnpm build && tsc --noEmit -p tsconfig.consumer.json",
+    "test:examples": "pnpm build && NEXT_PUBLIC_VOLCANO_API_URL=http://127.0.0.1:8787 NEXT_PUBLIC_VOLCANO_ANON_KEY=example-test-key NEXT_PUBLIC_VOLCANO_DATABASE_NAME=app pnpm --dir examples/nextjs-notes-app build",
+    "audit": "pnpm build:tooling && node .quality-tools/audit-dependencies.mjs",
+    "quality": "pnpm quality:policy && pnpm quality:checks && pnpm mutation:full",
+    "quality:checks": "pnpm run audit && pnpm lint && pnpm check:unused && pnpm check:openapi && pnpm test:types && pnpm test:tooling && node .quality-tools/prepare-test-reports.mjs && pnpm test --ci --json --outputFile=reports/unit.json && pnpm test:typed-runtime && pnpm test:quickstart && pnpm test:examples",
+    "test:tooling": "pnpm build && node --test --test-reporter=tap --test-reporter=./.quality-tools/node-completeness.mjs --test-reporter-destination=stdout --test-reporter-destination=stdout --test-concurrency=1 .quality-tools/*.test.mjs",
+    "test:typed-runtime": "pnpm build && jest --config jest.typed.config.cjs",
+    "mutation:full": "pnpm build && node .quality-tools/run-mutation.mjs",
+    "quality:policy": "pnpm build:tooling && node --test --test-reporter=tap --test-reporter=./.quality-tools/node-completeness.mjs --test-reporter-destination=stdout --test-reporter-destination=stdout .quality-tools/quality-policy.test.mjs",
+    "build:tooling": "tsc -p tsconfig.tooling.json"
   },
   "keywords": [
     "volcano",
@@ -88,8 +108,16 @@
     "presence"
   ],
   "dependencies": {
-    "centrifuge": "^5.0.0",
-    "ws": "^8.0.0"
+    "centrifuge": "^5.7.4",
+    "ws": "^8.21.3"
+  },
+  "peerDependencies": {
+    "@aws/durable-execution-sdk-js": ">=2 <3"
+  },
+  "peerDependenciesMeta": {
+    "@aws/durable-execution-sdk-js": {
+      "optional": true
+    }
   },
   "author": "Kong <office@konghq.com>",
   "license": "Apache-2.0",
@@ -105,15 +133,28 @@
     "access": "public"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@babel/core": "^7.29.0",
     "@babel/preset-env": "^7.29.0",
+    "@babel/preset-typescript": "7.29.7",
     "@eslint/js": "^10.0.1",
+    "@jest/globals": "30.3.0",
+    "@jest/reporters": "30.3.0",
+    "@jest/types": "30.3.0",
+    "@next/eslint-plugin-next": "15.5.24",
     "@rollup/plugin-typescript": "^12.3.0",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/jest-runner": "9.6.1",
+    "@types/babel__core": "7.20.5",
+    "@types/jest": "30.0.0",
+    "@types/node": "20.19.43",
+    "@types/ws": "8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
     "babel-jest": "^30.3.0",
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "3.10.1",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-jest": "^29.15.2",
     "eslint-plugin-n": "^18.0.1",
@@ -124,16 +165,18 @@
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "eslint-plugin-sonarjs": "^4.0.3",
     "eslint-plugin-unicorn": "^64.0.0",
+    "fast-check": "4.10.2",
     "globals": "^17.6.0",
     "jest": "^30.3.0",
-    "jest-cucumber": "4.5.0",
     "jest-environment-jsdom": "^30.3.0",
-    "jest-junit": "17.0.0",
+    "jest-environment-node": "30.3.0",
+    "knip": "5.80.0",
     "openapi-typescript": "7.13.0",
     "orval": "8.26.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",
+    "tslib": "2.8.1",
     "typescript": "^6.0.2"
   }
 }

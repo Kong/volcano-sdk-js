@@ -90,9 +90,14 @@ console.log('Signed in as', user.email);
 
 After successful sign-in, the SDK automatically:
 
-1. Stores the access token and refresh token in localStorage (browser) or memory (server)
-2. Sets up automatic token refresh before expiration
+1. Stores the access token and any returned refresh token in localStorage (browser) or memory (server)
+2. Refreshes the access token when a refresh token is available
 3. Makes the user available via `volcano.auth.user()`
+
+Profile operations (`getUser`, `updateUser`, `convertAnonymous`, and `confirmEmailChange`) refresh a rejected access token once when the session has a usable refresh token, then replay the original request values.
+They do not retry other HTTP failures or ambiguous network failures, and they do not retry under a replacement session.
+Authenticated mutations capture the session before reading or serializing your options and metadata.
+If a getter or `toJSON()` replaces the session, the operation returns `AuthSessionChangedError` before sending the request.
 
 ### Sign Out
 
@@ -106,16 +111,18 @@ if (!error) {
 }
 ```
 
-This invalidates the refresh token on the server and clears local storage.
+Sign-out revokes the captured session and clears local storage. For credentials received together
+from a successful sign-in or validated refresh, it uses the refresh token directly, even if the
+access token has expired. For supplied credentials, it revokes the access-token session.
+On HTTP 401, that path can refresh once and revoke the same session without adopting the renewed credentials locally.
 Calling `signOut()` without a current session succeeds without a request. If token revocation fails,
 the SDK still clears the captured local session and returns the error so the application can report
-it. The cleared session no longer contains the refresh token needed to retry revocation. A session
-established while sign-out is pending remains current.
+it. The cleared session no longer contains credentials needed to retry revocation.
 
-If a concurrent refresh rotates the refresh token before sign-out completes, the rotated session
-remains current and `signOut()` returns `AuthSessionChangedError`. Read the current session before
-deciding whether to retry. If the refresh reuses the token that sign-out revoked, the SDK clears the
-session normally.
+Sign-out waits for an already-running refresh and uses its validated credentials for revocation.
+Later refresh attempts for that session return `AuthRefreshDiscardedError`; they do not send a request.
+Concurrent sign-out calls share the same revocation result. A separate sign-in or explicit
+session adoption remains current and sign-out returns `AuthSessionChangedError`.
 
 ## Session Management
 
@@ -136,6 +143,40 @@ if (!error && session) {
 
 `getSession()` reads local SDK state. It does not refresh or validate the access token; use
 `getUser()` when server validation is required.
+
+### Start with a Supplied Access Token
+
+Create a separate client for each server request that carries a user's access token:
+
+```javascript
+import { VolcanoClient } from '@volcano.dev/sdk';
+
+export async function loadRequestUser(accessToken) {
+  if (typeof accessToken !== 'string' || !accessToken.trim()) {
+    throw new Error('An access token from the current request is required');
+  }
+  const client = new VolcanoClient({
+    anonKey: process.env.VOLCANO_ANON_KEY,
+    accessToken,
+  });
+  const { user, error } = await client.auth.getUser();
+  if (error) throw error;
+  return user;
+}
+```
+
+Call this helper from your request handler with the bearer token from that request.
+For a Volcano function, use the access token in `event.__volcano_auth.access_token` supplied for that invocation.
+The helper validates the token with Volcano before returning the user.
+
+Refresh must preserve the server session identified by the access JWT, even before a profile is loaded. A different session is rejected, including another session for the same user. Supplied credentials need a readable session identifier to refresh, even when you provide a user profile or load it from the server. Profile data does not prove that access and refresh tokens belong together.
+Once a user identity has been validated, a refresh response for another user is also rejected.
+Construction makes no request and does not persist the supplied credentials.
+`getSession()` initially returns the access token with `refresh_token: null` and `user: null`.
+A successful `getUser()` caches the server-validated profile without changing the token.
+Without a refresh token, an HTTP 401 remains an authentication error, `refreshSession()` returns an error, and `signOut()` revokes the server session identified by the access token before clearing local state.
+Pass `refreshToken` alongside `accessToken` when the client should refresh that session.
+`setSession()` still requires a complete session.
 
 ### Adopt an Existing Session
 
@@ -256,6 +297,13 @@ If Volcano rejects the refresh token with `401` or `403`, the SDK clears that se
 error or server failure leaves the current session unchanged so the application can retry. A late
 refresh response never replaces a newer session.
 
+Authenticated profile, session-list/deletion, email-change request/cancellation,
+linked-provider, provider-token, and provider-API operations refresh a usable
+session once after HTTP 401 and replay the original request values. They preserve
+an explicitly replaced session and do not retry other HTTP failures or ambiguous
+network failures. Deleting the current server session also clears its refreshed
+local credentials; a separately adopted session remains current.
+
 ## Hosted Auth Pages (Managed Login)
 
 Instead of building your own login UI, you can redirect users to Volcano's hosted (managed) login and sign-up pages. **Always start the flow with `signInWithHostedAuth()`** (or `getHostedAuthUrl()`): it stores a one-time nonce and passes it as `state`, which the SDK validates when the session comes back. This binds the returned session to the flow you started and prevents an attacker from tricking a user into adopting an attacker-controlled session (login CSRF / session fixation).
@@ -349,6 +397,8 @@ These methods redirect the user to the provider's login page. After successful a
 
 The SDK requests the platform's authorization-code callback mode. After the OAuth redirect, the user returns with a short-lived, single-use `code` and the flow's `state` nonce. The SDK validates the nonce, removes both values from the URL, and exchanges the code for a session before `initialize()`, `getUser()`, or another authenticated operation proceeds. In this mode, access and refresh tokens are never placed in the OAuth callback URL. Platform deployments retain the established session-fragment response for older clients that do not request authorization-code mode.
 
+When the exchange uses an eligible HttpOnly cookie session, its response can omit the refresh token. The SDK keeps the access token, clears any stale stored refresh token, and reports `refresh_token: null` from `getSession()`.
+
 By default the user returns to the page that called `signInWithOAuth()`; pass `{ redirectTo }` to override:
 
 ```javascript
@@ -373,6 +423,10 @@ const { data, error } = await volcano.auth.linkOAuthProvider('google');
 if (error) {
   console.error('Failed to link provider:', error.message);
   return;
+}
+
+if (!data?.authorization_url) {
+  throw new Error('The provider did not return an authorization URL');
 }
 
 // Redirect user to complete linking
@@ -445,7 +499,9 @@ const { data, error } = await volcano.auth.callOAuthAPI('github', {
   method: 'GET',
 });
 
-if (data) {
+if (error) {
+  console.error('Provider request failed:', error);
+} else if (Array.isArray(data)) {
   data.forEach((repo) => {
     console.log(repo.full_name);
   });
@@ -453,6 +509,14 @@ if (data) {
 ```
 
 Volcano automatically handles token refresh and passes the correct credentials to the provider.
+`data` is the provider's raw JSON value, or `null` when the provider returns no body.
+Provider bodies are limited to 8 MiB after decompression. Transport failures,
+invalid JSON, and oversized responses produce a Volcano 502 error.
+
+Check `error` for Volcano request failures. The current SDK does not expose the
+provider's HTTP status: a valid JSON response from a provider, including a 4xx or
+5xx response, is returned as `data` with `error: null`. Inspect the provider's
+documented response shape before treating the operation as successful.
 The response is discarded with `AuthSessionChangedError` if the active session changes while the
 request is in flight.
 
@@ -762,6 +826,8 @@ await volcano.auth.signUp({ email, password });
 ```
 
 ### Handle Token Expiration
+
+If an authenticated request receives HTTP 401 and cannot refresh successfully, its error retains `status: 401` and any server `code` and `retryAfter` metadata. The compatible message remains `Session expired`. A network failure has no HTTP status.
 
 Access tokens expire after a configured time (default: 1 hour). The SDK handles refresh automatically, but you should handle the case where refresh fails:
 

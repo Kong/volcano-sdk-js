@@ -1,4 +1,5 @@
 coverage
+reports
 dist
 node_modules
 openapi
@@ -9,3 +10,7 @@ examples/nextjs-notes-app/node_modules
 *.tgz
 yarn.lock
 examples/nextjs-notes-app/yarn.lock
+
+.stryker-tmp/
+
+.quality-tools/
