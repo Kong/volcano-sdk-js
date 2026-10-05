@@ -79,14 +79,10 @@ function fixture(): AuthAccountHost {
   };
 }
 
-test('a fresh signup with required confirmation does not retry sign-in and preserves absent message', async () => {
+test('signup with required confirmation never signs in and preserves absent message', async () => {
   const host = fixture();
   const signInSpy = jest.fn<AuthAccountHost['signIn']>(() =>
-    Promise.resolve({
-      user: null,
-      session: null,
-      error: Object.assign(new Error('invalid credentials'), { status: 401 }),
-    }),
+    Promise.resolve({ user, session: null, error: null }),
   );
   host.signIn = signInSpy;
   host._anonFetch = () =>
@@ -104,22 +100,7 @@ test('a fresh signup with required confirmation does not retry sign-in and prese
     message: null,
     error: null,
   });
-  expect(signInSpy).toHaveBeenCalledTimes(1);
-});
-
-test('automatic signup stops on a sign-in transport error without creating an account', async () => {
-  const host = fixture();
-  const error = new Error('network unavailable');
-  host.signIn = () => Promise.resolve({ user: null, session: null, error });
-  const signup = jest.spyOn(host, '_anonFetch');
-  expect(await signUp(host, { ...credentials, signInWhenAllowed: true })).toEqual({
-    user: null,
-    session: null,
-    confirmationRequired: false,
-    message: null,
-    error,
-  });
-  expect(signup).not.toHaveBeenCalled();
+  expect(signInSpy).not.toHaveBeenCalled();
 });
 
 test('sign-in uses anonymous credential scope even when a session exists', async () => {
@@ -219,17 +200,12 @@ test.each([
   expect(notify).not.toHaveBeenCalled();
 });
 
-test('a fresh signup sends metadata and retries sign-in when confirmation is unnecessary', async () => {
+test('signup sends account metadata and signs in only when confirmation is unnecessary', async () => {
   const host = fixture();
   const calls: { path: string; options: RequestInit }[] = [];
   const signInSpy = jest.fn<AuthAccountHost['signIn']>(() =>
     Promise.resolve({ user, session: null, error: null }),
   );
-  signInSpy.mockResolvedValueOnce({
-    user: null,
-    session: null,
-    error: Object.assign(new Error('invalid credentials'), { status: 401 }),
-  });
   host.signIn = signInSpy;
   host._anonFetch = (path, options) => {
     calls.push({ path, options });
@@ -260,15 +236,10 @@ test('a fresh signup sends metadata and retries sign-in when confirmation is unn
   ]);
 });
 
-test('signup failure reports no confirmation or session after invalid credentials', async () => {
+test('signup failure reports no confirmation or session and never signs in', async () => {
   const host = fixture();
   const failure = new Error('signup rejected');
   const signInSpy = jest.fn<AuthAccountHost['signIn']>();
-  signInSpy.mockResolvedValueOnce({
-    user: null,
-    session: null,
-    error: Object.assign(new Error('invalid credentials'), { status: 401 }),
-  });
   host.signIn = signInSpy;
   host._anonFetch = () => Promise.resolve({ ok: false, status: 400, data: null, error: failure });
 
@@ -279,7 +250,7 @@ test('signup failure reports no confirmation or session after invalid credential
     message: null,
     error: failure,
   });
-  expect(signInSpy).toHaveBeenCalledTimes(1);
+  expect(signInSpy).not.toHaveBeenCalled();
 });
 
 test('signup refuses a malformed acknowledgement instead of coercing confirmation', async () => {
