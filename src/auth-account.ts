@@ -1,5 +1,10 @@
 import type { ContextRequest, RequestResult } from './auth-request.ts';
-import { optionalStringField, optionalTokenField, requiredField } from './auth-response.ts';
+import {
+  optionalField,
+  optionalStringField,
+  optionalTokenField,
+  requiredField,
+} from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import {
   assertAuthTokenResponse,
@@ -71,6 +76,7 @@ export async function signUp(
   message: string | null;
   error: Error | null;
 }> {
+  const expectedGeneration = host._sessionGeneration;
   const { email, password, metadata = {} } = options;
   const result = await host._anonFetch('/auth/signup', {
     method: 'POST',
@@ -85,20 +91,32 @@ export async function signUp(
       error: result.error,
     };
   }
-  return finishSignUp(host, options, result.data);
+  return finishSignUp(host, options, result.data, expectedGeneration);
 }
 
 async function finishSignUp(
   host: AuthAccountHost,
   options: { email: string; password: string; signInWhenAllowed?: boolean },
   data: unknown,
+  expectedGeneration: number,
 ): ReturnType<typeof signUp> {
-  // The signup response is deliberately session-less to avoid account enumeration.
+  // Only the server can authenticate existing signup credentials and issue a session.
   const confirmationRequired = requiredField(data, 'confirmation_required');
   if (typeof confirmationRequired !== 'boolean') {
     throw new TypeError('Auth response confirmation_required must be a boolean');
   }
   const message = optionalStringField(data, 'message');
+  const issuedSession = optionalField(data, 'session');
+  if (issuedSession !== undefined) {
+    return adoptSignupSession(
+      host,
+      issuedSession,
+      confirmationRequired,
+      message,
+      expectedGeneration,
+    );
+  }
+
   if (options.signInWhenAllowed === true && !confirmationRequired) {
     const signedIn = await host.signIn({ email: options.email, password: options.password });
     return {
@@ -110,6 +128,39 @@ async function finishSignUp(
     };
   }
   return { user: null, session: null, confirmationRequired, message, error: null };
+}
+
+function adoptSignupSession(
+  host: AuthAccountHost,
+  data: unknown,
+  confirmationRequired: boolean,
+  message: string | null,
+  expectedGeneration: number,
+): Awaited<ReturnType<typeof signUp>> {
+  assertAuthTokenResponse(data);
+  if (confirmationRequired) {
+    throw new TypeError('Signup session cannot require email confirmation');
+  }
+  if (!host._setSession(data, expectedGeneration)) {
+    return {
+      user: null,
+      session: null,
+      confirmationRequired: false,
+      message,
+      error: new AuthSessionChangedError(),
+    };
+  }
+  return {
+    user: data.user,
+    session: {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+    },
+    confirmationRequired: false,
+    message,
+    error: null,
+  };
 }
 
 export async function signIn(

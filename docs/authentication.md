@@ -23,7 +23,7 @@ All authentication methods work with the same session system and integrate seaml
 Create a new user account with email and password:
 
 ```javascript
-const { confirmationRequired, message, error } = await volcano.auth.signUp({
+const { session, confirmationRequired, message, error } = await volcano.auth.signUp({
   email: 'alice@example.com',
   password: 'secure-password-123',
   metadata: {
@@ -44,9 +44,11 @@ if (error) {
   return;
 }
 
-// Sign up is session-less: it returns no user and no session, and the response is
-// deliberately identical whether or not the email was already registered. The
-// account is created; obtain a session with a separate `signIn`.
+// The server can return an existing-account session after checking credentials.
+if (session) {
+  return;
+}
+// A new account still requires confirmation or a separate sign-in.
 if (confirmationRequired) {
   console.log(message ?? 'Check your email to confirm your account, then sign in.');
 } else {
@@ -56,7 +58,9 @@ if (confirmationRequired) {
 
 The `metadata` field is optional and lets you store additional user information like display names, profile pictures, or preferences. This data is stored securely and accessible via `user.user_metadata` once the user is signed in.
 
-If your project does not require email confirmation and you want the user signed in immediately, pass `signInWhenAllowed: true`. When confirmation is not required, the SDK then performs the follow-up `signIn` for you and the response carries a live `user`/`session`:
+The server checks signup credentials against an existing account, including aliases. If the password matches and sign-in checks pass, the server returns that account’s session. The SDK stores it without another sign-in request. No account, password, or metadata is changed. Wrong passwords and OAuth-only accounts receive no session.
+
+For a fresh account, signup remains session-less. If your project does not require email confirmation and you want the user signed in immediately, pass `signInWhenAllowed: true`. When confirmation is not required, the SDK then performs the follow-up `signIn` for you and the response carries a live `user`/`session`:
 
 ```javascript
 const { user, session, error } = await volcano.auth.signUp({

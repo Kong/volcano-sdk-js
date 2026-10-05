@@ -101,6 +101,39 @@ describe('VolcanoAuth credentials', () => {
       expect(result.message).toBe(mockResponse.message);
     });
 
+    it.each([false, true])(
+      'adopts the server signup session with automatic sign-in=%s',
+      async (signInWhenAllowed) => {
+        fetchMock.mockResolvedValueOnce(
+          reply(201, {
+            confirmation_required: false,
+            message: 'Signed in to your existing account.',
+            session: {
+              user: { id: 'existing-user', email: 'owner@example.com', status: 'active' },
+              access_token: 'existing-access',
+              refresh_token: 'existing-refresh',
+              expires_in: 3600,
+            },
+          }),
+        );
+        const result = await volcano.auth.signUp({
+          email: 'owner+tag@example.com',
+          password: 'existing-password',
+          signInWhenAllowed,
+        });
+        expect(result.user?.id).toBe('existing-user');
+        expect(result.session?.access_token).toBe('existing-access');
+        expect(result.error).toBeNull();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [input] = fetchCall(0);
+        expect(input).toEqual(expect.stringContaining('/auth/signup'));
+        expect(Reflect.get(localStorage, 'setItem')).toHaveBeenCalledWith(
+          'volcano_access_token',
+          'existing-access',
+        );
+      },
+    );
+
     it('signs in after signup when confirmation is not required and signInWhenAllowed is set', async () => {
       fetchMock
         .mockResolvedValueOnce(reply(200, { confirmation_required: false, message: 'ok' }))

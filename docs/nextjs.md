@@ -114,9 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string) => {
     const volcano = getVolcano();
-    // Sign up is session-less; sign in immediately when the project allows it so
-    // the provider's `user` is populated. When confirmation is required this is a
-    // no-op and the user must confirm their email before signing in.
+    // The server can return an existing-account session. For a new account,
+    // sign in after signup when confirmation is not required.
     const { error } = await volcano.auth.signUp({ email, password, signInWhenAllowed: true });
     if (error) throw error;
   }, []);

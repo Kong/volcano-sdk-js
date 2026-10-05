@@ -20,7 +20,7 @@ import {
 } from '../src/auth-account.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
-import { VolcanoAuth } from '../src/index.ts';
+import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
 
 const user = { id: 'user-1', email: 'user@example.com', status: 'active' } as const;
 const credentials = { email: 'user@example.com', password: 'password' };
@@ -101,6 +101,61 @@ test('signup with required confirmation never signs in and preserves absent mess
     error: null,
   });
   expect(signInSpy).not.toHaveBeenCalled();
+});
+
+test('a server signup session cannot replace a newer local session', async () => {
+  const host = fixture();
+  host._sessionGeneration = 7;
+  host._anonFetch = () => {
+    host._sessionGeneration = 8;
+    return Promise.resolve({
+      ok: true,
+      status: 201,
+      error: null,
+      data: {
+        confirmation_required: false,
+        session: { user, access_token: 'access', refresh_token: 'refresh', expires_in: 3600 },
+      },
+    });
+  };
+  host._setSession = (_, generation) => generation === host._sessionGeneration;
+  const result = await signUp(host, credentials);
+  expect(AuthSessionChangedError.is(result.error)).toBe(true);
+  expect(result.session).toBeNull();
+});
+
+test.each([null, {}, { access_token: '' }])(
+  'signup rejects an invalid server session: %p',
+  async (session) => {
+    const host = fixture();
+    host._anonFetch = () =>
+      Promise.resolve({
+        ok: true,
+        status: 201,
+        error: null,
+        data: { confirmation_required: false, session },
+      });
+    await expect(signUp(host, credentials)).rejects.toThrow(TypeError);
+  },
+);
+
+test('signup rejects a session with required confirmation before adopting it', async () => {
+  const host = fixture();
+  const adopt = jest.spyOn(host, '_setSession');
+  host._anonFetch = () =>
+    Promise.resolve({
+      ok: true,
+      status: 201,
+      error: null,
+      data: {
+        confirmation_required: true,
+        session: { user, access_token: 'access', expires_in: 3600 },
+      },
+    });
+  await expect(signUp(host, credentials)).rejects.toThrow(
+    'Signup session cannot require email confirmation',
+  );
+  expect(adopt).not.toHaveBeenCalled();
 });
 
 test('sign-in uses anonymous credential scope even when a session exists', async () => {

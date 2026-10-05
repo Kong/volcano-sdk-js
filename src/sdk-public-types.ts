@@ -111,13 +111,10 @@ export interface SignUpOptions {
   password: string;
   metadata?: UserMetadata;
   /**
-   * Opt-in: when the project does not require email confirmation
-   * (`confirmationRequired === false`), perform a follow-up {@link VolcanoAuth.signIn}
-   * with the same credentials so the returned {@link SignUpResponse} carries a live
-   * `user`/`session`. Defaults to `false`, matching the server's session-less signup
-   * contract. When confirmation is required this flag has no effect. If the follow-up
-   * sign-in fails, `error` is populated and `user`/`session` remain `null` (the
-   * account is still created).
+   * For a fresh account, perform a follow-up sign-in when confirmation is not
+   * required. Defaults to false. Existing-account sessions issued by the server
+   * are adopted regardless of this option. If follow-up sign-in fails, `error`
+   * is populated and `user`/`session` remain null; the new account still exists.
    */
   signInWhenAllowed?: boolean;
 }
@@ -180,11 +177,10 @@ export interface AuthResponse {
 }
 
 /**
- * Session-less signup response (VOL-309). The server returns a uniform
- * acknowledgement with no user and no session tokens, so `user`/`session` are
- * always null on success; obtain a session via a separate {@link VolcanoAuth.signIn}.
- * `message` is the server's acknowledgement and `confirmationRequired` reflects
- * the project's auth config.
+ * Signup response. The server can authenticate existing credentials and return
+ * a session, which the SDK adopts. Fresh accounts and requests without credential
+ * proof receive a session-less acknowledgement. `confirmationRequired` is false
+ * when a session is returned; otherwise it reflects the project's auth config.
  */
 export interface SignUpResponse {
   user: User | null;

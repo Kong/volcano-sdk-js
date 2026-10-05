@@ -2531,15 +2531,17 @@ export interface paths {
          * @description Create a new end-user account. The project is determined from the anon key.
          *     Requires project-specific anon key in Authorization header.
          *
-         *     **Session-less**: signup never issues a session. On success it returns a
-         *     uniform acknowledgement (`AuthSignupResponse`) with no tokens; the client
-         *     obtains a session with a subsequent `POST /auth/signin`. If email confirmation
-         *     is enabled for the project, a confirmation email is sent and
-         *     `confirmation_required` is `true`.
+         *     When the supplied email or alias and password authenticate an existing
+         *     account, the server applies the regular sign-in checks and returns the
+         *     existing account's session in `AuthSignupResponse.session`. It does not
+         *     create another account or replace the password or account metadata.
          *
-         *     **Anti-enumeration**: a signup for an already-registered email returns the
-         *     exact same `201` response as a fresh signup — it never returns `409` — so the
-         *     response cannot be used to discover which emails are registered.
+         *     Otherwise signup returns a session-less acknowledgement. If email
+         *     confirmation is enabled for the project, a confirmation email is sent
+         *     for a new account and `confirmation_required` is `true`.
+         *
+         *     **Anti-enumeration**: without valid existing credentials, an already-registered
+         *     email returns the same `201` acknowledgement as a fresh signup, never `409`.
          */
         post: operations["authSignup"];
         delete?: never;
@@ -4993,21 +4995,16 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
-        /**
-         * @description Uniform, session-less response returned by POST /auth/signup. It carries no
-         *     tokens and no user object, and is identical for a new account and for an
-         *     already-registered email (anti-enumeration). Clients obtain a session with a
-         *     subsequent POST /auth/signin.
-         */
+        /** @description Signup acknowledgement with an optional server-authenticated existing-account session. Without valid existing credentials it remains session-less and does not disclose account existence. */
         AuthSignupResponse: {
             /**
-             * @description Whether the project requires email confirmation. Reflects project config
-             *     only (identical for a new and an existing email), so it leaks nothing about
-             *     account existence.
+             * @description False when the server returns an authenticated session; otherwise
+             *     reflects project configuration without disclosing account existence.
              */
             confirmation_required: boolean;
             /** @description Human-readable acknowledgement. */
             message: string;
+            session?: components["schemas"]["AuthTokenResponse"];
         };
         AuthTokenResponse: {
             /** @description JWT access token (expires after configured lifetime) */
@@ -17508,8 +17505,9 @@ export interface operations {
         };
         responses: {
             /**
-             * @description Signup acknowledged (session-less). Returned identically for a new
-             *     account and for an already-registered email (anti-enumeration).
+             * @description Signup acknowledged. Includes a session only after existing credentials
+             *     pass sign-in checks. Without credential proof, new and existing accounts
+             *     receive the same acknowledgement.
              */
             201: {
                 headers: {
