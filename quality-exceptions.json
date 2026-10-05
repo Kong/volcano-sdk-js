@@ -22,5 +22,11 @@
     "scope": "src/volcano-fetch.ts:volcanoFetch:return",
     "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
     "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+  },
+  {
+    "rule": "pnpm audit",
+    "scope": "GHSA-vfj7-8cjw-p6xm:braces@3.0.3",
+    "rationale": "braces 3.0.3 is the latest release and has no fix. It is reached only through development tooling (Next's ESLint plugin, Tailwind, and chokidar in the example app), which expands glob patterns from this repository's own configuration, never caller input. The SDK package does not depend on it.",
+    "evidence": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm and https://github.com/micromatch/braces/issues/70 list no patched version; npm lists 3.0.3 as latest. Approved by Marco Palladino on 2026-10-03. Remove this entry when braces publishes a fix; the audit fails while it names an advisory pnpm no longer reports."
   }
 ]
