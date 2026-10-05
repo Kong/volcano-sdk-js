@@ -41,9 +41,15 @@ export const startDurableExecutionFromApplication = async (functionId, startDura
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getStartDurableExecutionFromApplicationUrl(functionId), {
         ...options,
@@ -134,9 +140,15 @@ export const queryDatabaseSelect = async (databaseName, databaseSelectRequest, o
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getQueryDatabaseSelectUrl(databaseName), {
         ...options,
@@ -165,9 +177,15 @@ export const authSignin = async (authSigninBody, options) => {
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getAuthSigninUrl(), {
         ...options,
@@ -193,9 +211,15 @@ export const acquireProjectLock = async (key, projectLockLeaseRequest, options) 
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getAcquireProjectLockUrl(key), {
         ...options,

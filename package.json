@@ -172,7 +172,7 @@
     "jest-environment-node": "30.3.0",
     "knip": "6.39.0",
     "openapi-typescript": "7.13.0",
-    "orval": "8.26.0",
+    "orval": "8.30.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",
