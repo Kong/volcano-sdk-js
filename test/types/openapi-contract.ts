@@ -236,6 +236,11 @@ type _CustomDomainTLSMatchesHosting = Assert<
   >
 >;
 
+interface CustomDomainVerificationRecordShape {
+  name: string;
+  type: string;
+  value: string;
+}
 interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
@@ -248,19 +253,25 @@ interface CustomDomainResponseShape {
     | 'deleted';
   verification_status: 'pending' | 'verified' | 'failed';
   failure_reason?: string;
-  verification_records?: { name: string; type: string; value: string }[];
-  required_routing_record?: {
-    record_type: 'CNAME';
-    zone_apex_record_type: 'ALIAS';
-    name: string;
-    value: string;
-  };
+  verification_records?: CustomDomainVerificationRecordShape[];
+  required_routing_record?: { record_type: 'CNAME'; name: string; value: string };
+  routing_target_hostname?: string;
   effective_urls: string[];
   created_at: string;
   updated_at: string;
 }
 type _CustomDomainResponseMatchesHosting = Assert<
   Equal<OpenAPIComponents['schemas']['FrontendCustomDomainResponse'], CustomDomainResponseShape>
+>;
+type CustomDomainConflict =
+  OpenAPIOperations['createFrontendCustomDomain']['responses'][409]['content']['application/json'];
+type _CustomDomainConflictCarriesRequiredRecord = Assert<
+  Equal<
+    CustomDomainConflict,
+    OpenAPIComponents['schemas']['Error'] & {
+      required_record?: CustomDomainVerificationRecordShape;
+    }
+  >
 >;
 
 type ProjectConfigCustomDomainTLS = NonNullable<
@@ -307,6 +318,7 @@ export type OpenApiContractChecks = [
   _LogSearchEventBodyKeepsJsonTypes,
   _CustomDomainTLSMatchesHosting,
   _CustomDomainResponseMatchesHosting,
+  _CustomDomainConflictCarriesRequiredRecord,
   _ProjectConfigTLSMatchesHosting,
 ];
 
