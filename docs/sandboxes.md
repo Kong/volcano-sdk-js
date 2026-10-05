@@ -89,6 +89,6 @@ Read the scoped credential through `access.data.token`; it is omitted from JSON 
 
 Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.exec()`, or `session.exec()`. Other operations accept cancellation through `signal` but do not accept `requestId`. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
 
-Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. Execution waits for the command timeout plus 120 seconds for provisioning, or the configured client timeout if longer. One-shot commands allow up to 60 seconds; session commands allow up to 3600 seconds.
+Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. The HTTP timeout budget is the command timeout plus 120 seconds for provisioning, or the configured client timeout if longer. A one-shot command timeout returns HTTP 504; retrying the same request ID returns HTTP 409 and does not rerun it. A session command timeout returns command data with `timedOut: true`. One-shot commands allow up to 60 seconds; session commands allow up to 3600 seconds.
 
 Use either `preset` or a saved template's `sandboxId`, never both. `sandboxes.presets()` lists available preset IDs, memory sizes, and regions. `sandboxes.get(sessionId)` reconnects to an existing session. Backend code can call `grant(sessionId, authUserId, expiresAt)` and `revoke(sessionId, authUserId)` to control user access.
