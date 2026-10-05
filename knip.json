@@ -1,12 +1,8 @@
 {
-  "$schema": "https://unpkg.com/knip@5.80.0/schema.json",
+  "$schema": "https://unpkg.com/knip@6.39.0/schema.json",
   "workspaces": {
     ".": {
       "entry": [
-        "src/index.ts!",
-        "src/realtime.ts!",
-        "src/durable.ts!",
-        "src/next/middleware.ts!",
         "__tests__/**/*.test.{js,ts}",
         "__tests__/browser-environment.cjs",
         "__tests__/node-environment.cjs",
