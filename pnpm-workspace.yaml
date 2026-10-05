@@ -17,6 +17,9 @@ overrides:
   'js-yaml@>=4.0.0 <4.3.2': ^4.3.2
   # Stryker's HTTP client resolves a qs release with DoS advisories.
   'typed-rest-client>qs': 6.16.0
+  # Patch URI parsing and Markdown denial-of-service advisories in tooling.
+  'fast-uri@>=3.0.0 <3.1.8': ^3.1.8
+  'markdown-it@>=14.0.0 <14.3.1': ^14.3.1
 
 allowBuilds:
   protobufjs: true
