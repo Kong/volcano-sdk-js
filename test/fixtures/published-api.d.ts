@@ -1,4 +1,3 @@
-/// <reference lib="esnext.disposable" />
 // Main 3ec5cf3 API with the nine approved return-type corrections and the additive Sandbox facade.
 import type { FilterValue } from '../../dist/database-filters';
 export type { FilterValue } from '../../dist/database-filters';
@@ -13,6 +12,8 @@ export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExec
 export type PaginatedDurableExecutions =
   GeneratedComponents['schemas']['PaginatedDurableExecutions'];
 export interface VolcanoAuthConfig {
+  /** HTTP request timeout in milliseconds. Sandbox execution may extend this budget. */
+  timeout?: number;
   apiUrl?: string;
   anonKey: string;
   accessToken?: string;
@@ -720,10 +721,10 @@ export interface SandboxReplayOptions extends SandboxRequestOptions {
   requestId?: string;
 }
 export interface SandboxSelectionOptions extends SandboxReplayOptions {
-  preset?: 'python3.12' | 'node22';
+  preset?: string;
   sandboxId?: string;
   region: string;
-  memoryMB?: 1024 | 2048;
+  memoryMB?: number;
 }
 export interface SandboxCreateOptions extends SandboxSelectionOptions {
   maxDurationSeconds?: number;

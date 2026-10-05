@@ -1,4 +1,4 @@
-/// <reference lib="esnext.disposable" />
+/// <reference lib="esnext.disposable" preserve="true" />
 import type { FilterValue } from './database-filters';
 import type { FunctionInvokeResponse } from './function-invoke.ts';
 export type { FilterValue } from './database-filters';
@@ -22,6 +22,8 @@ export type PaginatedDurableExecutions =
   GeneratedComponents['schemas']['PaginatedDurableExecutions'];
 
 export interface VolcanoAuthConfig {
+  /** HTTP request timeout in milliseconds. Sandbox execution may extend this budget. */
+  timeout?: number;
   /**
    * Your Volcano API base URL.
    * Defaults to 'https://api.volcano.dev' if not specified.
@@ -1073,10 +1075,10 @@ export interface SandboxReplayOptions extends SandboxRequestOptions {
   requestId?: string;
 }
 export interface SandboxSelectionOptions extends SandboxReplayOptions {
-  preset?: 'python3.12' | 'node22';
+  preset?: string;
   sandboxId?: string;
   region: string;
-  memoryMB?: 1024 | 2048;
+  memoryMB?: number;
 }
 export interface SandboxCreateOptions extends SandboxSelectionOptions {
   maxDurationSeconds?: number;

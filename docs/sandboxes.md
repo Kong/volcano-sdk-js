@@ -12,7 +12,6 @@ const client = new VolcanoClient({
   apiUrl: process.env.VOLCANO_API_URL ?? 'https://api.volcano.dev',
   anonKey: process.env.VOLCANO_ANON_KEY,
   accessToken: process.env.VOLCANO_SERVICE_KEY,
-  timeout: 180_000,
 });
 const projectId = process.env.VOLCANO_PROJECT_ID;
 const { data, error } = await client.sandboxes.exec(projectId, 'python -c "print(42)"', {
@@ -63,7 +62,7 @@ try {
 }
 ```
 
-In a runtime with explicit resource management, use `await using session = created.data` after checking the creation result. Leaving the scope requests termination through `Symbol.asyncDispose`. Termination is durable and asynchronous; poll `refresh()` if you need confirmation that the session has stopped.
+In a runtime with explicit resource management, use `await using session = created.data` after checking the creation result. Leaving the scope requests termination through `Symbol.asyncDispose`. Disposal skips sessions already terminating or terminated and accepts a 404 for a session already removed. Termination is durable and asynchronous; poll `refresh()` if you need confirmation that the session has stopped.
 
 `session.suspend()` and `session.resume()` request state transitions. Poll for `suspended` or `running` before the next operation. Local suspension preserves processes and files, but the container continues to reserve memory.
 
@@ -84,12 +83,12 @@ const response = await fetch(access.data.url, {
 console.log(await response.text());
 ```
 
-The token is bound to this session and port. Do not append it to URLs. See [Sandbox HTTP access](/platform/guides/sandboxes) for browser redemption and authorization.
+Read the scoped credential through `access.data.token`; it is omitted from JSON serialization and routine object logging. The token is bound to this session and port. Do not append it to URLs. See [Sandbox HTTP access](/platform/guides/sandboxes) for browser redemption and authorization.
 
 ## Retry safely
 
 Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.exec()`, or `session.exec()`. Other operations accept cancellation through `signal` but do not accept `requestId`. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
 
-Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. Choose a client `timeout` longer than the command timeout plus provisioning time; use sessions for long-running work.
+Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. Execution waits for the command timeout plus 120 seconds for provisioning, or the configured client timeout if longer. One-shot commands allow up to 60 seconds; session commands allow up to 3600 seconds.
 
 Use either `preset` or a saved template's `sandboxId`, never both. `sandboxes.presets()` lists available preset IDs, memory sizes, and regions. `sandboxes.get(sessionId)` reconnects to an existing session. Backend code can call `grant(sessionId, authUserId, expiresAt)` and `revoke(sessionId, authUserId)` to control user access.

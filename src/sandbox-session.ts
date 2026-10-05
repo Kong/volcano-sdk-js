@@ -16,6 +16,7 @@ import type {
 } from './index.ts';
 import {
   commandRequest,
+  executionRequestOptions,
   pathId,
   requestOptions,
   responseData,
@@ -76,7 +77,7 @@ export class SandboxSessionHandle implements SandboxSession {
           executeSandboxSession(
             pathId(this.id),
             commandRequest(command, options),
-            requestOptions(this.client, options, 'replayable'),
+            executionRequestOptions(this.client, options),
           ),
         ),
       ),
@@ -123,11 +124,11 @@ export class SandboxSessionHandle implements SandboxSession {
     );
   }
   async [Symbol.asyncDispose](): Promise<void> {
-    if (this.state === 'terminated') {
+    if (this.state === 'terminated' || this.state === 'terminating') {
       return;
     }
     const result = await this.terminate();
-    if (result.error !== null) {
+    if (result.error !== null && !isMissingSession(result.error)) {
       throw result.error;
     }
   }
@@ -149,4 +150,8 @@ export class SandboxSessionHandle implements SandboxSession {
       );
     });
   }
+}
+
+function isMissingSession(error: Error): boolean {
+  return 'status' in error && error.status === 404;
 }

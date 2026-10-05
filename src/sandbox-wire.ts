@@ -78,16 +78,18 @@ export function createRequest(
     region: options.region,
     ...(options.preset === undefined ? {} : { preset: options.preset }),
     ...(options.sandboxId === undefined ? {} : { sandbox_id: options.sandboxId }),
-    ...(options.memoryMB === undefined ? {} : { memory_mb: options.memoryMB }),
+    ...(options.memoryMB === undefined ? {} : { memory_mb: presetMemory(options.memoryMB) }),
   };
 }
 export function accessResult(value: unknown): SandboxAccess {
   const data = record(value);
-  return {
+  const access = {
     url: text(data['url']),
     token: text(data['token']),
     expiresAt: text(data['expires_at']),
   };
+  Object.defineProperty(access, 'token', { enumerable: false });
+  return access;
 }
 export function presetsResult(value: unknown): SandboxPreset[] {
   const data = record(value);
@@ -138,4 +140,11 @@ export function sessionRequest(
       ? {}
       : { idle_timeout_seconds: options.idleTimeoutSeconds }),
   };
+}
+
+function presetMemory(value: number): 1024 | 2048 {
+  if (value !== 1024 && value !== 2048) {
+    throw new RangeError('Sandbox memory must be 1024 or 2048 MB');
+  }
+  return value;
 }

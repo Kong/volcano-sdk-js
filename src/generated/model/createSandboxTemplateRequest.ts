@@ -8,11 +8,11 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateSandboxTemplateRequestMemoryMb } from './createSandboxTemplateRequestMemoryMb';
-import type { CreateSandboxTemplateRequestPreset } from './createSandboxTemplateRequestPreset';
 
 export interface CreateSandboxTemplateRequest {
   /** @pattern ^[a-z][a-z0-9-]{0,62}$ */
   name: string;
-  preset: CreateSandboxTemplateRequestPreset;
+  /** Preset ID from the available Sandbox preset catalog. */
+  preset: string;
   memory_mb?: CreateSandboxTemplateRequestMemoryMb;
 }

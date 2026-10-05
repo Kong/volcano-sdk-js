@@ -8,10 +8,10 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateSandboxSessionRequestMemoryMb } from './createSandboxSessionRequestMemoryMb';
-import type { CreateSandboxSessionRequestPreset } from './createSandboxSessionRequestPreset';
 
 export type CreateSandboxSessionRequest = (unknown & {
-  preset?: CreateSandboxSessionRequestPreset;
+  /** Preset ID from the available Sandbox preset catalog. */
+  preset?: string;
   sandbox_id?: string;
   memory_mb?: CreateSandboxSessionRequestMemoryMb;
   /**

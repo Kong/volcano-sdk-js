@@ -337,9 +337,15 @@ export const createSandbox = async (id, createSandboxTemplateRequest, options) =
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getCreateSandboxUrl(id), {
         ...options,
@@ -403,9 +409,15 @@ export const createSandboxSession = async (id, createSandboxSessionRequest, opti
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getCreateSandboxSessionUrl(id), {
         ...options,
@@ -426,9 +438,15 @@ export const executeSandbox = async (id, sandboxExecutionRequest, options) => {
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getExecuteSandboxUrl(id), {
         ...options,
@@ -497,9 +515,15 @@ export const executeSandboxSession = async (sessionId, sandboxCommandRequest, op
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getExecuteSandboxSessionUrl(sessionId), {
         ...options,
@@ -520,9 +544,15 @@ export const readSandboxSessionFile = async (sessionId, sandboxFileReadRequest, 
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getReadSandboxSessionFileUrl(sessionId), {
         ...options,
@@ -543,9 +573,15 @@ export const writeSandboxSessionFile = async (sessionId, sandboxFileWriteRequest
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getWriteSandboxSessionFileUrl(sessionId), {
         ...options,
@@ -566,9 +602,15 @@ export const grantSandboxSession = async (sessionId, subjectId, sandboxSubjectGr
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getGrantSandboxSessionUrl(sessionId, subjectId), {
         ...options,
@@ -601,9 +643,15 @@ export const createSandboxSessionAccess = async (sessionId, sandboxAccessRequest
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getCreateSandboxSessionAccessUrl(sessionId), {
         ...options,

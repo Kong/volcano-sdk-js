@@ -3,8 +3,14 @@ import type { SandboxCommandOptions, SandboxReplayOptions, SandboxResult } from 
 
 type TransportOptions = NonNullable<Parameters<typeof executeSandbox>[2]>;
 export interface SandboxClient {
+  readonly timeout: number;
   _completeOAuthExchange(): Promise<unknown>;
-  _generatedOptions(mode: 'anon' | 'session', headers?: Record<string, string>): TransportOptions;
+  _generatedOptions(
+    mode: 'anon' | 'session',
+    headers?: Record<string, string>,
+    responseType?: 'blob',
+    timeoutMs?: number,
+  ): TransportOptions;
 }
 export function pathId(value: string): string {
   if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)) {
@@ -16,10 +22,13 @@ export function requestOptions(
   client: SandboxClient,
   options: SandboxReplayOptions = {},
   mode?: 'anon' | 'session' | 'replayable',
+  timeoutMs?: number,
 ): TransportOptions {
   const result = client._generatedOptions(
     mode === 'anon' ? 'anon' : 'session',
     mutationHeaders(options, mode === 'replayable'),
+    undefined,
+    timeoutMs,
   );
   if (options.signal !== undefined) {
     result.signal = options.signal;
@@ -59,4 +68,12 @@ export async function sandboxResult<T>(operation: () => Promise<T>): Promise<San
 export async function responseData(request: Promise<{ data: unknown }>): Promise<unknown> {
   const response = await request;
   return response.data;
+}
+
+export function executionRequestOptions(
+  client: SandboxClient,
+  options: SandboxCommandOptions,
+): TransportOptions {
+  const timeoutMs = Math.max(client.timeout, ((options.timeoutSeconds ?? 60) + 120) * 1000);
+  return requestOptions(client, options, 'replayable', timeoutMs);
 }

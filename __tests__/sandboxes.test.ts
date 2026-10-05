@@ -179,9 +179,9 @@ test('preserves binary files and returns a scoped HTTP credential', async () => 
   expect(bodyJson(fetchMock.mock.calls[2])).toEqual({ path: '/workspace/data' });
   const access = await result.data.access(8080);
   expect(bodyJson(fetchMock.mock.calls[3])).toEqual({ port: 8080 });
+  expect(access.data?.token).toBe('scoped-token');
   expect(access.data).toEqual({
     url: 'https://session.example',
-    token: 'scoped-token',
     expiresAt: snapshot.expires_at,
   });
 });
@@ -381,10 +381,21 @@ test('normalizes non-Error failures without exposing arbitrary values', async ()
 });
 test('default request options contain no mutation headers', () => {
   const generated = jest
-    .fn<(mode: 'anon' | 'session', headers?: Record<string, string>) => object>()
+    .fn<
+      (
+        mode: 'anon' | 'session',
+        headers?: Record<string, string>,
+        responseType?: 'blob',
+        timeoutMs?: number,
+      ) => object
+    >()
     .mockReturnValue({});
-  requestOptions({ _completeOAuthExchange: () => Promise.resolve(), _generatedOptions: generated });
-  expect(generated).toHaveBeenCalledWith('session', {});
+  requestOptions({
+    timeout: 60_000,
+    _completeOAuthExchange: () => Promise.resolve(),
+    _generatedOptions: generated,
+  });
+  expect(generated).toHaveBeenCalledWith('session', {}, undefined, undefined);
 });
 test('session commands use default execution options', async () => {
   const fetchMock = jest

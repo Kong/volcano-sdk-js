@@ -4798,8 +4798,8 @@ export interface components {
         };
         CreateSandboxTemplateRequest: {
             name: string;
-            /** @enum {string} */
-            preset: "python3.12" | "node22";
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset: string;
             /**
              * @default 1024
              * @enum {integer}
@@ -4830,8 +4830,8 @@ export interface components {
             expires_at: string;
         };
         CreateSandboxSessionRequest: {
-            /** @enum {string} */
-            preset?: "python3.12" | "node22";
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
             /** @enum {integer} */
@@ -4852,8 +4852,8 @@ export interface components {
             };
         };
         SandboxExecutionRequest: {
-            /** @enum {string} */
-            preset?: "python3.12" | "node22";
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
             /** @enum {integer} */

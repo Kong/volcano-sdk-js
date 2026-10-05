@@ -91,9 +91,20 @@ test.each([
 
 test('forwards the caller abort signal and leaves absent signals untouched', () => {
   const generated = jest
-    .fn<(mode: 'session', headers?: Record<string, string>) => object>()
+    .fn<
+      (
+        mode: 'session',
+        headers?: Record<string, string>,
+        responseType?: 'blob',
+        timeoutMs?: number,
+      ) => object
+    >()
     .mockImplementation(() => ({}));
-  const client = { _completeOAuthExchange: () => Promise.resolve(), _generatedOptions: generated };
+  const client = {
+    timeout: 60_000,
+    _completeOAuthExchange: () => Promise.resolve(),
+    _generatedOptions: generated,
+  };
   const signal = new AbortController().signal;
   expect(requestOptions(client, { signal }).signal).toBe(signal);
   expect(requestOptions(client)).not.toHaveProperty('signal');
@@ -129,5 +140,21 @@ test('omits absent optional wire properties', () => {
     region: 'aws-us-east-1',
     max_duration_seconds: 300,
     idle_timeout_seconds: 60,
+  });
+});
+
+test.each([0, 1, 1023, 1025, 2047, 2049, Number.NaN])(
+  'rejects unsupported memory %s before transport',
+  (memoryMB) => {
+    expect(() => createRequest({ preset: 'node22', region: 'us-east-1', memoryMB })).toThrow(
+      'Sandbox memory must be 1024 or 2048 MB',
+    );
+  },
+);
+test.each([1024, 2048])('accepts catalog memory %s', (memoryMB) => {
+  expect(createRequest({ preset: 'catalog-preset', region: 'us-east-1', memoryMB })).toEqual({
+    preset: 'catalog-preset',
+    region: 'us-east-1',
+    memory_mb: memoryMB,
   });
 });

@@ -512,17 +512,20 @@ class VolcanoAuth {
     volcanoAuthorization: 'anon' | 'session',
     headers?: Record<string, string>,
     responseType?: 'blob',
+    timeoutMs?: number,
   ): {
     volcanoAuthorization: 'anon' | 'session';
     volcanoClient: VolcanoAuth;
     headers?: Record<string, string>;
     volcanoResponseType?: 'blob';
+    volcanoTimeoutMs?: number;
   } {
     return {
       volcanoAuthorization,
       volcanoClient: this,
       ...(headers === undefined ? {} : { headers }),
       ...(responseType === undefined ? {} : { volcanoResponseType: responseType }),
+      ...(timeoutMs === undefined ? {} : { volcanoTimeoutMs: timeoutMs }),
     };
   }
 
@@ -531,6 +534,7 @@ class VolcanoAuth {
     path: string,
     options: RequestInit,
     authorization: 'anon' | 'session',
+    timeoutMs = this.timeout,
   ): Promise<Response> {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
@@ -544,11 +548,11 @@ class VolcanoAuth {
           ...options,
           headers,
         },
-        this.timeout,
+        timeoutMs,
       );
     }
 
-    return fetchWithAuthRetry(this, url, options);
+    return fetchWithAuthRetry(this, url, options, timeoutMs);
   }
 
   /** @internal */

@@ -14,6 +14,7 @@ import type {
 } from './index.ts';
 import {
   commandRequest,
+  executionRequestOptions,
   pathId,
   requestOptions,
   responseData,
@@ -42,7 +43,7 @@ export class SandboxesApi implements Sandboxes {
       const response = await executeSandbox(
         pathId(projectId),
         { ...createRequest(options), ...commandRequest(command, options) },
-        requestOptions(this.client, options, 'replayable'),
+        executionRequestOptions(this.client, options),
       );
       return executionResult(response.data);
     });

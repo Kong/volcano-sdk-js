@@ -9,10 +9,10 @@
  */
 import type { SandboxExecutionRequestEnvironment } from './sandboxExecutionRequestEnvironment';
 import type { SandboxExecutionRequestMemoryMb } from './sandboxExecutionRequestMemoryMb';
-import type { SandboxExecutionRequestPreset } from './sandboxExecutionRequestPreset';
 
 export type SandboxExecutionRequest = (unknown & {
-  preset?: SandboxExecutionRequestPreset;
+  /** Preset ID from the available Sandbox preset catalog. */
+  preset?: string;
   sandbox_id?: string;
   memory_mb?: SandboxExecutionRequestMemoryMb;
   /**
