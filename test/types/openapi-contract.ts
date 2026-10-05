@@ -20,14 +20,9 @@ import type {
   PresenceState,
   RealtimeChannel,
 } from '../../src/realtime.ts';
+import type { Exact as Equal } from '../fixtures/public-api-compatibility.d.ts';
 
 type Assert<T extends true> = T;
-// Mutual assignability alone ignores optional fields that only one side declares.
-type Equal<Left, Right> = [Left, Required<Left>] extends [Right, Required<Right>]
-  ? [Right, Required<Right>] extends [Left, Required<Left>]
-    ? true
-    : false
-  : false;
 
 type SetSessionParameter = Parameters<Auth['setSession']>[0];
 type _CompleteSessionCanBeAdopted = Assert<
@@ -226,10 +221,6 @@ type _LogSearchEventBodyKeepsJsonTypes = Assert<
   LogSearchEventStructuredShape extends LogSearchEvent ? true : false
 >;
 
-type CustomDomainRequest = OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest'];
-type _ManagedTLSRequestNeedsNoCertificate = Assert<
-  { domain: string; tls: { mode: 'managed' } } extends CustomDomainRequest ? true : false
->;
 // Hosting enforces which PEM fields each mode allows with `not` rules that
 // openapi-typescript does not translate, so the generated shape stays flat.
 interface CustomDomainTLSShape {
@@ -239,43 +230,37 @@ interface CustomDomainTLSShape {
   certificate_chain_pem?: string;
 }
 type _CustomDomainTLSMatchesHosting = Assert<
-  Equal<CustomDomainRequest['tls'], CustomDomainTLSShape>
+  Equal<
+    OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest']['tls'],
+    CustomDomainTLSShape
+  >
 >;
 
-type CustomDomainResponse = OpenAPIComponents['schemas']['FrontendCustomDomainResponse'];
-type _CustomDomainVerificationCanFail = Assert<
-  Equal<CustomDomainResponse['verification_status'], 'pending' | 'verified' | 'failed'>
->;
-type _CustomDomainFailureReasonIsOptional = Assert<
-  Equal<Pick<CustomDomainResponse, 'failure_reason'>, { failure_reason?: string }>
->;
-type _CustomDomainResponseExposesOnlyPublicFields = Assert<
-  Equal<
-    keyof CustomDomainResponse,
-    | 'domain'
-    | 'tls_mode'
-    | 'domain_status'
-    | 'verification_status'
-    | 'failure_reason'
-    | 'verification_records'
-    | 'required_routing_record'
-    | 'effective_urls'
-    | 'created_at'
-    | 'updated_at'
-  >
->;
-type CustomDomainVerificationRecord = NonNullable<
-  CustomDomainResponse['verification_records']
->[number];
-type _VerificationRecordExposesOnlyDNSFields = Assert<
-  Equal<CustomDomainVerificationRecord, { name: string; type: string; value: string }>
->;
-type CustomDomainRoutingRecord = NonNullable<CustomDomainResponse['required_routing_record']>;
-type _RoutingRecordNamesZoneApexAlternative = Assert<
-  Equal<
-    CustomDomainRoutingRecord,
-    { record_type: 'CNAME'; zone_apex_record_type: 'ALIAS'; name: string; value: string }
-  >
+interface CustomDomainResponseShape {
+  domain: string;
+  tls_mode: 'managed' | 'byoc';
+  domain_status:
+    | 'pending_verification'
+    | 'provisioning'
+    | 'active'
+    | 'detaching'
+    | 'failed'
+    | 'deleted';
+  verification_status: 'pending' | 'verified' | 'failed';
+  failure_reason?: string;
+  verification_records?: { name: string; type: string; value: string }[];
+  required_routing_record?: {
+    record_type: 'CNAME';
+    zone_apex_record_type: 'ALIAS';
+    name: string;
+    value: string;
+  };
+  effective_urls: string[];
+  created_at: string;
+  updated_at: string;
+}
+type _CustomDomainResponseMatchesHosting = Assert<
+  Equal<OpenAPIComponents['schemas']['FrontendCustomDomainResponse'], CustomDomainResponseShape>
 >;
 
 type ProjectConfigCustomDomainTLS = NonNullable<
@@ -320,13 +305,8 @@ export type OpenApiContractChecks = [
   _DurableExecutionComesOffTheWire,
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
-  _ManagedTLSRequestNeedsNoCertificate,
   _CustomDomainTLSMatchesHosting,
-  _CustomDomainVerificationCanFail,
-  _CustomDomainFailureReasonIsOptional,
-  _CustomDomainResponseExposesOnlyPublicFields,
-  _VerificationRecordExposesOnlyDNSFields,
-  _RoutingRecordNamesZoneApexAlternative,
+  _CustomDomainResponseMatchesHosting,
   _ProjectConfigTLSMatchesHosting,
 ];
 
