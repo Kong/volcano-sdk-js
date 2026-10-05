@@ -76,7 +76,7 @@ export class SandboxSessionHandle implements SandboxSession {
           executeSandboxSession(
             pathId(this.id),
             commandRequest(command, options),
-            requestOptions(this.client, options, true),
+            requestOptions(this.client, options, 'replayable'),
           ),
         ),
       ),

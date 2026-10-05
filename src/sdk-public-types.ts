@@ -1067,10 +1067,12 @@ export interface RealtimeModule {
 
 export type SandboxResult<T> = { data: T; error: null } | { data: null; error: Error };
 export interface SandboxRequestOptions {
-  requestId?: string;
   signal?: AbortSignal;
 }
-export interface SandboxSelectionOptions extends SandboxRequestOptions {
+export interface SandboxReplayOptions extends SandboxRequestOptions {
+  requestId?: string;
+}
+export interface SandboxSelectionOptions extends SandboxReplayOptions {
   preset?: 'python3.12' | 'node22';
   sandboxId?: string;
   region: string;
@@ -1084,7 +1086,7 @@ export interface SandboxExecOptions extends SandboxSelectionOptions {
   timeoutSeconds?: number;
   environment?: Record<string, string>;
 }
-export interface SandboxCommandOptions extends SandboxRequestOptions {
+export interface SandboxCommandOptions extends SandboxReplayOptions {
   timeoutSeconds?: number;
   environment?: Record<string, string>;
 }

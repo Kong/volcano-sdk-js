@@ -1,10 +1,10 @@
 import type { executeSandbox } from './generated/client.ts';
-import type { SandboxCommandOptions, SandboxRequestOptions, SandboxResult } from './index.ts';
+import type { SandboxCommandOptions, SandboxReplayOptions, SandboxResult } from './index.ts';
 
 type TransportOptions = NonNullable<Parameters<typeof executeSandbox>[2]>;
 export interface SandboxClient {
   _completeOAuthExchange(): Promise<unknown>;
-  _generatedOptions(mode: 'session', headers?: Record<string, string>): TransportOptions;
+  _generatedOptions(mode: 'anon' | 'session', headers?: Record<string, string>): TransportOptions;
 }
 export function pathId(value: string): string {
   if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)) {
@@ -14,19 +14,19 @@ export function pathId(value: string): string {
 }
 export function requestOptions(
   client: SandboxClient,
-  options: SandboxRequestOptions = {},
-  mutating = false,
+  options: SandboxReplayOptions = {},
+  mode: 'anon' | 'session' | 'replayable' = 'session',
 ): TransportOptions {
-  const result = client._generatedOptions('session', mutationHeaders(options, mutating));
+  const result = client._generatedOptions(
+    mode === 'anon' ? 'anon' : 'session',
+    mutationHeaders(options, mode === 'replayable'),
+  );
   if (options.signal !== undefined) {
     result.signal = options.signal;
   }
   return result;
 }
-function mutationHeaders(
-  options: SandboxRequestOptions,
-  mutating: boolean,
-): Record<string, string> {
+function mutationHeaders(options: SandboxReplayOptions, mutating: boolean): Record<string, string> {
   if (!mutating) {
     return {};
   }

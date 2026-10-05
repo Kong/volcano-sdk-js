@@ -27,7 +27,9 @@ export class SandboxesApi implements Sandboxes {
   constructor(private readonly client: SandboxClient) {}
   presets(options: SandboxRequestOptions = {}): ReturnType<Sandboxes['presets']> {
     return sandboxResult(async () =>
-      presetsResult(await responseData(listSandboxPresets(requestOptions(this.client, options)))),
+      presetsResult(
+        await responseData(listSandboxPresets(requestOptions(this.client, options, 'anon'))),
+      ),
     );
   }
   exec(
@@ -40,7 +42,7 @@ export class SandboxesApi implements Sandboxes {
       const response = await executeSandbox(
         pathId(projectId),
         { ...createRequest(options), ...commandRequest(command, options) },
-        requestOptions(this.client, options, true),
+        requestOptions(this.client, options, 'replayable'),
       );
       return executionResult(response.data);
     });
@@ -52,7 +54,7 @@ export class SandboxesApi implements Sandboxes {
       const response = await createSandboxSession(
         pathId(projectId),
         body,
-        requestOptions(this.client, options, true),
+        requestOptions(this.client, options, 'replayable'),
       );
       return new SandboxSessionHandle(this.client, response.data);
     });

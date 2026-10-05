@@ -23,7 +23,7 @@ if (error) throw error;
 console.log(data.stdout, data.exitCode);
 ```
 
-Keep service keys on your backend. Creating and managing sessions requires a platform user or service key. An authenticated project user can access only sessions explicitly granted to that user. Anonymous keys cannot access Sandboxes. Availability depends on your platform's Sandbox rollout.
+Keep service keys on your backend. Creating and managing sessions requires a platform user or service key. An authenticated project user can access only sessions explicitly granted to that user. Anonymous keys can list the public preset catalog with `sandboxes.presets()`, but cannot create or access sessions. Availability depends on your platform's Sandbox rollout.
 
 A nonzero command exit is returned as `data.exitCode`; it is not a platform error. All methods return `{ data, error }`. Check `error` before using `data`.
 
@@ -88,7 +88,7 @@ The token is bound to this session and port. Do not append it to URLs. See [Sand
 
 ## Retry safely
 
-Pass a UUID `requestId` to creation or command execution. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
+Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.exec()`, or `session.exec()`. Other operations accept cancellation through `signal` but do not accept `requestId`. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
 
 Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. Choose a client `timeout` longer than the command timeout plus provisioning time; use sessions for long-running work.
 

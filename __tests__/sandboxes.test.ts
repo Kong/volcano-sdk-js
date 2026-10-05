@@ -194,13 +194,25 @@ test('rejects invalid selectors before issuing a request', async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test('lists preset sizes and regions', async () => {
-  globalThis.fetch = jest
+test('lists public presets with only anonymous credentials and cancellation', async () => {
+  const fetchMock = jest
     .fn<typeof fetch>()
     .mockResolvedValue(
       Response.json({ data: [{ id: 'node22', memory_mb: 1024, regions: ['aws-us-east-1'] }] }),
     );
-  const observed1 = await client().sandboxes.presets();
+  globalThis.fetch = fetchMock;
+  const signal = new AbortController().signal;
+  const anonymousClient = new VolcanoAuth({
+    apiUrl: 'https://api.test.com',
+    anonKey: 'ak-project',
+  });
+  const observed1 = await anonymousClient.sandboxes.presets({ signal });
+  const request = requestCall(fetchMock.mock.calls, 0);
+  expect(request[0]).toBe('https://api.test.com/sandboxes/presets');
+  expect(new Headers(request[1]?.headers).get('Authorization')).toBe('Bearer ak-project');
+  expect(new Headers(request[1]?.headers).has('Idempotency-Key')).toBe(false);
+  expect(request[1]?.signal?.aborted).toBe(false);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(observed1).toEqual({
     data: [{ id: 'node22', memoryMB: 1024, regions: ['aws-us-east-1'] }],
     error: null,
@@ -369,7 +381,7 @@ test('normalizes non-Error failures without exposing arbitrary values', async ()
 });
 test('default request options contain no mutation headers', () => {
   const generated = jest
-    .fn<(mode: 'session', headers?: Record<string, string>) => object>()
+    .fn<(mode: 'anon' | 'session', headers?: Record<string, string>) => object>()
     .mockReturnValue({});
   requestOptions({ _completeOAuthExchange: () => Promise.resolve(), _generatedOptions: generated });
   expect(generated).toHaveBeenCalledWith('session', {});
