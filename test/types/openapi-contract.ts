@@ -225,16 +225,19 @@ type CustomDomainRequest = OpenAPIComponents['schemas']['CreateFrontendCustomDom
 type _ManagedTLSRequestNeedsNoCertificate = Assert<
   { domain: string; tls: { mode: 'managed' } } extends CustomDomainRequest ? true : false
 >;
-type _BYOCTLSRequestCarriesCertificate = Assert<
-  {
-    domain: string;
-    tls: { mode: 'byoc'; certificate_pem: string; private_key_pem: string };
-  } extends CustomDomainRequest
-    ? true
+// Hosting enforces which PEM fields each mode allows with `not` rules that
+// openapi-typescript does not translate, so the generated shape stays flat.
+interface CustomDomainTLSShape {
+  mode: 'managed' | 'byoc';
+  certificate_pem?: string;
+  private_key_pem?: string;
+  certificate_chain_pem?: string;
+}
+// Mutual assignability ignores a missing optional field, so compare the keys too.
+type _CustomDomainTLSMatchesHosting = Assert<
+  Equal<CustomDomainRequest['tls'], CustomDomainTLSShape> extends true
+    ? Equal<keyof CustomDomainRequest['tls'], keyof CustomDomainTLSShape>
     : false
->;
-type _CustomDomainTLSModesMatchHosting = Assert<
-  Equal<CustomDomainRequest['tls']['mode'], 'managed' | 'byoc'>
 >;
 
 type CustomDomainResponse = OpenAPIComponents['schemas']['FrontendCustomDomainResponse'];
@@ -244,8 +247,20 @@ type _CustomDomainVerificationCanFail = Assert<
 type _CustomDomainFailureReasonIsOptional = Assert<
   Equal<Pick<CustomDomainResponse, 'failure_reason'>, { failure_reason?: string }>
 >;
-type _CustomDomainResponseOmitsProviderLifecycle = Assert<
-  'managed_tls_certificate' extends keyof CustomDomainResponse ? false : true
+type _CustomDomainResponseExposesOnlyPublicFields = Assert<
+  Equal<
+    keyof CustomDomainResponse,
+    | 'domain'
+    | 'tls_mode'
+    | 'domain_status'
+    | 'verification_status'
+    | 'failure_reason'
+    | 'verification_records'
+    | 'required_routing_record'
+    | 'effective_urls'
+    | 'created_at'
+    | 'updated_at'
+  >
 >;
 type CustomDomainVerificationRecord = NonNullable<
   CustomDomainResponse['verification_records']
@@ -298,11 +313,10 @@ export type OpenApiContractChecks = [
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
   _ManagedTLSRequestNeedsNoCertificate,
-  _BYOCTLSRequestCarriesCertificate,
-  _CustomDomainTLSModesMatchHosting,
+  _CustomDomainTLSMatchesHosting,
   _CustomDomainVerificationCanFail,
   _CustomDomainFailureReasonIsOptional,
-  _CustomDomainResponseOmitsProviderLifecycle,
+  _CustomDomainResponseExposesOnlyPublicFields,
   _VerificationRecordExposesOnlyDNSFields,
   _RoutingRecordNamesZoneApexAlternative,
   _ProjectConfigTLSModesMatchHosting,
