@@ -5,6 +5,15 @@ Prettier, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
 `quality:checks` runs the checks shared by both supported CI runtimes;
 `mutation:full` adds the complete mutation gate.
 
+## Dependency audit exceptions
+
+The audit requires zero advisories at every severity. An advisory with no
+patched release can be approved in `quality-exceptions.json` with rule
+`pnpm audit` and scope `<GHSA>:<package>@<version>`; the audit then drops that
+one advisory and its count. pnpm's `auditConfig.ignoreGhsas` cannot do this: it
+hides the advisory but keeps it in the severity counts. The audit fails while an
+approval names an advisory pnpm no longer reports, so remove it once a fix ships.
+
 ## Protecting the task graph
 
 A valid task can silently stop enforcing quality if its command becomes
