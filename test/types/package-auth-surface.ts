@@ -13,6 +13,7 @@ type PublishedMember =
   | 'logs'
   | 'storage'
   | 'locks'
+  | 'sandboxes'
   | 'database'
   | 'from'
   | 'insert'
