@@ -1,4 +1,5 @@
-// Main 3ec5cf3 API with the nine approved return-type corrections and the additive Sandbox facade.
+// Main 3ec5cf3 API with the nine approved return-type corrections and the additive Sandbox and
+// durable approvals facades.
 import type { FilterValue } from '../../dist/database-filters';
 export type { FilterValue } from '../../dist/database-filters';
 export type {
@@ -11,6 +12,10 @@ export type DurableExecution = GeneratedComponents['schemas']['DurableExecution'
 export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExecutionStatus'];
 export type PaginatedDurableExecutions =
   GeneratedComponents['schemas']['PaginatedDurableExecutions'];
+export type DurableApproval = GeneratedComponents['schemas']['DurableApproval'];
+export type DurableApprovalStatus = GeneratedComponents['schemas']['DurableApprovalStatus'];
+export type DurableApprovalStats = GeneratedComponents['schemas']['DurableApprovalStats'];
+export type PaginatedDurableApprovals = GeneratedComponents['schemas']['PaginatedDurableApprovals'];
 export interface VolcanoAuthConfig {
   /** HTTP request timeout in milliseconds. Sandbox execution may extend this budget. */
   timeout?: number;
@@ -294,6 +299,69 @@ export interface Durable {
     executionId: string,
   ): Promise<{
     data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  approvals: DurableApprovals;
+}
+export interface DurableApprovalListOptions {
+  status?: DurableApprovalStatus;
+  function?: string;
+  executionId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+export interface DurableApprovalStatsOptions {
+  function?: string;
+  from?: string;
+  to?: string;
+}
+export interface DurableApprovals {
+  list(
+    projectId: string,
+    options?: DurableApprovalListOptions,
+  ): Promise<{
+    data: PaginatedDurableApprovals | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  get(
+    projectId: string,
+    approvalId: string,
+  ): Promise<{
+    data: DurableApproval | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  stats(
+    projectId: string,
+    options?: DurableApprovalStatsOptions,
+  ): Promise<{
+    data: DurableApprovalStats | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  approve(
+    projectId: string,
+    approvalId: string,
+    options?: {
+      comment?: string;
+    },
+  ): Promise<{
+    data: DurableApproval | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  deny(
+    projectId: string,
+    approvalId: string,
+    options?: {
+      comment?: string;
+    },
+  ): Promise<{
+    data: DurableApproval | null;
     status: number | null;
     error: Error | null;
   }>;

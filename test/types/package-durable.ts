@@ -14,6 +14,7 @@ export const cjsHandler = cjsDurable<{ orderId: number }, number>(
 export const esmHandler = esmDurable<{ orderId: number }, number>(
   async (input, context: EsmContext) => {
     await context.wait('1s');
-    return input.orderId;
+    const decision = await context.waitForApproval('ship', { title: 'Ship it?' });
+    return decision.approved ? input.orderId : 0;
   },
 );

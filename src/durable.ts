@@ -1,3 +1,4 @@
+import { type CallbackContext, waitForApproval } from './durable-approval.ts';
 import { batchResult, type EngineBatch } from './durable-batch-result.ts';
 import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
 import { waitDuration } from './durable-duration.ts';
@@ -13,6 +14,7 @@ import type {
   DurableStepScope,
   ParallelBranch,
   StepOptions,
+  WaitForApprovalOptions,
   WaitUntilOptions,
 } from './durable-types.ts';
 
@@ -28,8 +30,9 @@ interface EngineScope {
   attempt: number;
 }
 
-interface EngineContext {
+interface EngineContext extends CallbackContext {
   logger: DurableLog;
+  executionContext?: { durableExecutionArn?: unknown };
   configureLogger(config: { customLogger: DurableLog }): void;
   step<Result>(
     name: string | undefined,
@@ -162,15 +165,27 @@ export function durable<Input = unknown, Result = unknown>(
         if (options.logger !== undefined) {
           context.configureLogger({ customLogger: options.logger });
         }
-        return handler(input, durableContext(context, engine));
+        return handler(input, durableContext(context, engine, executionRef(context)));
       });
     }
     return wrapped(event, functionContext);
   };
 }
 
+// The runtime copies the invocation event's DurableExecutionArn here verbatim.
+// Reading it per invocation from the root context, rather than from the event
+// in the cached wrapper, keeps concurrent invocations from sharing a value.
+function executionRef(context: EngineContext): string | undefined {
+  const arn = context.executionContext?.durableExecutionArn;
+  return typeof arn === 'string' && arn !== '' ? arn : undefined;
+}
+
 /** Expose only Volcano's supported checkpoint operations to a handler. */
-function durableContext(context: EngineContext, engine: Engine): DurableContext {
+function durableContext(
+  context: EngineContext,
+  engine: Engine,
+  ref: string | undefined,
+): DurableContext {
   return {
     log: context.logger,
 
@@ -206,7 +221,11 @@ function durableContext(context: EngineContext, engine: Engine): DurableContext 
       if (typeof run !== 'function') {
         throw new TypeError('ctx.child() requires a function to run');
       }
-      return context.runInChildContext(name, (child) => run(durableContext(child, engine)));
+      return context.runInChildContext(name, (child) => run(durableContext(child, engine, ref)));
+    },
+
+    waitForApproval(name: string, options: WaitForApprovalOptions) {
+      return waitForApproval(context, ref, name, options);
     },
 
     waitUntil<State>(
@@ -240,7 +259,7 @@ function durableContext(context: EngineContext, engine: Engine): DurableContext 
         .map<
           Item,
           Result
-        >(call.name, call.items, (child, item, index) => run(item, durableContext(child, engine), index), batchConfig(call.options))
+        >(call.name, call.items, (child, item, index) => run(item, durableContext(child, engine, ref), index), batchConfig(call.options))
         .then(batchResult);
     },
 
@@ -256,7 +275,7 @@ function durableContext(context: EngineContext, engine: Engine): DurableContext 
       return context
         .parallel<Result>(
           name,
-          parallelBranches(branches, (child) => durableContext(engineContext(child), engine)),
+          parallelBranches(branches, (child) => durableContext(engineContext(child), engine, ref)),
           batchConfig(config),
         )
         .then(batchResult);
@@ -270,6 +289,8 @@ function stepScope(scope: EngineScope): DurableStepScope {
 
 export { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 export type {
+  ApprovalDecider,
+  ApprovalDecision,
   BatchCompletionReason,
   BatchFailure,
   BatchItem,
@@ -286,5 +307,6 @@ export type {
   RetryDecision,
   RetryOptions,
   StepOptions,
+  WaitForApprovalOptions,
   WaitUntilOptions,
 } from './durable-types.ts';

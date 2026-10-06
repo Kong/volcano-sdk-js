@@ -4,6 +4,250 @@
  */
 
 export interface paths {
+    "/sandboxes/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available sandbox presets */
+        get: operations["listSandboxPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox templates */
+        get: operations["listSandboxes"];
+        put?: never;
+        /** Create a sandbox template from a verified preset */
+        post: operations["createSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox template */
+        get: operations["getSandbox"];
+        put?: never;
+        post?: never;
+        /** Retire a template and terminate its sessions */
+        delete: operations["deleteSandbox"];
+        options?: never;
+        head?: never;
+        /** Rename a sandbox template */
+        patch: operations["updateSandbox"];
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox deployment history */
+        get: operations["listSandboxDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project sandbox sessions */
+        get: operations["listSandboxSessions"];
+        put?: never;
+        /** Start a sandbox session */
+        post: operations["createSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute once and return after confirmed termination */
+        post: operations["executeSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox session */
+        get: operations["getSandboxSession"];
+        put?: never;
+        post?: never;
+        /** Request sandbox termination */
+        delete: operations["terminateSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend a sandbox session */
+        post: operations["suspendSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a sandbox session */
+        post: operations["resumeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/exec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a command within a session */
+        post: operations["executeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read a workspace file */
+        post: operations["readSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a workspace file */
+        post: operations["writeSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/grants/{subjectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Authorize an authenticated project user for this session */
+        put: operations["grantSandboxSession"];
+        post?: never;
+        /** Revoke a project user session grant */
+        delete: operations["revokeSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a short-lived port-scoped access credential */
+        post: operations["createSandboxSessionAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/user/imports/connect": {
         parameters: {
             query?: never;
@@ -464,6 +708,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/frontend-shared-variables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace frontend shared variable names
+         * @description Atomically replaces the complete shared frontend-variable list without
+         *     changing values. Names must already exist. Validates final affected
+         *     frontend environments before membership or propagation side effects.
+         *     An empty list clears membership. Omitted names remain stored outside the frontend shared list.
+         */
+        put: operations["replaceFrontendSharedVariables"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/config": {
         parameters: {
             query?: never;
@@ -479,7 +746,7 @@ export interface paths {
          *     `?format=yaml`; the YAML is returned verbatim as the raw response body
          *     (`Content-Type: application/yaml`) and is meant to be saved as-is.
          *     Variable values and write-only secrets (SMTP password, OAuth client secrets, TLS material)
-         *     are omitted from the export; shared_variables contains names only; the YAML rendering adds a header comment
+         *     are omitted from the export; shared_variables and frontend_shared_variables contain names only; the YAML rendering adds a header comment
          *     describing how to set them via CLI environment interpolation.
          */
         get: operations["getProjectConfig"];
@@ -675,7 +942,9 @@ export interface paths {
         /**
          * Get database queries
          * @description Returns the database's current top queries from pg_stat_statements
-         *     ranked by total execution time.
+         *     ranked by total execution time. Only data statements (SELECT, INSERT,
+         *     UPDATE, DELETE, MERGE) are listed; statements Volcano runs to operate
+         *     the database are left out.
          *
          *     **SUPERAGENT plan required.** This endpoint is only available to projects owned
          *     by users on the SUPERAGENT billing plan.
@@ -758,6 +1027,11 @@ export interface paths {
          *     ordered most-recent first. Each item includes a normalized resource
          *     reference so clients can render both resource types without extra
          *     fetches.
+         *
+         *     Standard and durable function deployments both appear under
+         *     `resource.type: function`, and `resource.kind` tells them apart. Pass
+         *     `function_kind` to list one kind only; frontends are then excluded.
+         *     Combining `function_kind` with `resource_type=frontend` is rejected.
          */
         get: operations["listProjectDeployments"];
         put?: never;
@@ -783,6 +1057,9 @@ export interface paths {
          *     and superseded attempts are excluded. Median build duration includes
          *     completed, non-superseded attempts with recorded build work,
          *     including failed builds.
+         *
+         *     With `resource_type=function`, pass `function_kind` to summarize one
+         *     kind of function only. It is rejected with `resource_type=frontend`.
          */
         get: operations["summarizeProjectDeployments"];
         put?: never;
@@ -835,7 +1112,7 @@ export interface paths {
         put?: never;
         /**
          * Create or update function code
-         * @description Upload a serverless function source bundle. Direct API clients may send the function code
+         * @description Upload a function source bundle. Direct API clients may send the function code
          *     as a ZIP or tar.gz archive via multipart/form-data. The API stores a normalized tar.gz
          *     source archive.
          *     Cloud deploys should include source files and dependency manifests/lockfiles, not installed
@@ -901,15 +1178,22 @@ export interface paths {
         put?: never;
         /**
          * Invoke a function
-         * @description Invoke a serverless function.
+         * @description Invoke a function. The function's `visibility` decides which credentials
+         *     may call it, and the function does not run for any other. A `private`
+         *     function answers every credential but a service key exactly as a
+         *     missing one, with 404, so its name and id cannot be discovered; an anon
+         *     key on an `authenticated` function gets 403. An SDK calling by name
+         *     resolves it first through `GET /functions/resolve`, which answers that
+         *     anon key with 404 instead.
          *
-         *     **With Service Key** (admin/background operations):
+         *     **With Service Key** (admin/background operations, every visibility):
          *     - Use for background jobs, webhooks, cron, admin operations
          *     - Function receives payload only (no user context)
          *     - Database queries bypass RLS (admin access)
          *
-         *     **With Auth User Token** (user-facing):
+         *     **With Auth User Token** (user-facing, `authenticated` or `public` functions):
          *     - Use for user-initiated actions
+         *     - Includes users from anonymous sign-ins
          *     - Function receives payload + `__volcano_auth` context:
          *       ```javascript
          *       {
@@ -921,9 +1205,9 @@ export interface paths {
          *       ```
          *     - Database queries enforce RLS (user-scoped data)
          *
-         *     **With Anon Key** (public function only):
+         *     **With Anon Key** (`public` functions only):
          *     - Requires anon key permission: `functions.invoke`
-         *     - Function must have `is_public: true`
+         *     - Function must have `visibility: public`
          *     - Function receives payload only (no `__volcano_auth`)
          *
          *     **Transport and CORS:**
@@ -973,11 +1257,16 @@ export interface paths {
          *     `/projects/{id}/durable-functions/...` remains the owner's management
          *     surface.
          *
-         *     **With a service key or an auth user token:** any durable function in
-         *     the project.
+         *     **With a service key:** any durable function in the project.
+         *
+         *     **With an auth user token:** a durable function whose `visibility` is
+         *     `authenticated` or `public`.
          *
          *     **With an anon key:** requires the `functions.invoke` permission, and
-         *     the function must have `is_public: true`.
+         *     the function must have `visibility: public`.
+         *
+         *     A `private` durable function answers every credential but a service key
+         *     exactly as a missing one, with 404.
          *
          *     Starting is all this endpoint does. Reading a result or stopping an
          *     execution requires the project owner's token, because an anon key is
@@ -1022,11 +1311,12 @@ export interface paths {
          *     - Allowed
          *
          *     **With Auth User Token**:
-         *     - Allowed
+         *     - Allowed for `authenticated` and `public` functions
+         *     - A `private` function answers 404, exactly as a missing one
          *
          *     **With Anon Key**:
          *     - Requires anon key permission: `functions.invoke`
-         *     - Function must have `is_public: true`
+         *     - Function must have `visibility: public`; any other answers 404
          */
         get: operations["resolveFunctionForInvocation"];
         put?: never;
@@ -1053,10 +1343,12 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to count deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
-         *     from a HOBBY-plan project owner returns 403. The activity window is limited
+         *     databases. Database logs are a SUPERAGENT feature; `resource.type=database`
+         *     from a HOBBY project owner returns 403. The activity window is limited
          *     to the plan's retention window (HOBBY: 1 day, SUPERAGENT: 30 days); older start
-         *     times are clamped to that window.
+         *     times are clamped to that window. Buckets are aligned to UTC clock
+         *     intervals and count events in the half-open window
+         *     `[start_time, end_time)`.
          */
         post: operations["getProjectLogActivity"];
         delete?: never;
@@ -1081,8 +1373,8 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to read deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a SUPERAGENT-plan feature; requests for
-         *     `resource.type=database` from a HOBBY-plan project owner return 403.
+         *     databases. Database logs are a SUPERAGENT feature; requests for
+         *     `resource.type=database` from a HOBBY project owner return 403.
          *     Log history (runtime and deployment) is limited to the plan's retention
          *     window (HOBBY: 1 day, SUPERAGENT: 30 days); older time ranges are clamped to that
          *     window.
@@ -1109,8 +1401,8 @@ export interface paths {
          *     resource selector plus `q`, `start_time`, and `limit`,
          *     including runtime logs and function/frontend deployment logs selected
          *     with `resource.deployments`. Deployment logs are not supported for
-         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
-         *     from a HOBBY-plan project owner returns 403. The `q` field uses the same
+         *     databases. Database logs are a SUPERAGENT feature; `resource.type=database`
+         *     from a HOBBY project owner returns 403. The `q` field uses the same
          *     syntax as search and activity requests. Do not send `cursor` or
          *     `end_time`; use `/logs/search` for range backfills.
          *     Explicit historical `start_time` values are limited to the plan's
@@ -1175,6 +1467,10 @@ export interface paths {
          *     Returns schedulers across all functions in the project, ordered by
          *     creation time descending, with standard page/limit pagination so
          *     clients don't have to fan out one request per function.
+         *
+         *     Schedulers of standard and durable functions are listed together, and
+         *     each carries `function_kind`. Pass `function_kind` to list one kind
+         *     only.
          */
         get: operations["listProjectSchedulers"];
         put?: never;
@@ -1294,10 +1590,14 @@ export interface paths {
         /**
          * Delete a durable function
          * @description Accepted for asynchronous teardown; the work continues after the
-         *     response. The function's executions go with it: history stops being
-         *     readable whatever `retention_days` had left, and the executions still
-         *     running stop counting against the project's concurrency cap. Stop an
-         *     execution first if you need it to end before the function does.
+         *     response. The function's executions go with it: executions still in
+         *     flight are stopped, and history stops being readable whatever
+         *     `retention_days` had left.
+         *
+         *     Stopping is asynchronous at the platform, and it does not interrupt a
+         *     step already running -- that step runs to its next checkpoint. So a
+         *     delete ends an execution rather than halting it mid-step; stop the
+         *     execution yourself first if you need to observe it ending.
          */
         delete: operations["deleteDurableFunction"];
         options?: never;
@@ -1435,6 +1735,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's operations
+         * @description Returns the execution's trace: every operation it began — each step,
+         *     wait, poll, child context, map item and parallel branch — with when it
+         *     started and ended, how it ended, and each attempt of a retried step.
+         *     `invocations` are the windows the function's code was actually running;
+         *     the gaps between them are time the execution spent suspended, which is
+         *     not charged.
+         *
+         *     A finished execution's trace is final and `complete` is `true`. A
+         *     running one is refreshed when it is read, and can be up to about ten
+         *     seconds behind; `synced_at` says when it was last refreshed. Inputs,
+         *     results and other payloads are never included.
+         *
+         *     The list is not paginated: an execution is limited to 3,000
+         *     operations, and a trace is read whole.
+         */
+        get: operations["listDurableExecutionOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/stop": {
         parameters: {
             query?: never;
@@ -1459,6 +1792,158 @@ export interface paths {
          *     response carries the state it settled in.
          */
         post: operations["stopDurableExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request an approval from inside a workflow
+         * @description Registers an approval request for a running durable execution. The
+         *     Volcano SDK calls this from `ctx.waitForApproval`; applications do not
+         *     call it directly.
+         *
+         *     `execution_ref` and `callback_id` are opaque values the SDK reads from
+         *     the running workflow. Together they are the request's credential, so
+         *     the operation takes no other authentication. The approval belongs to
+         *     the project that owns the execution, and expires when the workflow's
+         *     own approval timeout does.
+         *
+         *     Retrying is safe: a request for an approval that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["requestDurableApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List durable approvals
+         * @description Lists the approvals durable workflows in the project have requested,
+         *     newest first. Pending approvals are the ones a workflow is waiting on;
+         *     decided, expired, and cancelled ones are kept for a year.
+         *
+         *     Project access tokens can list approvals, including read-only ones.
+         */
+        get: operations["listDurableApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get durable approval statistics
+         * @description Counts the project's approvals by outcome over a time window, overall,
+         *     per workflow, and per day. The window defaults to the last 30 days and
+         *     can cover up to a year. An approval is counted on the day it was
+         *     requested.
+         *
+         *     Project access tokens can read statistics, including read-only ones.
+         */
+        get: operations["getDurableApprovalStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a durable approval */
+        get: operations["getDurableApproval"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a durable approval
+         * @description Approves a pending approval. The workflow resumes with the decision.
+         *
+         *     Only a person can decide: use the dashboard or a platform token from
+         *     `volcano login`. Project access tokens are refused with `403`.
+         *
+         *     Approving an approval that is already approved returns it unchanged.
+         *     If the workflow cannot be reached right away, the decision still
+         *     stands and Volcano keeps delivering it.
+         */
+        post: operations["approveDurableApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deny a durable approval
+         * @description Denies a pending approval. The workflow resumes with the decision; a
+         *     denial is a value the workflow branches on, not an error.
+         *
+         *     Only a person can decide: use the dashboard or a platform token from
+         *     `volcano login`. Project access tokens are refused with `403`.
+         *
+         *     Denying an approval that is already denied returns it unchanged.
+         *     If the workflow cannot be reached right away, the decision still
+         *     stands and Volcano keeps delivering it.
+         */
+        post: operations["denyDurableApproval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1504,7 +1989,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.25 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.5 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.27 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.8 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1624,14 +2109,73 @@ export interface paths {
          *     `requests: 0, errors: 0` so the response always has exactly
          *     `days` entries.
          *
-         *     Backs the Monitoring section on the Frontend detail page in
-         *     volcano-web. `days` defaults to 30 and is capped at 90 to keep
+         *     Backs the Monitoring section on the frontend detail page in
+         *     the Volcano dashboard. `days` defaults to 30 and is capped at 90 to keep
          *     the (frontend_id, day) index scan bounded.
          */
         get: operations["getFrontendUsageHistory"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/function-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        /** List a Frontend's Function routes */
+        get: operations["listFrontendFunctionRoutes"];
+        put?: never;
+        /**
+         * Route a Frontend path to an HTTP Function
+         * @description The Frontend and Function must belong to this Project. The Function must be a standard
+         *     Function with `visibility: public` and HTTP invocation mode, because requests through the
+         *     route carry no credential: Volcano does not check a token sent to a route path or add
+         *     `__volcano_auth`, so the Function authenticates its callers itself. A Function cannot leave `public`
+         *     while a route targets it. The route applies to every hostname that resolves to the
+         *     Frontend, including generated, custom-domain, preview, and local hostnames.
+         */
+        post: operations["createFrontendFunctionRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/function-routes/{routeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Function route ID */
+                routeId: components["parameters"]["FrontendFunctionRouteId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a Frontend Function route
+         * @description Replaces the route's target, path, and prefix handling. The new target must meet the same rules as on create, including `visibility: public`.
+         */
+        put: operations["updateFrontendFunctionRoute"];
+        post?: never;
+        /** Delete a Frontend Function route */
+        delete: operations["deleteFrontendFunctionRoute"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1680,9 +2224,9 @@ export interface paths {
         get: operations["listDatabases"];
         put?: never;
         /**
-         * Create a new serverless PostgreSQL database
-         * @description Creates a serverless PostgreSQL database in the project.
-         *     Each project can hold 1 database on Hobby and up to 10,000 on Superagent.
+         * Create a new PostgreSQL database
+         * @description Creates a PostgreSQL database in the project.
+         *     Each project can hold 1 database on HOBBY and up to 10,000 on SUPERAGENT.
          *     Requests over the plan's cap return 403.
          */
         post: operations["createDatabase"];
@@ -2271,7 +2815,7 @@ export interface paths {
          *     - Simple data retrieval
          *     - Filtered searches with sorting and pagination
          *
-         *     **Note:** For complex queries (JOINs, CTEs), use Lambda functions with direct SQL
+         *     **Note:** For complex queries (JOINs, CTEs), use a function with direct SQL
          *
          *     **Branch-targeted.** Runs against the named branch instead of the parent
          *     database, using the branch's own credentials. The branch must be `active`
@@ -2430,8 +2974,9 @@ export interface paths {
         };
         /**
          * List supported function runtimes
-         * @description Returns the public function runtime catalog used by CLI clients to select supported runtimes,
-         *     language defaults, and local source packaging metadata for deployments.
+         * @description Returns the public function runtime catalog: every runtime a deploy accepts, its display
+         *     label for runtime pickers, language defaults, durable capability, and local source packaging
+         *     metadata for deployments.
          *     This is a public endpoint that doesn't require authentication.
          */
         get: operations["listFunctionRuntimes"];
@@ -3010,12 +3555,15 @@ export interface paths {
         };
         /**
          * Get auth user insights
-         * @description Returns current auth-user totals, rolling 30-day active users, and
-         *     zero-filled signup and successful sign-in counts for an inclusive UTC
-         *     date range. Weeks start on Monday. Sign-in counts and active-user
-         *     activity begin when collection is deployed. Historical signup counts
-         *     are backfilled from users present at deployment. Token refreshes affect
-         *     active users but not the sign-in series.
+         * @description Returns current and deleted auth-user totals, rolling 24-hour and 30-day
+         *     active users, and zero-filled signup, deletion, net-growth, and successful
+         *     sign-in counts for an inclusive UTC date range. Weeks start on Monday.
+         *     Signups remain counted after deletion; net growth is signups minus
+         *     deletions. Deleted users contribute to active counts until their last
+         *     activity leaves the rolling window. Token refreshes affect active users
+         *     but not the sign-in series. Collection starts at deployment, with signup
+         *     history backfilled from accounts still present then. Earlier hard-deleted
+         *     accounts cannot be recovered.
          */
         get: operations["getAuthInsights"];
         put?: never;
@@ -3135,6 +3683,7 @@ export interface paths {
          * Ban a user
          * @description Bans a user temporarily or permanently. Banned users cannot sign in
          *     and all their active sessions are immediately revoked.
+         *     Omitting banned_until clears any previous expiry. Deleted accounts cannot be banned.
          *
          *     - Omit `banned_until` for a permanent ban
          *     - Provide `banned_until` ISO timestamp for a temporary ban
@@ -3158,7 +3707,7 @@ export interface paths {
         /**
          * Unban a user
          * @description Removes a ban from a user, restoring their ability to sign in.
-         *     The user's status is set back to 'active'.
+         *     The user's status is set back to 'active'. Deleted accounts cannot be restored.
          */
         post: operations["unbanAuthUser"];
         delete?: never;
@@ -3183,7 +3732,7 @@ export interface paths {
         /**
          * Create email template
          * @description Creates a custom email template for the project. Custom email templates
-         *     are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner are
+         *     are a SUPERAGENT feature: requests from a HOBBY project owner are
          *     rejected with 403, and HOBBY projects always send the built-in default
          *     templates regardless of any previously saved custom rows.
          *     Every project is created with one template per type, so customizing one
@@ -3208,9 +3757,9 @@ export interface paths {
         get: operations["getEmailTemplate"];
         /**
          * Update email template
-         * @description Updates a custom email template. Custom email templates are a SUPERAGENT-plan
-         *     feature: requests from a HOBBY-plan project owner are rejected with 403
-         *     (including after a SUPERAGENT→HOBBY downgrade), so a HOBBY project cannot modify
+         * @description Updates a custom email template. Custom email templates are a SUPERAGENT
+         *     feature: requests from a HOBBY project owner are rejected with 403
+         *     (including after a downgrade), so a HOBBY project cannot modify
          *     templates and always sends the built-in defaults.
          */
         put: operations["updateEmailTemplate"];
@@ -3218,7 +3767,7 @@ export interface paths {
         /**
          * Delete email template
          * @description Deletes a custom template, reverting to the default. Custom email
-         *     templates are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner
+         *     templates are a SUPERAGENT feature: requests from a HOBBY project owner
          *     are rejected with 403.
          */
         delete: operations["deleteEmailTemplate"];
@@ -4011,6 +4560,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/access-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's access tokens
+         * @description Lists the project's access tokens, newest first. Secrets are never
+         *     returned: only a hash is stored, so a token's value exists solely in the
+         *     response to the create call.
+         *
+         *     Only tokens that can still authenticate are returned by default, so
+         *     revoked and expired ones are hidden. Pass `include_revoked=true` to see
+         *     them, which is how you find out what a key did before it stopped working.
+         *
+         *     Requires a platform token. A project access token cannot manage project
+         *     access tokens, so a leaked credential cannot enumerate or replace itself.
+         */
+        get: operations["listProjectAccessTokens"];
+        put?: never;
+        /**
+         * Create a project access token
+         * @description Creates a project access token and returns its secret.
+         *
+         *     The secret is in this response and nowhere else. Only its hash is
+         *     stored, so it cannot be retrieved, displayed, or recovered later — save
+         *     it when you create it.
+         *
+         *     The name must be unique within the project, so a retry cannot mint a
+         *     second credential. It cannot recover the first one either. A retry that
+         *     returns `409` with code `access_token_name_exists` means the original
+         *     create committed and its secret is unrecoverable: list the project's
+         *     tokens, revoke the one holding that name, and create it again.
+         *
+         *     Requires a platform token.
+         */
+        post: operations["createProjectAccessToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-day request counts for every access token in a project
+         * @description Returns a zero-filled daily series of request counts for each of the
+         *     project's access tokens, oldest first. Every day in the window is
+         *     present, so a gap reads as zero rather than missing.
+         *
+         *     Revoked tokens are included, because the traffic they made before
+         *     revocation is usually the reason you are looking.
+         *
+         *     `days` defaults to 30 and is capped at 60, which is also how long per-day
+         *     counts are retained — a longer window cannot be answered.
+         *
+         *     A platform token sees every token in the project. A project access token
+         *     sees only its own row, so it can watch its own traffic without being
+         *     able to enumerate the project's other credentials by name.
+         */
+        get: operations["listProjectAccessTokensUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/{tokenId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a project access token
+         * @description Returns one token's metadata. Never its secret, which is not stored in a
+         *     recoverable form.
+         *
+         *     Requires a platform token.
+         */
+        get: operations["getProjectAccessToken"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a project access token
+         * @description Revokes the token. It stops authenticating immediately in the region
+         *     handling this call and within seconds across Volcano's other regions.
+         *
+         *     The record is kept rather than deleted, so the token's name, prefix, last
+         *     use, and request history stay available — which is what you need if you
+         *     are revoking because a secret leaked. Revoking an already-revoked token
+         *     succeeds.
+         *
+         *     Revoking does not undo anything the token already did. Treat whatever it
+         *     could reach as exposed and rotate accordingly.
+         *
+         *     Requires a platform token.
+         */
+        delete: operations["revokeProjectAccessToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/access-tokens/{tokenId}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-day request counts for one access token
+         * @description Returns a zero-filled daily series of request counts for a single token,
+         *     oldest first, so the response always has exactly `days` entries.
+         *
+         *     `days` defaults to 30 and is capped at 60, matching how long per-day
+         *     counts are retained.
+         *
+         *     A project access token may read only its own usage; asking for another
+         *     token's returns `403`. A platform token may read any token in the
+         *     project.
+         */
+        get: operations["getProjectAccessTokenUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/service-keys": {
         parameters: {
             query?: never;
@@ -4077,7 +4769,7 @@ export interface paths {
         /**
          * Regenerate service key
          * @description Generate new JWT value for existing key.
-         *     The old key is immediately invalidated.
+         *     The old key stops working within a few seconds.
          *     Update your backend services with the new key before regenerating in production.
          */
         post: operations["regenerateServiceKey"];
@@ -4527,96 +5219,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sandboxes/presets": {
+    "/openapi.json": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List available sandbox presets */
-        get: operations["listSandboxPresets"];
+        /**
+         * Fetch the OpenAPI specification as JSON
+         * @description Returns this specification as a self-contained JSON document, with every
+         *     reference resolved. It is generated from the same document the server
+         *     validates requests against, so a client generated from it cannot
+         *     describe a different API than the one that answers.
+         *
+         *     No credential is required: a client generator fetches this by URL before
+         *     its user has a token, and every path here is already published in the
+         *     API reference.
+         *
+         *     The response carries a strong `ETag`; send it back as `If-None-Match` to
+         *     get `304 Not Modified` instead of the whole document.
+         */
+        get: operations["getOpenAPISpecJSON"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /**
+         * Check the JSON OpenAPI specification
+         * @description The headers `GET /openapi.json` would return, so a cache can pick up the
+         *     current `ETag` without transferring the document.
+         */
+        head: operations["headOpenAPISpecJSON"];
         patch?: never;
         trace?: never;
     };
-    "/projects/{id}/sandboxes": {
+    "/openapi.yaml": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List sandbox templates */
-        get: operations["listSandboxes"];
-        put?: never;
-        /** Create a sandbox template from a verified preset */
-        post: operations["createSandbox"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/sandboxes/{sandboxId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a sandbox template */
-        get: operations["getSandbox"];
-        put?: never;
-        post?: never;
-        /** Retire a template and terminate its sessions */
-        delete: operations["deleteSandbox"];
-        options?: never;
-        head?: never;
-        /** Rename a sandbox template */
-        patch: operations["updateSandbox"];
-        trace?: never;
-    };
-    "/projects/{id}/sandboxes/{sandboxId}/deployments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List sandbox deployment history */
-        get: operations["listSandboxDeployments"];
+        /**
+         * Fetch the OpenAPI specification as YAML
+         * @description The same document as `/openapi.json`, serialized as YAML for tools that
+         *     prefer it. See that operation for caching and authentication notes.
+         */
+        get: operations["getOpenAPISpecYAML"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /**
+         * Check the YAML OpenAPI specification
+         * @description The headers `GET /openapi.yaml` would return, so a cache can pick up the
+         *     current `ETag` without transferring the document.
+         */
+        head: operations["headOpenAPISpecYAML"];
         patch?: never;
         trace?: never;
     };
-    "/projects/{id}/sandbox-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List project sandbox sessions */
-        get: operations["listSandboxSessions"];
-        put?: never;
-        /** Start a sandbox session */
-        post: operations["createSandboxSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/sandbox-executions": {
+    "/mcp": {
         parameters: {
             query?: never;
             header?: never;
@@ -4625,146 +5289,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute once and return after confirmed termination */
-        post: operations["executeSandbox"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a sandbox session */
-        get: operations["getSandboxSession"];
-        put?: never;
-        post?: never;
-        /** Request sandbox termination */
-        delete: operations["terminateSandboxSession"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/suspend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Suspend a sandbox session */
-        post: operations["suspendSandboxSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resume a sandbox session */
-        post: operations["resumeSandboxSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/exec": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Execute a command within a session */
-        post: operations["executeSandboxSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/files/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Read a workspace file */
-        post: operations["readSandboxSessionFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/files/write": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Write a workspace file */
-        post: operations["writeSandboxSessionFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/grants/{subjectId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Authorize an authenticated project user for this session */
-        put: operations["grantSandboxSession"];
-        post?: never;
-        /** Revoke a project user session grant */
-        delete: operations["revokeSandboxSession"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sandbox-sessions/{sessionId}/access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Issue a short-lived port-scoped access credential */
-        post: operations["createSandboxSessionAccess"];
+        /**
+         * Model Context Protocol endpoint
+         * @description Streamable-HTTP MCP endpoint: one JSON-RPC 2.0 object per request, one
+         *     response per request. There is no server-to-client stream, so a `GET`
+         *     returns `405`, and a batched array is rejected.
+         *
+         *     Authenticated with a **project access token**. The endpoint takes its
+         *     project from the credential, so a platform token is refused with `403` —
+         *     it names no project, and letting a tool argument choose one would hand an
+         *     agent its own blast radius.
+         *
+         *     Scope carries over from the REST API. A `read_only` token is not offered
+         *     mutating tools or credential-returning reads, and is refused if it calls
+         *     one anyway. Revoking the token ends MCP access on the same path it ends
+         *     API access.
+         *
+         *     Methods: `initialize`, `notifications/initialized`, `ping`,
+         *     `tools/list`, `tools/call`. See the
+         *     [MCP guide](https://docs.volcano.dev/platform/interfaces/mcp) for the
+         *     tool surface and client configuration.
+         */
+        post: operations["callMCP"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5199,7 +5745,7 @@ export interface components {
             bucket_start: string;
             /**
              * Format: int64
-             * @description Accounts created during the bucket.
+             * @description Registrations during the bucket. Subsequent deletion does not subtract from this count. Historical counts removed before deletion-history collection cannot be reconstructed.
              */
             signups: number;
             /**
@@ -5207,18 +5753,38 @@ export interface components {
              * @description Successful session creations during the bucket.
              */
             signins: number;
+            /**
+             * Format: int64
+             * @description Accounts deleted during this bucket, counted once across soft and hard deletion.
+             */
+            deletions: number;
+            /**
+             * Format: int64
+             * @description Registrations minus deletions during this bucket. May be negative.
+             */
+            net_growth: number;
             /** @description Whether the requested window or observation time clips this bucket. */
             is_partial: boolean;
         };
         AuthInsightsSummary: {
             /**
              * Format: int64
-             * @description Current auth-user count, matching the auth-user list total.
+             * @description Current auth-user count, excluding accounts with deleted status.
              */
             total_users: number;
             /**
              * Format: int64
-             * @description Users with a successful session creation or refresh in the trailing 30 days since activity collection was deployed.
+             * @description Recorded deletions, excluding internal test identities. Includes soft and hard deletion, counted once per account.
+             */
+            deleted_users: number;
+            /**
+             * Format: int64
+             * @description Distinct users active in the trailing 24 hours, including activity before account deletion.
+             */
+            active_users_1d: number;
+            /**
+             * Format: int64
+             * @description Distinct users with a successful session creation or refresh in the trailing 30 days, including activity before account deletion.
              */
             active_users_30d: number;
         };
@@ -5585,11 +6151,12 @@ export interface components {
              */
             name: string;
             /**
-             * @description Region for database hosting. The accepted values are the regions this
-             *     environment runs in, so read them from `GET /databases/regions` rather
-             *     than hardcoding a list. A region the environment does not offer is
-             *     rejected with 400.
-             * @example aws-us-east-1
+             * @description Region for database hosting, such as `us-east-1`. The accepted values
+             *     are the regions this environment runs in, so read them from
+             *     `GET /databases/regions` rather than hardcoding a list. A region the
+             *     environment does not offer is rejected with 400. Region IDs issued by
+             *     earlier versions of the API are still accepted.
+             * @example us-east-1
              */
             region: string;
             /**
@@ -5688,6 +6255,14 @@ export interface components {
              */
             name: string;
             /**
+             * @description Optional trusted starter template identifier. The server resolves immutable source and database initialization artifacts. Callers cannot supply artifact locations or database credentials. Creation accepts an asynchronous installation; poll the individual project until template_installation.status is ready before using the app. Use pixel-board, trellini, or collab-pad for the configured starter bundles. The official-starter legacy identifier has environment-specific availability. Cannot be combined with initialPrompt.
+             * @example pixel-board
+             * @enum {string}
+             */
+            template_id?: "pixel-board" | "trellini" | "collab-pad" | "official-starter";
+            /** @description Optional initial builder prompt. Cannot be combined with template_id. */
+            initialPrompt?: string;
+            /**
              * @description Optional region policy.
              *     - `true` (default): project functions deploy to all configured regions
              *     - `false`: project deploys only to `selected_regions`
@@ -5779,6 +6354,7 @@ export interface components {
         CreateVariableRequest: {
             /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
             shared?: boolean;
+            /** @description Project variable name. Function runtime names such as AWS_REGION are reserved and return 400; see the environment variables guide for the full list. */
             name: string;
             value: string;
         };
@@ -5816,7 +6392,7 @@ export interface components {
             connection_string?: string;
             /**
              * @description Region where the database is hosted
-             * @example aws-us-east-1
+             * @example us-east-1
              */
             region?: string;
             /**
@@ -6691,6 +7267,13 @@ export interface components {
             production_branch?: string;
         };
         Frontend: {
+            /**
+             * @description All preserves access to all project variables. Shared includes the project frontend shared-variable list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "shared" | "scoped";
+            /** @description Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it. */
+            declared_variables?: string[];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -6735,12 +7318,44 @@ export interface components {
              * @enum {string}
              */
             custom_domain_status?: "pending_verification" | "provisioning" | "active" | "detaching" | "failed" | "deleted";
+            /**
+             * @description Paths on this frontend that forward to a public function, ordered
+             *     from most to least specific. Anyone who can load the frontend can
+             *     reach the target function at these paths without a credential.
+             */
+            function_routes: components["schemas"]["FrontendFunctionRoute"][];
             /** Format: date-time */
             last_invoked_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        FrontendFunctionRoute: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            frontend_id: string;
+            /** Format: uuid */
+            function_id: string;
+            path_prefix: string;
+            strip_prefix: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        FrontendFunctionRouteList: {
+            data: components["schemas"]["FrontendFunctionRoute"][];
+        };
+        CreateFrontendFunctionRouteRequest: {
+            /** Format: uuid */
+            function_id: string;
+            path_prefix: string;
+            /** @default false */
+            strip_prefix?: boolean;
         };
         FrontendCustomDomainResponse: {
             domain: string;
@@ -6752,6 +7367,8 @@ export interface components {
             verification_status: "pending" | "verified";
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             required_routing_record?: components["schemas"]["FrontendDomainRoutingRecord"];
+            /** @description DNS routing target hostname for this frontend. The DNS record type depends on whether the custom domain is a zone apex. */
+            routing_target_hostname?: string;
             effective_urls: string[];
             /** Format: date-time */
             created_at: string;
@@ -6795,21 +7412,19 @@ export interface components {
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
             /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
             initiated_by?: string;
-            artifact_bucket?: string;
-            artifact_key?: string;
-            artifact_version?: string;
             site_url?: string;
-            cloudformation_stack_id?: string;
-            cloudformation_stack_url?: string;
             /**
              * Format: int64
-             * @description Total CodeBuild build duration recorded for this deployment, in seconds.
+             * @description Total build time recorded for this deployment, in seconds.
              */
-            codebuild_duration_seconds?: number;
-            /** @description Number of completed CodeBuild builds included in codebuild_duration_seconds. */
-            codebuild_build_count?: number;
-            /** Format: date-time */
-            codebuild_duration_recorded_at?: string;
+            build_duration_seconds?: number;
+            /** @description Number of completed builds included in build_duration_seconds. */
+            build_count?: number;
+            /**
+             * Format: date-time
+             * @description When the build time was last recorded.
+             */
+            build_duration_recorded_at?: string;
             progress?: components["schemas"]["DeploymentProgress"];
             error_message?: string;
             /** Format: date-time */
@@ -6880,6 +7495,148 @@ export interface components {
             /** Format: int64 */
             total_page_views: number;
         };
+        /**
+         * @description A project access token: a control-plane credential bound to a single
+         *     project. Unlike a platform token, which acts on every project its owner
+         *     has, this one is limited to the project it was created in.
+         *
+         *     The secret itself is never returned here. Only its hash is stored, so
+         *     the plaintext exists solely in the response to the create call.
+         */
+        ProjectAccessToken: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** @description Unique per project. */
+            name: string;
+            /** @description First 12 characters of the secret, for recognising a token in a list. */
+            token_prefix: string;
+            scope: components["schemas"]["ProjectAccessTokenScope"];
+            /**
+             * @description `revoked` means the token was deliberately revoked, by you or by the
+             *     deletion of its project. `expired` means it simply reached
+             *     `expires_at`; nothing was taken away. Both are refused, and both keep
+             *     their record so a token's name, prefix, last use, and request history
+             *     remain available after a leak.
+             *
+             *     A token revoked before its expiry passed stays `revoked`, because
+             *     that is the fact worth keeping.
+             * @enum {string}
+             */
+            status: "active" | "revoked" | "expired";
+            /**
+             * @description What created the token.
+             * @enum {string}
+             */
+            token_source: "api" | "cli" | "dashboard";
+            /**
+             * Format: date-time
+             * @description Absent for a token that does not expire.
+             */
+            expires_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once every few minutes, so it may lag slightly.
+             */
+            last_used_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description Requests authenticated with this token since it was created.
+             */
+            all_time_requests: number;
+        };
+        /**
+         * @description What a project access token may do within its project.
+         *
+         *     `full` is everything you can do to that one project, up to and including
+         *     deleting it. It cannot manage access tokens, so a leaked token cannot
+         *     mint a replacement or erase the record of its own use, but for a CI or
+         *     agent credential that only deploys, prefer `read_only` where the job
+         *     allows it.
+         *
+         *     `read_only` refuses mutations. It is enforced by route classification
+         *     rather than HTTP method, so the log and metrics query endpoints remain
+         *     available even though they are POST requests that carry body filters.
+         *
+         *     `read_only` also refuses the reads that return a credential — service
+         *     keys, anon keys, variable values, and database connection strings. Those
+         *     grant write access over the project's data and keep working after the
+         *     token that fetched them is revoked, so returning one to a read-only
+         *     credential would make the scope a formality. An anon key is included
+         *     because its permissions are chosen per key and may include uploading,
+         *     deleting, and publishing.
+         * @enum {string}
+         */
+        ProjectAccessTokenScope: "full" | "read_only";
+        CreateProjectAccessTokenRequest: {
+            /**
+             * @description Held by any of the project's tokens you have not revoked, including
+             *     one that has expired. Creating a duplicate returns 409 with code
+             *     `access_token_name_exists`; revoking the holder frees the name, so a
+             *     rotation can keep the name its caller already references.
+             */
+            name: string;
+            scope: components["schemas"]["ProjectAccessTokenScope"];
+            /**
+             * Format: date-time
+             * @description Omit for a token that does not expire.
+             */
+            expires_at?: string;
+        };
+        CreatedProjectAccessToken: components["schemas"]["ProjectAccessToken"] & {
+            /**
+             * @description The secret. Returned only here, and not recoverable afterwards:
+             *     the server stores a hash rather than the value. Save it now.
+             */
+            token: string;
+        };
+        PaginatedProjectAccessTokens: {
+            data: components["schemas"]["ProjectAccessToken"][];
+            page: number;
+            limit: number;
+            total: number;
+            has_more: boolean;
+            next?: string;
+        };
+        /**
+         * @description Zero-filled daily request counts for a single token, oldest first. Every
+         *     day in the window is present, so a gap reads as zero rather than missing.
+         *
+         *     Counts every request the token authenticated, including ones then
+         *     refused — a read-only token attempting a write, or a token presented on
+         *     another project's route. That is deliberate: after a leak, the probing
+         *     is the part you want to see, and a counter that hid it would make a
+         *     token look idle while it was being tried.
+         */
+        ProjectAccessTokenUsage: {
+            /** Format: uuid */
+            token_id: string;
+            name: string;
+            /**
+             * @description The token's display prefix, which identifies the credential when its
+             *     name does not. Revoking frees a name, so a project that rotated
+             *     `ci-deploy` has two entries here both called `ci-deploy`. Not usable
+             *     as a credential.
+             */
+            token_prefix: string;
+            /** @description Number of daily entries returned, always equal to the requested window. */
+            days: number;
+            daily: components["schemas"]["ProjectAccessTokenUsageDailyEntry"][];
+            /** Format: int64 */
+            total_requests: number;
+        };
+        ProjectAccessTokenUsageDailyEntry: {
+            /**
+             * Format: date
+             * @description UTC day.
+             */
+            day: string;
+            /** Format: int64 */
+            requests: number;
+        };
         Function: {
             /** Format: uuid */
             id: string;
@@ -6893,10 +7650,10 @@ export interface components {
              * @description Timestamp when the current provisioning phase started
              */
             provisioning_started_at?: string;
+            visibility: components["schemas"]["FunctionVisibility"];
             /**
-             * @description Function visibility for anon-key invocation.
-             *     - `false` (default): only auth user tokens and service keys can invoke
-             *     - `true`: anon keys with `functions.invoke` can invoke
+             * @deprecated
+             * @description Deprecated. `true` exactly when `visibility` is `public`.
              */
             is_public: boolean;
             invocation_mode: components["schemas"]["FunctionInvocationMode"];
@@ -6907,7 +7664,6 @@ export interface components {
             } | null;
             /** @description Whether OpenAPI metadata is configured; list responses omit the document itself. */
             has_openapi_spec: boolean;
-            aws_function_arn?: string;
             /** @description Canonical geo-routed HTTPS endpoint for invoking this function. Use it as-is: it does not share a domain with the API, so a host derived from the API URL will not reach the function. Omitted when the deployment serves no public invocation domain, as in local development, so a client testing for an empty string never matches. */
             invoke_url?: string;
             /** @description Regions where this function is currently deployed */
@@ -6955,20 +7711,24 @@ export interface components {
              */
             provisioning_started_at?: string;
             /**
-             * @description Whether anon keys may start executions of this function through
-             *     `POST /durable-functions/{functionId}/executions`.
+             * @description Who may start executions of this function through
+             *     `POST /durable-functions/{functionId}/executions`: service keys at
+             *     every level, signed-in users of the project from `authenticated`,
+             *     and anon keys holding `functions.invoke` only at `public`. Reading
+             *     and stopping an execution always require the project owner's
+             *     token, whatever this is set to.
              *
-             *     When `true`, an anon key holding `functions.invoke` can start an
-             *     execution. When `false` (the default) only service keys and auth
-             *     user tokens can. Reading and stopping an execution always require
-             *     the project owner's token, whatever this is set to.
-             *
-             *     Set it when the function is created. Durable functions have no
+             *     Set it when the function is deployed. Durable functions have no
              *     update endpoint, so changing visibility later means redeploying.
              *
-             *     A public durable function is startable, never invocable: it is not
+             *     A durable function is startable, never invocable: it is not
              *     reachable through `POST /functions/{functionId}/invoke` or a
-             *     function URL, which answer `404` for either visibility.
+             *     function URL, which answer `404` at every level.
+             */
+            visibility: components["schemas"]["FunctionVisibility"];
+            /**
+             * @deprecated
+             * @description Deprecated. `true` exactly when `visibility` is `public`.
              */
             is_public: boolean;
             durable: components["schemas"]["DurableFunctionConfig"];
@@ -7092,6 +7852,126 @@ export interface components {
             type?: string;
             message?: string;
         };
+        /** @description A durable execution's trace. */
+        DurableExecutionOperationList: {
+            /**
+             * @description Every operation the execution began. The execution itself comes
+             *     first and is the only operation without a `parent_id`; the rest
+             *     follow in the order they started.
+             */
+            data: components["schemas"]["DurableExecutionOperation"][];
+            /**
+             * @description When the function's code was running, oldest first. An execution
+             *     suspended in a wait holds no runtime, so the gaps between these are
+             *     not charged as compute.
+             */
+            invocations: components["schemas"]["DurableExecutionInvocation"][];
+            /**
+             * @description `true` once the execution has finished and nothing more will be
+             *     recorded. Its operations no longer change, and it is no longer
+             *     refreshed on read; a final invocation window can still be added
+             *     shortly after.
+             */
+            complete: boolean;
+            /**
+             * Format: date-time
+             * @description When the trace was last refreshed. Absent before it has been
+             *     refreshed at all. A running execution's trace is usually within
+             *     about ten seconds of the execution, and further behind when many
+             *     executions are being watched at once.
+             */
+            synced_at?: string;
+        };
+        /** @description One operation on an execution's timeline. */
+        DurableExecutionOperation: {
+            /** @description Identifies the operation within its execution. */
+            id: string;
+            /**
+             * @description The operation this one ran inside: a child context, map item or
+             *     parallel branch, or the execution itself for top-level work. Absent
+             *     only on the execution.
+             */
+            parent_id?: string;
+            /**
+             * @description The name the handler gave the operation. Map items and parallel
+             *     branches the handler did not name carry the SDK's positional name,
+             *     such as `map-item-0`. Absent for an unnamed operation.
+             */
+            name?: string;
+            /**
+             * @description The kind of checkpointed operation Volcano recorded.
+             * @enum {string}
+             */
+            type: "execution" | "step" | "wait" | "callback" | "context" | "chained_invoke";
+            /**
+             * @description The operation as the handler wrote it: `ctx.step` is `step`,
+             *     `ctx.wait` is `wait`, `ctx.waitUntil` is `wait_until`, `ctx.child`
+             *     is `child`, `ctx.map` is `map` with one `map_item` per item, and
+             *     `ctx.parallel` is `parallel` with one `parallel_branch` per branch.
+             * @enum {string}
+             */
+            kind: "execution" | "step" | "wait" | "wait_until" | "callback" | "child" | "map" | "map_item" | "parallel" | "parallel_branch" | "invoke";
+            /**
+             * @description Where the operation stands. `waiting` holds no runtime: a wait that
+             *     has not elapsed, or a `waitUntil` between checks. `retrying` is a step whose last attempt failed and
+             *     whose next one is scheduled at `next_attempt_at`. Work still open
+             *     when the execution ended is `cancelled` at the moment it ended.
+             *     `unknown` is only ever the execution itself, when its outcome was
+             *     lost with its history, as in the execution's own `unknown` status.
+             * @enum {string}
+             */
+            status: "running" | "waiting" | "retrying" | "succeeded" | "failed" | "cancelled" | "timed_out" | "stopped" | "unknown";
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description Present once the operation has ended.
+             */
+            ended_at?: string;
+            /**
+             * Format: date-time
+             * @description When a wait is due to elapse.
+             */
+            scheduled_end_at?: string;
+            /**
+             * Format: date-time
+             * @description When a step's next attempt, or a `waitUntil`'s next check, is due.
+             *     Present only while one is scheduled.
+             */
+            next_attempt_at?: string;
+            /**
+             * @description Each run of a step's body, in order. Present on steps and
+             *     `waitUntil` polls, where each check is an attempt.
+             */
+            attempts?: components["schemas"]["DurableExecutionOperationAttempt"][];
+            error?: components["schemas"]["DurableExecutionError"];
+        };
+        /** @description One run of a step's body. */
+        DurableExecutionOperationAttempt: {
+            /** @description The attempt's number, starting at 1. */
+            attempt: number;
+            /**
+             * @description How the attempt ended. A `waitUntil` check whose condition did not
+             *     hold yet is `succeeded`: the check ran, and the poll continues.
+             * @enum {string}
+             */
+            status: "running" | "succeeded" | "failed";
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description Present once the attempt has ended.
+             */
+            ended_at?: string;
+            error?: components["schemas"]["DurableExecutionError"];
+        };
+        /** @description A window in which the function's code was running. */
+        DurableExecutionInvocation: {
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            ended_at: string;
+        };
         /**
          * @description Invocation contract. `rpc` preserves the existing POST `{payload: ...}` contract;
          *     `http` forwards HTTP request semantics to the function runtime.
@@ -7099,11 +7979,25 @@ export interface components {
          */
         FunctionInvocationMode: "rpc" | "http";
         /**
-         * @description Authentication applied by the HTTP ingress. `none` is valid only for public
-         *     HTTP-mode functions and is intended for externally signed webhooks.
+         * @description Authentication applied by the HTTP ingress. `none` is valid only for
+         *     HTTP-mode functions with `visibility: public` and is intended for
+         *     externally signed webhooks.
          * @enum {string}
          */
         FunctionHTTPAuthMode: "volcano" | "none";
+        /**
+         * @description Who can invoke the function. Each level admits everything the one
+         *     before it does.
+         *     - `private`: service keys and the project's schedulers only. The
+         *       default for a new function. To any other credential the function
+         *       does not exist: it answers 404, like a missing one.
+         *     - `authenticated`: also any signed-in user of the project, including
+         *       anonymous sign-ins. The function receives their auth context.
+         *     - `public`: also anon keys holding `functions.invoke`, and Frontend
+         *       Function routes, which forward requests without a credential.
+         * @enum {string}
+         */
+        FunctionVisibility: "private" | "authenticated" | "public";
         FunctionDeployment: {
             /** Format: uuid */
             id: string;
@@ -7124,18 +8018,18 @@ export interface components {
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
             /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
             initiated_by?: string;
-            artifact_bucket?: string;
-            artifact_key?: string;
-            artifact_version?: string;
             /**
              * Format: int64
-             * @description Total CodeBuild build duration recorded for this deployment, in seconds.
+             * @description Total build time recorded for this deployment, in seconds.
              */
-            codebuild_duration_seconds?: number;
-            /** @description Number of completed CodeBuild builds included in codebuild_duration_seconds. */
-            codebuild_build_count?: number;
-            /** Format: date-time */
-            codebuild_duration_recorded_at?: string;
+            build_duration_seconds?: number;
+            /** @description Number of completed builds included in build_duration_seconds. */
+            build_count?: number;
+            /**
+             * Format: date-time
+             * @description When the build time was last recorded.
+             */
+            build_duration_recorded_at?: string;
             progress?: components["schemas"]["DeploymentProgress"];
             error_message?: string;
             /** Format: date-time */
@@ -7170,16 +8064,16 @@ export interface components {
         FunctionInvocationResponse: {
             [key: string]: unknown;
         };
-        /** @description Log-event counts for one activity time bucket. */
+        /** @description Log-event counts for one activity time bucket. The first and last buckets can extend past the requested window; they count only events inside it. */
         LogActivityBucket: {
             /**
              * Format: date-time
-             * @description Bucket start time.
+             * @description Bucket start time, inclusive.
              */
             start_time: string;
             /**
              * Format: date-time
-             * @description Bucket end time.
+             * @description Bucket end time, exclusive.
              */
             end_time: string;
             /** @description Counts grouped by activity dimension. */
@@ -7207,15 +8101,15 @@ export interface components {
             q?: string;
             /**
              * Format: date-time
-             * @description Start time.
+             * @description Start of the window, inclusive. Defaults to 24 hours before `end_time`.
              */
             start_time?: string;
             /**
              * Format: date-time
-             * @description End time.
+             * @description End of the window, exclusive. Defaults to now.
              */
             end_time?: string;
-            /** @description Number of activity buckets to return. */
+            /** @description Maximum number of buckets. Defaults to 24. Volcano picks the smallest bucket width from 1s, 2s, 5s, 10s, 15s, 30s, 1m, 2m, 5m, 10m, 15m, 30m, 1h, 2h, 3h, 6h, 12h, 1d, or a whole number of days that covers the window in at most this many buckets. Bucket edges fall on UTC multiples of the width, so they stay fixed as the window moves, and the response can contain fewer buckets. `1` returns one bucket that spans exactly the window. */
             bucket_count?: number;
         };
         /** @description Bucketed runtime log activity. */
@@ -7274,9 +8168,9 @@ export interface components {
             data: components["schemas"]["LogSearchEvent"][];
             /** @description Number of items requested per page. */
             limit: number;
-            /** @description Whether there are more log events available. */
+            /** @description Whether the search may have more matching log events. A page can hold fewer than `limit` events, or none, while this is true; keep paging until it is false. */
             has_more: boolean;
-            /** @description Opaque cursor for the next page. Send this value as `cursor` on the next request. */
+            /** @description Opaque cursor for the next page, present while `has_more` is true. Send this value as `cursor` on the next request, even when `data` is empty. */
             next_cursor?: string;
         };
         FunctionRegion: {
@@ -7303,6 +8197,11 @@ export interface components {
              */
             name: string;
             /**
+             * @description Human-readable runtime label suitable for display in pickers.
+             * @example Node.js 24
+             */
+            label: string;
+            /**
              * @description Runtime language family used by the CLI to choose defaults from source files.
              * @example nodejs
              */
@@ -7316,6 +8215,12 @@ export interface components {
         FunctionRuntimesResponse: {
             runtimes: components["schemas"]["FunctionRuntimeOption"][];
         };
+        /**
+         * @description A function kind to filter a list by. Unlike `FunctionKind` it has no
+         *     default: omitting the filter includes both kinds.
+         * @enum {string}
+         */
+        FunctionKindFilter: "standard" | "durable";
         FunctionScheduler: {
             /** Format: uuid */
             id?: string;
@@ -7418,7 +8323,7 @@ export interface components {
             /**
              * @description Metric name (for example, "Function & Frontend Invocations", "Frontend Requests",
              *     "Durable Executions", "Durable Operations", "Durable Compute (MB-Seconds)",
-             *     "CodeBuild Build Seconds",
+             *     "Build Seconds",
              *     "Bandwidth Ingress (Bytes)", "Bandwidth Egress (Bytes)",
              *     "Bandwidth Total (Bytes)", or "Database Storage (Bytes)"). Byte-based metrics are
              *     reported in bytes. "Bandwidth Total (Bytes)" is derived (ingress + egress) and
@@ -7429,6 +8334,13 @@ export interface components {
              *     started in. "Durable Compute (MB-Seconds)" reports the memory the execution ran
              *     at times the time it spent running, in megabyte-seconds; the allowance for it is
              *     published in gigabyte-seconds, which is 1024 of these.
+             *     "Sandbox Running (MiB-Seconds)", "Sandbox Suspended (Seconds)", and
+             *     "Sandbox Uncertain (MiB-Seconds)" are preview-only usage; they do not
+             *     debit credits. Running reports configured memory times observed runtime,
+             *     not measured CPU or elastic memory consumption. Uncertain includes
+             *     observation gaps and unconfirmed state transitions. Suspended reports
+             *     duration, not snapshot size. Local sessions do not contribute.
+             *     Totals are rounded down after aggregating millisecond measurements.
              *     "Database Storage (Bytes)" is a current observed gauge,
              *     not a cumulative counter. It is the sum of the latest samples exposed as
              *     `storage_bytes` by the project's database list, so it includes what each
@@ -7598,6 +8510,113 @@ export interface components {
             /** @description Whether there are more pages available */
             has_more: boolean;
         };
+        /** @description An approval a durable workflow requested. */
+        DurableApproval: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableApprovalStatus"];
+            /** @description The name the workflow gave the approval in `ctx.waitForApproval`. */
+            name: string;
+            title: string;
+            description: string;
+            /**
+             * @description The JSON value the workflow attached for the person deciding, as
+             *     given.
+             */
+            details?: unknown;
+            function: components["schemas"]["DurableApprovalFunction"];
+            execution: components["schemas"]["DurableApprovalExecution"];
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description When the approval expires if nobody decides. Null when the
+             *     workflow set no timeout; the approval then lasts as long as its
+             *     execution.
+             */
+            expires_at: string | null;
+            decision: components["schemas"]["DurableApprovalDecision"];
+        };
+        /**
+         * @description `pending` means the workflow is waiting for a decision. `approved` and
+         *     `denied` are decisions a person made. `expired` means the workflow's
+         *     approval timeout passed first, and `cancelled` means the execution
+         *     ended while the approval was still pending. Every status but `pending`
+         *     is final.
+         * @enum {string}
+         */
+        DurableApprovalStatus: "pending" | "approved" | "denied" | "expired" | "cancelled";
+        /** @description The registered approval, as the requesting workflow sees it. */
+        DurableApprovalRegistration: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableApprovalStatus"];
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        DurableApprovalStats: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            counts: components["schemas"]["DurableApprovalCounts"];
+            /**
+             * Format: double
+             * @description `approved / (approved + denied)`, from 0 to 1. Null when nothing in
+             *     the window was decided.
+             */
+            approval_rate: number | null;
+            /**
+             * Format: double
+             * @description Median time from request to decision. Null when nothing was decided.
+             */
+            median_seconds_to_decision: number | null;
+            /**
+             * Format: double
+             * @description 90th percentile time from request to decision. Null when nothing was decided.
+             */
+            p90_seconds_to_decision: number | null;
+            /**
+             * @description The ten workflows that requested the most approvals, most first.
+             *     The rest are summed in `other_functions`.
+             */
+            functions: components["schemas"]["DurableApprovalFunctionCounts"][];
+            other_functions: components["schemas"]["DurableApprovalCounts"];
+            /**
+             * @description One entry per UTC day in the window that has approvals, oldest
+             *     first. Days with none are omitted.
+             */
+            daily: components["schemas"]["DurableApprovalDailyCounts"][];
+        };
+        DurableApprovalDecisionRequest: {
+            /** @description A note for the workflow and the approval's history. */
+            comment?: string;
+        };
+        RequestDurableApprovalRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque approval reference, supplied by the SDK. */
+            callback_id: string;
+            name: string;
+            title: string;
+            description?: string;
+            /**
+             * @description Any JSON value to show the person deciding. The whole request is
+             *     limited to 64 KiB.
+             */
+            details?: unknown;
+        };
+        PaginatedDurableApprovals: {
+            data: components["schemas"]["DurableApproval"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
+        };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
             /** @description Current page number (1-indexed) */
@@ -7722,16 +8741,17 @@ export interface components {
             expires_at: string;
         };
         Project: {
+            template_installation?: components["schemas"]["ProjectTemplateInstallation"];
             /** Format: uuid */
             id: string;
             name: string;
             /** @enum {string} */
             status: "active" | "deleting" | "failed";
             /**
-             * @description Public plan name; FREE and PRO are accepted from older Hosting responses.
+             * @description Plan name applied to the project when available.
              * @enum {string}
              */
-            plan?: "HOBBY" | "SUPERAGENT" | "FREE" | "PRO";
+            plan?: "HOBBY" | "SUPERAGENT";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions
@@ -7740,7 +8760,6 @@ export interface components {
             all_regions: boolean;
             /** @description Effective region set for this project (normalized and deduplicated) */
             selected_regions: string[];
-            aws_application_name?: string;
             /**
              * Format: date-time
              * @description Most recent activity timestamp across project resources
@@ -7785,6 +8804,8 @@ export interface components {
             databases?: components["schemas"]["ProjectConfigDatabase"][];
             /** @description Replace the complete shared function-variable list with existing names, without changing variable values. Omission keeps membership unchanged; an empty list clears it. */
             shared_variables?: string[];
+            /** @description Replace the complete shared frontend-variable list with existing names. Frontends with variable_scope shared receive this list. Omission keeps membership unchanged; an empty list clears it. */
+            frontend_shared_variables?: string[];
             /** @description Fully synced when declared - variables absent from this list are deleted. */
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
@@ -8011,7 +9032,7 @@ export interface components {
          */
         ProjectConfigDatabase: {
             name: string;
-            /** @description Deployed region ID (e.g. aws-us-east-1). Asserted, never written. */
+            /** @description Deployed region ID (e.g. us-east-1). Asserted, never written; region IDs issued by earlier versions of the API match too. */
             region: string;
             /**
              * @description PostgreSQL major version. Asserted, never written.
@@ -8050,8 +9071,17 @@ export interface components {
          *     without `custom_domain` deletes an existing custom domain.
          */
         ProjectConfigFrontend: {
+            /**
+             * @description All preserves access to all project variables. Shared includes the project frontend_shared_variables list. Scoped includes only explicitly declared variables in builds and runtime. Omission preserves the stored selection.
+             * @enum {string}
+             */
+            variable_scope?: "all" | "shared" | "scoped";
+            /** @description Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it. */
+            variables?: string[];
             name: string;
             custom_domain?: components["schemas"]["ProjectConfigCustomDomain"];
+            /** @description Complete set of same-origin Function path mappings when declared. Omission preserves existing mappings; an empty list deletes all mappings. */
+            function_routes?: components["schemas"]["ProjectConfigFrontendFunctionRoute"][];
         };
         /**
          * @description Configuration for an existing (deployed) function. Functions are never
@@ -8064,7 +9094,16 @@ export interface components {
         ProjectConfigFunction: {
             name: string;
             kind?: components["schemas"]["FunctionKind"];
-            /** @description Function visibility for anon-key invocation */
+            visibility?: components["schemas"]["FunctionVisibility"];
+            /**
+             * @deprecated
+             * @description Deprecated alias for `visibility`: `true` means `public` and
+             *     `false` means `authenticated`, not `private`, so an entry left at
+             *     `false` applies `authenticated` on every apply; declare
+             *     `visibility: private` to keep a function private. Declaring both
+             *     with different meanings is an error. Exports write `visibility`
+             *     only.
+             */
             public?: boolean;
             /**
              * @description Which project variables this function receives. `all` (the default)
@@ -8187,6 +9226,7 @@ export interface components {
         ProjectConfigVariable: {
             /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
             shared?: boolean;
+            /** @description Project variable name. Function runtime names such as AWS_REGION are reserved and fail validation; see the environment variables guide for the full list. */
             name: string;
             value: string;
         };
@@ -8333,7 +9373,6 @@ export interface components {
              * @enum {string}
              */
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
-            artifact_version?: string;
             error_message?: string;
             /** Format: date-time */
             completed_at?: string;
@@ -8375,7 +9414,7 @@ export interface components {
             success_rate: number | null;
             /**
              * Format: double
-             * @description Median CodeBuild duration across eligible completed attempts.
+             * @description Median build duration across eligible completed attempts.
              */
             median_build_duration_seconds: number | null;
         };
@@ -8863,10 +9902,12 @@ export interface components {
             text_body?: string;
         };
         UpdateFunctionRequest: {
+            visibility?: components["schemas"]["FunctionVisibility"];
             /**
-             * @description Function visibility for anon-key invocation.
-             *     - `false` (default): private function
-             *     - `true`: public function (anon keys with `functions.invoke` can invoke)
+             * @deprecated
+             * @description Deprecated alias for `visibility`: `true` means `public` and
+             *     `false` means `authenticated`. Sending both with different meanings
+             *     returns 400.
              */
             is_public?: boolean;
             invocation_mode?: components["schemas"]["FunctionInvocationMode"];
@@ -9010,6 +10051,8 @@ export interface components {
         Variable: {
             /** @description Include this name in the project's shared function variables. Omission preserves existing membership; new variables default to true for legacy clients. Send false explicitly to create a non-shared variable. */
             shared?: boolean;
+            /** @description Whether this name is in the project's shared frontend-variable list. */
+            frontend_shared?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -9040,6 +10083,25 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description This OpenAPI document, with every reference resolved. Shared by the JSON
+         *     and YAML operations, which differ only in serialization.
+         */
+        OpenAPISpecDocument: {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Template initialization progress, returned by project creation and the
+         *     individual project endpoint. Omitted for projects without a template.
+         *     Project creation accepts the installation; wait for `ready` before use.
+         *     A failed installation retains the project for inspection or deletion.
+         */
+        ProjectTemplateInstallation: {
+            /** @enum {string} */
+            status: "pending" | "running" | "ready" | "failed";
+            /** @enum {string} */
+            phase: "database" | "restore" | "configure" | "deploy" | "verify" | "ready";
         };
         ProjectGitConnectionSummary: {
             /** Format: int64 */
@@ -9084,6 +10146,13 @@ export interface components {
             theme?: components["schemas"]["AuthPageTheme"];
             layouts?: components["schemas"]["ProjectConfigAuthPageLayouts"];
         };
+        ProjectConfigFrontendFunctionRoute: {
+            /** @description Name of an existing public standard Function configured for HTTP invocation. */
+            function: string;
+            path_prefix: string;
+            /** @default false */
+            strip_prefix?: boolean;
+        };
         DatabaseQueryPerformanceDatabase: {
             /** Format: uuid */
             id: string;
@@ -9092,10 +10161,10 @@ export interface components {
         DatabaseQueryPerformanceItem: {
             /** @description pg_stat_statements query identifier. */
             query_id: string;
-            /** @description Normalized and obfuscated representative query text. */
+            /** @description Normalized representative query text with literal values replaced by `?`. */
             query: string;
             database: components["schemas"]["DatabaseQueryPerformanceDatabase"];
-            /** @description Database role used for the query. */
+            /** @description Postgres role that ran the query, such as `anon` or `authenticated` for RLS-enforced connections, `service_role`, the database owner role for full-access connections, or a role you created. `unknown` when the role no longer exists. */
             role: string;
             /** Format: int64 */
             calls: number;
@@ -9154,6 +10223,13 @@ export interface components {
             type: "function";
             /** @description Optional function identifiers. Omit or send an empty array to include every function in the project. */
             ids?: string[];
+            /**
+             * @description Read only functions of this kind. Omit to include standard and
+             *     durable functions. With `ids`, the listed functions of other kinds
+             *     are left out, so an ID of the other kind returns no logs. Search,
+             *     stream, and activity cursors are bound to the kind.
+             */
+            kind?: components["schemas"]["FunctionKindFilter"];
             deployments?: components["schemas"]["LogDeploymentRequestSelector"];
         };
         /** @description Frontend log resource selector. */
@@ -9206,6 +10282,61 @@ export interface components {
              * @enum {string}
              */
             stage?: "compile" | "publish";
+        };
+        /**
+         * @description The durable function that requested the approval. `id` is null once the
+         *     function has been deleted; `name` is kept.
+         */
+        DurableApprovalFunction: {
+            /** Format: uuid */
+            id: string | null;
+            name: string;
+        };
+        /**
+         * @description The durable execution that requested the approval. `id` and `status`
+         *     are null once the execution is no longer retained; `name` is kept.
+         */
+        DurableApprovalExecution: {
+            /** Format: uuid */
+            id: string | null;
+            name: string;
+            status: components["schemas"]["DurableExecutionStatus"] | null;
+        };
+        /** @description The person who decided. Null once their account is deleted. */
+        DurableApprovalDecider: {
+            id: string;
+            email: string;
+        } | null;
+        /** @description Who decided and when. Null unless the approval was approved or denied. */
+        DurableApprovalDecision: {
+            comment: string;
+            decided_by: components["schemas"]["DurableApprovalDecider"];
+            /** Format: date-time */
+            decided_at: string;
+        } | null;
+        /** @description Approvals by status. `requested` is every approval, whatever its status. */
+        DurableApprovalCounts: {
+            /** Format: int64 */
+            requested: number;
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            approved: number;
+            /** Format: int64 */
+            denied: number;
+            /** Format: int64 */
+            expired: number;
+            /** Format: int64 */
+            cancelled: number;
+        };
+        DurableApprovalFunctionCounts: {
+            function: components["schemas"]["DurableApprovalFunction"];
+            counts: components["schemas"]["DurableApprovalCounts"];
+        };
+        DurableApprovalDailyCounts: {
+            /** Format: date */
+            date: string;
+            counts: components["schemas"]["DurableApprovalCounts"];
         };
         /** @description One WHERE condition. Conditions are combined with AND. */
         DatabaseQueryFilter: {
@@ -9309,6 +10440,21 @@ export interface components {
     };
     responses: {
         /**
+         * @description Too many requests for the specification from one address. The document
+         *     carries an `ETag`; revalidate with `If-None-Match` rather than
+         *     re-fetching it.
+         */
+        OpenAPISpecThrottled: {
+            headers: {
+                /** @description Seconds to wait before requesting the specification again. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
          * @description The platform user exceeded their billing-cycle bandwidth allowance (aggregate
          *     ingress + egress across owned projects). Enforcement is eventual:
          *     requests are rejected until the allowance increases or the next
@@ -9350,6 +10496,28 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The specification still matches the supplied `If-None-Match`, so no body
+         *     is returned.
+         */
+        OpenAPISpecNotModified: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /**
+         * @description The headers a `GET` would return, without the document. The declared
+         *     `ETag` is the one to revalidate against.
+         */
+        OpenAPISpecHeaders: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
     };
     parameters: {
         /**
@@ -9386,12 +10554,22 @@ export interface components {
         DeploymentId: string;
         /** @description Frontend ID */
         FrontendId: string;
+        /** @description Frontend Function route ID */
+        FrontendFunctionRouteId: string;
         /** @description Function ID */
         FunctionId: string;
         /** @description Durable function ID, or its name within the project */
         DurableFunctionId: string;
         /** @description Durable execution ID */
         DurableExecutionId: string;
+        /** @description Durable approval ID */
+        DurableApprovalId: string;
+        /**
+         * @description Only approvals requested by this durable function, given by id or by
+         *     name. A name also matches approvals from a deleted function of that
+         *     name.
+         */
+        DurableApprovalFunctionFilter: string;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -9423,6 +10601,11 @@ export interface components {
          *     both Function and Frontend deployments.
          */
         DeploymentResourceType: "function" | "frontend";
+        /**
+         * @description Restrict results to functions of one kind. Omit to include both
+         *     standard and durable functions.
+         */
+        FunctionKindFilter: components["schemas"]["FunctionKindFilter"];
         /** @description Restrict a deployment feed to attempts in one status. */
         DeploymentStatus: "queued" | "provisioning" | "active" | "degraded" | "failed" | "superseded" | "deleting" | "deleted";
         /**
@@ -9443,6 +10626,8 @@ export interface components {
         Page: number;
         /** @description Project ID */
         ProjectId: string;
+        /** @description Project access token ID */
+        TokenId: string;
         /**
          * @description Case-insensitive substring match on the resource `name`. See the
          *     endpoint description for supported pagination modes.
@@ -9452,15 +10637,738 @@ export interface components {
         RestoreId: string;
         /** @description Function scheduler ID */
         SchedulerId: string;
-        /** @description Variable name */
+        /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
         VariableName: string;
+        /**
+         * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+         *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+         *     weak tags of the form `W/"tag"`.
+         * @example "9f2c1e0b5a"
+         */
+        IfNoneMatch: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description Strong validator for the returned document. Send it back as `If-None-Match`
+         *     to revalidate without transferring the document again.
+         * @example "9f2c1e0b5a"
+         */
+        ETag: string;
+        /**
+         * @description Milliseconds Volcano spent before running the query, counted from the
+         *     request arriving: authenticating the caller, validating the request,
+         *     resolving the database, and building the SQL. Does not include query
+         *     execution. Also present when the query itself failed.
+         */
+        DatabaseQueryProxyMs: number;
+        /**
+         * @description The part of `X-Volcano-Proxy-Ms` spent in the query endpoint itself.
+         *     Subtract it from `X-Volcano-Proxy-Ms` to see what authentication and
+         *     request validation cost. Also present when the query itself failed.
+         */
+        DatabaseQueryProxyHandlerMs: number;
+        /**
+         * @description Milliseconds the database took to run the query and return its rows.
+         *     Does not include Volcano's preparation. Also present when the query
+         *     itself failed.
+         */
+        DatabaseQueryComputeMs: number;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listSandboxPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List available sandbox presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxPresetList"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxes: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplatePage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Create a sandbox template from a verified preset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retire a template and terminate its sessions */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rename a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxDeployments: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox deployment history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDeploymentPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxSessions: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List project sandbox sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSessionPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Start a sandbox session */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute once and return after confirmed termination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxExecutionResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    terminateSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request sandbox termination */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    suspendSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suspend a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resumeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resume a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute a command within a session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxCommandResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    readSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Read a workspace file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFileResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    writeSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Write a workspace file */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    grantSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxSubjectGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorize an authenticated project user for this session */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoke a project user session grant */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSessionAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Issue a short-lived port-scoped access credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAccess"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     startImportConnect: {
         parameters: {
             query?: {
@@ -9468,6 +11376,8 @@ export interface operations {
                 provider?: components["schemas"]["ImportProvider"];
                 /** @description Validated application URL used after the provider callback. */
                 redirect?: string;
+                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. */
+                callback_url?: string;
             };
             header?: never;
             path?: never;
@@ -10079,6 +11989,8 @@ export interface operations {
                 provider?: "github";
                 /** @description URL to redirect the browser to after the provider callback completes. */
                 redirect?: string;
+                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. */
+                callback_url?: string;
             };
             header?: never;
             path?: never;
@@ -10557,6 +12469,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The selected project template is not configured in this environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getProject: {
@@ -10659,7 +12580,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden (for example, selecting subset regions on non-SUPERAGENT plan) */
+            /** @description Forbidden (for example, selecting subset regions on plan other than SUPERAGENT) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11127,6 +13048,85 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    replaceFrontendSharedVariables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    frontend_shared_variables: string[];
+                    /** @description When present, replace only if the current complete frontend shared list matches this list. */
+                    expected_frontend_shared_variables?: string[];
+                    /** @description SHA-256 of the sorted unique current shared names joined by a newline. Use instead of expected_frontend_shared_variables for a compact conditional replacement. */
+                    expected_frontend_shared_variables_digest?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Frontend shared list replaced and affected frontend synchronization started. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid names or final frontend environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Frontend shared list changed since it was read. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,194,304 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Persistence or synchronization failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -12244,6 +14244,11 @@ export interface operations {
                  *     Function and Frontend deployments.
                  */
                 resource_type?: "function" | "frontend";
+                /**
+                 * @description Restrict results to functions of one kind. Omit to include both
+                 *     standard and durable functions.
+                 */
+                function_kind?: components["parameters"]["FunctionKindFilter"];
             };
             header?: never;
             path: {
@@ -12263,7 +14268,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginatedProjectDeployments"];
                 };
             };
-            /** @description Bad request - invalid identifier */
+            /** @description Bad request - invalid identifier or filter, or `function_kind` combined with `resource_type=frontend` */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12308,6 +14313,11 @@ export interface operations {
                 search?: string;
                 /** @description Restrict the summary to one comparable deployment pipeline. */
                 resource_type: "function" | "frontend";
+                /**
+                 * @description Restrict results to functions of one kind. Omit to include both
+                 *     standard and durable functions.
+                 */
+                function_kind?: components["parameters"]["FunctionKindFilter"];
                 /** @description Restrict results to attempts created at or after this timestamp. */
                 created_after?: string;
             };
@@ -12329,7 +14339,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectDeploymentSummary"];
                 };
             };
-            /** @description Bad request - invalid identifier or filter */
+            /** @description Bad request - invalid identifier or filter, or `function_kind` combined with `resource_type=frontend` */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12579,9 +14589,15 @@ export interface operations {
                      */
                     handler?: string;
                     /**
-                     * @description Whether the function can be reached through public invocation
-                     *     ingress. Omit it to keep the function's current visibility; a
-                     *     new function starts private.
+                     * @description Who can invoke the function. Omit it to keep the function's
+                     *     current visibility; a new function starts `private`.
+                     */
+                    visibility?: components["schemas"]["FunctionVisibility"];
+                    /**
+                     * @deprecated
+                     * @description Deprecated alias for `visibility`: `true` means `public` and
+                     *     `false` means `authenticated`. Sending both with different
+                     *     meanings returns 400.
                      */
                     is_public?: boolean;
                     invocation_mode?: components["schemas"]["FunctionInvocationMode"];
@@ -12617,7 +14633,10 @@ export interface operations {
                     "application/json": components["schemas"]["Function"];
                 };
             };
-            /** @description Bad request (invalid file, too large, etc.) */
+            /**
+             * @description Bad request (invalid file, too large, etc.), an unknown
+             *     `visibility`, or `visibility` and `is_public` disagree
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12636,8 +14655,11 @@ export interface operations {
                 };
             };
             /**
-             * @description Function deletion is queued or running, or the name is already held
-             *     by a durable function — a function cannot change kind.
+             * @description Function deletion is queued or running, the name is already held
+             *     by a durable function — a function cannot change kind — or the
+             *     redeploy would take a function with Frontend Function routes out
+             *     of `public` or out of HTTP invocation mode. The request is refused
+             *     before the deploy starts, so nothing is deployed.
              */
             409: {
                 headers: {
@@ -12647,8 +14669,32 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /**
+             * @description The owner's billing-cycle build-minutes allowance is spent. The
+             *     error names the allowance and carries a link to the usage page.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Internal server error (function deployment failed) */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Build usage could not be read, so the allowance could not be
+             *     checked. The same request succeeds once it can be.
+             */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12751,7 +14797,11 @@ export interface operations {
                     "application/json": components["schemas"]["Function"];
                 };
             };
-            /** @description Bad request */
+            /**
+             * @description Invalid settings: an unknown `visibility`, `visibility` and
+             *     `is_public` disagree, or `http_auth_mode: none` on a function that
+             *     is not `public`
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12762,6 +14812,18 @@ export interface operations {
             };
             /** @description Function not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Function settings conflict with attached Frontend Function routes:
+             *     a routed function must stay `public` and in HTTP invocation mode.
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12794,6 +14856,12 @@ export interface operations {
                     "X-Volcano-Version"?: string;
                     /** @description Region the function ran in (for example `us-east-1`) */
                     "X-Volcano-Region"?: string;
+                    /** @description Milliseconds Volcano spent preparing the invocation, counted from the request arriving until the function was dispatched. Present only when the function was invoked. Does not include function execution. */
+                    "X-Volcano-Proxy-Ms"?: number;
+                    /** @description The part of `X-Volcano-Proxy-Ms` spent in the invoke endpoint itself. Subtract it from `X-Volcano-Proxy-Ms` to see what authentication and request validation cost. Present only when the function was invoked. */
+                    "X-Volcano-Proxy-Handler-Ms"?: number;
+                    /** @description Milliseconds spent running the function, from dispatch until it returned. Present only when the function was invoked. Does not include proxy preparation. */
+                    "X-Volcano-Compute-Ms"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12818,7 +14886,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - CORS blocked, missing `functions.invoke`, or private function with anon key */
+            /**
+             * @description Forbidden - CORS blocked, missing `functions.invoke`, or an anon key
+             *     on an `authenticated` function
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -12827,7 +14898,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Function not found */
+            /**
+             * @description Function not found. Also returned for a `private` function to any
+             *     credential but a service key.
+             */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12872,6 +14946,12 @@ export interface operations {
                     "X-Volcano-Version"?: string;
                     /** @description Region the function ran in (for example `us-east-1`) */
                     "X-Volcano-Region"?: string;
+                    /** @description Milliseconds Volcano spent preparing the invocation, counted from the request arriving until the function was dispatched. Present only when the function was invoked. Does not include function execution. */
+                    "X-Volcano-Proxy-Ms"?: number;
+                    /** @description The part of `X-Volcano-Proxy-Ms` spent in the invoke endpoint itself. Subtract it from `X-Volcano-Proxy-Ms` to see what authentication and request validation cost. Present only when the function was invoked. */
+                    "X-Volcano-Proxy-Handler-Ms"?: number;
+                    /** @description Milliseconds spent running the function, from dispatch until it returned. Present only when the function was invoked. Does not include proxy preparation. */
+                    "X-Volcano-Compute-Ms"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12938,8 +15018,9 @@ export interface operations {
                 };
             };
             /**
-             * @description The anon key lacks `functions.invoke`, the function is not public,
-             *     or the request's origin is refused by the project's CORS policy.
+             * @description The anon key lacks `functions.invoke` or the function is
+             *     `authenticated`, or the request's origin is refused by the project's
+             *     CORS policy.
              */
             403: {
                 headers: {
@@ -12951,8 +15032,9 @@ export interface operations {
             };
             /**
              * @description Durable function not found. Also returned for a standard function's
-             *     id and for a durable function in another project, so the response
-             *     cannot be used to tell those apart.
+             *     id, for a durable function in another project, and for a `private`
+             *     one to any credential but a service key, so the response cannot be
+             *     used to tell those apart.
              */
             404: {
                 headers: {
@@ -13003,10 +15085,9 @@ export interface operations {
             };
             /**
              * @description Durable execution is not available in this environment, or the
-             *     usage limit service could not be reached to charge the start. The
-             *     first is returned by a deployment that has no durable execution
-             *     engine, such as a local one, and is not retryable there; the second
-             *     is transient.
+             *     plan terms for the start could not be read. The first means the
+             *     capability is paused or this deployment cannot serve it, so it is
+             *     not one to retry in a loop; the second is transient.
              */
             503: {
                 headers: {
@@ -13060,7 +15141,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - CORS blocked or missing `functions.invoke` permission for anon key */
+            /**
+             * @description Forbidden - CORS blocked, or missing `functions.invoke` permission
+             *     for anon key
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13070,7 +15154,8 @@ export interface operations {
                 };
             };
             /**
-             * @description Function not found (or private function with anon key). A durable
+             * @description Function not found. Also returned for a `private` function with an
+             *     auth user token, and a non-public one with an anon key. A durable
              *     function is never resolvable here: it is started through
              *     `POST /durable-functions/{functionId}/executions`, not invoked.
              */
@@ -13365,6 +15450,30 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /**
+             * @description The owner's billing-cycle build-minutes allowance is spent. The
+             *     error names the allowance and carries a link to the usage page.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Build usage could not be read, so the allowance could not be
+             *     checked. The same request succeeds once it can be.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listProjectSchedulers: {
@@ -13408,6 +15517,11 @@ export interface operations {
                  *     endpoint description for supported pagination modes.
                  */
                 search?: components["parameters"]["Search"];
+                /**
+                 * @description Restrict results to functions of one kind. Omit to include both
+                 *     standard and durable functions.
+                 */
+                function_kind?: components["parameters"]["FunctionKindFilter"];
             };
             header?: never;
             path: {
@@ -13425,6 +15539,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FunctionSchedulerListResponse"];
+                };
+            };
+            /** @description Bad request - invalid pagination or filter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -13792,15 +15915,22 @@ export interface operations {
                      */
                     handler?: string;
                     /**
-                     * @description Whether anon keys with `functions.invoke` may start an
-                     *     execution. Redeploying is the only way to change it, since
-                     *     the collection has no update endpoint; omit it to keep the
-                     *     current visibility, and a new function starts private.
+                     * @description Who may start an execution. Redeploying is the only way to
+                     *     change it, since the collection has no update endpoint; omit
+                     *     it to keep the current visibility, and a new function starts
+                     *     `private`.
                      *
                      *     The standard collection's synchronous invocation fields —
                      *     `invocation_mode`, `http_auth_mode`, `openapi_spec` —
                      *     configure a request path no durable route serves, and are
                      *     rejected with 400 rather than ignored.
+                     */
+                    visibility?: components["schemas"]["FunctionVisibility"];
+                    /**
+                     * @deprecated
+                     * @description Deprecated alias for `visibility`: `true` means `public` and
+                     *     `false` means `authenticated`. Sending both with different
+                     *     meanings returns 400.
                      */
                     is_public?: boolean;
                     /**
@@ -13833,7 +15963,8 @@ export interface operations {
                 };
             };
             /**
-             * @description Bad request (invalid archive, unsupported runtime, invalid name, or a
+             * @description Bad request (invalid archive, unsupported runtime, invalid name, an
+             *     unknown `visibility`, `visibility` and `is_public` disagree, or a
              *     project region that does not offer durable execution — a durable
              *     function deploys to every region of its project)
              */
@@ -13854,7 +15985,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Name is held by a standard function, or a deletion is queued or running */
+            /**
+             * @description Name is held by a standard function, or a deletion is queued or
+             *     running. The request is refused before the deploy starts, so
+             *     nothing is deployed.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14369,10 +16504,9 @@ export interface operations {
             };
             /**
              * @description Durable execution is not available in this environment, or the
-             *     usage limit service could not be reached to charge the start. The
-             *     first is returned by a deployment that has no durable execution
-             *     engine, such as a local one, and is not retryable there; the second
-             *     is transient.
+             *     plan terms for the start could not be read. The first means the
+             *     capability is paused or this deployment cannot serve it, so it is
+             *     not one to retry in a loop; the second is transient.
              */
             503: {
                 headers: {
@@ -14419,9 +16553,67 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Returned by
-             *     a deployment that has no durable execution engine, such as a local
-             *     one; the request is not retryable there.
+             * @description Durable execution is not available in this environment. Either the
+             *     capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableExecutionOperations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecutionOperationList"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The trace could not be read */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment. Either the
+             *     capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop.
              */
             503: {
                 headers: {
@@ -14480,11 +16672,382 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Returned by
-             *     a deployment that has no durable execution engine, such as a local
-             *     one; the request is not retryable there.
+             * @description Durable execution is not available in this environment. Either the
+             *     capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop.
              */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    requestDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDurableApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description The approval was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalRegistration"];
+                };
+            };
+            /** @description Approval registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval cannot be registered now. `code` says why:
+             *
+             *     - `approval_not_ready`: the workflow has not finished opening the
+             *       approval yet. Retry with a short backoff; the SDK does.
+             *     - `approval_closed`: the workflow is no longer waiting on it.
+             *     - `execution_ended`: the execution has finished.
+             *     - `too_many_pending_approvals`: the execution already has the
+             *       maximum number of pending approvals.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 64 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many approval requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval could not be confirmed with the workflow right now.
+             *     Retry with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableApprovals: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /** @description Return only approvals in this status. */
+                status?: components["schemas"]["DurableApprovalStatus"];
+                /**
+                 * @description Only approvals requested by this durable function, given by id or by
+                 *     name. A name also matches approvals from a deleted function of that
+                 *     name.
+                 */
+                function?: components["parameters"]["DurableApprovalFunctionFilter"];
+                /** @description Return only approvals requested by this durable execution. */
+                execution_id?: string;
+                /** @description Return only approvals requested at or after this time. */
+                from?: string;
+                /** @description Return only approvals requested before this time. */
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableApprovals"];
+                };
+            };
+            /** @description A filter is invalid, or `from` is after `to` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableApprovalStats: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only approvals requested by this durable function, given by id or by
+                 *     name. A name also matches approvals from a deleted function of that
+                 *     name.
+                 */
+                function?: components["parameters"]["DurableApprovalFunctionFilter"];
+                /** @description Start of the window. Defaults to 30 days before `to`. */
+                from?: string;
+                /** @description End of the window. Defaults to now. */
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalStats"];
+                };
+            };
+            /** @description The window is invalid or longer than 366 days */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    approveDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DurableApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credential is not a person's */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval was already denied, or has expired or been cancelled.
+             *     `code` is `approval_decided`, `approval_expired`, or
+             *     `approval_cancelled`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    denyDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DurableApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Denied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credential is not a person's */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval was already approved, or has expired or been
+             *     cancelled. `code` is `approval_decided`, `approval_expired`, or
+             *     `approval_cancelled`.
+             */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14627,6 +17190,13 @@ export interface operations {
                      * @example apps/web
                      */
                     app_root?: string;
+                    /**
+                     * @description Variable selection for this deployment. New frontends default to `scoped`; omitting this field for an existing frontend preserves its current selection.
+                     * @enum {string}
+                     */
+                    variable_scope?: "all" | "scoped";
+                    /** @description Project variable names selected when `variable_scope` is `scoped`. Submit each name as a repeated multipart field. */
+                    variables?: string[];
                     /**
                      * Format: binary
                      * @description ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
@@ -15340,6 +17910,287 @@ export interface operations {
                 };
             };
             /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listFrontendFunctionRoutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Function routes ordered from most to least specific */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendFunctionRouteList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list Function routes */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFrontendFunctionRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendFunctionRouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Function route created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendFunctionRoute"];
+                };
+            };
+            /** @description Invalid path or non-HTTP Function */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or Function not found in the Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Path is already routed, the Frontend has reached its 64-route limit, or the Function is not public */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateFrontendFunctionRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Function route ID */
+                routeId: components["parameters"]["FrontendFunctionRouteId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendFunctionRouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Function route replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendFunctionRoute"];
+                };
+            };
+            /** @description Invalid path or non-HTTP Function */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function route, Frontend, or Function not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Path is already routed, the Frontend has reached its 64-route limit, or the Function is not public */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to replace Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteFrontendFunctionRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Function route ID */
+                routeId: components["parameters"]["FrontendFunctionRouteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Function route deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Function route not found on the Frontend */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete Function route */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -16088,7 +18939,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupList"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16167,7 +19018,7 @@ export interface operations {
             };
             /**
              * @description The database has reached its backup allowance, or the owner's plan
-             *     does not include backups, which are SUPERAGENT-only.
+             *     does not include backups, which are available only on SUPERAGENT.
              */
             403: {
                 headers: {
@@ -16241,7 +19092,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackup"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16319,7 +19170,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16384,7 +19235,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupSchedule"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16465,7 +19316,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16530,7 +19381,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestoreList"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16600,7 +19451,7 @@ export interface operations {
             };
             /**
              * @description The owner's plan does not include backups or point-in-time restore.
-             *     Both are SUPERAGENT-only.
+             *     Both are available only on SUPERAGENT.
              */
             403: {
                 headers: {
@@ -16668,7 +19519,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestore"];
                 };
             };
-            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
+            /** @description Backups require SUPERAGENT */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16916,6 +19767,9 @@ export interface operations {
             /** @description Database is reachable */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -16981,6 +19835,9 @@ export interface operations {
             /** @description Query successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17060,6 +19917,9 @@ export interface operations {
             /** @description Insert successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17139,6 +19999,9 @@ export interface operations {
             /** @description Update successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17216,6 +20079,9 @@ export interface operations {
             /** @description Delete successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17289,6 +20155,9 @@ export interface operations {
             /** @description Database is reachable */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17357,6 +20226,9 @@ export interface operations {
             /** @description Query successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17439,6 +20311,9 @@ export interface operations {
             /** @description Insert successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17521,6 +20396,9 @@ export interface operations {
             /** @description Update successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17601,6 +20479,9 @@ export interface operations {
             /** @description Delete successful */
             200: {
                 headers: {
+                    "X-Volcano-Proxy-Ms": components["headers"]["DatabaseQueryProxyMs"];
+                    "X-Volcano-Proxy-Handler-Ms": components["headers"]["DatabaseQueryProxyHandlerMs"];
+                    "X-Volcano-Compute-Ms": components["headers"]["DatabaseQueryComputeMs"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -17676,7 +20557,7 @@ export interface operations {
                     "application/json": {
                         /**
                          * @description Region identifier for API usage
-                         * @example aws-us-east-1
+                         * @example us-east-1
                          */
                         id?: string;
                         /**
@@ -17771,7 +20652,7 @@ export interface operations {
             path: {
                 /** @description Project ID */
                 id: components["parameters"]["ProjectId"];
-                /** @description Variable name */
+                /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
                 name: components["parameters"]["VariableName"];
             };
             cookie?: never;
@@ -17805,7 +20686,7 @@ export interface operations {
             path: {
                 /** @description Project ID */
                 id: components["parameters"]["ProjectId"];
-                /** @description Variable name */
+                /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
                 name: components["parameters"]["VariableName"];
             };
             cookie?: never;
@@ -17823,6 +20704,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Variable"];
+                };
+            };
+            /** @description Invalid or reserved variable name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Variable not found */
@@ -17852,7 +20742,7 @@ export interface operations {
             path: {
                 /** @description Project ID */
                 id: components["parameters"]["ProjectId"];
-                /** @description Variable name */
+                /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
                 name: components["parameters"]["VariableName"];
             };
             cookie?: never;
@@ -19073,6 +21963,8 @@ export interface operations {
                      *       },
                      *       "summary": {
                      *         "total_users": 1234,
+                     *         "deleted_users": 42,
+                     *         "active_users_1d": 83,
                      *         "active_users_30d": 418
                      *       },
                      *       "series": [
@@ -19080,6 +21972,8 @@ export interface operations {
                      *           "bucket_start": "2026-07-20",
                      *           "signups": 12,
                      *           "signins": 97,
+                     *           "deletions": 3,
+                     *           "net_growth": 9,
                      *           "is_partial": true
                      *         }
                      *       ]
@@ -19447,6 +22341,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Deleted accounts cannot be banned or restored */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     unbanAuthUser: {
@@ -19473,6 +22376,15 @@ export interface operations {
             };
             /** @description User not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Deleted accounts cannot be banned or restored */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21837,6 +24749,391 @@ export interface operations {
             };
         };
     };
+    listProjectAccessTokens: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Case-insensitive substring match on the resource `name`. See the
+                 *     endpoint description for supported pagination modes.
+                 */
+                search?: components["parameters"]["Search"];
+                /**
+                 * @description Include tokens that can no longer authenticate — both revoked and
+                 *     expired ones.
+                 */
+                include_revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedProjectAccessTokens"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectAccessTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Token created - save the secret now, it cannot be retrieved again */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedProjectAccessToken"];
+                };
+            };
+            /** @description Bad request - invalid name, scope, or expiry */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Duplicate name, token limit reached, or the project is being
+             *     deleted. Tell them apart with `code`, which is one of
+             *     `access_token_name_exists`, `access_token_limit_reached`, or
+             *     `project_deleting` — the message text is not a contract.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listProjectAccessTokensUsage: {
+        parameters: {
+            query?: {
+                /** @description Number of trailing days to return (1-60, default 30). */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessTokenUsage"][];
+                };
+            };
+            /** @description Bad request - invalid window */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessToken"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeProjectAccessToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner, or a project access token was used */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict - the project is being deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getProjectAccessTokenUsage: {
+        parameters: {
+            query?: {
+                /** @description Number of trailing days to return (1-60, default 30). */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Project access token ID */
+                tokenId: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessTokenUsage"];
+                };
+            };
+            /** @description Bad request - invalid window */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - not the project owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listServiceKeys: {
         parameters: {
             query?: {
@@ -23220,7 +26517,9 @@ export interface operations {
             /**
              * @description File size exceeds plan-based limits. This occurs when:
              *     - File exceeds the plan-based maximum file size (HOBBY or SUPERAGENT tier)
-             *     - Upload would exceed the project's total storage quota
+             *     - The account on the HOBBY plan holds its file-storage allowance.
+             *       Enforcement is eventual: uploads are accepted until Volcano's
+             *       next allowance check sees the account at its allowance
              */
             413: {
                 headers: {
@@ -23377,166 +26676,168 @@ export interface operations {
             };
         };
     };
-    listSandboxPresets: {
+    getOpenAPISpecJSON: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The OpenAPI specification */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAPISpecDocument"];
+                };
+            };
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    headOpenAPISpecJSON: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OpenAPISpecHeaders"];
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    getOpenAPISpecYAML: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The OpenAPI specification */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/yaml": components["schemas"]["OpenAPISpecDocument"];
+                };
+            };
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    headOpenAPISpecYAML: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Entity tag from an earlier response, returning `304 Not Modified` while it
+                 *     still matches. Accepts the full condition: `*`, a comma-separated list, and
+                 *     weak tags of the form `W/"tag"`.
+                 * @example "9f2c1e0b5a"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OpenAPISpecHeaders"];
+            304: components["responses"]["OpenAPISpecNotModified"];
+            429: components["responses"]["OpenAPISpecThrottled"];
+        };
+    };
+    callMCP: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
-        responses: {
-            /** @description List available sandbox presets */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxPresetList"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listSandboxes: {
-        parameters: {
-            query?: {
-                /** @description Number of items per page (max 100) */
-                limit?: components["parameters"]["Limit"];
-                /**
-                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
-                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
-                 *     combining them returns 400. When supplied, the request's `search` and
-                 *     `limit` must match the values bound to the cursor or the request returns 400.
-                 */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List sandbox templates */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxTemplatePage"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    createSandbox: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateSandboxTemplateRequest"];
+                "application/json": {
+                    /** @enum {string} */
+                    jsonrpc: "2.0";
+                    /** @description The MCP method to call. */
+                    method: string;
+                    /**
+                     * @description Request identifier, echoed verbatim. Omit it to send a
+                     *     notification, which is answered with `202` and no body.
+                     */
+                    id?: string | number;
+                    params?: {
+                        [key: string]: unknown;
+                    };
+                };
             };
         };
         responses: {
-            /** @description Create a sandbox template from a verified preset */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxTemplate"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getSandbox: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                sandboxId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Get a sandbox template */
+            /** @description A JSON-RPC response object */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SandboxTemplate"];
+                    "application/json": {
+                        /** @enum {string} */
+                        jsonrpc: "2.0";
+                        /** @description Echoes the request's id. Null when the request could not be read well enough to determine one. */
+                        id: (string | number) | null;
+                        result?: {
+                            [key: string]: unknown;
+                        };
+                        error?: {
+                            code: number;
+                            message: string;
+                        };
+                    };
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteSandbox: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                sandboxId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Retire a template and terminate its sessions */
+            /** @description A notification was accepted; there is no body */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
+            /** @description Not authenticated */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23544,35 +26845,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-        };
-    };
-    updateSandbox: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                sandboxId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateSandboxTemplateRequest"];
-            };
-        };
-        responses: {
-            /** @description Rename a sandbox template */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxTemplate"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
+            /**
+             * @description The credential is valid but may not use this endpoint — most often a
+             *     platform token, which names no project.
+             */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23580,490 +26857,12 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-        };
-    };
-    listSandboxDeployments: {
-        parameters: {
-            query?: {
-                /** @description Number of items per page (max 100) */
-                limit?: components["parameters"]["Limit"];
-                /**
-                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
-                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
-                 *     combining them returns 400. When supplied, the request's `search` and
-                 *     `limit` must match the values bound to the cursor or the request returns 400.
-                 */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                id: string;
-                sandboxId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List sandbox deployment history */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxDeploymentPage"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listSandboxSessions: {
-        parameters: {
-            query?: {
-                /** @description Number of items per page (max 100) */
-                limit?: components["parameters"]["Limit"];
-                /**
-                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
-                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
-                 *     combining them returns 400. When supplied, the request's `search` and
-                 *     `limit` must match the values bound to the cursor or the request returns 400.
-                 */
-                cursor?: components["parameters"]["Cursor"];
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List project sandbox sessions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSessionPage"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    createSandboxSession: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSandboxSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description Start a sandbox session */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSession"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    executeSandbox: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxExecutionRequest"];
-            };
-        };
-        responses: {
-            /** @description Execute once and return after confirmed termination */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxExecutionResult"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Get a sandbox session */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSession"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    terminateSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Request sandbox termination */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSession"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    suspendSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Suspend a sandbox session */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSession"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    resumeSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Resume a sandbox session */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxSession"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    executeSandboxSession: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxCommandRequest"];
-            };
-        };
-        responses: {
-            /** @description Execute a command within a session */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxCommandResult"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    readSandboxSessionFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxFileReadRequest"];
-            };
-        };
-        responses: {
-            /** @description Read a workspace file */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxFileResult"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    writeSandboxSessionFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxFileWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Write a workspace file */
-            204: {
+            /** @description The JSON-RPC frame exceeds the 1 MiB limit */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    grantSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-                subjectId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxSubjectGrantRequest"];
-            };
-        };
-        responses: {
-            /** @description Authorize an authenticated project user for this session */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    revokeSandboxSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-                subjectId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revoke a project user session grant */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    createSandboxSessionAccess: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SandboxAccessRequest"];
-            };
-        };
-        responses: {
-            /** @description Issue a short-lived port-scoped access credential */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SandboxAccess"];
-                };
-            };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
             };
         };
     };

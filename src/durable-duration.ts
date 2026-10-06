@@ -19,16 +19,16 @@ export function optionalDuration(value: unknown, field: string): Duration | unde
   return value === undefined ? undefined : toDuration(value, field);
 }
 
-// Waits must fit the platform's execution lifetime. Retry and poll delays are
-// left to the engine's own bounds.
-export function waitDuration(value: unknown): Duration {
-  const duration = toDuration(value, 'wait');
+// Waits and approval timeouts must fit the platform's execution lifetime.
+// Retry and poll delays are left to the engine's own bounds.
+export function waitDuration(value: unknown, field = 'wait'): Duration {
+  const duration = toDuration(value, field);
   const seconds = durationSeconds(duration);
   if (seconds < minWaitSeconds) {
-    throw new TypeError(`wait must be at least ${String(minWaitSeconds)} second`);
+    throw new TypeError(`${field} must be at least ${String(minWaitSeconds)} second`);
   }
   if (seconds > maxWaitSeconds) {
-    throw new TypeError(`wait must be at most ${String(maxWaitSeconds)} seconds (366 days)`);
+    throw new TypeError(`${field} must be at most ${String(maxWaitSeconds)} seconds (366 days)`);
   }
   return duration;
 }

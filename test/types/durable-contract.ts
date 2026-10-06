@@ -1,8 +1,10 @@
 import {
+  type ApprovalDecision,
   type BatchResult,
   durable,
   type DurableContext,
   type DurableStepScope,
+  type WaitForApprovalOptions,
 } from '../../src/durable.js';
 
 interface OrderInput {
@@ -35,6 +37,19 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       { initialState: { approved: false }, until: (state) => state.approved, interval: 15 },
     );
 
+    const request: WaitForApprovalOptions = {
+      title: `Ship order ${String(input.order_id)}?`,
+      description: 'Over the auto-ship limit',
+      details: { items: input.items },
+      timeout: '2d',
+    };
+    const decision: ApprovalDecision = await ctx.waitForApproval('ship-order', request);
+    const decidedBy: string | null = decision.decidedBy?.email ?? null;
+    const outcome: 'approved' | 'denied' | 'expired' = decision.status;
+    const reviewed = decision.approved ? decision.comment : decision.decidedAt;
+    // @ts-expect-error a title is required
+    void ctx.waitForApproval('untitled', {});
+
     const shipped: BatchResult<string> = await ctx.map(
       'ship',
       input.items,
@@ -65,6 +80,9 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       completed,
       failures,
       approved: approved.approved,
+      decidedBy,
+      outcome,
+      reviewed,
       grouped,
     };
   },

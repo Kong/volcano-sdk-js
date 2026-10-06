@@ -146,6 +146,40 @@ export interface BatchResult<TResult> {
   throwIfFailed(): void;
 }
 
+export interface WaitForApprovalOptions {
+  /** What reviewers see first. Up to 200 characters. */
+  title: string;
+  /** Longer context for the reviewer. Up to 4000 characters. */
+  description?: string;
+  /** Any JSON value shown with the request, such as the record under review. */
+  details?: unknown;
+  /**
+   * How long reviewers have to decide. Unset, the approval stays open until
+   * the execution ends. When it runs out the decision resolves as `expired`.
+   */
+  timeout?: DurableDuration;
+}
+
+export interface ApprovalDecider {
+  id: string;
+  email: string;
+}
+
+/**
+ * The outcome of an approval. A denial or an expiry is a decision like any
+ * other, so it resolves rather than throws: branch on `approved`.
+ */
+export interface ApprovalDecision {
+  approved: boolean;
+  status: 'approved' | 'denied' | 'expired';
+  /** The reviewer's comment, or `''` when they left none. */
+  comment: string;
+  /** Who decided, or `null` when the approval expired. */
+  decidedBy: ApprovalDecider | null;
+  /** When it was decided, as an ISO 8601 timestamp, or `null` when it expired. */
+  decidedAt: string | null;
+}
+
 /** A branch of `ctx.parallel`, named for the execution history. */
 export interface ParallelBranch<TResult> {
   name?: string;
@@ -198,6 +232,13 @@ export interface DurableContext {
     check: (state: TState, scope: DurableStepScope) => Promise<TState>,
     options: WaitUntilOptions<TState>,
   ): Promise<TState>;
+
+  /**
+   * Asks the project's owners to approve or deny, and suspends until one of
+   * them decides in the dashboard, the CLI, or the API. The execution is not
+   * running, and not billed, while it waits.
+   */
+  waitForApproval(name: string, options: WaitForApprovalOptions): Promise<ApprovalDecision>;
 
   /** Runs the same work over every item, each in its own child context. */
   map<TItem, TResult>(

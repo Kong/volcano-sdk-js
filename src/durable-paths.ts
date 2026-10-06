@@ -15,6 +15,13 @@ export function durablePathSegments(fields: {
 export function durablePathSegments(fields: {
   functionName: unknown;
 }): DurablePathResult<{ functionName: string }>;
+export function durablePathSegments(fields: {
+  projectId: unknown;
+  approvalId: unknown;
+}): DurablePathResult<{ projectId: string; approvalId: string }>;
+export function durablePathSegments(fields: {
+  projectId: unknown;
+}): DurablePathResult<{ projectId: string }>;
 export function durablePathSegments(
   fields: Readonly<Record<string, unknown>>,
 ): DurablePathResult<Record<string, string>>;
