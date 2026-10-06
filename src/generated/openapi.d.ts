@@ -1584,7 +1584,7 @@ export interface paths {
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
          *     Managed TLS returns the DNS records currently required for setup. Volcano may require a tenant-specific TXT ownership challenge before returning the certificate authority's validation record. After ownership verification succeeds, Volcano permanently assigns the hostname to the account, including after the domain is deleted. A required but unverified ownership reservation expires after 72 hours.
-         *     An unverified reservation does not block an account that proves ownership. When another account holds one, a managed TLS request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. A BYOC request with a publicly trusted certificate and key for the hostname also takes it over; other BYOC requests get a `409` without `code`. Verified hostnames and BYOC domains are never taken over.
+         *     An unverified reservation does not block an account that proves ownership. When another account holds one, a managed TLS request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. A BYOC request with a publicly trusted certificate and key for the hostname also takes it over; other BYOC requests get a `409` without `code`. Hostnames claimed through ownership verification and BYOC domains are never taken over.
          */
         post: operations["createFrontendCustomDomain"];
         /** Delete frontend custom domain */
@@ -6748,6 +6748,7 @@ export interface components {
         FrontendCustomDomainTLSConfig: {
             /**
              * @description managed for a Volcano-issued certificate; byoc to supply your own.
+             * @default byoc
              * @enum {string}
              */
             mode: "managed" | "byoc";
@@ -6764,9 +6765,12 @@ export interface components {
             tls_mode: "managed" | "byoc";
             /** @enum {string} */
             domain_status: "pending_verification" | "provisioning" | "active" | "detaching" | "failed" | "deleted";
-            /** @enum {string} */
+            /**
+             * @description `verified`: the domain is served by a validated certificate. `pending`: it is not served yet, is being re-validated after its certificate material was withdrawn, or Volcano is retrying after a failure. `failed`: a failure left the domain unserved, alongside `domain_status: failed`; managed domains report the cause in `failure_reason`.
+             * @enum {string}
+             */
             verification_status: "pending" | "verified" | "failed";
-            /** @description Failure category, present only when managed TLS setup has failed. Current values are provider, certificate, ownership, and internal; ownership means another account has already verified the hostname. Treat unrecognized values as internal. */
+            /** @description Failure category, present only when managed TLS setup has failed. Current values are provider, certificate, ownership, and internal; ownership means another account has already claimed the hostname through ownership verification. Treat unrecognized values as internal. */
             failure_reason?: string;
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             /**

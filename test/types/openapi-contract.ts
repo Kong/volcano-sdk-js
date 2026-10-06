@@ -235,6 +235,17 @@ type _CustomDomainTLSMatchesHosting = Assert<
     CustomDomainTLSShape
   >
 >;
+// The spec gives `mode` a `default: byoc` but also lists it as required, and
+// generation runs with `--default-non-nullable false`. The default must not
+// make `mode` optional: a request that leaves it out does not compile.
+type _CustomDomainTLSDefaultKeepsModeRequired = Assert<
+  {
+    certificate_pem: string;
+    private_key_pem: string;
+  } extends OpenAPIComponents['schemas']['FrontendCustomDomainTLSConfig']
+    ? false
+    : true
+>;
 
 interface CustomDomainVerificationRecordShape {
   name: string;
@@ -317,6 +328,7 @@ export type OpenApiContractChecks = [
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
   _CustomDomainTLSMatchesHosting,
+  _CustomDomainTLSDefaultKeepsModeRequired,
   _CustomDomainResponseMatchesHosting,
   _CustomDomainConflictCarriesRequiredRecord,
   _ProjectConfigTLSMatchesHosting,
