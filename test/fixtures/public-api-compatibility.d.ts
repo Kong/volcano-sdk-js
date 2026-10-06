@@ -2,7 +2,7 @@ import type * as Expected from './published-api';
 import type * as Actual from '@volcano.dev/sdk';
 import type * as ESM from '../../dist/index.esm.mjs';
 
-type Exact<A, B> =
+export type Exact<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type AllTrue<T extends true[]> = T;
 
