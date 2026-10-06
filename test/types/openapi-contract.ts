@@ -293,12 +293,37 @@ type _ProjectConfigTLSMatchesHosting = Assert<
     ProjectConfigCustomDomainTLS,
     | { mode: 'managed' }
     | {
-        mode: 'byoc';
+        mode?: 'byoc';
         certificate_pem?: string;
         private_key_pem?: string;
         certificate_chain_pem?: string;
       }
   >
+>;
+// Hosting reads a manifest TLS block without `mode` as BYOC and no longer
+// declares a discriminator, so the union must resolve on `mode` alone.
+type ManagedManifestTLS =
+  OpenAPIComponents['schemas']['ManagedProjectConfigFrontendCustomDomainTLSConfig'];
+type BYOCManifestTLS =
+  OpenAPIComponents['schemas']['BYOCProjectConfigFrontendCustomDomainTLSConfig'];
+type ManifestTLSMembersAccepting<Block> = ProjectConfigCustomDomainTLS extends infer Member
+  ? Member extends unknown
+    ? Block extends Member
+      ? Member
+      : never
+    : never
+  : never;
+type _ProjectConfigTLSWithoutModeIsBYOC = Assert<
+  Equal<
+    ManifestTLSMembersAccepting<{ certificate_pem: string; private_key_pem: string }>,
+    BYOCManifestTLS
+  >
+>;
+type _ProjectConfigEmptyTLSIsBYOC = Assert<
+  Equal<ManifestTLSMembersAccepting<Record<never, never>>, BYOCManifestTLS>
+>;
+type _ProjectConfigManagedTLSStaysManaged = Assert<
+  Equal<ManifestTLSMembersAccepting<{ mode: 'managed' }>, ManagedManifestTLS>
 >;
 
 export type OpenApiContractChecks = [
@@ -332,6 +357,9 @@ export type OpenApiContractChecks = [
   _CustomDomainResponseMatchesHosting,
   _CustomDomainConflictCarriesRequiredRecord,
   _ProjectConfigTLSMatchesHosting,
+  _ProjectConfigTLSWithoutModeIsBYOC,
+  _ProjectConfigEmptyTLSIsBYOC,
+  _ProjectConfigManagedTLSStaysManaged,
 ];
 
 declare const refreshError: unknown;
@@ -477,6 +505,19 @@ async function functionErrorMetadata(
   return { status, code, retryAfter, systemFields };
 }
 
+function manifestTLSMode(tls: ProjectConfigCustomDomainTLS): 'managed' | 'byoc' {
+  if (tls.mode === 'managed') {
+    const managed: ManagedManifestTLS = tls;
+    return managed.mode;
+  }
+  const byoc: BYOCManifestTLS = tls;
+  return byoc.mode ?? 'byoc';
+}
+manifestTLSMode({ certificate_pem: 'cert', private_key_pem: 'key' });
+manifestTLSMode({ mode: 'managed' });
+// @ts-expect-error A managed block cannot carry certificate fields.
+manifestTLSMode({ mode: 'managed', certificate_pem: 'cert' });
+
 export const contractOperations = {
   adoptCurrentSession,
   startDurableExecution,
@@ -488,4 +529,5 @@ export const contractOperations = {
   authErrorMetadata,
   presenceIdentity,
   functionErrorMetadata,
+  manifestTLSMode,
 };

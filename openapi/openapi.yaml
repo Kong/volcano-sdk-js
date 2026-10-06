@@ -20512,6 +20512,7 @@ components:
           type: string
           enum:
             - byoc
+          description: Optional; a TLS block without `mode` is BYOC.
         certificate_pem:
           type: string
           maxLength: 65536
@@ -20524,17 +20525,11 @@ components:
           type: string
           maxLength: 65536
           description: Optional PEM-encoded certificate chain. Requires certificate_pem and private_key_pem. Omitted from exports.
-      required:
-        - mode
     ProjectConfigFrontendCustomDomainTLSConfig:
+      description: TLS for the custom domain. `mode` defaults to `byoc` when omitted.
       oneOf:
         - $ref: '#/components/schemas/ManagedProjectConfigFrontendCustomDomainTLSConfig'
         - $ref: '#/components/schemas/BYOCProjectConfigFrontendCustomDomainTLSConfig'
-      discriminator:
-        propertyName: mode
-        mapping:
-          managed: '#/components/schemas/ManagedProjectConfigFrontendCustomDomainTLSConfig'
-          byoc: '#/components/schemas/BYOCProjectConfigFrontendCustomDomainTLSConfig'
     DatabaseQueryPerformanceDatabase:
       type: object
       properties:

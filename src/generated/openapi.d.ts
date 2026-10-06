@@ -9108,19 +9108,16 @@ export interface components {
         };
         /** @description Volcano issues and renews the certificate. Certificate fields are not allowed. */
         ManagedProjectConfigFrontendCustomDomainTLSConfig: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
+            /** @enum {string} */
             mode: "managed";
         };
         /** @description Your own certificate. Send `certificate_pem` and `private_key_pem` together, with an optional `certificate_chain_pem`, to create the domain or rotate its certificate. For an existing BYOC domain, `mode: byoc` without certificate fields keeps the stored certificate; exports render only the mode. */
         BYOCProjectConfigFrontendCustomDomainTLSConfig: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Optional; a TLS block without `mode` is BYOC.
              * @enum {string}
              */
-            mode: "byoc";
+            mode?: "byoc";
             /** @description PEM-encoded certificate for create or rotation. Requires private_key_pem. Omitted from exports. */
             certificate_pem?: string;
             /** @description PEM-encoded private key for create or rotation. Requires certificate_pem. Omitted from exports. */
@@ -9128,6 +9125,7 @@ export interface components {
             /** @description Optional PEM-encoded certificate chain. Requires certificate_pem and private_key_pem. Omitted from exports. */
             certificate_chain_pem?: string;
         };
+        /** @description TLS for the custom domain. `mode` defaults to `byoc` when omitted. */
         ProjectConfigFrontendCustomDomainTLSConfig: components["schemas"]["ManagedProjectConfigFrontendCustomDomainTLSConfig"] | components["schemas"]["BYOCProjectConfigFrontendCustomDomainTLSConfig"];
         DatabaseQueryPerformanceDatabase: {
             /** Format: uuid */
