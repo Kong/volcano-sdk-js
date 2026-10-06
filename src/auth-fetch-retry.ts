@@ -19,6 +19,7 @@ export async function fetchWithAuthRetry<Context extends AuthContext>(
   client: AuthRetryClient<Context>,
   url: string,
   options: RequestInit = {},
+  timeoutMs = client.timeout,
 ): Promise<Response> {
   await client._completeOAuthExchange();
   const context = client._captureAuthContext();
@@ -29,7 +30,7 @@ export async function fetchWithAuthRetry<Context extends AuthContext>(
         ...options,
         headers: authenticatedHeaders(options.headers, accessToken),
       },
-      client.timeout,
+      timeoutMs,
     );
   };
 

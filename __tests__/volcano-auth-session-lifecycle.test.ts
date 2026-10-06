@@ -7,6 +7,7 @@ import { sessionToken } from './session-fixtures.ts';
 const fetchMock = jest.mocked(globalThis.fetch);
 const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const config = { apiUrl: 'https://api.test.com', anonKey: 'ak-test-anon-key' };
+const newPassword = 'fake-new-password';
 let volcano: VolcanoAuth;
 
 beforeEach(() => {
@@ -506,7 +507,7 @@ describe('VolcanoAuth session lifecycle', () => {
         }),
       );
 
-      const result = await volcano.auth.updateUser({ password: 'newpass123' });
+      const result = await volcano.auth.updateUser({ password: newPassword });
 
       expect(result.error).toBeNull();
       expect(result.user).toBeDefined();
@@ -537,7 +538,7 @@ describe('VolcanoAuth session lifecycle', () => {
       );
 
       const result = await volcano.auth.updateUser({
-        password: 'newpass123',
+        password: newPassword,
         metadata: { name: 'Test' },
       });
 

@@ -23,7 +23,8 @@ const requiredTasks = {
     'pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz',
   'test:quickstart':
     'pnpm test:package && pnpm test:types:package && node .quality-tools/test-package-quickstart.mjs reports/volcano-sdk.tgz',
-  'test:types:package': 'pnpm build && tsc --noEmit -p tsconfig.consumer.json',
+  'test:types:package':
+    'pnpm build && tsc --noEmit -p tsconfig.consumer.json && tsc --noEmit -p tsconfig.consumer-sandbox.json',
   'test:examples':
     'pnpm build && NEXT_PUBLIC_VOLCANO_API_URL=http://127.0.0.1:8787 NEXT_PUBLIC_VOLCANO_ANON_KEY=example-test-key NEXT_PUBLIC_VOLCANO_DATABASE_NAME=app pnpm --dir examples/nextjs-notes-app build',
   audit: 'pnpm build:tooling && node .quality-tools/audit-dependencies.mjs',

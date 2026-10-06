@@ -677,8 +677,8 @@ export interface paths {
          * @description Returns the database's current top queries from pg_stat_statements
          *     ranked by total execution time.
          *
-         *     **PRO plan required.** This endpoint is only available to projects owned
-         *     by users on the PRO billing plan.
+         *     **SUPERAGENT plan required.** This endpoint is only available to projects owned
+         *     by users on the SUPERAGENT billing plan.
          */
         get: operations["getProjectDatabaseQueries"];
         put?: never;
@@ -1053,9 +1053,9 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to count deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The activity window is limited
-         *     to the plan's retention window (FREE: 1 day, PRO: 30 days); older start
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The activity window is limited
+         *     to the plan's retention window (HOBBY: 1 day, SUPERAGENT: 30 days); older start
          *     times are clamped to that window.
          */
         post: operations["getProjectLogActivity"];
@@ -1081,10 +1081,10 @@ export interface paths {
          *     `resource.ids` to filter to one or more resources, and add
          *     `resource.deployments.ids` to read deployment logs instead of runtime
          *     logs for functions and frontends. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; requests for
-         *     `resource.type=database` from a FREE-plan project owner return 403.
+         *     databases. Database logs are a SUPERAGENT-plan feature; requests for
+         *     `resource.type=database` from a HOBBY-plan project owner return 403.
          *     Log history (runtime and deployment) is limited to the plan's retention
-         *     window (FREE: 1 day, PRO: 30 days); older time ranges are clamped to that
+         *     window (HOBBY: 1 day, SUPERAGENT: 30 days); older time ranges are clamped to that
          *     window.
          */
         post: operations["searchProjectLogs"];
@@ -1109,12 +1109,12 @@ export interface paths {
          *     resource selector plus `q`, `start_time`, and `limit`,
          *     including runtime logs and function/frontend deployment logs selected
          *     with `resource.deployments`. Deployment logs are not supported for
-         *     databases. Database logs are a PRO-plan feature; `resource.type=database`
-         *     from a FREE-plan project owner returns 403. The `q` field uses the same
+         *     databases. Database logs are a SUPERAGENT-plan feature; `resource.type=database`
+         *     from a HOBBY-plan project owner returns 403. The `q` field uses the same
          *     syntax as search and activity requests. Do not send `cursor` or
          *     `end_time`; use `/logs/search` for range backfills.
          *     Explicit historical `start_time` values are limited to the plan's
-         *     retention window (FREE: 1 day, PRO: 30 days). Resume with
+         *     retention window (HOBBY: 1 day, SUPERAGENT: 30 days). Resume with
          *     `Last-Event-ID` or the `last_event_id` query parameter. The cursor is
          *     bound to the request body: the resource selector and every filter must
          *     match the original request when reconnecting, otherwise the request is
@@ -1579,7 +1579,7 @@ export interface paths {
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
-         * Configure frontend custom domain (PRO)
+         * Configure frontend custom domain (SUPERAGENT)
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
@@ -1682,7 +1682,7 @@ export interface paths {
         /**
          * Create a new serverless PostgreSQL database
          * @description Creates a serverless PostgreSQL database in the project.
-         *     Each project can hold 1 database on Free and up to 10,000 on Pro.
+         *     Each project can hold 1 database on Hobby and up to 10,000 on Superagent.
          *     Requests over the plan's cap return 403.
          */
         post: operations["createDatabase"];
@@ -3183,8 +3183,8 @@ export interface paths {
         /**
          * Create email template
          * @description Creates a custom email template for the project. Custom email templates
-         *     are a PRO-plan feature: requests from a FREE-plan project owner are
-         *     rejected with 403, and FREE projects always send the built-in default
+         *     are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner are
+         *     rejected with 403, and HOBBY projects always send the built-in default
          *     templates regardless of any previously saved custom rows.
          *     Every project is created with one template per type, so customizing one
          *     is usually a PUT; creating a type the project already has returns 409.
@@ -3208,9 +3208,9 @@ export interface paths {
         get: operations["getEmailTemplate"];
         /**
          * Update email template
-         * @description Updates a custom email template. Custom email templates are a PRO-plan
-         *     feature: requests from a FREE-plan project owner are rejected with 403
-         *     (including after a PRO→FREE downgrade), so a FREE project cannot modify
+         * @description Updates a custom email template. Custom email templates are a SUPERAGENT-plan
+         *     feature: requests from a HOBBY-plan project owner are rejected with 403
+         *     (including after a SUPERAGENT→HOBBY downgrade), so a HOBBY project cannot modify
          *     templates and always sends the built-in defaults.
          */
         put: operations["updateEmailTemplate"];
@@ -3218,7 +3218,7 @@ export interface paths {
         /**
          * Delete email template
          * @description Deletes a custom template, reverting to the default. Custom email
-         *     templates are a PRO-plan feature: requests from a FREE-plan project owner
+         *     templates are a SUPERAGENT-plan feature: requests from a HOBBY-plan project owner
          *     are rejected with 403.
          */
         delete: operations["deleteEmailTemplate"];
@@ -4527,10 +4527,442 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandboxes/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available sandbox presets */
+        get: operations["listSandboxPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox templates */
+        get: operations["listSandboxes"];
+        put?: never;
+        /** Create a sandbox template from a verified preset */
+        post: operations["createSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox template */
+        get: operations["getSandbox"];
+        put?: never;
+        post?: never;
+        /** Retire a template and terminate its sessions */
+        delete: operations["deleteSandbox"];
+        options?: never;
+        head?: never;
+        /** Rename a sandbox template */
+        patch: operations["updateSandbox"];
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sandbox deployment history */
+        get: operations["listSandboxDeployments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project sandbox sessions */
+        get: operations["listSandboxSessions"];
+        put?: never;
+        /** Start a sandbox session */
+        post: operations["createSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandbox-executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute once and return after confirmed termination */
+        post: operations["executeSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox session */
+        get: operations["getSandboxSession"];
+        put?: never;
+        post?: never;
+        /** Request sandbox termination */
+        delete: operations["terminateSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend a sandbox session */
+        post: operations["suspendSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a sandbox session */
+        post: operations["resumeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/exec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a command within a session */
+        post: operations["executeSandboxSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read a workspace file */
+        post: operations["readSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/files/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a workspace file */
+        post: operations["writeSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/grants/{subjectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Authorize an authenticated project user for this session */
+        put: operations["grantSandboxSession"];
+        post?: never;
+        /** Revoke a project user session grant */
+        delete: operations["revokeSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-sessions/{sessionId}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a short-lived port-scoped access credential */
+        post: operations["createSandboxSessionAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SandboxPreset: {
+            id: string;
+            runtime: string;
+            version: string;
+            /** @enum {integer} */
+            memory_mb: 1024 | 2048;
+            regions: string[];
+        };
+        SandboxTemplate: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            preset?: string;
+            memory_mb?: number;
+            /** @enum {string} */
+            status: "ready" | "unavailable" | "deleting";
+            /** Format: date-time */
+            created_at: string;
+        };
+        CreateSandboxTemplateRequest: {
+            name: string;
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset: string;
+            /**
+             * @default 1024
+             * @enum {integer}
+             */
+            memory_mb?: 1024 | 2048;
+        };
+        UpdateSandboxTemplateRequest: {
+            name: string;
+        };
+        SandboxSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            sandbox_id: string;
+            /** @enum {string} */
+            state: "starting" | "running" | "suspending" | "suspended" | "resuming" | "terminating" | "terminated" | "unknown";
+            /** @enum {string} */
+            desired_state: "running" | "suspended" | "terminated";
+            region: string;
+            memory_mb: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        CreateSandboxSessionRequest: {
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset?: string;
+            /** Format: uuid */
+            sandbox_id?: string;
+            /** @enum {integer} */
+            memory_mb?: 1024 | 2048;
+            /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
+            region: string;
+            /** @default 3600 */
+            max_duration_seconds?: number;
+            /** @default 0 */
+            idle_timeout_seconds?: number;
+        } & (unknown | unknown);
+        SandboxCommandRequest: {
+            command: string;
+            /** @default 60 */
+            timeout_seconds?: number;
+            environment?: {
+                [key: string]: string;
+            };
+        };
+        SandboxExecutionRequest: {
+            /** @description Preset ID from the available Sandbox preset catalog. */
+            preset?: string;
+            /** Format: uuid */
+            sandbox_id?: string;
+            /** @enum {integer} */
+            memory_mb?: 1024 | 2048;
+            /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
+            region: string;
+            command: string;
+            /** @default 60 */
+            timeout_seconds?: number;
+            environment?: {
+                [key: string]: string;
+            };
+        } & (unknown | unknown);
+        SandboxCommandResult: {
+            stdout: string;
+            stderr: string;
+            exit_code: number;
+            stdout_truncated: boolean;
+            stderr_truncated: boolean;
+            timed_out: boolean;
+        };
+        SandboxExecutionResult: {
+            stdout: string;
+            stderr: string;
+            exit_code: number;
+            stdout_truncated: boolean;
+            stderr_truncated: boolean;
+            timed_out: boolean;
+            /** Format: uuid */
+            session_id: string;
+            region: string;
+            /** Format: int64 */
+            duration_ms: number;
+        };
+        SandboxFileWriteRequest: {
+            path: string;
+            /** Format: byte */
+            data: string;
+        };
+        SandboxFileReadRequest: {
+            path: string;
+        };
+        SandboxFileResult: {
+            /** Format: byte */
+            data: string;
+        };
+        SandboxSubjectGrantRequest: {
+            /** Format: date-time */
+            expires_at: string;
+        };
+        SandboxAccessRequest: {
+            port: number;
+            /** @default 300 */
+            expires_in_seconds?: number;
+        };
+        SandboxAccess: {
+            /** Format: uri */
+            url: string;
+            token: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        SandboxDeployment: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SandboxPagination: {
+            limit: number;
+            has_more: boolean;
+            next_cursor?: string;
+        };
+        SandboxTemplatePage: {
+            data: components["schemas"]["SandboxTemplate"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxSessionPage: {
+            data: components["schemas"]["SandboxSession"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxDeploymentPage: {
+            data: components["schemas"]["SandboxDeployment"][];
+            pagination: components["schemas"]["SandboxPagination"];
+        };
+        SandboxPresetList: {
+            data: components["schemas"]["SandboxPreset"][];
+        };
+        SandboxCapacity: {
+            region: string;
+            /** Format: int64 */
+            allocated_memory_mb: number;
+        };
+        SandboxCapacityList: {
+            data: components["schemas"]["SandboxCapacity"][];
+        };
+        PublishSandboxPresetRequest: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            preset: "python3.12" | "node22";
+            /** @enum {integer} */
+            memory_mb: 1024 | 2048;
+            /** Format: uuid */
+            deployment_id: string;
+        };
         AnonKey: {
             /** Format: uuid */
             id: string;
@@ -4645,9 +5077,9 @@ export interface components {
              *     403, and `allowed_email_domains_mode` decides whether sign-in is
              *     covered as well.
              *
-             *     The allowlist is a PRO feature to configure and to enforce. A
+             *     The allowlist is a SUPERAGENT feature to configure and to enforce. A
              *     downgrade parks it: the domains are still returned here and stop
-             *     being applied until the project is back on PRO.
+             *     being applied until the project is back on SUPERAGENT.
              * @example [
              *       "domain1.com",
              *       "domain2.com"
@@ -7296,10 +7728,10 @@ export interface components {
             /** @enum {string} */
             status: "active" | "deleting" | "failed";
             /**
-             * @description Platform plan applied to the project when available
+             * @description Public plan name; FREE and PRO are accepted from older Hosting responses.
              * @enum {string}
              */
-            plan?: "FREE" | "PRO";
+            plan?: "HOBBY" | "SUPERAGENT" | "FREE" | "PRO";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions
@@ -7510,8 +7942,8 @@ export interface components {
              *     prefix) and must be bare domains such as `domain1.com`. Matching is
              *     exact, so subdomains need their own entry. At most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only declare the list it already has or remove the
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only declare the list it already has or remove the
              *     restriction, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -7560,7 +7992,7 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with BYOC TLS (PRO plan). `tls` is required when the
+         * @description Custom domain with BYOC TLS (SUPERAGENT plan). `tls` is required when the
          *     domain is first created and optional afterwards: providing new TLS
          *     material for the same domain rotates the certificate in place (zero
          *     downtime); omitting `tls` keeps the stored certificate. TLS material is
@@ -7595,16 +8027,16 @@ export interface components {
         };
         ProjectConfigEmailTemplate: {
             subject?: string;
-            /** @description HTML body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description HTML body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             html_body?: string;
-            /** @description Plain-text body. Max 256 KiB. PRO plan required for custom bodies. */
+            /** @description Plain-text body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             text_body?: string;
         };
         /**
          * @description Email templates keyed by type. Fully synced when declared - template
          *     types absent from a declared map revert to server defaults (custom
          *     bodies deleted, subject overrides cleared). Custom template bodies
-         *     require the PRO plan; subject-only changes are available on FREE.
+         *     require the SUPERAGENT plan; subject-only changes are available on HOBBY.
          */
         ProjectConfigEmailTemplates: {
             confirmation?: components["schemas"]["ProjectConfigEmailTemplate"];
@@ -7666,7 +8098,7 @@ export interface components {
             css?: string;
         };
         /**
-         * @description Hosted auth pages keyed by page type (PRO plan). Upsert-only: omitted
+         * @description Hosted auth pages keyed by page type (SUPERAGENT plan). Upsert-only: omitted
          *     pages are left untouched (there is no delete for hosted pages).
          */
         ProjectConfigHostedPages: {
@@ -7714,7 +8146,7 @@ export interface components {
         /** @description Project-level settings. `name` renames the project. */
         ProjectConfigProject: {
             name?: string;
-            /** @description Region policy. `false` requires `selected_regions` (PRO plan). */
+            /** @description Region policy. `false` requires `selected_regions` (SUPERAGENT plan). */
             all_regions?: boolean;
             /** @description Region subset (bare region names). Requires `all_regions=false`. */
             selected_regions?: string[];
@@ -8008,8 +8440,8 @@ export interface components {
         /** @description Plan-based limits for realtime features */
         RealtimePlanLimits: {
             /**
-             * @description Plan name (FREE or PRO)
-             * @example FREE
+             * @description Public plan name (HOBBY or SUPERAGENT).
+             * @example HOBBY
              */
             plan?: string;
             /**
@@ -8345,8 +8777,8 @@ export interface components {
              *     prefix); matching is exact, so subdomains need their own entry. At
              *     most 100 entries.
              *
-             *     Restricting signups is a PRO feature to configure and to enforce: a
-             *     FREE project can only remove the restriction and gets 403 for any
+             *     Restricting signups is a SUPERAGENT feature to configure and to enforce: a
+             *     HOBBY project can only remove the restriction and gets 403 for any
              *     other change, and the list it keeps is parked until it upgrades.
              * @example [
              *       "domain1.com",
@@ -10227,7 +10659,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden (for example, selecting subset regions on non-PRO plan) */
+            /** @description Forbidden (for example, selecting subset regions on non-SUPERAGENT plan) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -14649,7 +15081,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - custom domains require PRO plan */
+            /** @description Forbidden - custom domains require SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15656,7 +16088,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupList"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15735,7 +16167,7 @@ export interface operations {
             };
             /**
              * @description The database has reached its backup allowance, or the owner's plan
-             *     does not include backups, which are PRO-only.
+             *     does not include backups, which are SUPERAGENT-only.
              */
             403: {
                 headers: {
@@ -15809,7 +16241,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackup"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15887,7 +16319,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15952,7 +16384,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackupSchedule"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16033,7 +16465,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16098,7 +16530,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestoreList"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16168,7 +16600,7 @@ export interface operations {
             };
             /**
              * @description The owner's plan does not include backups or point-in-time restore.
-             *     Both are PRO-only.
+             *     Both are SUPERAGENT-only.
              */
             403: {
                 headers: {
@@ -16236,7 +16668,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseRestore"];
                 };
             };
-            /** @description Backups are PRO-only and the owner's plan does not include them */
+            /** @description Backups are SUPERAGENT-only and the owner's plan does not include them */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19109,7 +19541,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19186,7 +19618,7 @@ export interface operations {
                     "application/json": components["schemas"]["EmailTemplate"];
                 };
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19224,7 +19656,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Custom email templates require the PRO plan */
+            /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19344,7 +19776,7 @@ export interface operations {
             /**
              * @description The update would turn on, widen, or otherwise edit the email domain
              *     allowlist (`allowed_email_domains`, `allowed_email_domains_mode`)
-             *     for a project that is not on the PRO plan. A FREE project keeps
+             *     for a project that is not on the SUPERAGENT plan. A HOBBY project keeps
              *     whatever allowlist it already has — parked, enforcing nothing until
              *     it upgrades — and may still remove it, so a downgrade never leaves a
              *     project locked out of its own signups.
@@ -22787,7 +23219,7 @@ export interface operations {
             };
             /**
              * @description File size exceeds plan-based limits. This occurs when:
-             *     - File exceeds the plan-based maximum file size (FREE or PRO tier)
+             *     - File exceeds the plan-based maximum file size (HOBBY or SUPERAGENT tier)
              *     - Upload would exceed the project's total storage quota
              */
             413: {
@@ -22941,6 +23373,696 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    listSandboxPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List available sandbox presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxPresetList"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxes: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplatePage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Create a sandbox template from a verified preset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retire a template and terminate its sessions */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSandboxTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rename a sandbox template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTemplate"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxDeployments: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List sandbox deployment history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDeploymentPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxSessions: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque keyset pagination cursor from a previous response's `next_cursor`
+                 *     — pages forward. Mutually exclusive with `page` and `ending_before`;
+                 *     combining them returns 400. When supplied, the request's `search` and
+                 *     `limit` must match the values bound to the cursor or the request returns 400.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List project sandbox sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSessionPage"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSandboxSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Start a sandbox session */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute once and return after confirmed termination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxExecutionResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    terminateSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request sandbox termination */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    suspendSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suspend a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resumeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resume a sandbox session */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxSession"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    executeSandboxSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Execute a command within a session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxCommandResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    readSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Read a workspace file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFileResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    writeSandboxSessionFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFileWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Write a workspace file */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    grantSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxSubjectGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorize an authenticated project user for this session */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                subjectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoke a project user session grant */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxSessionAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Issue a short-lived port-scoped access credential */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAccess"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

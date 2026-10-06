@@ -10,5 +10,5 @@
 
 export type UploadStorageObjectBodyOne = {
   /** File to upload (simple upload) */
-  file: Blob;
+  file: Blob | File;
 };

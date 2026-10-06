@@ -127,6 +127,7 @@ import {
 import { isBrowser } from './next/request.ts';
 import { ProjectLocksApi } from './project-locks.ts';
 import { logActivityResult, logSearchResult } from './project-logs.ts';
+import { SandboxesApi } from './sandboxes.ts';
 import type {
   Auth,
   Durable,
@@ -136,6 +137,7 @@ import type {
   MutationBuilder as PublicMutationBuilder,
   ProjectLocks,
   QueryBuilder as PublicQueryBuilder,
+  Sandboxes,
   Storage,
   StorageFileApi as PublicStorageFileApi,
   User,
@@ -280,6 +282,7 @@ class VolcanoAuth {
   logs: Logs;
   storage: Storage;
   locks: ProjectLocks;
+  sandboxes: Sandboxes;
 
   constructor(config: VolcanoAuthConfig);
   constructor(
@@ -388,6 +391,7 @@ class VolcanoAuth {
     };
 
     this.locks = new ProjectLocksApi(this);
+    this.sandboxes = new SandboxesApi(this);
   }
 
   /** @internal */
@@ -508,17 +512,20 @@ class VolcanoAuth {
     volcanoAuthorization: 'anon' | 'session',
     headers?: Record<string, string>,
     responseType?: 'blob',
+    timeoutMs?: number,
   ): {
     volcanoAuthorization: 'anon' | 'session';
     volcanoClient: VolcanoAuth;
     headers?: Record<string, string>;
     volcanoResponseType?: 'blob';
+    volcanoTimeoutMs?: number;
   } {
     return {
       volcanoAuthorization,
       volcanoClient: this,
       ...(headers === undefined ? {} : { headers }),
       ...(responseType === undefined ? {} : { volcanoResponseType: responseType }),
+      ...(timeoutMs === undefined ? {} : { volcanoTimeoutMs: timeoutMs }),
     };
   }
 
@@ -527,6 +534,7 @@ class VolcanoAuth {
     path: string,
     options: RequestInit,
     authorization: 'anon' | 'session',
+    timeoutMs = this.timeout,
   ): Promise<Response> {
     const url = `${this.apiUrl}${path}`;
     if (authorization === 'anon') {
@@ -540,11 +548,11 @@ class VolcanoAuth {
           ...options,
           headers,
         },
-        this.timeout,
+        timeoutMs,
       );
     }
 
-    return fetchWithAuthRetry(this, url, options);
+    return fetchWithAuthRetry(this, url, options, timeoutMs);
   }
 
   /** @internal */

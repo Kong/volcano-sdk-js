@@ -7,8 +7,9 @@ packages:
 # which pulled a package requiring Node >=22 into a workspace tested on Node 20.
 autoInstallPeers: false
 
-# Next 15 pins PostCSS 8.4.31, which predates its file-disclosure and XSS fixes.
 overrides:
+  # Next 16 pins PostCSS 8.5.23, which predates the symlink check in its
+  # source-map path protection (8.5.26).
   'next>postcss': ^8.5.28
   # Both Cucumber consumers use v4; uuid 11 retains their CommonJS API.
   'jest-cucumber>uuid': ^11.1.1
@@ -17,6 +18,16 @@ overrides:
   'js-yaml@>=4.0.0 <4.3.2': ^4.3.2
   # Stryker's HTTP client resolves a qs release with DoS advisories.
   'typed-rest-client>qs': 6.16.0
+  # Patch URI parsing and Markdown denial-of-service advisories in tooling.
+  'fast-uri@>=3.0.0 <3.1.8': ^3.1.8
+  'markdown-it@>=14.0.0 <14.3.1': ^14.3.1
+  # js-yaml 3 pulls sprintf-js through argparse 1, and sprintf-js has no fixed
+  # release. load-nyc-config only calls load(), which js-yaml 4 keeps.
+  '@istanbuljs/load-nyc-config>js-yaml': ^4.3.2
+  # The example's PostCSS and Tailwind 3 tooling resolve releases with
+  # denial-of-service advisories; only 7.x of the selector parser is patched.
+  'source-map-js@>=1.0.0 <1.2.2': ^1.2.2
+  'postcss-selector-parser@<7.1.6': ^7.1.6
 
 allowBuilds:
   protobufjs: true
