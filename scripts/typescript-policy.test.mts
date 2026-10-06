@@ -22,8 +22,8 @@ const require = createRequire(import.meta.url);
 const coverageConfig = record(require('../jest.typed.config.cjs'));
 const manifest = record(require('../package.json'));
 const nextPlugin = record(require('@next/eslint-plugin-next'));
-const nextFlatConfig = record(nextPlugin['flatConfig']);
-const nextCoreConfig = record(nextFlatConfig['coreWebVitals']);
+const nextConfigs = record(nextPlugin['configs']);
+const nextCoreConfig = record(nextConfigs['core-web-vitals']);
 const nextRules = record(nextCoreConfig['rules']);
 const approvedComments = new Map([
   [

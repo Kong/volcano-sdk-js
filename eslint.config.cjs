@@ -152,7 +152,7 @@ module.exports = [
     ],
   }),
   ...scopeConfig(reactHooks.configs.flat.recommended, exampleFiles),
-  scopedRules(next.flatConfig.coreWebVitals, exampleFiles),
+  scopedRules(next.configs['core-web-vitals'], exampleFiles),
   {
     files: exampleFiles,
     settings: { next: { rootDir: 'examples/nextjs-notes-app/' } },

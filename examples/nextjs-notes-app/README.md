@@ -26,7 +26,7 @@ A full-featured notes application demonstrating the **Volcano SDK** capabilities
 
 ### 1. Prerequisites
 
-- Node.js 20+
+- Node.js 20.9+ (required by Next.js 16)
 - A Volcano project
 - A database with the `notes` table (see schema below)
 
@@ -87,6 +87,11 @@ NEXT_PUBLIC_VOLCANO_API_URL=https://api.your-project.volcano.hosting
 NEXT_PUBLIC_VOLCANO_ANON_KEY=your-anon-key
 NEXT_PUBLIC_VOLCANO_DATABASE_NAME=your_database_name
 ```
+
+You can also set these variables on the command line instead of in `.env.local`.
+Next.js inlines `NEXT_PUBLIC_*` values into the browser bundle when `next dev`
+starts or `next build` runs. After you change them, restart the dev server or
+rebuild; setting them only for `next start` has no effect.
 
 ### 4. Install & Run
 
