@@ -7,8 +7,9 @@ packages:
 # which pulled a package requiring Node >=22 into a workspace tested on Node 20.
 autoInstallPeers: false
 
-# Next 15 pins PostCSS 8.4.31, which predates its file-disclosure and XSS fixes.
 overrides:
+  # Next 16 pins PostCSS 8.5.23, which predates the symlink check in its
+  # source-map path protection (8.5.26).
   'next>postcss': ^8.5.28
   # Both Cucumber consumers use v4; uuid 11 retains their CommonJS API.
   'jest-cucumber>uuid': ^11.1.1

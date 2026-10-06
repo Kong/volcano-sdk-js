@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@volcano.dev/sdk": "workspace:*",
-    "next": "^15.5.27",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.16",
