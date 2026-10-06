@@ -15,36 +15,24 @@
  */
 
 import { VolcanoAuth } from '@volcano.dev/sdk';
-import getConfig from 'next/config';
 
 // ---------------------------------------------------------------------------
 // SDK CONFIGURATION
 // ---------------------------------------------------------------------------
 
 /**
- * Get configuration from either runtime config (command line) or env vars (.env.local)
- * Runtime config takes precedence for command-line usage
+ * Read configuration from NEXT_PUBLIC_* environment variables.
+ *
+ * Next.js inlines these into the browser bundle when `next dev` starts or
+ * `next build` runs, so set them in .env.local or on the command line before
+ * either command. Each must be referenced by its full literal name; Next.js
+ * cannot inline dynamic lookups such as process.env[name].
  */
-function getVolcanoConfig() {
-  // Try runtime config first (supports command-line env vars)
-  const { volcanoApiUrl, volcanoAnonKey, volcanoDatabaseName } =
-    getConfig()?.publicRuntimeConfig ?? {};
-
-  return {
-    apiUrl: configuredValue(volcanoApiUrl, process.env.NEXT_PUBLIC_VOLCANO_API_URL),
-    anonKey: configuredValue(volcanoAnonKey, process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY),
-    databaseName: configuredValue(
-      volcanoDatabaseName,
-      process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME,
-    ),
-  };
-}
-
-function configuredValue(runtimeValue, environmentValue) {
-  return runtimeValue || environmentValue;
-}
-
-const config = getVolcanoConfig();
+const config = {
+  apiUrl: process.env.NEXT_PUBLIC_VOLCANO_API_URL,
+  anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY,
+  databaseName: process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME,
+};
 
 /**
  * Validate required configuration
