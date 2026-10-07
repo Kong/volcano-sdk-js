@@ -805,6 +805,30 @@ describe('approval registration', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  it('reports the last refusal when the deadline passes as a retry begins', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    fetchMock().mockImplementation(() => Promise.resolve(respond(503, { error: 'unavailable' })));
+    const deadline = Date.now() + 30_000;
+
+    const failure = failureOf(registered());
+    // Fires just before the backoff does: it ends a millisecond short of the
+    // deadline, and the clock has passed it by the next reading.
+    setTimeout(() => {
+      jest
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(deadline - 1)
+        .mockReturnValue(deadline + 1);
+    }, 500);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(await failure).toMatchObject({
+      status: 503,
+      message: 'Volcano refused the approval request (503): unavailable',
+    });
+    expect(timeout.mock.calls).toEqual([[10_000], [1]]);
+  });
+
   it('reports an unreachable platform with its cause once retries run out', async () => {
     jest.useFakeTimers({ timerLimit: 100 });
     const cause = new TypeError('fetch failed');

@@ -24,39 +24,45 @@ export async function requestApproval(apiUrl: string, request: ApprovalRequest):
   const url = `${apiUrl.replace(/\/$/, '')}/durable-approvals`;
   const body = JSON.stringify(request);
   const deadline = Date.now() + REGISTRATION_DEADLINE_MS;
-  let failure = await send(url, body, deadline);
+  let failure = await send(url, body, REQUEST_TIMEOUT_MS);
   for (const delay of RETRY_DELAYS_MS) {
     if (failure === null) {
       return;
     }
-    if (!(await waitedToRetry(failure, delay, deadline))) {
+    const timeout = await retryTimeout(failure, delay, deadline);
+    if (timeout === null) {
       break;
     }
-    failure = await send(url, body, deadline);
+    failure = await send(url, body, timeout);
   }
   if (failure !== null) {
     throw failure.error;
   }
 }
 
-// Waits out the delay, unless the failure is final or waiting would leave no
-// time for another attempt.
-async function waitedToRetry(failure: Failure, delay: number, deadline: number): Promise<boolean> {
+// Waits out the delay and answers how long the next attempt may take, or null
+// when the failure is final or no time would be left for another attempt.
+async function retryTimeout(
+  failure: Failure,
+  delay: number,
+  deadline: number,
+): Promise<number | null> {
   if (!failure.retryable || deadline - Date.now() <= delay) {
-    return false;
+    return null;
   }
   await sleep(delay);
-  return Date.now() < deadline;
+  const remaining = deadline - Date.now();
+  return remaining > 0 ? Math.min(REQUEST_TIMEOUT_MS, remaining) : null;
 }
 
-async function send(url: string, body: string, deadline: number): Promise<Failure | null> {
+async function send(url: string, body: string, timeout: number): Promise<Failure | null> {
   let response: Response;
   try {
     response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-      signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now())),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch (cause) {
     return {
