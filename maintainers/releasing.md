@@ -19,16 +19,25 @@ This checklist does not authorize a release, a registry mutation or an environme
 ## Dependabot updates
 
 Dependabot titles every update `chore(deps)` or `chore(deps-dev)`, so merging one
-does not start a release. When merging an update that changes what the package
-ships, edit the squash commit title to `fix(deps): ...` so Release Please
+does not start a release. When an update changes what the package ships, edit
+the squash commit title to `fix(deps): ...` when merging so Release Please
 releases it:
 
-- An update that changes the `dependencies` range in `package.json`, such as a
+- A change to the `dependencies` range in the root `package.json`, such as a
   major `centrifuge` or `ws` update. In-range bumps change only
-  `pnpm-lock.yaml`, which is not published.
-- An update whose regenerated output differs: an `openapi-codegen` update, or a
-  prettier or TypeScript update in `npm-development`. If `pnpm check:openapi`
-  fails, run `pnpm generate:openapi` and commit the result to the update's PR.
+  `pnpm-lock.yaml`, and the example app's `package.json` is not published.
+- A change to `src/generated` after regenerating, because the build bundles it
+  into `dist`.
+
+Some updates need a commit before CI passes:
+
+- If `pnpm check:openapi` fails, usually after an `openapi-codegen`, prettier or
+  TypeScript update, run `pnpm generate:openapi` and commit the result.
+- If a prettier update fails `pnpm format:check`, run `pnpm format` and commit
+  the result.
+
+Dependabot stops rebasing a pull request once someone else pushes to it, so
+merge it soon after. `@dependabot recreate` starts over and drops those commits.
 
 ## Before publication
 
