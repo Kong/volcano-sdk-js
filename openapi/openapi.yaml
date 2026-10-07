@@ -18132,9 +18132,7 @@ components:
           enum:
             - HOBBY
             - SUPERAGENT
-            - FREE
-            - PRO
-          description: Public plan name; FREE and PRO are accepted from older Hosting responses.
+          description: Plan name applied to the project when available.
         all_regions:
           type: boolean
           description: |
