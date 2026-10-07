@@ -146,6 +146,7 @@
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/jest-runner": "10.0.0",
     "@types/babel__core": "7.20.5",
+    "@types/convert-source-map": "2.0.3",
     "@types/jest": "30.0.0",
     "@types/node": "22.20.5",
     "@types/ws": "8.18.2",
