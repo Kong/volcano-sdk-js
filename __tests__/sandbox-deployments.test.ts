@@ -171,13 +171,13 @@ test('omits optional deployment fields and accepts boundary ports', async () => 
   expect(body.has('ports')).toBe(false);
   const boundary = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(), {
     name: 'ports',
-    ports: [1, 65535],
+    ports: [1, 65532],
     memoryMB: 1024,
   });
   expect(boundary.error).toBeNull();
 });
 
-test.each([0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+test.each([0, -1, 65533, 65534, 65535, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
   'rejects invalid deployment port %s before sending',
   async (port) => {
     const fetchMock = jest.fn<typeof fetch>();
@@ -188,7 +188,7 @@ test.each([0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
     });
     expect(outcome).toEqual({
       data: null,
-      error: new RangeError('Sandbox ports must be between 1 and 65535'),
+      error: new RangeError('Sandbox ports must be between 1 and 65532'),
     });
     expect(fetchMock).not.toHaveBeenCalled();
   },
@@ -300,4 +300,37 @@ test('downloads exact archive bytes even when the server labels them as text', a
     .mockResolvedValue(new Response(bytes, { headers: { 'Content-Type': 'text/plain' } }));
   const outcome = await client().sandboxes.source(projectId, templateId, requestId);
   expect(outcome).toEqual({ data: bytes, error: null });
+});
+
+test.each([
+  {
+    ports: Array.from({ length: 17 }, (_, index) => index + 1),
+    message: 'Sandbox templates support at most 16 ports',
+  },
+  { ports: [8080, 8080], message: 'Sandbox template ports must be unique' },
+])('rejects invalid template port sets before upload: $message', async ({ ports, message }) => {
+  const fetchMock = jest.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
+  const outcome = await client().sandboxes.deploy(projectId, templateId, new Uint8Array(), {
+    name: 'app',
+    ports,
+  });
+  expect(outcome).toEqual({ data: null, error: new RangeError(message) });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test('accepts sixteen unique template ports', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(deployment));
+  globalThis.fetch = fetchMock;
+  const ports = Array.from({ length: 16 }, (_, index) => index + 1);
+  const outcome = await client().sandboxes.deploy(projectId, templateId, new Uint8Array(), {
+    name: 'app',
+    ports,
+  });
+  expect(outcome.error).toBeNull();
+  const body = firstCall(fetchMock.mock.calls)[1]?.body;
+  if (!(body instanceof FormData)) {
+    throw new TypeError('Expected multipart upload');
+  }
+  expect(body.get('ports')).toBe(JSON.stringify(ports));
 });

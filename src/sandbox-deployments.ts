@@ -127,13 +127,19 @@ function validateSource(archive: Uint8Array, ports: number[]): void {
   if (archive.byteLength > 32 * 1024 * 1024) {
     throw new RangeError('Sandbox source archives are limited to 32 MiB');
   }
+  if (ports.length > 16) {
+    throw new RangeError('Sandbox templates support at most 16 ports');
+  }
+  if (new Set(ports).size !== ports.length) {
+    throw new RangeError('Sandbox template ports must be unique');
+  }
   for (const port of ports) {
     validatePort(port);
   }
 }
 function validatePort(port: number): void {
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new RangeError('Sandbox ports must be between 1 and 65535');
+  if (!Number.isInteger(port) || port < 1 || port > 65532) {
+    throw new RangeError('Sandbox ports must be between 1 and 65532');
   }
 }
 function pageResult(data: Record<string, unknown>): import('./index.ts').SandboxDeploymentPage {

@@ -116,6 +116,8 @@ if (error) throw error;
 const state = await client.sandboxes.deployment(projectId, sandboxId, deployment.id);
 ```
 
+`ports` accepts at most 16 unique integers from 1 through 65532.
+
 Keep the same template ID, request ID, source bytes, and options when retrying an
 uncertain request. To update an existing template, deploy with its ID and a new
 request ID. Wait for `status: 'active'` before creating a session from that
