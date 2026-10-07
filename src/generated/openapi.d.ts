@@ -8573,7 +8573,7 @@ export interface components {
              * @description Plan name applied to the project when available.
              * @enum {string}
              */
-            plan?: "HOBBY" | "SUPERAGENT" | "FREE" | "PRO";
+            plan?: "HOBBY" | "SUPERAGENT";
             /**
              * @description Region policy for function deployment.
              *     - `true`: deploy functions to all configured platform regions

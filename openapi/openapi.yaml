@@ -20345,8 +20345,6 @@ components:
           enum:
             - HOBBY
             - SUPERAGENT
-            - FREE
-            - PRO
           description: Plan name applied to the project when available.
         all_regions:
           type: boolean
