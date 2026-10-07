@@ -482,8 +482,8 @@ describe('durable.approvals over the wire', () => {
   test.each([
     [
       403,
-      'permission_denied',
-      'approvals are decided by a person; use a platform token or the dashboard',
+      undefined,
+      'project access tokens cannot decide durable approvals; a person decides in the dashboard or with a platform token',
     ],
     [404, undefined, 'durable approval not found'],
     [409, 'approval_decided', 'approval was already denied'],
