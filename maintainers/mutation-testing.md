@@ -3,11 +3,8 @@
 `pnpm quality` runs Stryker against every handwritten runtime file under `src/`.
 Generated files, declarations, and tests are outside the mutation target. A
 local run checks the complete target; CI runs the same command in 32 required
-shards on Node 22. Node 20 runs the full nonmutation quality checks and tests.
-In [Node 20's full mutation run](https://github.com/Kong/volcano-sdk-js/actions/runs/35990154684/job/107602058701),
-four malformed part-bound mutants abort the native `Blob.slice` implementation
-with `SIGABRT` (`node::Blob::ToSlice`); the [same shard on Node 22](https://github.com/Kong/volcano-sdk-js/actions/runs/35990154684/job/107602058808)
-kills all mutants. The Node 20 crash is not a useful mutant detection.
+shards on Node 22, and each shard first runs the full nonmutation quality checks
+and tests.
 `scripts/verify-mutation-shards.mts` compares the shard mutant counts with
 Stryker's unfiltered inventory, so a missing range or empty shard fails the
 gate.

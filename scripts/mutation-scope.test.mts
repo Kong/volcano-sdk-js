@@ -14,10 +14,9 @@ await test('CI starts every required mutation shard', () => {
   assert.match(workflow, /name: SDK Node 22 mutation shard/);
   assert.equal(readFileSync('.node-version', 'utf8').trim(), '22.23.3');
   assert.match(workflow, /node-version-file: '\.node-version'/);
-  assert.match(workflow, /name: SDK Node 20 lint, tests, and build/);
-  assert.match(workflow, /node-version: '20\.20\.2'/);
-  assert.match(workflow, /run: pnpm quality:checks/);
-  assert.match(workflow, /needs: \[sdk, sdk-node20\]/);
+  assert.doesNotMatch(workflow, /node-version: '/);
+  assert.match(workflow, /run: pnpm quality\n/);
+  assert.match(workflow, /needs: \[sdk\]\n/);
   assert.doesNotMatch(workflow, /node-version: \['20', '22'\]/);
   assert.deepEqual(
     [...stringValue(matrix[1]).matchAll(/\d+/g)].map((match) => Number(match[0])),
