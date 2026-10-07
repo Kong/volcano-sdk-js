@@ -619,9 +619,19 @@ describe('the decision', () => {
     ['a bare year', '2026'],
     ['a date without a time', '2026-10-06'],
     ['a time without an offset', '2026-10-06T12:05:00'],
+    ['a time without seconds', '2026-10-06T12:05Z'],
+    ['a space for the T', '2026-10-06 12:05:00Z'],
+    ['the basic format', '20261006T120500Z'],
+    ['text before it', 'at 2026-10-06T12:05:00Z'],
+    ['text after it', '2026-10-06T12:05:00Z UTC'],
+    ['an interval', '2026-10-06T12:05:00Z/2026-10-07T12:05:00Z'],
+    ['day zero', '2026-10-00T12:05:00Z'],
+    ['an impossible day of any month', '2026-10-32T12:05:00Z'],
     ['an impossible day', '2026-02-30T12:05:00Z'],
     ['an impossible hour', '2026-10-06T24:00:00Z'],
+    ['a three-digit hour', '2026-10-06T012:05:00Z'],
     ['an impossible month', '2026-13-06T12:05:00Z'],
+    ['an impossible offset', '2026-10-06T12:05:00+24:00'],
     ['a leap second', '2026-10-06T23:59:60Z'],
     ['prose', 'Tue Oct 06 2026'],
     ['epoch milliseconds', 1_791_288_300_000],
@@ -634,6 +644,8 @@ describe('the decision', () => {
   it.each([
     ['fractional seconds and an offset', '2026-10-06T14:05:00.123+02:00'],
     ['a leap day', '2028-02-29T12:05:00Z'],
+    ['the last day of a month', '2026-10-31T12:05:00Z'],
+    ['the latest time and widest offset', '2026-10-06T23:59:59-23:59'],
   ])('keeps a decision time with %s', async (_case, decidedAt) => {
     await expect(
       decide(() => Promise.resolve(decided({ decided_at: decidedAt }))),
