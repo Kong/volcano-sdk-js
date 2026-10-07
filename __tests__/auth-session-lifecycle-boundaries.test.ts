@@ -315,6 +315,22 @@ test('refresh rejects a different user while the captured session still owns the
   );
 });
 
+test('refresh rejects a token response without an integer lifetime', async () => {
+  const { host, context } = fixture();
+  host._anonFetch = jest.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      data: { ...session, expires_in: 1.5 },
+      error: null,
+    } satisfies RequestResult),
+  );
+
+  await expect(fetchSessionRefresh(host, context)).rejects.toThrow(
+    'Auth expires_in must be an integer',
+  );
+});
+
 test('access-session revocation reports a failed refresh after an unauthorized delete', async () => {
   const { host, context } = fixture();
   const refreshError = new Error('refresh denied');
