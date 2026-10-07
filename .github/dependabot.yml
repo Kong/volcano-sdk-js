@@ -4,6 +4,9 @@ updates:
   # workspace member that shares pnpm-lock.yaml; a separate entry for that
   # directory would duplicate its updates without refreshing the root lockfile.
   # The durable-order-pipeline functions have no lockfile and are left out.
+  # Dependabot does not read `peerDependencies`, so the published
+  # `@aws/durable-execution-sdk-js` range is reviewed by hand; see
+  # maintainers/releasing.md.
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:

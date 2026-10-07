@@ -39,6 +39,11 @@ Some updates need a commit before CI passes:
 Dependabot stops rebasing a pull request once someone else pushes to it, so
 merge it soon after. `@dependabot recreate` starts over and drops those commits.
 
+Dependabot does not read `peerDependencies`, so it never proposes changes to the
+published `@aws/durable-execution-sdk-js` range. When that runtime ships a new
+major version, update the range and the durable tests by hand, and release the
+change as `fix(deps)` or `feat`.
+
 ## Before publication
 
 1. Identify the release PR, exact source commit, version, tag and intended registry account. Inspect the generated changelog and package metadata.
