@@ -320,7 +320,7 @@ type _ProjectConfigTLSWithoutModeIsBYOC = Assert<
   >
 >;
 type _ProjectConfigEmptyTLSIsBYOC = Assert<
-  Equal<ManifestTLSMembersAccepting<Record<never, never>>, BYOCManifestTLS>
+  Equal<ManifestTLSMembersAccepting<Record<string, never>>, BYOCManifestTLS>
 >;
 type _ProjectConfigManagedTLSStaysManaged = Assert<
   Equal<ManifestTLSMembersAccepting<{ mode: 'managed' }>, ManagedManifestTLS>
