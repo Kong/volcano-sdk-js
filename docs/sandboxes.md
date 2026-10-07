@@ -97,20 +97,23 @@ Use either `preset` or a saved template's `sandboxId`, never both. `sandboxes.pr
 
 Build a tar.gz archive containing a root `Dockerfile` fragment and its files.
 Volcano supplies the base image and entrypoint; use `RUN`, `COPY`, and `CMD`
-instead of `FROM`, `USER`, or `ENTRYPOINT`.
+instead of `FROM`, `USER`, or `ENTRYPOINT`. Use the backend `client` initialized
+above with a service key granting `sandboxes.deployments.write` to deploy and
+`sandboxes.deployments.read` to read history, status, source, and logs.
 
 ```typescript
 const sandboxId = crypto.randomUUID();
 const requestId = crypto.randomUUID();
-const source = new Uint8Array(await archiveFile.arrayBuffer());
-const { data: deployment, error } = await volcano.sandboxes.deploy(projectId, sandboxId, source, {
+const { readFile } = await import('node:fs/promises');
+const source = new Uint8Array(await readFile('./sandbox.tar.gz'));
+const { data: deployment, error } = await client.sandboxes.deploy(projectId, sandboxId, source, {
   name: 'my-image',
   memoryMB: 1024,
   ports: [8080],
   requestId,
 });
 if (error) throw error;
-const state = await volcano.sandboxes.deployment(projectId, sandboxId, deployment.id);
+const state = await client.sandboxes.deployment(projectId, sandboxId, deployment.id);
 ```
 
 Keep the same template ID, request ID, source bytes, and options when retrying an

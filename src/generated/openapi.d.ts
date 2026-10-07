@@ -558,6 +558,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List verified domains
+         * @description Lists the domains the account has verified. The account can attach any
+         *     custom domain at or below one of them, in either TLS mode, without
+         *     publishing another ownership record.
+         */
+        get: operations["listVerifiedDomains"];
+        put?: never;
+        /**
+         * Verify a domain
+         * @description Verifies the account's ownership of a domain and every name below it.
+         *     Verify a registrable domain such as `example.com` to cover all of its
+         *     subdomains, or a delegated subdomain you control.
+         *
+         *     Publish a TXT record named `_volcano.<domain>`, then send this request.
+         *     Without the record, the response is `409` with
+         *     `code: ownership_verification_required` and the `required_record` to
+         *     publish. Its value is the same on every request. The record must be
+         *     served at that name itself; a record reached through a CNAME does not
+         *     count.
+         *
+         *     When another account verified the domain, publishing your record moves
+         *     the domain to your account once that account's record is no longer
+         *     published. Keep your record published so the domain stays yours.
+         *
+         *     Verifying a domain the account already verified returns `200`.
+         */
+        post: operations["verifyDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/domains/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a verified domain
+         * @description Gives up the account's ownership of a domain. Custom domains already
+         *     attached below it keep serving; attaching another requires verifying
+         *     the domain again. Domains Volcano reserves for its own account cannot
+         *     be removed.
+         */
+        delete: operations["deleteVerifiedDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/github/callback": {
         parameters: {
             query?: never;
@@ -1892,7 +1956,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.27 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.3.8 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.27 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.4.0 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -1971,8 +2035,10 @@ export interface paths {
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
-         *     Managed TLS returns the DNS records currently required for setup. Volcano may require a tenant-specific TXT ownership challenge before returning the certificate authority's validation record. After ownership verification succeeds, Volcano permanently assigns the hostname to the account, including after the domain is deleted. A required but unverified ownership reservation expires after 72 hours.
-         *     An unverified reservation does not block an account that proves ownership. When another account holds one, a managed TLS request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. A BYOC request with a publicly trusted certificate and key for the hostname also takes it over; other BYOC requests get a `409` without `code`. Hostnames claimed through ownership verification and BYOC domains are never taken over.
+         *     The account must own the hostname: it must have verified the hostname or a domain above it (see `POST /user/domains`). A certificate does not prove ownership.
+         *     When the account owns no domain covering the hostname, Volcano asks for a TXT record at `_volcano.<registrable domain>`, such as `_volcano.example.com`. Publishing it verifies the whole domain, so later subdomains need no record. A managed TLS request reserves the hostname and returns that record in `verification_records`; the reservation expires after 72 hours unless the record is published. A BYOC request gets `409` with `code: ownership_verification_required` and the record in `required_record`; publish it and send the same request again.
+         *     Managed TLS then returns the CNAME that authorizes certificate issuance and renewal.
+         *     An unverified reservation does not block an account that proves ownership. When another account holds one, a request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. When another account verified the domain, the same `409` names the record that moves the domain to the caller once the other account's record is no longer published. A hostname below a domain another account owns otherwise returns `409` without `code`.
          */
         post: operations["createFrontendCustomDomain"];
         /** Delete frontend custom domain */
@@ -6996,6 +7062,23 @@ export interface components {
         GitConnectStartResponse: {
             authorization_url: string;
         };
+        /** @description A domain the account owns, along with every name below it. */
+        VerifiedDomain: {
+            /** @example example.com */
+            domain: string;
+            /**
+             * Format: date-time
+             * @description When the account last proved ownership.
+             */
+            verified_at: string;
+        };
+        VerifiedDomainsResponse: {
+            domains: components["schemas"]["VerifiedDomain"][];
+        };
+        VerifyDomainRequest: {
+            /** @description The domain to verify, such as `example.com`. */
+            domain: string;
+        };
         GitConnectionsResponse: {
             connections: components["schemas"]["GitConnection"][];
         };
@@ -7362,13 +7445,13 @@ export interface components {
             name: string;
             value: string;
         };
-        /** @description The DNS records currently required for managed TLS. Volcano may require a tenant-specific TXT ownership record before returning a CNAME that authorizes certificate issuance and renewal. Clients must follow the records returned for the current lifecycle state instead of assuming a fixed sequence. */
+        /** @description The DNS records currently required. Volcano may require an account-specific TXT ownership record for the hostname's domain before returning a CNAME that authorizes managed certificate issuance and renewal. Clients must follow the records returned for the current lifecycle state instead of assuming a fixed sequence. */
         FrontendDomainVerificationRecord: {
             name: string;
             type: string;
             value: string;
         };
-        /** @description Custom domain create conflict. With `code: ownership_verification_required`, another account holds an unverified managed TLS reservation for the hostname: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. Other conflicts omit both fields. */
+        /** @description Domain ownership conflict. With `code: ownership_verification_required`, the account has not proven it owns the domain: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. Other conflicts omit both fields. */
         FrontendCustomDomainConflictError: components["schemas"]["Error"] & {
             required_record?: components["schemas"]["FrontendDomainVerificationRecord"];
         };
@@ -12242,6 +12325,206 @@ export interface operations {
             };
             /** @description Git provider integration is not configured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVerifiedDomains: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's verified domains */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifiedDomainsResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list verified domains */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Domain verification is unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    verifyDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description The account had already verified the domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifiedDomain"];
+                };
+            };
+            /** @description Domain verified */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifiedDomain"];
+                };
+            };
+            /** @description Bad request - invalid domain or a public suffix */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict - the ownership record is not published yet, or another account owns the domain */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainConflictError"];
+                };
+            };
+            /** @description Failed to verify the domain */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Domain verification is unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service unavailable - DNS did not answer whether another account's record is still published; retry later */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteVerifiedDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The verified domain, such as `example.com` */
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - Volcano reserves this domain */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The account has not verified this domain */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to remove the domain */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Domain verification is unavailable in local mode */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17253,7 +17536,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - custom domain already in use, reserved by another account until ownership is proven, still detaching, or frontend already has a custom domain */
+            /** @description Conflict - ownership not verified, custom domain owned or reserved by another account, already in use, still detaching, or frontend already has a custom domain */
             409: {
                 headers: {
                     [name: string]: unknown;

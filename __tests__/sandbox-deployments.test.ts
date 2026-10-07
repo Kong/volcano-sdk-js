@@ -58,6 +58,7 @@ test('uploads raw archive bytes and preserves deployment replay identity', async
   if (!(code instanceof Blob)) {
     throw new TypeError('Expected binary archive');
   }
+  expect(code.type).toBe('application/gzip');
   expect(new Uint8Array(await code.arrayBuffer())).toEqual(bytes);
 });
 
@@ -145,4 +146,154 @@ test('deletes a custom template through its project scope', async () => {
     `https://api.test.com/projects/${projectId}/sandboxes/${templateId}`,
   );
   expect(firstCall(fetchMock.mock.calls)[1]?.method).toBe('DELETE');
+});
+
+test('omits optional deployment fields and accepts boundary ports', async () => {
+  const fetchMock = jest
+    .fn<typeof fetch>()
+    .mockImplementation(() => Promise.resolve(Response.json(deployment, { status: 202 })));
+  globalThis.fetch = fetchMock;
+  const sdk = client();
+  const minimal = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(), {
+    name: 'minimal',
+  });
+  expect(minimal.error).toBeNull();
+  const body = firstCall(fetchMock.mock.calls)[1]?.body;
+  expect(body).toBeInstanceOf(FormData);
+  if (!(body instanceof FormData)) {
+    throw new TypeError('Expected multipart upload');
+  }
+  expect(body.has('memory_mb')).toBe(false);
+  expect(body.has('ports')).toBe(false);
+  const boundary = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(), {
+    name: 'ports',
+    ports: [1, 65535],
+    memoryMB: 1024,
+  });
+  expect(boundary.error).toBeNull();
+});
+
+test.each([0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+  'rejects invalid deployment port %s before sending',
+  async (port) => {
+    const fetchMock = jest.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    const outcome = await client().sandboxes.deploy(projectId, templateId, new Uint8Array(), {
+      name: 'ports',
+      ports: [port],
+    });
+    expect(outcome).toEqual({
+      data: null,
+      error: new RangeError('Sandbox ports must be between 1 and 65535'),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  },
+);
+
+test('accepts the archive limit and rejects the next byte before upload', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(deployment));
+  globalThis.fetch = fetchMock;
+  const sdk = client();
+  const limit = 32 * 1024 * 1024;
+  const accepted = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(limit), {
+    name: 'limit',
+  });
+  expect(accepted.error).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const rejected = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(limit + 1), {
+    name: 'oversize',
+  });
+  expect(rejected).toEqual({
+    data: null,
+    error: new RangeError('Sandbox source archives are limited to 32 MiB'),
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('reads complete deployment history without optional pagination', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      data: [deployment],
+      pagination: { limit: 10, has_more: false },
+    }),
+  );
+  globalThis.fetch = fetchMock;
+  const outcome = await client().sandboxes.deployments(projectId, templateId);
+  expect(outcome).toEqual({
+    error: null,
+    data: {
+      data: [
+        {
+          id: requestId,
+          status: 'building',
+          createdAt: deployment.created_at,
+          updatedAt: deployment.updated_at,
+        },
+      ],
+      pagination: { limit: 10, hasMore: false },
+    },
+  });
+  expect(firstCall(fetchMock.mock.calls)[0]).toBe(
+    `https://api.test.com/projects/${projectId}/sandboxes/${templateId}/deployments`,
+  );
+});
+
+test.each([
+  [{ data: {} }, 'Invalid Sandbox deployment page'],
+  [
+    { data: [], pagination: { limit: '10', has_more: false } },
+    'Invalid Sandbox deployment pagination',
+  ],
+  [
+    { data: [], pagination: { limit: 10, has_more: 'false' } },
+    'Invalid Sandbox deployment pagination',
+  ],
+] as const)('rejects malformed deployment history %j', async (body, message) => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(body));
+  const outcome = await client().sandboxes.deployments(projectId, templateId);
+  expect(outcome).toEqual({ data: null, error: new TypeError(message) });
+});
+
+test('reads build logs with only the required region', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      data: [{ timestamp: deployment.created_at, message: 'ready' }],
+    }),
+  );
+  globalThis.fetch = fetchMock;
+  const outcome = await client().sandboxes.logs(projectId, templateId, requestId, {
+    region: 'aws-us-east-1',
+  });
+  expect(outcome).toEqual({
+    error: null,
+    data: { data: [{ timestamp: deployment.created_at, message: 'ready' }] },
+  });
+  expect(firstCall(fetchMock.mock.calls)[0]).toBe(
+    `https://api.test.com/projects/${projectId}/sandboxes/${templateId}/deployments/${requestId}/logs?region=aws-us-east-1`,
+  );
+});
+
+test('rejects malformed build log pages', async () => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json({ data: {} }));
+  const outcome = await client().sandboxes.logs(projectId, templateId, requestId, {
+    region: 'aws-us-east-1',
+  });
+  expect(outcome).toEqual({ data: null, error: new TypeError('Invalid Sandbox build logs') });
+});
+
+test('rejects invalid binary source responses', async () => {
+  const response = new Response();
+  Object.defineProperty(response, 'blob', { value: () => Promise.resolve(null) });
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(response);
+  const outcome = await client().sandboxes.source(projectId, templateId, requestId);
+  expect(outcome).toEqual({ data: null, error: new TypeError('Invalid Sandbox source archive') });
+});
+
+test('downloads exact archive bytes even when the server labels them as text', async () => {
+  const bytes = new Uint8Array([31, 139, 0, 255]);
+  globalThis.fetch = jest
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response(bytes, { headers: { 'Content-Type': 'text/plain' } }));
+  const outcome = await client().sandboxes.source(projectId, templateId, requestId);
+  expect(outcome).toEqual({ data: bytes, error: null });
 });

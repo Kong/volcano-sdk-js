@@ -13,6 +13,7 @@ import type {
   Sandboxes,
   SandboxRequestOptions,
 } from './index.ts';
+import { buildConfiguration, cursorOptions, logOptions } from './sandbox-deployment-wire.ts';
 import {
   pathId,
   requestOptions,
@@ -135,18 +136,6 @@ function validatePort(port: number): void {
     throw new RangeError('Sandbox ports must be between 1 and 65535');
   }
 }
-function buildConfiguration(options: SandboxDeployOptions): {
-  memory_mb?: 1024 | 2048;
-  ports?: string;
-} {
-  return {
-    ...(options.memoryMB === undefined ? {} : { memory_mb: options.memoryMB }),
-    ...(options.ports === undefined ? {} : { ports: JSON.stringify(options.ports) }),
-  };
-}
-function cursorOptions(options: SandboxDeploymentListOptions): { cursor?: string } {
-  return options.cursor === undefined ? {} : { cursor: options.cursor };
-}
 function pageResult(data: Record<string, unknown>): import('./index.ts').SandboxDeploymentPage {
   if (!Array.isArray(data['data'])) {
     throw new TypeError('Invalid Sandbox deployment page');
@@ -181,11 +170,7 @@ export function logs(
           pathId(projectId),
           pathId(sandboxId),
           pathId(deploymentId),
-          {
-            region: options.region,
-            ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-            ...(options.limit === undefined ? {} : { limit: options.limit }),
-          },
+          logOptions(options),
           requestOptions(client, options),
         ),
       ),
