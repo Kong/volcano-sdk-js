@@ -3,6 +3,10 @@ module.exports = {
   testEnvironment: 'jsdom',
   reporters: ['default', '<rootDir>/.quality-tools/jest-completeness.cjs'],
   testMatch: ['**/__tests__/**/*.test.{js,ts}'],
+  // Use the project's babel-jest so tests compile with the project's Babel 8.
+  // Jest's default transform resolves jest-config's own babel-jest and Babel 7,
+  // which cannot apply the Babel 8 presets in babel.config.js.
+  transform: { '\\.[jt]sx?$': require.resolve('babel-jest') },
   // Type-check against generated TypeScript while exercising the built SDK artifact.
   moduleNameMapper: {
     '^\\.\\./src/index\\.ts$': '<rootDir>/dist/index.js',
