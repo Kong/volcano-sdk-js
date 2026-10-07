@@ -13,7 +13,7 @@ import {
   VolcanoAuth,
 } from '../src/index.ts';
 import type { User } from '../src/sdk-public-types.ts';
-import { deferred, within } from './auth-concurrency-fixtures.ts';
+import { deferred, signal, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
 
 beforeEach(clearSharedFunctionResolveStateForTests);
@@ -398,7 +398,7 @@ describe('shared function resolution boundary', () => {
     const sdk = client();
     const state = getSharedFunctionResolveState();
     const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
-    const settle = deferred<undefined>();
+    const settle = signal();
     state.inFlight.set(
       key,
       settle.promise.then(() => {
@@ -408,7 +408,7 @@ describe('shared function resolution boundary', () => {
 
     const resolution = resolveWith(sdk, anonToken, true);
     sdk._sessionGeneration += 1;
-    settle.resolve(undefined);
+    settle.resolve();
     await expect(resolution).rejects.toThrow(AuthSessionChangedError);
   });
 
