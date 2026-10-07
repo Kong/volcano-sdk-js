@@ -30,6 +30,18 @@ updates:
       - dependency-name: 'typescript'
         update-types:
           - 'version-update:semver-major'
+      # eslint-plugin-unicorn 76 renames rules this config disables and adds
+      # recommended rules with ~1,100 violations. Adopt it in its own PR rather
+      # than in the grouped major bump, then drop this ignore.
+      - dependency-name: 'eslint-plugin-unicorn'
+        update-types:
+          - 'version-update:semver-major'
+      # Tailwind CSS 4 (examples/nextjs-notes-app) needs a migration: the
+      # @tailwindcss/postcss plugin, CSS-first config and renamed utilities. Do
+      # it in its own PR, then drop this ignore.
+      - dependency-name: 'tailwindcss'
+        update-types:
+          - 'version-update:semver-major'
     labels:
       - 'dependencies'
       - 'javascript'
