@@ -6,8 +6,7 @@ import { describe, expect, test } from '@jest/globals';
 
 // Installing this SDK must never install the durable runtime. Volcano puts it in
 // a durable function's own dependencies when it builds one, on a Node runtime
-// that satisfies the runtime's own `engines` — nowhere else does it belong, and
-// this repo supports Node 20, which the runtime does not.
+// that satisfies the runtime's own `engines` — nowhere else does it belong.
 //
 // It is declared as an optional peer so the SDK can still resolve it from inside
 // a strict node_modules layout once the build has added it to the function.

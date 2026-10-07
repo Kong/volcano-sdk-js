@@ -2924,7 +2924,8 @@ export interface paths {
         };
         /**
          * List available PostgreSQL versions
-         * @description Returns a list of supported PostgreSQL major versions for database provisioning.
+         * @description Returns the PostgreSQL major versions a database can be created on,
+         *     newest first. Local mode lists only the version its server runs.
          *     This is a public endpoint that doesn't require authentication.
          */
         get: operations["listPostgresVersions"];
@@ -6140,11 +6141,13 @@ export interface components {
              */
             region: string;
             /**
-             * @description PostgreSQL major version
-             * @example 16
+             * @description PostgreSQL major version. `GET /databases/postgres-versions` lists
+             *     the versions this environment accepts; local mode accepts only the
+             *     version its server runs. Any other value is rejected with 400.
+             * @example 18
              * @enum {string}
              */
-            pg_version: "15" | "16";
+            pg_version: "15" | "16" | "17" | "18";
             /**
              * @description Compute size tier (optional, defaults to volcano-db-xs).
              *     Determines autoscaling limits for the database.
@@ -6377,7 +6380,7 @@ export interface components {
             region?: string;
             /**
              * @description PostgreSQL major version
-             * @example 16
+             * @example 18
              */
             pg_version?: string;
             /**
@@ -8948,7 +8951,7 @@ export interface components {
              * @description PostgreSQL major version. Asserted, never written.
              * @enum {string}
              */
-            pg_version: "15" | "16";
+            pg_version: "15" | "16" | "17" | "18";
             /**
              * @description Compute tier. Asserted, never written - tier changes are not
              *     supported via the manifest; use the databases API/CLI/GUI instead.
@@ -20455,16 +20458,18 @@ export interface operations {
                     "application/json": {
                         /**
                          * @description PostgreSQL major version number
-                         * @example 16
+                         * @example 18
                          */
                         version?: string;
                         /**
                          * @description Human-readable version name
-                         * @example PostgreSQL 16
+                         * @example PostgreSQL 18
                          */
                         name?: string;
-                        /** @description Whether this is the default version (recommended) */
+                        /** @description True on the version to preselect for a new database; absent on the others */
                         default?: boolean;
+                        /** @description True on the version recommended for new databases; absent on the others */
+                        recommended?: boolean;
                         /** @description Whether this version is deprecated (approaching EOL) */
                         deprecated?: boolean;
                     }[];
