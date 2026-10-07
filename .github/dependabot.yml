@@ -1,0 +1,85 @@
+version: 2
+updates:
+  # The pnpm workspace root. It also covers examples/nextjs-notes-app, a
+  # workspace member that shares pnpm-lock.yaml; a separate entry for that
+  # directory would duplicate its updates without refreshing the root lockfile.
+  # The durable-order-pipeline functions have no lockfile and are left out.
+  # Dependabot does not read `peerDependencies`, so the published
+  # `@aws/durable-execution-sdk-js` range is reviewed by hand; see
+  # maintainers/releasing.md.
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    # Keep a range that already allows the new version, so in-range bumps
+    # change only pnpm-lock.yaml.
+    versioning-strategy: 'increase-if-necessary'
+    ignore:
+      # @types/node tracks the oldest supported Node (`engines.node` >=20).
+      - dependency-name: '@types/node'
+        update-types:
+          - 'version-update:semver-major'
+    labels:
+      - 'dependencies'
+      - 'javascript'
+    # Every npm update is `chore`, which Release Please does not release.
+    # Dependabot can split prefixes only by `dependencies` vs `devDependencies`,
+    # and here `dependencies` also holds the unpublished example app's Next.js
+    # and React, so `fix` would cut an SDK release for each example bump.
+    # See maintainers/releasing.md for runtime updates that need a release.
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      # The generators behind `pnpm generate:openapi`. If a bump changes their
+      # output, CI's `check:openapi` fails until `pnpm generate:openapi` is run
+      # and committed. Prettier and tsc also touch that output but stay in
+      # npm-development, so a formatting or type change can't hold these back;
+      # `check:openapi` catches drift from either.
+      openapi-codegen:
+        patterns:
+          - 'orval'
+          - 'openapi-typescript'
+        update-types:
+          - 'minor'
+          - 'patch'
+      npm-production:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+      # Exclude the generators explicitly so no dependency belongs to two groups.
+      npm-development:
+        dependency-type: 'development'
+        exclude-patterns:
+          - 'orval'
+          - 'openapi-typescript'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    # GitHub Actions supports only `default-days`.
+    cooldown:
+      default-days: 5
+    labels:
+      - 'dependencies'
+      - 'github_actions'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
