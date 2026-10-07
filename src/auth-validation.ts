@@ -196,6 +196,10 @@ export function validateOAuthSession(session: unknown): TypeError | null {
   return validateUser(session['user']);
 }
 
+export function isCompleteSession(session: unknown): session is CompleteSessionFields {
+  return validateCompleteSession(session) === null;
+}
+
 export function assertCompleteSession(session: unknown): asserts session is CompleteSessionFields {
   const error = validateCompleteSession(session);
   if (error !== null) {

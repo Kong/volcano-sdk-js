@@ -397,6 +397,30 @@ test('default request options contain no mutation headers', () => {
   });
   expect(generated).toHaveBeenCalledWith('session', {}, undefined, undefined);
 });
+test('replayable request options reject a non-UUID idempotency key', () => {
+  const generated = jest
+    .fn<
+      (
+        mode: 'anon' | 'session',
+        headers?: Record<string, string>,
+        responseType?: 'blob',
+        timeoutMs?: number,
+      ) => object
+    >()
+    .mockReturnValue({});
+  expect(() =>
+    requestOptions(
+      {
+        timeout: 60_000,
+        _completeOAuthExchange: () => Promise.resolve(),
+        _generatedOptions: generated,
+      },
+      { requestId: 'retry-1' },
+      'replayable',
+    ),
+  ).toThrow('A Sandbox resource ID must be a UUID');
+  expect(generated).not.toHaveBeenCalled();
+});
 test('session commands use default execution options', async () => {
   const fetchMock = jest
     .fn<typeof fetch>()

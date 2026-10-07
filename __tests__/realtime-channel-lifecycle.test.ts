@@ -386,6 +386,7 @@ test('presence events update state and are ignored while paused or malformed', a
   expect(state._presenceState).toEqual({ alice: { client: 'alice', user: 'user' } });
   await subscription.emit('leave', { info: { client: 'alice' } });
   expect(state._presenceState).toEqual({});
+  expect(state.syncs).toBe(3);
   expect(state.events).toEqual([
     { event: 'join', data: { client: 'alice', user: 'user' } },
     { event: 'leave', data: { client: 'alice' } },
@@ -418,6 +419,7 @@ test('presence snapshot applies after delay and ignores stale and malformed resu
     await jest.advanceTimersByTimeAsync(150);
     expect(client.presenceCalls).toEqual(['presence:lobby']);
     expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
+    expect(state.syncs).toBe(1);
     expect(state._presenceTimeoutId).toBeNull();
 
     client.presenceResult = Promise.resolve({ clients: [] });
@@ -440,6 +442,7 @@ test('presence snapshot applies after delay and ignores stale and malformed resu
     waiting.resolve({ clients: { stale: { client: 'stale' } } });
     await jest.advanceTimersByTimeAsync(0);
     expect(state._presenceState).toEqual({});
+    expect(state.syncs).toBe(1);
   } finally {
     jest.useRealTimers();
   }
