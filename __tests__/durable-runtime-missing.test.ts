@@ -8,11 +8,9 @@ import { durable, DurableRuntimeMissingError } from '../src/durable.ts';
 //
 // Volcano installs the runtime when it builds a durable function, so this is no
 // longer something the reader can fix by installing a package, and the message
-// must not send them after one. The runtime is never installed in this repo --
-// `pnpm-workspace.yaml` sets `autoInstallPeers: false` and
-// the packaging test asserts the lockfile does not resolve it --
-// so the virtual mock below is what makes the missing-module path testable at
-// all, rather than a way of hiding a module that is really there.
+// must not send them after one. This repo installs the runtime only as a dev
+// dependency for durable-approval-runtime.test.ts, so the mock below stands in
+// for a function deployed without it.
 jest.mock(
   '@aws/durable-execution-sdk-js',
   () => {
