@@ -118,5 +118,5 @@ await test('typed coverage discovers a newly added test without a task-list edit
     '__tests__/new.test.ts': "test('new failure', () => { expect(true).toBe(false); });",
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.doesNotMatch(result.stderr, /coverage threshold/);
+  assert.doesNotMatch(result.stderr, /Coverage for \w+ .*does not meet/);
 });
