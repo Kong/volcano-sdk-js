@@ -303,12 +303,12 @@ volcano cloud durable approvals approve <approval-id> --comment "Address checked
 volcano cloud durable approvals deny <approval-id> --comment "Customer cancelled"
 ```
 
-| Option        | Type     | Description                                                                                 |
-| ------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `title`       | `string` | Required. What the reviewer sees first. Up to 200 characters.                               |
-| `description` | `string` | Longer context for the reviewer. Up to 4,000 characters.                                    |
-| `details`     | any      | A JSON value shown with the request, such as the record under review.                       |
-| `timeout`     | duration | How long reviewers have to decide. Unset, the approval stays open as long as the execution. |
+| Option        | Type     | Description                                                                                                   |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `title`       | `string` | Required. What the reviewer sees first. Up to 200 characters.                                                 |
+| `description` | `string` | Longer context for the reviewer. Up to 4,000 characters.                                                      |
+| `details`     | any      | A JSON value shown with the request, such as the record under review. The whole request is limited to 64 KiB. |
+| `timeout`     | duration | How long reviewers have to decide. Unset, the approval stays open as long as the execution.                   |
 
 The name is up to 255 characters and is what the approval is recorded under in
 the execution history, like a step's name.
@@ -316,13 +316,13 @@ the execution history, like a step's name.
 A denial and an expiry are decisions like an approval, so the call resolves
 rather than throws: branch on `approved`.
 
-| Field       | Type                                  | Description                                                    |
-| ----------- | ------------------------------------- | -------------------------------------------------------------- |
-| `approved`  | `boolean`                             | `true` only when the status is `approved`.                     |
-| `status`    | `'approved' \| 'denied' \| 'expired'` | `expired` when `timeout` ran out before anyone decided.        |
-| `comment`   | `string`                              | The reviewer's comment, or `''` when they left none.           |
-| `decidedBy` | `{ id, email }` \| `null`             | Who decided. `null` when the approval expired.                 |
-| `decidedAt` | `string` \| `null`                    | When they decided, as an ISO 8601 timestamp. `null` on expiry. |
+| Field       | Type                                  | Description                                                                                                                       |
+| ----------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `approved`  | `boolean`                             | `true` only when the status is `approved`.                                                                                        |
+| `status`    | `'approved' \| 'denied' \| 'expired'` | `expired` when `timeout` ran out before anyone decided.                                                                           |
+| `comment`   | `string`                              | The reviewer's comment, or `''` when they left none.                                                                              |
+| `decidedBy` | `{ id, email }` \| `null`             | Who decided. `null` when the approval expired, or when the deciding account was deleted before the decision reached the workflow. |
+| `decidedAt` | `string` \| `null`                    | When they decided, as an ISO 8601 timestamp. `null` on expiry.                                                                    |
 
 Like every operation, the decision is recorded: a resumed execution gets the same
 one back, and the request is registered once however many times the handler
@@ -331,9 +331,17 @@ way, so a handler can ask several people at once.
 
 The call throws, failing the execution unless you catch it, when the options are
 invalid or Volcano refuses the request — for example when the execution already
-holds too many pending approvals. The request goes to
+holds too many pending approvals. Invalid options include `details` that cannot
+be serialized as JSON, such as a `BigInt` or a circular object, and a request
+over 64 KiB; both are refused before the approval is opened. The request goes to
 `VOLCANO_PLATFORM_API_URL`, which Volcano sets on every durable function, so a
 handler deployed as a standard function cannot request an approval.
+
+Volcano can take a moment to see a new execution or approval, and the SDK
+retries the request for up to 30 seconds while Volcano does not know the
+execution yet, is not ready for the approval, throttles it, or is unavailable.
+It then throws the last failure. A request that arrives after the approval's
+`timeout` has already run out is not an error: the call resolves `expired`.
 
 ## `ctx.map(name?, items, fn, options?)`
 

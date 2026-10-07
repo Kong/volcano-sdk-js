@@ -151,7 +151,10 @@ export interface WaitForApprovalOptions {
   title: string;
   /** Longer context for the reviewer. Up to 4000 characters. */
   description?: string;
-  /** Any JSON value shown with the request, such as the record under review. */
+  /**
+   * Any JSON value shown with the request, such as the record under review.
+   * The whole request, details included, is limited to 64 KiB.
+   */
   details?: unknown;
   /**
    * How long reviewers have to decide. Unset, the approval stays open until
@@ -174,7 +177,10 @@ export interface ApprovalDecision {
   status: 'approved' | 'denied' | 'expired';
   /** The reviewer's comment, or `''` when they left none. */
   comment: string;
-  /** Who decided, or `null` when the approval expired. */
+  /**
+   * Who decided, or `null` when the approval expired or the deciding account
+   * was deleted before the decision reached the workflow.
+   */
   decidedBy: ApprovalDecider | null;
   /** When it was decided, as an ISO 8601 timestamp, or `null` when it expired. */
   decidedAt: string | null;

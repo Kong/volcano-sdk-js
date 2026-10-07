@@ -187,7 +187,8 @@ function decisionBody(comment: unknown): { comment?: string } | Error {
   if (typeof comment !== 'string') {
     return new Error('comment must be a string when provided');
   }
-  if (comment.length > MAX_COMMENT_LENGTH) {
+  // Volcano counts characters as code points, not UTF-16 units.
+  if (Array.from(comment).length > MAX_COMMENT_LENGTH) {
     return new Error(`comment must be at most ${String(MAX_COMMENT_LENGTH)} characters`);
   }
   return { comment };

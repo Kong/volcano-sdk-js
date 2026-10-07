@@ -204,6 +204,18 @@ describe('durable.approvals', () => {
     expect(transport.denyDurableApproval).not.toHaveBeenCalled();
   });
 
+  // Volcano counts code points; each of these emoji is two UTF-16 units.
+  test('counts a comment in characters rather than UTF-16 units', async () => {
+    const { volcano, transport } = clientWithTransport();
+
+    await volcano.durable.approvals.approve('proj-1', 'apr-1', { comment: '👍'.repeat(2000) });
+    expect(transport.approveDurableApproval).toHaveBeenCalledTimes(1);
+    await expect(
+      volcano.durable.approvals.deny('proj-1', 'apr-1', { comment: '👎'.repeat(2001) }),
+    ).resolves.toMatchObject({ error: new Error('comment must be at most 2000 characters') });
+    expect(transport.denyDurableApproval).not.toHaveBeenCalled();
+  });
+
   test('refuses an empty identifier before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
     const { approvals } = volcano.durable;

@@ -16,6 +16,10 @@ export interface CallbackContext {
 const MAX_NAME_LENGTH = 255;
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 4000;
+const MAX_REQUEST_BYTES = 64 * 1024;
+// The runtime picks the callback id only once the callback is open, so the
+// size check allows for the longest one Volcano accepts.
+const LONGEST_CALLBACK_ID = 'x'.repeat(1024);
 
 /**
  * Open a callback, register it with Volcano as an approval, and resolve with
@@ -35,6 +39,7 @@ export async function waitForApproval(
   const config = callbackConfig(options['timeout']);
   const apiUrl = platformApiUrl();
   const execution = requiredExecutionRef(executionRef);
+  withinRequestLimit({ execution_ref: execution, callback_id: LONGEST_CALLBACK_ID, ...fields });
   const waitForCallback = context.waitForCallback;
   if (typeof waitForCallback !== 'function') {
     throw new TypeError(
@@ -58,7 +63,7 @@ function requestFields(name: unknown, options: Record<string, unknown>): Request
     name: requiredText(name, 'name', MAX_NAME_LENGTH),
     title: requiredText(options['title'], 'title', MAX_TITLE_LENGTH),
     ...description(options['description']),
-    details: options['details'],
+    ...details(options['details']),
   };
 }
 
@@ -79,13 +84,44 @@ function description(value: unknown): { description?: string } {
   return { description: withinLength(value, 'description', MAX_DESCRIPTION_LENGTH) };
 }
 
+// Volcano counts characters as code points, not UTF-16 units.
 function withinLength(value: string, field: string, maxLength: number): string {
-  if (value.length > maxLength) {
+  if (Array.from(value).length > maxLength) {
     throw new TypeError(
       `ctx.waitForApproval() ${field} must be at most ${String(maxLength)} characters`,
     );
   }
   return value;
+}
+
+// Send a snapshot, so details that change later, or serialize differently a
+// second time, cannot slip past the size check.
+function details(value: unknown): { details?: unknown } {
+  if (value === undefined) {
+    return {};
+  }
+  // A function or symbol serializes to nothing rather than throwing.
+  let text: unknown;
+  try {
+    text = JSON.stringify(value);
+  } catch (cause) {
+    throw notJson({ cause });
+  }
+  if (typeof text !== 'string') {
+    throw notJson();
+  }
+  const snapshot: unknown = JSON.parse(text);
+  return { details: snapshot };
+}
+
+function notJson(options?: ErrorOptions): TypeError {
+  return new TypeError('ctx.waitForApproval() details must be serializable as JSON', options);
+}
+
+function withinRequestLimit(request: ApprovalRequest): void {
+  if (new TextEncoder().encode(JSON.stringify(request)).byteLength > MAX_REQUEST_BYTES) {
+    throw new TypeError('ctx.waitForApproval() request must be at most 64 KiB, details included');
+  }
 }
 
 // The submitter retries what is worth retrying. Left unset, the engine would

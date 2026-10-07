@@ -168,6 +168,36 @@ function bodyAt(index: number): unknown {
   return value;
 }
 
+// AbortSignal.timeout keeps real time even under fake timers, so stand in one
+// that keeps fake time, and record what each attempt was given.
+function hangUntilTimedOut(): number[] {
+  const timeouts: number[] = [];
+  jest.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    timeouts.push(ms);
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, ms);
+    return controller.signal;
+  });
+  fetchMock().mockImplementation(hang);
+  return timeouts;
+}
+
+function hang(_url: unknown, init?: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => {
+      reject(new DOMException('The operation timed out', 'TimeoutError'));
+    });
+  });
+}
+
+function circular(): Record<string, unknown> {
+  const value: Record<string, unknown> = { order_id: 42 };
+  value['self'] = value;
+  return value;
+}
+
 function onlyCallbackCall(): CallbackCall {
   expect(callbackCalls).toHaveLength(1);
   const [call] = callbackCalls;
@@ -282,6 +312,81 @@ describe('ctx.waitForApproval()', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  // Volcano counts code points; each of these emoji is two UTF-16 units.
+  it('counts lengths in characters rather than UTF-16 units', async () => {
+    await run((_input, ctx) =>
+      ctx.waitForApproval('🚢'.repeat(255), {
+        title: '👍'.repeat(200),
+        description: '📦'.repeat(4000),
+      }),
+    );
+
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    await expect(
+      run((_input, ctx) => ctx.waitForApproval('🚢'.repeat(256), { title: 'Ship?' })),
+    ).rejects.toThrow('ctx.waitForApproval() name must be at most 255 characters');
+  });
+
+  it('accepts a request of exactly 64 KiB, allowing for the longest callback id', async () => {
+    const fields = { name: 'ship-order', title: 'Ship?' };
+    const empty = JSON.stringify({
+      execution_ref: EXECUTION_ARN,
+      callback_id: 'x'.repeat(1024),
+      ...fields,
+      details: '',
+    });
+    const room = 64 * 1024 - empty.length;
+
+    await run((_input, ctx) =>
+      ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room) }),
+    );
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+
+    await expect(
+      run((_input, ctx) =>
+        ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room + 1) }),
+      ),
+    ).rejects.toThrow('ctx.waitForApproval() request must be at most 64 KiB, details included');
+    // Two bytes each in UTF-8, so half as many fit.
+    await expect(
+      run((_input, ctx) =>
+        ctx.waitForApproval(fields.name, { title: fields.title, details: 'é'.repeat(room) }),
+      ),
+    ).rejects.toThrow('ctx.waitForApproval() request must be at most 64 KiB, details included');
+    expect(callbackCalls).toHaveLength(1);
+  });
+
+  it('sends the details it checked', async () => {
+    let serialized = 0;
+    const details = {
+      toJSON() {
+        serialized += 1;
+        return serialized === 1 ? { total: 1250 } : 'x'.repeat(70_000);
+      },
+    };
+
+    await run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', details }));
+
+    expect(bodyAt(0)).toMatchObject({ details: { total: 1250 } });
+  });
+
+  it.each([
+    ['with a BigInt', { total: 10n }, 'BigInt'],
+    ['that are circular', circular(), 'circular structure'],
+  ])('refuses details %s before registering anything', async (_case, details, reason) => {
+    const failure = await failureOf(
+      run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', details })),
+    );
+
+    expect(failure).toBeInstanceOf(TypeError);
+    expect(failure).toMatchObject({
+      message: 'ctx.waitForApproval() details must be serializable as JSON',
+      cause: expect.objectContaining({ message: expect.stringContaining(reason) }),
+    });
+    expect(callbackCalls).toHaveLength(0);
+    expect(fetchMock()).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['an empty name', '', { title: 'Ship?' }, 'ctx.waitForApproval() requires a non-empty name'],
     ['a blank name', '  ', { title: 'Ship?' }, 'ctx.waitForApproval() requires a non-empty name'],
@@ -301,6 +406,12 @@ describe('ctx.waitForApproval()', () => {
     ['null options', 'ship', null, 'ctx.waitForApproval() requires options with a title'],
     ['no title', 'ship', {}, 'ctx.waitForApproval() requires a non-empty title'],
     [
+      'a blank title',
+      'ship',
+      { title: ' \t\n' },
+      'ctx.waitForApproval() requires a non-empty title',
+    ],
+    [
       'a long title',
       'ship',
       { title: 't'.repeat(201) },
@@ -317,6 +428,18 @@ describe('ctx.waitForApproval()', () => {
       'ship',
       { title: 'Ship?', description: 'd'.repeat(4001) },
       'ctx.waitForApproval() description must be at most 4000 characters',
+    ],
+    [
+      'details that serialize to nothing',
+      'ship',
+      { title: 'Ship?', details: () => 42 },
+      'ctx.waitForApproval() details must be serializable as JSON',
+    ],
+    [
+      'details over the request limit',
+      'ship',
+      { title: 'Ship?', details: 'd'.repeat(64 * 1024) },
+      'ctx.waitForApproval() request must be at most 64 KiB, details included',
     ],
   ])('refuses %s before registering anything', async (_case, name, options, message) => {
     await expect(
@@ -557,6 +680,13 @@ describe('approval registration', () => {
   });
 
   it.each([
+    [
+      'yet to record the execution',
+      () =>
+        Promise.resolve(
+          respond(404, { error: 'no running durable execution matches execution_ref' }),
+        ),
+    ],
     ['throttled', () => Promise.resolve(respond(429, { error: 'slow down' }))],
     ['failing', () => Promise.resolve(respond(500, { error: 'internal error' }))],
     ['unavailable', () => Promise.resolve(respond(503, { error: 'unavailable' }))],
@@ -572,8 +702,8 @@ describe('approval registration', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(2);
   });
 
-  // 0.5, 1, 2, and 4 seconds, then 5 seconds four times, and the 2.5 seconds
-  // left of the budget: ten attempts across thirty seconds.
+  // 0.5, 1, 2, and 4 seconds, then 5 seconds four times: nine attempts, the
+  // last 27.5 seconds in, with too little of the 30 seconds left for another.
   it('gives up after about thirty seconds of retrying', async () => {
     jest.useFakeTimers({ timerLimit: 100 });
     fetchMock().mockImplementation(() =>
@@ -584,10 +714,6 @@ describe('approval registration', () => {
     await jest.advanceTimersByTimeAsync(27_499);
     expect(fetchMock()).toHaveBeenCalledTimes(8);
     await jest.advanceTimersByTimeAsync(1);
-    expect(fetchMock()).toHaveBeenCalledTimes(9);
-    await jest.advanceTimersByTimeAsync(2499);
-    expect(fetchMock()).toHaveBeenCalledTimes(9);
-    await jest.advanceTimersByTimeAsync(1);
     expect(await failure).toMatchObject({
       status: 503,
       code: 'unavailable',
@@ -595,21 +721,88 @@ describe('approval registration', () => {
     });
     await jest.advanceTimersByTimeAsync(60_000);
 
-    expect(fetchMock()).toHaveBeenCalledTimes(10);
+    expect(fetchMock()).toHaveBeenCalledTimes(9);
   });
 
   it('succeeds on the last attempt the budget allows', async () => {
     jest.useFakeTimers({ timerLimit: 100 });
-    for (let attempt = 0; attempt < 9; attempt += 1) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
       fetchMock().mockResolvedValueOnce(respond(503, { error: 'unavailable' }));
     }
     fetchMock().mockResolvedValueOnce(respond(201));
 
     const pending = registered();
-    await jest.advanceTimersByTimeAsync(30_000);
+    await jest.advanceTimersByTimeAsync(27_500);
     await pending;
 
-    expect(fetchMock()).toHaveBeenCalledTimes(10);
+    expect(fetchMock()).toHaveBeenCalledTimes(9);
+  });
+
+  it('gives each attempt only the time left before the deadline', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    const timeouts = hangUntilTimedOut();
+
+    const failure = failureOf(registered());
+    // 10 seconds, half a second of backoff, 10 more, then 1 second of backoff
+    // leaves 8.5 seconds.
+    await jest.advanceTimersByTimeAsync(29_999);
+    expect(timeouts).toEqual([10_000, 10_000, 8500]);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(await failure).toMatchObject({
+      message: 'Could not reach Volcano to request the approval',
+      cause: { name: 'TimeoutError' },
+    });
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock()).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops rather than back off past the deadline', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    hangUntilTimedOut();
+    fetchMock()
+      .mockImplementationOnce(hang)
+      .mockImplementationOnce(hang)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(respond(503, { error: 'unavailable' }));
+            }, 6500);
+          }),
+      );
+
+    let settled = false;
+    const failure = failureOf(registered()).finally(() => {
+      settled = true;
+    });
+    // The third answer lands 28 seconds in, and the next backoff would use up
+    // the 2 seconds left.
+    await jest.advanceTimersByTimeAsync(27_999);
+    expect(settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(settled).toBe(true);
+    expect(await failure).toMatchObject({
+      status: 503,
+      message: 'Volcano refused the approval request (503): unavailable',
+    });
+    expect(fetchMock()).toHaveBeenCalledTimes(3);
+  });
+
+  it('makes no further attempt when a backoff ends at the deadline', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    fetchMock().mockResolvedValue(respond(503, { error: 'unavailable' }));
+
+    const failure = failureOf(registered());
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    // The process was frozen through the backoff, as a suspended runtime is.
+    jest.setSystemTime(Date.now() + 29_500);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(await failure).toMatchObject({ status: 503 });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
   it('reports an unreachable platform with its cause once retries run out', async () => {
@@ -626,13 +819,36 @@ describe('approval registration', () => {
     });
   });
 
+  it('treats a closed approval as registered and resolves the callback outcome', async () => {
+    fetchMock().mockResolvedValueOnce(
+      respond(409, { error: 'approval request is no longer open', code: 'approval_closed' }),
+    );
+    const timeout = Object.assign(new Error('Callback timed out'), {
+      errorType: 'CallbackTimeoutError',
+    });
+
+    await expect(decide(() => Promise.reject(timeout))).resolves.toEqual({
+      approved: false,
+      status: 'expired',
+      comment: '',
+      decidedBy: null,
+      decidedAt: null,
+    });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     [400, { error: 'title is required' }, undefined],
-    [404, { error: 'callback not found' }, undefined],
     [409, { error: 'execution has ended', code: 'execution_ended' }, 'execution_ended'],
-    [409, { error: 'approval was closed', code: 'approval_closed' }, 'approval_closed'],
-    // Only a conflict means "not yet"; the same code on another status is final.
+    [
+      409,
+      { error: 'too many pending approvals', code: 'too_many_pending_approvals' },
+      'too_many_pending_approvals',
+    ],
+    // Only a conflict means "not yet" or "closed"; the same code on another
+    // status is final.
     [400, { error: 'not ready', code: 'approval_not_ready' }, 'approval_not_ready'],
+    [400, { error: 'closed', code: 'approval_closed' }, 'approval_closed'],
     [413, { error: 'request too large' }, undefined],
   ])('fails at once on a %d refusal', async (status, body, code) => {
     fetchMock().mockResolvedValueOnce(respond(status, body));
