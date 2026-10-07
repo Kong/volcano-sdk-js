@@ -12,6 +12,14 @@ updates:
     cooldown:
       default-days: 5
       semver-major-days: 14
+    # Keep a range that already allows the new version, so in-range bumps
+    # change only pnpm-lock.yaml.
+    versioning-strategy: 'increase-if-necessary'
+    ignore:
+      # @types/node tracks the oldest supported Node (`engines.node` >=20).
+      - dependency-name: '@types/node'
+        update-types:
+          - 'version-update:semver-major'
     labels:
       - 'dependencies'
       - 'javascript'
@@ -19,23 +27,20 @@ updates:
     # Dependabot can split prefixes only by `dependencies` vs `devDependencies`,
     # and here `dependencies` also holds the unpublished example app's Next.js
     # and React, so `fix` would cut an SDK release for each example bump.
-    # In-range runtime bumps change only pnpm-lock.yaml, which is not published.
-    # If an update changes the published `dependencies` range, edit the squash
-    # commit title to `fix(deps): ...` when merging.
+    # See maintainers/releasing.md for runtime updates that need a release.
     commit-message:
       prefix: 'chore'
       include: 'scope'
     groups:
-      # All four feed `pnpm generate:openapi`: orval and openapi-typescript write
-      # src/generated, prettier formats the generated types, and tsc compiles
-      # src/generated-runtime. If a bump changes that output, CI's
-      # `check:openapi` fails until `pnpm generate:openapi` is run and committed.
+      # The generators behind `pnpm generate:openapi`. If a bump changes their
+      # output, CI's `check:openapi` fails until `pnpm generate:openapi` is run
+      # and committed. Prettier and tsc also touch that output but stay in
+      # npm-development, so a formatting or type change can't hold these back;
+      # `check:openapi` catches drift from either.
       openapi-codegen:
         patterns:
           - 'orval'
           - 'openapi-typescript'
-          - 'prettier'
-          - 'typescript'
         update-types:
           - 'minor'
           - 'patch'

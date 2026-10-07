@@ -16,6 +16,20 @@ release gate is required.
 The checked-in release and publish workflows own versioning and publication.
 This checklist does not authorize a release, a registry mutation or an environment approval.
 
+## Dependabot updates
+
+Dependabot titles every update `chore(deps)` or `chore(deps-dev)`, so merging one
+does not start a release. When merging an update that changes what the package
+ships, edit the squash commit title to `fix(deps): ...` so Release Please
+releases it:
+
+- An update that changes the `dependencies` range in `package.json`, such as a
+  major `centrifuge` or `ws` update. In-range bumps change only
+  `pnpm-lock.yaml`, which is not published.
+- An `openapi-codegen` update whose regenerated output differs. If
+  `pnpm check:openapi` fails, run `pnpm generate:openapi` and commit the result
+  to the update's PR.
+
 ## Before publication
 
 1. Identify the release PR, exact source commit, version, tag and intended registry account. Inspect the generated changelog and package metadata.
