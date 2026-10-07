@@ -92,3 +92,37 @@ Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.exec()`, or `session
 Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. The HTTP timeout budget is the command timeout plus 120 seconds for provisioning, or the configured client timeout if longer. A one-shot command timeout returns HTTP 504; retrying the same request ID returns HTTP 409 and does not rerun it. A session command timeout returns command data with `timedOut: true`. One-shot commands allow up to 60 seconds; session commands allow up to 3600 seconds.
 
 Use either `preset` or a saved template's `sandboxId`, never both. `sandboxes.presets()` lists available preset IDs, memory sizes, and regions. `sandboxes.get(sessionId)` reconnects to an existing session. Backend code can call `grant(sessionId, authUserId, expiresAt)` and `revoke(sessionId, authUserId)` to control user access.
+
+## Deploy custom templates
+
+Build a tar.gz archive containing a root `Dockerfile` fragment and its files.
+Volcano supplies the base image and entrypoint; use `RUN`, `COPY`, and `CMD`
+instead of `FROM`, `USER`, or `ENTRYPOINT`.
+
+```typescript
+const sandboxId = crypto.randomUUID();
+const requestId = crypto.randomUUID();
+const source = new Uint8Array(await archiveFile.arrayBuffer());
+const { data: deployment, error } = await volcano.sandboxes.deploy(projectId, sandboxId, source, {
+  name: 'my-image',
+  memoryMB: 1024,
+  ports: [8080],
+  requestId,
+});
+if (error) throw error;
+const state = await volcano.sandboxes.deployment(projectId, sandboxId, deployment.id);
+```
+
+Keep the same template ID, request ID, source bytes, and options when retrying an
+uncertain request. To update an existing template, deploy with its ID and a new
+request ID. Wait for `status: 'active'` before creating a session from that
+`sandboxId`. Existing sessions retain their original image.
+
+`deployments(projectId, sandboxId, { cursor })` returns paginated history.
+`source(projectId, sandboxId, deploymentId)` returns the original archive as
+`Uint8Array`. Sources may be at most 32 MiB compressed and expanded.
+
+Read regional build output with
+`logs(projectId, sandboxId, deploymentId, { region: 'aws-us-east-1', limit: 100 })`.
+The response contains `data` events and an optional `nextCursor`; pass it as
+`cursor` to read the next page. Failed builds remain visible in deployment history.

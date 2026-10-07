@@ -1143,7 +1143,63 @@ export interface SandboxPreset {
   memoryMB: number;
   regions: string[];
 }
+export interface SandboxDeployOptions extends SandboxReplayOptions {
+  name: string;
+  memoryMB?: 1024 | 2048;
+  ports?: number[];
+}
+export interface SandboxDeployment {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface SandboxDeploymentPage {
+  data: SandboxDeployment[];
+  pagination: { limit: number; hasMore: boolean; nextCursor?: string };
+}
+export interface SandboxDeploymentListOptions extends SandboxRequestOptions {
+  cursor?: string;
+}
+export interface SandboxBuildLogOptions extends SandboxRequestOptions {
+  region: string;
+  cursor?: string;
+  limit?: number;
+}
+export interface SandboxBuildLogPage {
+  data: { timestamp: string; message: string }[];
+  nextCursor?: string;
+}
 export interface Sandboxes {
+  logs(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options: SandboxBuildLogOptions,
+  ): Promise<SandboxResult<SandboxBuildLogPage>>;
+  deploy(
+    projectId: string,
+    sandboxId: string,
+    source: Uint8Array,
+    options: SandboxDeployOptions,
+  ): Promise<SandboxResult<SandboxDeployment>>;
+  deployments(
+    projectId: string,
+    sandboxId: string,
+    options?: SandboxDeploymentListOptions,
+  ): Promise<SandboxResult<SandboxDeploymentPage>>;
+  deployment(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options?: SandboxRequestOptions,
+  ): Promise<SandboxResult<SandboxDeployment>>;
+  source(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options?: SandboxRequestOptions,
+  ): Promise<SandboxResult<Uint8Array>>;
   presets(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxPreset[]>>;
   exec(
     projectId: string,

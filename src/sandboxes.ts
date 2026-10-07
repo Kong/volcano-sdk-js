@@ -7,11 +7,15 @@ import {
   revokeSandboxSession,
 } from './generated/client.ts';
 import type {
+  SandboxBuildLogOptions,
   SandboxCreateOptions,
+  SandboxDeploymentListOptions,
+  SandboxDeployOptions,
   Sandboxes,
   SandboxExecOptions,
   SandboxRequestOptions,
 } from './index.ts';
+import { deploy, deployment, deployments, logs, source } from './sandbox-deployments.ts';
 import {
   commandRequest,
   executionRequestOptions,
@@ -26,6 +30,45 @@ import { createRequest, executionResult, presetsResult, sessionRequest } from '.
 
 export class SandboxesApi implements Sandboxes {
   constructor(private readonly client: SandboxClient) {}
+  logs(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options: SandboxBuildLogOptions,
+  ): ReturnType<Sandboxes['logs']> {
+    return logs(this.client, projectId, sandboxId, deploymentId, options);
+  }
+  deploy(
+    projectId: string,
+    sandboxId: string,
+    archive: Uint8Array,
+    options: SandboxDeployOptions,
+  ): ReturnType<Sandboxes['deploy']> {
+    return deploy(this.client, projectId, sandboxId, archive, options);
+  }
+  deployments(
+    projectId: string,
+    sandboxId: string,
+    options: SandboxDeploymentListOptions = {},
+  ): ReturnType<Sandboxes['deployments']> {
+    return deployments(this.client, projectId, sandboxId, options);
+  }
+  deployment(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options: SandboxRequestOptions = {},
+  ): ReturnType<Sandboxes['deployment']> {
+    return deployment(this.client, projectId, sandboxId, deploymentId, options);
+  }
+  source(
+    projectId: string,
+    sandboxId: string,
+    deploymentId: string,
+    options: SandboxRequestOptions = {},
+  ): ReturnType<Sandboxes['source']> {
+    return source(this.client, projectId, sandboxId, deploymentId, options);
+  }
   presets(options: SandboxRequestOptions = {}): ReturnType<Sandboxes['presets']> {
     return sandboxResult(async () =>
       presetsResult(
