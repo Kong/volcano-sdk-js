@@ -811,6 +811,7 @@ export interface SandboxDeploymentPage {
 }
 export interface SandboxDeploymentListOptions extends SandboxRequestOptions {
   cursor?: string;
+  limit?: number;
 }
 export interface SandboxBuildLogOptions extends SandboxRequestOptions {
   region: string;

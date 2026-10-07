@@ -12,7 +12,7 @@ test('preserves present configuration and pagination options', () => {
     memory_mb: 1024,
     ports: '[]',
   });
-  expect(cursorOptions({ cursor: '' })).toStrictEqual({ cursor: '' });
+  expect(cursorOptions({ cursor: '', limit: 1 })).toStrictEqual({ cursor: '', limit: 1 });
   expect(logOptions({ region: 'aws-us-east-1', cursor: '', limit: 1 })).toStrictEqual({
     region: 'aws-us-east-1',
     cursor: '',

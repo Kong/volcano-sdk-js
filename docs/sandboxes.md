@@ -121,7 +121,8 @@ uncertain request. To update an existing template, deploy with its ID and a new
 request ID. Wait for `status: 'active'` before creating a session from that
 `sandboxId`. Existing sessions retain their original image.
 
-`deployments(projectId, sandboxId, { cursor })` returns paginated history.
+`deployments(projectId, sandboxId, { cursor, limit: 25 })` returns paginated history.
+`limit` accepts 1–100 and defaults to 10; use the returned `nextCursor` for the next page.
 `source(projectId, sandboxId, deploymentId)` returns the original archive as
 `Uint8Array`. Sources may be at most 32 MiB compressed and expanded.
 
@@ -129,3 +130,23 @@ Read regional build output with
 `logs(projectId, sandboxId, deploymentId, { region: 'aws-us-east-1', limit: 100 })`.
 The response contains `data` events and an optional `nextCursor`; pass it as
 `cursor` to read the next page. Failed builds remain visible in deployment history.
+
+## Delete a template
+
+`deleteTemplate(projectId, sandboxId)` retires the template and requests termination
+of all its sessions, including running work. The template becomes unavailable for
+new sessions. Use this only when you intend to remove the template; to stop one
+session while keeping the template, call `session.terminate()` instead.
+
+Call it from backend code with a platform user token or a service key granting
+`sandboxes.terminate` in the target project. An anonymous key or an authenticated
+project-user session does not authorize template deletion.
+
+```typescript
+const deleted = await client.sandboxes.deleteTemplate(projectId, sandboxId);
+if (deleted.error) throw deleted.error;
+```
+
+A successful response acknowledges the deletion request. Session termination and
+resource cleanup finish asynchronously; wait for sessions to reach `terminated`
+if your workflow requires confirmation that execution has stopped.

@@ -78,13 +78,17 @@ test('reads deployment history, detail and exact source bytes', async () => {
     );
   globalThis.fetch = fetchMock;
   const sdk = client();
-  const history = await sdk.sandboxes.deployments(projectId, templateId, { cursor: 'first' });
+  const history = await sdk.sandboxes.deployments(projectId, templateId, {
+    cursor: 'first',
+    limit: 1,
+  });
   expect(history.data).toMatchObject({ pagination: { nextCursor: 'next', hasMore: true } });
   const detail = await sdk.sandboxes.deployment(projectId, templateId, requestId);
   expect(detail.data?.id).toBe(requestId);
   const source = await sdk.sandboxes.source(projectId, templateId, requestId);
   expect(source.data).toEqual(bytes);
   expect(fetchMock.mock.calls[0]?.[0]).toContain('cursor=first');
+  expect(fetchMock.mock.calls[0]?.[0]).toContain('limit=1');
 });
 
 test('refuses invalid build configuration without issuing a request', async () => {

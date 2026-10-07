@@ -13,8 +13,14 @@ export function buildConfiguration(options: SandboxDeployOptions): {
     ...(options.ports === undefined ? {} : { ports: JSON.stringify(options.ports) }),
   };
 }
-export function cursorOptions(options: SandboxDeploymentListOptions): { cursor?: string } {
-  return options.cursor === undefined ? {} : { cursor: options.cursor };
+export function cursorOptions(options: SandboxDeploymentListOptions): {
+  cursor?: string;
+  limit?: number;
+} {
+  return {
+    ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    ...(options.limit === undefined ? {} : { limit: options.limit }),
+  };
 }
 
 export function logOptions(options: SandboxBuildLogOptions): {
