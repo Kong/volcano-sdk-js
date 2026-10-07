@@ -30,3 +30,15 @@ async-local storage instances; its CPU profile was dominated by Node's
 after long runs but were killed in fresh workers. Bounded reuse preserves every
 mutant and the existing timeout allowance. CI retains `stryker.log` on failure
 to distinguish worker behavior from test assertions.
+
+## Type-check directives
+
+Stryker inserts `// @ts-nocheck` into sandboxed files so mutants cannot fail
+type checking. Its default `disableTypeChecks: true` matches every script and
+HTML file in the sandbox, including the `coverage/` report and the compiled
+`.quality-tools/` tests that `pnpm quality` creates before mutation. Stryker 10
+parses their JavaScript with Babel 8, which loads the project's Babel 7
+`babel.config.js` and fails with a preprocessor warning. `stryker.config.json`
+limits the preprocessor to the TypeScript sources and tests, which Stryker
+parses without the project Babel configuration. Jest's Babel transform does not
+type-check, so no other file needs the directive.

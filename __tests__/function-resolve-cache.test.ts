@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from '@jest/globals';
 import {
+  clearFunctionResolveCache,
   clearSharedFunctionResolveStateForTests,
   functionResolveCacheKey,
   getSharedFunctionResolveState,
@@ -35,6 +36,18 @@ test('shares one cache between SDK copies and resets all mutable state', () => {
   expect(state.inFlight.size).toBe(0);
   expect(state.maxEntries).toBe(1024);
   expect(state.lastPruneAtMs).toBe(0);
+});
+
+test('clearing one resolution drops only its cached and in-flight entries', () => {
+  const state = getSharedFunctionResolveState();
+  for (const key of ['entry', 'other']) {
+    state.cache.set(key, { expiresAt: 9000 });
+    state.inFlight.set(key, Promise.resolve());
+  }
+
+  clearFunctionResolveCache(state, 'entry');
+  expect([...state.cache.keys()]).toEqual(['other']);
+  expect([...state.inFlight.keys()]).toEqual(['other']);
 });
 
 test('prunes on the normal interval and leaves recent entries untouched between scans', () => {

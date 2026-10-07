@@ -6,7 +6,12 @@ import {
   functionResolveCacheKey,
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
-import { AuthRefreshDiscardedError, loadRealtime, VolcanoAuth } from '../src/index.ts';
+import {
+  AuthRefreshDiscardedError,
+  AuthSessionChangedError,
+  loadRealtime,
+  VolcanoAuth,
+} from '../src/index.ts';
 import type { User } from '../src/sdk-public-types.ts';
 import { deferred, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
@@ -350,6 +355,61 @@ describe('shared function resolution boundary', () => {
       functionId: 'fresh',
     });
     expect(state.cache.has(key)).toBe(false);
+  });
+
+  test('prunes expired resolutions for other functions when reading the cache', async () => {
+    const sdk = client();
+    const state = getSharedFunctionResolveState();
+    const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
+    const expiredKey = functionResolveCacheKey(sdk.apiUrl, 'invoices', anonToken, true);
+    state.cache.set(key, {
+      functionId: 'cached-function',
+      invokeUrl: null,
+      error: null,
+      expiresAt: Date.now() + 10_000,
+    });
+    state.cache.set(expiredKey, { functionId: 'expired', error: null, expiresAt: Date.now() - 1 });
+
+    await expect(resolveWith(sdk, anonToken, true)).resolves.toMatchObject({
+      functionId: 'cached-function',
+    });
+    expect([...state.cache.keys()]).toEqual([key]);
+  });
+
+  test('rejects a changed session before returning a cached resolution', async () => {
+    const sdk = client();
+    const state = getSharedFunctionResolveState();
+    const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
+    state.cache.set(key, {
+      functionId: 'cached-function',
+      invokeUrl: null,
+      error: null,
+      expiresAt: Date.now() + 10_000,
+    });
+    const authContext = sdk._captureAuthContext();
+    sdk._sessionGeneration += 1;
+
+    await expect(
+      sdk._resolveFunctionIdByName(name, { authContext, token: anonToken, useAnonKey: true }),
+    ).rejects.toThrow(AuthSessionChangedError);
+  });
+
+  test('reports a session change instead of a shared resolution failure', async () => {
+    const sdk = client();
+    const state = getSharedFunctionResolveState();
+    const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
+    const settle = deferred<undefined>();
+    state.inFlight.set(
+      key,
+      settle.promise.then(() => {
+        throw new Error('resolver unavailable');
+      }),
+    );
+
+    const resolution = resolveWith(sdk, anonToken, true);
+    sdk._sessionGeneration += 1;
+    settle.resolve(undefined);
+    await expect(resolution).rejects.toThrow(AuthSessionChangedError);
   });
 
   test('treats a resolver cache entry expiring now as stale', async () => {

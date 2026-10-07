@@ -13,6 +13,7 @@
     "configFile": "jest.mutation.config.cjs"
   },
   "coverageAnalysis": "perTest",
+  "disableTypeChecks": "{src,__tests__,test}/**/*.{ts,mts,cts}",
   "concurrency": 4,
   "maxTestRunnerReuse": 20,
   "timeoutMS": 180000,
