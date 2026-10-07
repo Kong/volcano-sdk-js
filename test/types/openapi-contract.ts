@@ -74,7 +74,7 @@ type _ListProjectsAcceptsMetadataExpansions = Assert<
 >;
 type Project = OpenAPIComponents['schemas']['Project'];
 type _ProjectPlanAcceptsRolloutNames = Assert<
-  Equal<NonNullable<Project['plan']>, 'HOBBY' | 'SUPERAGENT'>
+  Equal<NonNullable<Project['plan']>, 'HOBBY' | 'SUPERAGENT' | 'FREE' | 'PRO'>
 >;
 type _ProjectGitConnectionUsesSummary = Assert<
   Equal<
