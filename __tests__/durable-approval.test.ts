@@ -555,11 +555,18 @@ describe('the decision', () => {
     });
   });
 
-  it('derives approved from the status, not the separate flag', async () => {
-    await expect(
-      decide(() => Promise.resolve(decided({ status: 'denied', approved: true }))),
-    ).resolves.toMatchObject({ approved: false, status: 'denied' });
-  });
+  it.each([
+    ['denied', true, false],
+    ['approved', false, true],
+    ['approved', 'yes', true],
+  ])(
+    'derives approved from a %s status, ignoring approved: %p',
+    async (status, approved, expected) => {
+      await expect(
+        decide(() => Promise.resolve(decided({ status, approved }))),
+      ).resolves.toMatchObject({ approved: expected, status });
+    },
+  );
 
   it('resolves an expired decision when the callback times out', async () => {
     const timeout = Object.assign(new Error('Callback timed out'), {
@@ -583,12 +590,12 @@ describe('the decision', () => {
     await expect(decide(() => rejectWithForeignValue(failure))).rejects.toBe(failure);
   });
 
-  it('fills in what the platform left out', async () => {
-    await expect(
-      decide(() =>
-        Promise.resolve(JSON.stringify({ status: 'approved', decided_by: null, comment: 3 })),
-      ),
-    ).resolves.toEqual({
+  it.each([
+    ['left out', { status: 'approved' }],
+    ['sent malformed', { status: 'approved', comment: 3, decided_by: 7, decided_at: 'today' }],
+    ['sent as null', { status: 'approved', comment: null, decided_by: null, decided_at: null }],
+  ])('fills in what the platform %s', async (_case, payload) => {
+    await expect(decide(() => Promise.resolve(JSON.stringify(payload)))).resolves.toEqual({
       approved: true,
       status: 'approved',
       comment: '',
@@ -600,11 +607,37 @@ describe('the decision', () => {
   it.each([
     ['without an email', { id: 'user-1' }],
     ['without an id', { email: 'owner@example.com' }],
+    ['with a numeric id', { id: 1, email: 'owner@example.com' }],
     ['as text', 'owner@example.com'],
   ])('drops a decider %s', async (_case, decidedBy) => {
     await expect(
       decide(() => Promise.resolve(decided({ decided_by: decidedBy }))),
     ).resolves.toMatchObject({ decidedBy: null });
+  });
+
+  it.each([
+    ['a bare year', '2026'],
+    ['a date without a time', '2026-10-06'],
+    ['a time without an offset', '2026-10-06T12:05:00'],
+    ['an impossible day', '2026-02-30T12:05:00Z'],
+    ['an impossible hour', '2026-10-06T24:00:00Z'],
+    ['an impossible month', '2026-13-06T12:05:00Z'],
+    ['a leap second', '2026-10-06T23:59:60Z'],
+    ['prose', 'Tue Oct 06 2026'],
+    ['epoch milliseconds', 1_791_288_300_000],
+  ])('drops a decision time given as %s', async (_case, decidedAt) => {
+    await expect(
+      decide(() => Promise.resolve(decided({ decided_at: decidedAt }))),
+    ).resolves.toMatchObject({ approved: true, decidedAt: null });
+  });
+
+  it.each([
+    ['fractional seconds and an offset', '2026-10-06T14:05:00.123+02:00'],
+    ['a leap day', '2028-02-29T12:05:00Z'],
+  ])('keeps a decision time with %s', async (_case, decidedAt) => {
+    await expect(
+      decide(() => Promise.resolve(decided({ decided_at: decidedAt }))),
+    ).resolves.toMatchObject({ decidedAt });
   });
 
   it('accepts a decision the runtime already parsed', async () => {
@@ -628,6 +661,8 @@ describe('the decision', () => {
     ['a JSON scalar', '42'],
     ['JSON null', 'null'],
     ['an unknown status', decided({ status: 'expired' })],
+    ['a status in another case', decided({ status: 'Approved' })],
+    ['a status that is not text', decided({ status: true })],
     ['no status', JSON.stringify({ approved: true })],
     ['nothing', undefined],
   ])('refuses %s', async (_case, result) => {

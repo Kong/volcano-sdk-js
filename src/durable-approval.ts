@@ -167,12 +167,30 @@ function decision(result: unknown): ApprovalDecision {
     status,
     comment: stringOr(value['comment'], ''),
     decidedBy: decider(value['decided_by']),
-    decidedAt: stringOr(value['decided_at'], null),
+    decidedAt: timestamp(value['decided_at']),
   };
 }
 
 function stringOr<Fallback>(value: unknown, fallback: Fallback): string | Fallback {
   return typeof value === 'string' ? value : fallback;
+}
+
+// RFC 3339, the form Volcano writes. Date.parse alone accepts looser text,
+// such as a bare year.
+const DATE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+const TIME = /^(?:[01]\d|2[0-3])(?::[0-5]\d){2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+
+function timestamp(value: unknown): string | null {
+  return typeof value === 'string' && isTimestamp(value) ? value : null;
+}
+
+function isTimestamp(value: string): boolean {
+  const day = value.slice(0, 10);
+  if (value[10] !== 'T' || !DATE.test(day) || !TIME.test(value.slice(11))) {
+    return false;
+  }
+  // Date rolls an impossible day, such as February 30, into the next month.
+  return new Date(`${day}T00:00:00Z`).toISOString().startsWith(day);
 }
 
 function unreadableDecision(options?: ErrorOptions): TypeError {
