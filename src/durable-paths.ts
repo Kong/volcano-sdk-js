@@ -1,6 +1,5 @@
 type DurablePathResult<Segments> =
-  | { segments: Segments; error?: never }
-  | { error: Error; segments?: never };
+  { segments: Segments; error?: never } | { error: Error; segments?: never };
 
 // Empty identifiers would address a collection instead of its execution.
 export function durablePathSegments(fields: {

@@ -256,12 +256,7 @@ interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
   domain_status:
-    | 'pending_verification'
-    | 'provisioning'
-    | 'active'
-    | 'detaching'
-    | 'failed'
-    | 'deleted';
+    'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
   verification_status: 'pending' | 'verified' | 'failed';
   failure_reason?: string;
   verification_records?: CustomDomainVerificationRecordShape[];
