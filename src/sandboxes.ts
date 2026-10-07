@@ -1,5 +1,6 @@
 import {
   createSandboxSession,
+  deleteSandbox,
   executeSandbox,
   getSandboxSession,
   grantSandboxSession,
@@ -30,6 +31,19 @@ import { createRequest, executionResult, presetsResult, sessionRequest } from '.
 
 export class SandboxesApi implements Sandboxes {
   constructor(private readonly client: SandboxClient) {}
+  deleteTemplate(
+    projectId: string,
+    sandboxId: string,
+    options: SandboxRequestOptions = {},
+  ): ReturnType<Sandboxes['deleteTemplate']> {
+    return sandboxResult(async () => {
+      await deleteSandbox(
+        pathId(projectId),
+        pathId(sandboxId),
+        requestOptions(this.client, options),
+      );
+    });
+  }
   logs(
     projectId: string,
     sandboxId: string,

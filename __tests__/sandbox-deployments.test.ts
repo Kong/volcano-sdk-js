@@ -135,3 +135,14 @@ test('reads regional build logs with pagination and preserves failures', async (
   expect(failure.data).toBeNull();
   expect(failure.error).toMatchObject({ status: 403, code: 'forbidden' });
 });
+
+test('deletes a custom template through its project scope', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 202 }));
+  globalThis.fetch = fetchMock;
+  const result = await client().sandboxes.deleteTemplate(projectId, templateId);
+  expect(result.error).toBeNull();
+  expect(firstCall(fetchMock.mock.calls)[0]).toBe(
+    `https://api.test.com/projects/${projectId}/sandboxes/${templateId}`,
+  );
+  expect(firstCall(fetchMock.mock.calls)[1]?.method).toBe('DELETE');
+});

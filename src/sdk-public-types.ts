@@ -1171,6 +1171,11 @@ export interface SandboxBuildLogPage {
   nextCursor?: string;
 }
 export interface Sandboxes {
+  deleteTemplate(
+    projectId: string,
+    sandboxId: string,
+    options?: SandboxRequestOptions,
+  ): Promise<SandboxResult<void>>;
   logs(
     projectId: string,
     sandboxId: string,
