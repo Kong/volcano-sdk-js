@@ -16,9 +16,12 @@ import type {
   DatabaseQueryCapExceededResponse,
   DatabaseQueryResult,
   DatabaseSelectRequest,
+  DeploySandboxBody,
   DurableExecution,
   Error,
+  GetSandboxDeploymentLogsParams,
   ListDurableExecutionsParams,
+  ListSandboxDeploymentsParams,
   ListSandboxSessionsParams,
   ListSandboxesParams,
   PaginatedDurableExecutions,
@@ -26,8 +29,11 @@ import type {
   ProjectLockLeaseRequest,
   SandboxAccess,
   SandboxAccessRequest,
+  SandboxBuildLogPage,
   SandboxCommandRequest,
   SandboxCommandResult,
+  SandboxDeployment,
+  SandboxDeploymentPage,
   SandboxExecutionRequest,
   SandboxExecutionResult,
   SandboxFileReadRequest,
@@ -287,6 +293,266 @@ export const deleteSandbox = async (id: string,
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type deploySandboxResponse202 = {
+  data: SandboxDeployment
+  status: 202
+}
+
+export type deploySandboxResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 202>
+}
+
+export type deploySandboxResponseSuccess = (deploySandboxResponse202) & {
+  headers: Headers;
+};
+export type deploySandboxResponseError = (deploySandboxResponseDefault) & {
+  headers: Headers;
+};
+
+export type deploySandboxResponse = (deploySandboxResponseSuccess | deploySandboxResponseError)
+
+export const getDeploySandboxUrl = (id: string,
+    sandboxId: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes/${sandboxId}/deployments`
+}
+
+/**
+ * Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+ * @summary Build and deploy a custom sandbox template
+ */
+export const deploySandbox = async (id: string,
+    sandboxId: string,
+    deploySandboxBody: DeploySandboxBody, options?: Parameters<typeof volcanoFetch>[1]): Promise<deploySandboxResponse> => {
+    const formData = new FormData();
+formData.append(`name`, deploySandboxBody.name);
+formData.append(`code`, deploySandboxBody.code);
+if(deploySandboxBody.memory_mb !== undefined) {
+ formData.append(`memory_mb`, deploySandboxBody.memory_mb.toString())
+ }
+if(deploySandboxBody.ports !== undefined) {
+ formData.append(`ports`, deploySandboxBody.ports);
+ }
+
+  return volcanoFetch<deploySandboxResponse>(getDeploySandboxUrl(id,sandboxId),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+export type listSandboxDeploymentsResponse200 = {
+  data: SandboxDeploymentPage
+  status: 200
+}
+
+export type listSandboxDeploymentsResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type listSandboxDeploymentsResponseSuccess = (listSandboxDeploymentsResponse200) & {
+  headers: Headers;
+};
+export type listSandboxDeploymentsResponseError = (listSandboxDeploymentsResponseDefault) & {
+  headers: Headers;
+};
+
+export type listSandboxDeploymentsResponse = (listSandboxDeploymentsResponseSuccess | listSandboxDeploymentsResponseError)
+
+export const getListSandboxDeploymentsUrl = (id: string,
+    sandboxId: string,
+    params?: ListSandboxDeploymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments`
+}
+
+/**
+ * @summary List sandbox deployment history
+ */
+export const listSandboxDeployments = async (id: string,
+    sandboxId: string,
+    params?: ListSandboxDeploymentsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listSandboxDeploymentsResponse> => {
+
+  return volcanoFetch<listSandboxDeploymentsResponse>(getListSandboxDeploymentsUrl(id,sandboxId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getSandboxDeploymentResponse200 = {
+  data: SandboxDeployment
+  status: 200
+}
+
+export type getSandboxDeploymentResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type getSandboxDeploymentResponseSuccess = (getSandboxDeploymentResponse200) & {
+  headers: Headers;
+};
+export type getSandboxDeploymentResponseError = (getSandboxDeploymentResponseDefault) & {
+  headers: Headers;
+};
+
+export type getSandboxDeploymentResponse = (getSandboxDeploymentResponseSuccess | getSandboxDeploymentResponseError)
+
+export const getGetSandboxDeploymentUrl = (id: string,
+    sandboxId: string,
+    deploymentId: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}`
+}
+
+/**
+ * @summary Get a sandbox deployment
+ */
+export const getSandboxDeployment = async (id: string,
+    sandboxId: string,
+    deploymentId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getSandboxDeploymentResponse> => {
+
+  return volcanoFetch<getSandboxDeploymentResponse>(getGetSandboxDeploymentUrl(id,sandboxId,deploymentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getSandboxDeploymentLogsResponse200 = {
+  data: SandboxBuildLogPage
+  status: 200
+}
+
+export type getSandboxDeploymentLogsResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type getSandboxDeploymentLogsResponseSuccess = (getSandboxDeploymentLogsResponse200) & {
+  headers: Headers;
+};
+export type getSandboxDeploymentLogsResponseError = (getSandboxDeploymentLogsResponseDefault) & {
+  headers: Headers;
+};
+
+export type getSandboxDeploymentLogsResponse = (getSandboxDeploymentLogsResponseSuccess | getSandboxDeploymentLogsResponseError)
+
+export const getGetSandboxDeploymentLogsUrl = (id: string,
+    sandboxId: string,
+    deploymentId: string,
+    params: GetSandboxDeploymentLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs`
+}
+
+/**
+ * @summary Read sandbox deployment build logs
+ */
+export const getSandboxDeploymentLogs = async (id: string,
+    sandboxId: string,
+    deploymentId: string,
+    params: GetSandboxDeploymentLogsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<getSandboxDeploymentLogsResponse> => {
+
+  return volcanoFetch<getSandboxDeploymentLogsResponse>(getGetSandboxDeploymentLogsUrl(id,sandboxId,deploymentId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getSandboxDeploymentSourceResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type getSandboxDeploymentSourceResponseDefault = {
+  data: Error
+  status: Exclude<HTTPStatusCodes, 200>
+}
+
+export type getSandboxDeploymentSourceResponseSuccess = (getSandboxDeploymentSourceResponse200) & {
+  headers: Headers;
+};
+export type getSandboxDeploymentSourceResponseError = (getSandboxDeploymentSourceResponseDefault) & {
+  headers: Headers;
+};
+
+export type getSandboxDeploymentSourceResponse = (getSandboxDeploymentSourceResponseSuccess | getSandboxDeploymentSourceResponseError)
+
+export const getGetSandboxDeploymentSourceUrl = (id: string,
+    sandboxId: string,
+    deploymentId: string,) => {
+
+
+
+
+  return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/source`
+}
+
+/**
+ * @summary Download the retained custom sandbox source
+ */
+export const getSandboxDeploymentSource = async (id: string,
+    sandboxId: string,
+    deploymentId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getSandboxDeploymentSourceResponse> => {
+
+  return volcanoFetch<getSandboxDeploymentSourceResponse>(getGetSandboxDeploymentSourceUrl(id,sandboxId,deploymentId),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

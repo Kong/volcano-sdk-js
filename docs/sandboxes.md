@@ -87,8 +87,68 @@ Read the scoped credential through `access.data.token`; it is omitted from JSON 
 
 ## Retry safely
 
-Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.exec()`, or `session.exec()`. Other operations accept cancellation through `signal` but do not accept `requestId`. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
+Pass a UUID `requestId` to `sandboxes.create()`, `sandboxes.deploy()`, `sandboxes.exec()`, or `session.exec()`. Other operations accept cancellation through `signal` but do not accept `requestId`. Retry the same intent with the same ID after a network failure. Do not reuse the ID for a different command. The SDK does not automatically replay failed commands.
 
 Pass `signal` to cancel waiting. Cancellation does not prove the remote command stopped. The HTTP timeout budget is the command timeout plus 120 seconds for provisioning, or the configured client timeout if longer. A one-shot command timeout returns HTTP 504; retrying the same request ID returns HTTP 409 and does not rerun it. A session command timeout returns command data with `timedOut: true`. One-shot commands allow up to 60 seconds; session commands allow up to 3600 seconds.
 
 Use either `preset` or a saved template's `sandboxId`, never both. `sandboxes.presets()` lists available preset IDs, memory sizes, and regions. `sandboxes.get(sessionId)` reconnects to an existing session. Backend code can call `grant(sessionId, authUserId, expiresAt)` and `revoke(sessionId, authUserId)` to control user access.
+
+## Deploy custom templates
+
+Build a tar.gz archive containing a root `Dockerfile` fragment and its files.
+Volcano supplies the base image and entrypoint; use `RUN`, `COPY`, and `CMD`
+instead of `FROM`, `USER`, or `ENTRYPOINT`. Use the backend `client` initialized
+above with a service key granting `sandboxes.deployments.write` to deploy and
+`sandboxes.deployments.read` to read history, status, source, and logs.
+
+```typescript
+const sandboxId = crypto.randomUUID();
+const requestId = crypto.randomUUID();
+const { readFile } = await import('node:fs/promises');
+const source = new Uint8Array(await readFile('./sandbox.tar.gz'));
+const { data: deployment, error } = await client.sandboxes.deploy(projectId, sandboxId, source, {
+  name: 'my-image',
+  memoryMB: 1024,
+  ports: [8080],
+  requestId,
+});
+if (error) throw error;
+const state = await client.sandboxes.deployment(projectId, sandboxId, deployment.id);
+```
+
+`ports` accepts at most 16 unique integers from 1 through 65532.
+
+Keep the same template ID, request ID, source bytes, and options when retrying an
+uncertain request. To update an existing template, deploy with its ID and a new
+request ID. Wait for `status: 'active'` before creating a session from that
+`sandboxId`. Existing sessions retain their original image.
+
+`deployments(projectId, sandboxId, { cursor, limit: 25 })` returns paginated history.
+`limit` accepts 1–100 and defaults to 10; use the returned `nextCursor` for the next page.
+`source(projectId, sandboxId, deploymentId)` returns the original archive as
+`Uint8Array`. Sources may be at most 32 MiB compressed and expanded.
+
+Read regional build output with
+`logs(projectId, sandboxId, deploymentId, { region: 'aws-us-east-1', limit: 100 })`.
+The response contains `data` events and an optional `nextCursor`; pass it as
+`cursor` to read the next page. Failed builds remain visible in deployment history.
+
+## Delete a template
+
+`deleteTemplate(projectId, sandboxId)` retires the template and requests termination
+of all its sessions, including running work. The template becomes unavailable for
+new sessions. Use this only when you intend to remove the template; to stop one
+session while keeping the template, call `session.terminate()` instead.
+
+Call it from backend code with a platform user token or a service key granting
+`sandboxes.terminate` in the target project. An anonymous key or an authenticated
+project-user session does not authorize template deletion.
+
+```typescript
+const deleted = await client.sandboxes.deleteTemplate(projectId, sandboxId);
+if (deleted.error) throw deleted.error;
+```
+
+A successful response acknowledges the deletion request. Session termination and
+resource cleanup finish asynchronously; wait for sessions to reach `terminated`
+if your workflow requires confirmation that execution has stopped.

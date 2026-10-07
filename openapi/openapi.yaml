@@ -283,6 +283,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   /projects/{id}/sandboxes/{sandboxId}/deployments:
+    post:
+      tags:
+        - Sandboxes
+      summary: Build and deploy a custom sandbox template
+      description: Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+      operationId: deploySandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - code
+              properties:
+                name:
+                  type: string
+                  pattern: ^[a-z][a-z0-9-]{0,62}$
+                code:
+                  type: string
+                  format: binary
+                  description: Source tar.gz archive, limited to 32 MiB compressed and expanded.
+                memory_mb:
+                  type: integer
+                  enum:
+                    - 1024
+                    - 2048
+                  description: Memory in MiB. Defaults to 1024 when omitted.
+                ports:
+                  type: string
+                  description: JSON array of application ports that must become ready before activation, for example [8080].
+      responses:
+        '202':
+          description: Deployment queued or replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxDeployment'
+        default:
+          description: Invalid source, conflicting retry, denied access, or unavailable deployment service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     get:
       tags:
         - Sandboxes
@@ -315,6 +382,148 @@ paths:
                 $ref: '#/components/schemas/SandboxDeploymentPage'
         default:
           description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}:
+    get:
+      tags:
+        - Sandboxes
+      summary: Get a sandbox deployment
+      operationId: getSandboxDeployment
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Get a sandbox deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxDeployment'
+        default:
+          description: Denied access, missing resource, or unavailable deployment service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/logs:
+    get:
+      tags:
+        - Sandboxes
+      summary: Read sandbox deployment build logs
+      operationId: getSandboxDeploymentLogs
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Read sandbox deployment build logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxBuildLogPage'
+        default:
+          description: Denied access, missing resource, or unavailable deployment service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/source:
+    get:
+      tags:
+        - Sandboxes
+      summary: Download the retained custom sandbox source
+      operationId: getSandboxDeploymentSource
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Download the retained custom sandbox source
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: Denied access, missing resource, or unavailable deployment service
           content:
             application/json:
               schema:
@@ -15118,6 +15327,27 @@ components:
         - url
         - token
         - expires_at
+    SandboxBuildLogPage:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required:
+              - timestamp
+              - message
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              message:
+                type: string
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Absent when caught up.
     SandboxDeployment:
       type: object
       additionalProperties: false
@@ -20442,6 +20672,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectConfigFrontend'
+        sandboxes:
+          type: array
+          description: Settings for existing templates; Git deploy applies build settings to matching sandbox source directories. Templates are never deleted by omission.
+          items:
+            $ref: '#/components/schemas/ProjectConfigSandbox'
       required:
         - version
     ProjectConfigApplyResult:
@@ -21081,6 +21316,7 @@ components:
             - frontend
             - database
             - bucket
+            - sandbox
         name:
           type: string
       required:
@@ -21178,6 +21414,7 @@ components:
             - frontend
             - database
             - bucket
+            - sandbox
         name:
           type: string
         reason:
@@ -22827,6 +23064,41 @@ components:
       required:
         - function
         - path_prefix
+    ProjectConfigSandbox:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+          description: Name of an existing sandbox template or matching Git source directory.
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+          description: Immutable deployed memory profile; config apply asserts it and Git deploy builds it.
+        ports:
+          type: array
+          uniqueItems: true
+          maxItems: 16
+          description: Service readiness ports; config apply asserts them and Git deploy builds them.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65532
+        idle_timeout_seconds:
+          type: integer
+          minimum: 0
+          maximum: 28800
+          description: Default idle timeout for new sessions when the caller omits it.
+        ttl_seconds:
+          type: integer
+          minimum: 30
+          maximum: 28800
+          description: Default absolute lifetime for new sessions when the caller omits it.
     DatabaseQueryPerformanceDatabase:
       type: object
       properties:
