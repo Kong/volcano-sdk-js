@@ -10,7 +10,7 @@
 
 export type GetSandboxDeploymentLogsParams = {
 /**
- * @pattern ^aws-[a-z]+-[a-z]+-[0-9]+$
+ * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
  */
 region: string;
 /**
