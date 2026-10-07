@@ -4,8 +4,7 @@ export type ChannelType = NonNullable<ChannelOptions['type']>;
 export type ChannelCallback = (data: unknown, context?: unknown) => void;
 export type EventHandler = (context: unknown) => void;
 export type RecoveryIdentity =
-  | { kind: 'user'; projectId: string; subject: string }
-  | { kind: 'credential'; token: unknown };
+  { kind: 'user'; projectId: string; subject: string } | { kind: 'credential'; token: unknown };
 
 export interface ActiveFetchConfig {
   batchWindowMs: number;

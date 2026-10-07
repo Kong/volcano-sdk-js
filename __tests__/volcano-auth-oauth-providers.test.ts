@@ -711,26 +711,15 @@ describe('VolcanoAuth OAuth provider operations', () => {
       expect(result).toMatchObject({ error: null });
     });
 
-    it('should throw error for invalid format in unlinkOAuthProvider', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      await expect(asyncProviderMethod('unlinkOAuthProvider', '')).rejects.toThrow(
-        'Provider must be a non-empty string',
-      );
-    });
-
-    it('should throw error for invalid format in refreshOAuthToken', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      await expect(asyncProviderMethod('refreshOAuthToken', '')).rejects.toThrow(
-        'Provider must be a non-empty string',
-      );
-    });
-
-    it('should throw error for invalid format in getOAuthProviderToken', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      await expect(asyncProviderMethod('getOAuthProviderToken', '')).rejects.toThrow(
-        'Provider must be a non-empty string',
-      );
-    });
+    it.each(['unlinkOAuthProvider', 'refreshOAuthToken', 'getOAuthProviderToken'])(
+      'should throw error for invalid format in %s',
+      async (method) => {
+        volcano.accessToken = TEST_ACCESS_TOKEN;
+        await expect(asyncProviderMethod(method, '')).rejects.toThrow(
+          'Provider must be a non-empty string',
+        );
+      },
+    );
 
     it('should throw error for invalid format in callOAuthAPI', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;

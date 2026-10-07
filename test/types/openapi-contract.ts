@@ -256,12 +256,7 @@ interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
   domain_status:
-    | 'pending_verification'
-    | 'provisioning'
-    | 'active'
-    | 'detaching'
-    | 'failed'
-    | 'deleted';
+    'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
   verification_status: 'pending' | 'verified' | 'failed';
   failure_reason?: string;
   verification_records?: CustomDomainVerificationRecordShape[];
@@ -320,7 +315,7 @@ type _ProjectConfigTLSWithoutModeIsBYOC = Assert<
   >
 >;
 type _ProjectConfigEmptyTLSIsBYOC = Assert<
-  Equal<ManifestTLSMembersAccepting<Record<never, never>>, BYOCManifestTLS>
+  Equal<ManifestTLSMembersAccepting<Record<string, never>>, BYOCManifestTLS>
 >;
 type _ProjectConfigManagedTLSStaysManaged = Assert<
   Equal<ManifestTLSMembersAccepting<{ mode: 'managed' }>, ManagedManifestTLS>

@@ -441,7 +441,7 @@ const contexts: [string, string][] = [
   ],
   [
     '__tests__',
-    "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(true).toBe(true); });\n",
+    "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(Math.max(1, 2)).toBe(2); });\n",
   ],
 ];
 

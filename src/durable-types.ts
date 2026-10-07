@@ -10,9 +10,7 @@
  * rather than rounded: the platform holds a wait between invocations.
  */
 export type DurableDuration =
-  | string
-  | number
-  | { days?: number; hours?: number; minutes?: number; seconds?: number };
+  string | number | { days?: number; hours?: number; minutes?: number; seconds?: number };
 
 /** What a retry strategy decides after an attempt fails. */
 export type RetryDecision =
