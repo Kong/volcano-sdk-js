@@ -62,9 +62,8 @@ const mockValidContext = {
       run: (context: unknown, item: unknown, index: number) => Promise<unknown>,
       config: unknown,
     ) => Promise<EngineBatch<unknown>>
-  >(
-    async (_name, items, run): Promise<EngineBatch<unknown>> =>
-      mockBatch(await Promise.all(items.map((item, index) => run(mockValidContext, item, index)))),
+  >(async (_name, items, run): Promise<EngineBatch<unknown>> =>
+    mockBatch(await Promise.all(items.map((item, index) => run(mockValidContext, item, index)))),
   ),
   parallel: jest.fn<
     (name: unknown, branches: EngineBranch[], config: unknown) => Promise<EngineBatch<unknown>>

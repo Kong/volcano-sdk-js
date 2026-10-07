@@ -75,7 +75,7 @@ await test('typed coverage rejects a new runtime module that no test imports', a
     'src/new-module.ts': 'export function missed(): number { return 1; }',
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /coverage threshold for (lines|statements).*not met/);
+  assert.match(result.stderr, /Coverage for (lines|statements) .*does not meet/);
   assert.equal(Object.keys(result.coverage).length, 2);
 });
 
@@ -84,7 +84,7 @@ await test('typed coverage rejects an unexercised branch', async () => {
     '__tests__/value.test.ts': assertions.replace('expect(value(false)).toBe(2);', ''),
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /coverage threshold for branches.*not met/);
+  assert.match(result.stderr, /Coverage for branches .*does not meet/);
 });
 
 await test('typed coverage rejects 99 percent function coverage with every line covered', async () => {
@@ -100,8 +100,8 @@ await test('typed coverage rejects 99 percent function coverage with every line 
     `,
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /coverage threshold for functions.*not met/);
-  assert.doesNotMatch(result.stderr, /coverage threshold for (lines|statements|branches)/);
+  assert.match(result.stderr, /Coverage for functions .*does not meet/);
+  assert.doesNotMatch(result.stderr, /Coverage for (lines|statements|branches) /);
 });
 
 await test('typed coverage excludes generated output and declarations', async () => {
@@ -118,5 +118,5 @@ await test('typed coverage discovers a newly added test without a task-list edit
     '__tests__/new.test.ts': "test('new failure', () => { expect(true).toBe(false); });",
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.doesNotMatch(result.stderr, /coverage threshold/);
+  assert.doesNotMatch(result.stderr, /Coverage for \w+ .*does not meet/);
 });

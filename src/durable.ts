@@ -256,10 +256,12 @@ function durableContext(
       }
       const run = call.run;
       return context
-        .map<
-          Item,
-          Result
-        >(call.name, call.items, (child, item, index) => run(item, durableContext(child, engine, ref), index), batchConfig(call.options))
+        .map<Item, Result>(
+          call.name,
+          call.items,
+          (child, item, index) => run(item, durableContext(child, engine, ref), index),
+          batchConfig(call.options),
+        )
         .then(batchResult);
     },
 

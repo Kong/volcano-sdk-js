@@ -1,8 +1,7 @@
 import { decodeBase64Url } from './token-claims.ts';
 
 type RecoveryIdentity =
-  | { kind: 'user'; projectId: string; subject: string }
-  | { kind: 'credential'; token: unknown };
+  { kind: 'user'; projectId: string; subject: string } | { kind: 'credential'; token: unknown };
 
 function decodeTokenPayload(token: unknown): { payload: unknown } | null {
   if (typeof token !== 'string') {

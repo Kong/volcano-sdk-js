@@ -1432,6 +1432,11 @@ export const getGetDurableApprovalUrl = (id: string,
 }
 
 /**
+ * Returns one approval: what the workflow asked, the durable function
+ * and execution that asked it, its deadline, and the decision once one
+ * is made.
+ *
+ * Project access tokens can read approvals, including read-only ones.
  * @summary Get a durable approval
  */
 export const getDurableApproval = async (id: string,

@@ -57,12 +57,7 @@ export interface VolcanoAuthConfig {
 
 /** JSON-serializable value type */
 export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /** User metadata object */
 export type UserMetadata = Record<string, JsonValue>;
