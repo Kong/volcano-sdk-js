@@ -8,6 +8,9 @@
  * OpenAPI spec version: 3.0.0
  */
 
+/**
+ * Memory in MiB. Defaults to 1024 when omitted.
+ */
 export type DeploySandboxBodyMemoryMb = typeof DeploySandboxBodyMemoryMb[keyof typeof DeploySandboxBodyMemoryMb];
 
 

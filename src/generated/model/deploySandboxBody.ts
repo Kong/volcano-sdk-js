@@ -14,6 +14,7 @@ export type DeploySandboxBody = {
   name: string;
   /** Source tar.gz archive, limited to 32 MiB compressed and expanded. */
   code: Blob | File;
+  /** Memory in MiB. Defaults to 1024 when omitted. */
   memory_mb?: DeploySandboxBodyMemoryMb;
   /** JSON array of application ports that must become ready before activation, for example [8080]. */
   ports?: string;

@@ -10748,7 +10748,7 @@ export interface operations {
                      */
                     code: string;
                     /**
-                     * @default 1024
+                     * @description Memory in MiB. Defaults to 1024 when omitted.
                      * @enum {integer}
                      */
                     memory_mb?: 1024 | 2048;
