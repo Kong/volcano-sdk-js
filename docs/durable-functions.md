@@ -677,9 +677,9 @@ Durable work is metered on those three allowances rather than on the request
 allowance a standard invocation spends. Every context operation is one
 operation: the execution itself, each `step` attempt — a retry is another
 attempt — each `wait`, each `waitUntil` check, each `child` context, and each
-`map` item or `parallel` branch. An approval counts both the wait for its
-decision and the step that registers it. Time is not charged, so a suspended
-execution costs nothing while it waits.
+`map` item or `parallel` branch. An approval is three: its own context, the
+wait for its decision, and the step that registers it. Time is not charged, so
+a suspended execution costs nothing while it waits.
 
 That makes the shape of a handler its cost. `ctx.map` over ten thousand items is
 ten thousand operations and will fail on the per-execution ceiling; batch the
