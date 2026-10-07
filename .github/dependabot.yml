@@ -49,8 +49,12 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+      # Exclude the generators explicitly so no dependency belongs to two groups.
       npm-development:
         dependency-type: 'development'
+        exclude-patterns:
+          - 'orval'
+          - 'openapi-typescript'
         update-types:
           - 'minor'
           - 'patch'
