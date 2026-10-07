@@ -50,7 +50,7 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
     "dist",
@@ -149,7 +149,7 @@
     "@stryker-mutator/jest-runner": "9.6.1",
     "@types/babel__core": "7.20.5",
     "@types/jest": "30.0.0",
-    "@types/node": "20.19.43",
+    "@types/node": "22.20.5",
     "@types/ws": "8.18.2",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
@@ -174,7 +174,7 @@
     "jest-environment-node": "30.5.2",
     "knip": "6.39.0",
     "openapi-typescript": "7.13.0",
-    "orval": "8.30.0",
+    "orval": "8.39.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "rollup": "^4.60.1",

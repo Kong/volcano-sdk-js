@@ -9,6 +9,9 @@ on:
       - synchronize
       - reopened
       - edited
+  # The queue requires this check too. A merge group has no title, and the PR
+  # passed before it was queued.
+  merge_group:
 
 permissions: {}
 
@@ -23,6 +26,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Validate PR title
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |

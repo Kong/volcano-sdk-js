@@ -14,7 +14,7 @@ Commit `package.json` and `package-lock.json`. Use `npm ci` to reproduce that de
 
 ## Runtime and compatibility
 
-Use Node.js 20 or later, or a browser with the APIs required by the feature you use. The native CI suite runs on Node.js 20; publishing builds run on Node.js 24. Durable function authoring needs its separately documented runtime.
+Use Node.js 22 or later, or a browser with the APIs required by the feature you use. The native CI suite runs on Node.js 22; publishing builds run on Node.js 24. Durable function authoring needs its separately documented runtime.
 
 The package uses semantic versions. Read the migration notes before a major update and the release notes before any update.
 JavaScript, Python and Ruby releases have independent version numbers; matching numbers are not a compatibility requirement.

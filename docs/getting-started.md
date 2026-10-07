@@ -4,7 +4,7 @@ description: 'This guide walks you through installing the Volcano SDK and making
 ---
 
 Install the SDK, sign in, and read a server-validated user profile.
-Use Node.js 20 or later for the runnable quickstart below. `VolcanoClient` is the
+Use Node.js 22 or later for the runnable quickstart below. `VolcanoClient` is the
 client for new applications; `VolcanoAuth` remains a compatible alias.
 
 ## Installation

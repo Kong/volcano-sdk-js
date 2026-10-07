@@ -25,17 +25,17 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.34.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.node-version'
           cache: 'pnpm'
@@ -56,12 +56,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.25.14'
           cache: false
@@ -115,17 +115,17 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.34.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.node-version'
           cache: 'pnpm'
@@ -150,54 +150,17 @@ jobs:
             stryker.log
           if-no-files-found: ignore
 
-  sdk-node20:
-    name: SDK Node 20 lint, tests, and build
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
-        with:
-          persist-credentials: false
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10.34.1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
-        with:
-          node-version: '20.20.2'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run SDK quality checks
-        run: pnpm quality:checks
-
-      - name: Preserve failing tests and property counterexamples
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: test-failures-node-20
-          path: reports/unit.json
-          if-no-files-found: ignore
-
   sdk-required:
     name: SDK Lint, Tests, and Build
     if: ${{ always() }}
-    needs: [sdk, sdk-node20]
+    needs: [sdk]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require both runtime checks and every mutation shard
+      - name: Require every mutation shard
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
-        run: jq -e 'length == 2 and all(. == "success")' <<< "$RESULTS"
+        run: jq -e 'length == 1 and all(. == "success")' <<< "$RESULTS"
 
   mutation-inventory:
     name: Mutation shard inventory
@@ -207,17 +170,17 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.34.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.node-version'
           cache: 'pnpm'
@@ -231,11 +194,11 @@ jobs:
   quality:
     name: Quality Gate
     if: ${{ always() }}
-    needs: [policy, actions, sdk, sdk-node20, sdk-required, mutation-inventory]
+    needs: [policy, actions, sdk, sdk-required, mutation-inventory]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every mandatory job to succeed
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
-        run: jq -e 'length == 6 and all(. == "success")' <<< "$RESULTS"
+        run: jq -e 'length == 5 and all(. == "success")' <<< "$RESULTS"

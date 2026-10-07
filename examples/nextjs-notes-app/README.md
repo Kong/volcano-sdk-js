@@ -26,7 +26,7 @@ A full-featured notes application demonstrating the **Volcano SDK** capabilities
 
 ### 1. Prerequisites
 
-- Node.js 20.9+ (required by Next.js 16)
+- Node.js 22+ (required by `@volcano.dev/sdk`)
 - A Volcano project
 - A database with the `notes` table (see schema below)
 
