@@ -26,9 +26,9 @@ releases it:
 - An update that changes the `dependencies` range in `package.json`, such as a
   major `centrifuge` or `ws` update. In-range bumps change only
   `pnpm-lock.yaml`, which is not published.
-- An `openapi-codegen` update whose regenerated output differs. If
-  `pnpm check:openapi` fails, run `pnpm generate:openapi` and commit the result
-  to the update's PR.
+- An update whose regenerated output differs: an `openapi-codegen` update, or a
+  prettier or TypeScript update in `npm-development`. If `pnpm check:openapi`
+  fails, run `pnpm generate:openapi` and commit the result to the update's PR.
 
 ## Before publication
 
