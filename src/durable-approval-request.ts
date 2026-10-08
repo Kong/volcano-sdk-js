@@ -66,11 +66,29 @@ async function send(url: string, body: string, timeout: number): Promise<Failure
     });
   } catch (cause) {
     return {
-      error: new Error('Could not reach Volcano to request the approval', { cause }),
+      error: new Error(`Could not reach Volcano to request the approval: ${reasons(cause)}`, {
+        cause,
+      }),
       retryable: true,
     };
   }
   return response.ok ? null : refusal(response);
+}
+
+// The runtime rethrows a failed registration with only its message, so the
+// message carries what the caller would otherwise read from the cause or code.
+// Read by field rather than instanceof: a fetch timeout is a DOMException.
+function reasons(cause: unknown): string {
+  const failure = new Object(cause);
+  const message: unknown = Reflect.get(failure, 'message');
+  if (typeof message !== 'string') {
+    return String(cause);
+  }
+  const inner: unknown = Reflect.get(failure, 'cause');
+  if (inner === undefined) {
+    return message;
+  }
+  return `${message}: ${reasons(inner)}`;
 }
 
 async function refusal(response: Response): Promise<Failure | null> {
@@ -81,8 +99,15 @@ async function refusal(response: Response): Promise<Failure | null> {
   if (response.status === 409 && error.code === 'approval_closed') {
     return null;
   }
-  error.message = `Volcano refused the approval request (${String(response.status)}): ${error.message}`;
+  error.message = `Volcano refused the approval request (${refusalLabel(response.status, error.code)}): ${error.message}`;
   return { error, retryable: isRetryable(response.status, error.code) };
+}
+
+function refusalLabel(status: number, code: string | undefined): string {
+  if (code === undefined) {
+    return String(status);
+  }
+  return `${String(status)} ${code}`;
 }
 
 // Volcano records an execution only after starting it, so an approval opened

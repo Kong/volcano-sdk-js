@@ -13,7 +13,11 @@ export interface CallbackContext {
   ) => Promise<unknown>;
 }
 
-const MAX_NAME_LENGTH = 255;
+// The name is also the runtime's operation name, which allows 256 printable
+// ASCII characters. The runtimes add suffixes of up to 19 characters to it, and
+// every SDK holds names to the same limit.
+const MAX_NAME_LENGTH = 237;
+const OPERATION_NAME = /^[\u0020-\u007E]+$/;
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -60,18 +64,26 @@ export async function waitForApproval(
 
 function requestFields(name: unknown, options: Record<string, unknown>): RequestFields {
   return {
-    name: requiredText(name, 'name', MAX_NAME_LENGTH),
+    name: operationName(name),
     title: requiredText(options['title'], 'title', MAX_TITLE_LENGTH),
     ...description(options['description']),
     ...details(options['details']),
   };
 }
 
+function operationName(value: unknown): string {
+  const name = requiredText(value, 'name', MAX_NAME_LENGTH);
+  if (!OPERATION_NAME.test(name)) {
+    throw new TypeError('ctx.waitForApproval() name must be printable ASCII');
+  }
+  return name;
+}
+
 function requiredText(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new TypeError(`ctx.waitForApproval() requires a non-empty ${field}`);
   }
-  return withinLength(value, field, maxLength);
+  return checkedText(value, field, maxLength);
 }
 
 function description(value: unknown): { description?: string } {
@@ -81,17 +93,34 @@ function description(value: unknown): { description?: string } {
   if (typeof value !== 'string') {
     throw new TypeError('ctx.waitForApproval() description must be a string');
   }
-  return { description: withinLength(value, 'description', MAX_DESCRIPTION_LENGTH) };
+  return { description: checkedText(value, 'description', MAX_DESCRIPTION_LENGTH) };
 }
 
-// Volcano counts characters as code points, not UTF-16 units.
-function withinLength(value: string, field: string, maxLength: number): string {
+// Volcano counts characters as code points, not UTF-16 units, and refuses NUL.
+function checkedText(value: string, field: string, maxLength: number): string {
   if (Array.from(value).length > maxLength) {
     throw new TypeError(
       `ctx.waitForApproval() ${field} must be at most ${String(maxLength)} characters`,
     );
   }
+  if (value.includes('\0')) {
+    throw noNul(field);
+  }
   return value;
+}
+
+function noNul(field: string): TypeError {
+  return new TypeError(`ctx.waitForApproval() ${field} must not contain NUL characters`);
+}
+
+function hasNul(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.includes('\0');
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.entries(value).some(([key, item]) => key.includes('\0') || hasNul(item));
 }
 
 // Send a snapshot, so details that change later, or serialize differently a
@@ -111,6 +140,9 @@ function details(value: unknown): { details?: unknown } {
     throw notJson();
   }
   const snapshot: unknown = JSON.parse(text);
+  if (hasNul(snapshot)) {
+    throw noNul('details');
+  }
   return { details: snapshot };
 }
 

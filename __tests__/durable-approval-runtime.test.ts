@@ -10,7 +10,7 @@ import {
   jest,
 } from '@jest/globals';
 import { durable } from '../src/durable.ts';
-import type { ApprovalDecision, DurableHandler } from '../src/durable-types.ts';
+import type { DurableHandler } from '../src/durable-types.ts';
 
 // durable-approval.test.ts stands a double in for the runtime. These run the
 // same calls through the runtime Volcano installs and its local checkpoint
@@ -62,7 +62,7 @@ function localRunner(): RunnerClass {
 const LocalDurableTestRunner = localRunner();
 const executionArns: unknown[] = [];
 
-function runnerFor(handler: DurableHandler<unknown, ApprovalDecision>): Runner {
+function runnerFor(handler: DurableHandler): Runner {
   const invoke = durable(handler);
   return new LocalDurableTestRunner({
     handlerFunction(event, context) {
@@ -172,5 +172,34 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
     const [arn] = executionArns;
     expect(arn).toEqual(expect.stringMatching(/\S/));
     expect(bodyAt(0)).toMatchObject({ execution_ref: arn });
+  });
+
+  // The runtime records a failed submitter by message and rethrows its own
+  // error, so the refusal's code survives only in the message.
+  it('hands the handler a refusal it can recognize by message', async () => {
+    fetchMock().mockImplementation(() =>
+      Promise.resolve(
+        Response.json(
+          { error: 'too many pending approvals', code: 'too_many_pending_approvals' },
+          { status: 409 },
+        ),
+      ),
+    );
+    const runner = runnerFor(async (_input, ctx) => {
+      try {
+        return await ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
+      } catch (error) {
+        return error instanceof Error ? { name: error.name, message: error.message } : error;
+      }
+    });
+
+    const result = await runner.run({ payload: {} });
+
+    expect(result.getResult()).toEqual({
+      name: 'CallbackSubmitterError',
+      message:
+        'Volcano refused the approval request (409 too_many_pending_approvals): too many pending approvals',
+    });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 });

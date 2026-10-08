@@ -310,8 +310,9 @@ volcano cloud durable approvals deny <approval-id> --comment "Customer cancelled
 | `details`     | any      | A JSON value shown with the request, such as the record under review. The whole request is limited to 64 KiB. |
 | `timeout`     | duration | How long reviewers have to decide. Unset, the approval stays open as long as the execution.                   |
 
-The name is up to 255 characters and is what the approval is recorded under in
-the execution history, like a step's name.
+The name is what the approval is recorded under in the execution history, like
+a step's name. Keep it short: it is up to 237 printable ASCII characters. No
+text, `details` included, may contain a NUL character.
 
 A denial and an expiry are decisions like an approval, so the call resolves
 rather than throws: branch on `approved`.
@@ -342,6 +343,23 @@ retries the request for up to 30 seconds while Volcano does not know the
 execution yet, is not ready for the approval, throttles it, or is unavailable.
 It then throws the last failure. A request that arrives after the approval's
 `timeout` has already run out is not an error: the call resolves `expired`.
+
+Invalid options throw a `TypeError`. A refusal, or a failure that outlasts the
+retries, reaches the handler as the durable runtime's `CallbackSubmitterError`,
+which keeps only the message. The message carries the status and error code,
+or the network failure:
+
+```javascript
+try {
+  await ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
+} catch (error) {
+  // "Volcano refused the approval request (409 too_many_pending_approvals): ..."
+  if (error.message.includes('too_many_pending_approvals')) {
+    return { shipped: false, reason: 'too many approvals waiting' };
+  }
+  throw error;
+}
+```
 
 ## `ctx.map(name?, items, fn, options?)`
 

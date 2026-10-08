@@ -303,19 +303,20 @@ describe('ctx.waitForApproval()', () => {
 
   it('accepts the longest name, title, and description the platform stores', async () => {
     await run((_input, ctx) =>
-      ctx.waitForApproval('n'.repeat(255), {
+      ctx.waitForApproval(`${' ~'.repeat(118)}n`, {
         title: 't'.repeat(200),
         description: 'd'.repeat(4000),
       }),
     );
 
     expect(fetchMock()).toHaveBeenCalledTimes(1);
+    expect(bodyAt(0)).toMatchObject({ name: `${' ~'.repeat(118)}n` });
   });
 
   // Volcano counts code points; each of these emoji is two UTF-16 units.
   it('counts lengths in characters rather than UTF-16 units', async () => {
     await run((_input, ctx) =>
-      ctx.waitForApproval('🚢'.repeat(255), {
+      ctx.waitForApproval('ship-order', {
         title: '👍'.repeat(200),
         description: '📦'.repeat(4000),
       }),
@@ -323,8 +324,8 @@ describe('ctx.waitForApproval()', () => {
 
     expect(fetchMock()).toHaveBeenCalledTimes(1);
     await expect(
-      run((_input, ctx) => ctx.waitForApproval('🚢'.repeat(256), { title: 'Ship?' })),
-    ).rejects.toThrow('ctx.waitForApproval() name must be at most 255 characters');
+      run((_input, ctx) => ctx.waitForApproval('ship', { title: '👍'.repeat(201) })),
+    ).rejects.toThrow('ctx.waitForApproval() title must be at most 200 characters');
   });
 
   it('accepts a request of exactly 64 KiB, allowing for the longest callback id', async () => {
@@ -370,6 +371,14 @@ describe('ctx.waitForApproval()', () => {
     expect(bodyAt(0)).toMatchObject({ details: { total: 1250 } });
   });
 
+  it('sends details that only spell out an escaped NUL', async () => {
+    const details = { note: String.raw`\u0000`, items: [1, null, true], nested: { ok: 'yes' } };
+
+    await run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', details }));
+
+    expect(bodyAt(0)).toMatchObject({ details });
+  });
+
   it.each([
     ['with a BigInt', { total: 10n }, 'BigInt'],
     ['that are circular', circular(), 'circular structure'],
@@ -398,9 +407,63 @@ describe('ctx.waitForApproval()', () => {
     ],
     [
       'a long name',
-      'n'.repeat(256),
+      'n'.repeat(238),
       { title: 'Ship?' },
-      'ctx.waitForApproval() name must be at most 255 characters',
+      'ctx.waitForApproval() name must be at most 237 characters',
+    ],
+    [
+      'a name outside ASCII',
+      'aprobación-envío',
+      { title: 'Ship?' },
+      'ctx.waitForApproval() name must be printable ASCII',
+    ],
+    [
+      'a name with a control character',
+      'ship\torder',
+      { title: 'Ship?' },
+      'ctx.waitForApproval() name must be printable ASCII',
+    ],
+    [
+      'a name with DEL',
+      'ship\u007F',
+      { title: 'Ship?' },
+      'ctx.waitForApproval() name must be printable ASCII',
+    ],
+    [
+      'a name with NUL',
+      'ship\0',
+      { title: 'Ship?' },
+      'ctx.waitForApproval() name must not contain NUL characters',
+    ],
+    [
+      'a title with NUL',
+      'ship',
+      { title: 'Ship\0?' },
+      'ctx.waitForApproval() title must not contain NUL characters',
+    ],
+    [
+      'a description with NUL',
+      'ship',
+      { title: 'Ship?', description: 'Express\0' },
+      'ctx.waitForApproval() description must not contain NUL characters',
+    ],
+    [
+      'details with NUL in a string',
+      'ship',
+      { title: 'Ship?', details: { items: ['a', 'b\0'] } },
+      'ctx.waitForApproval() details must not contain NUL characters',
+    ],
+    [
+      'details with NUL in a key',
+      'ship',
+      { title: 'Ship?', details: { order: { 'a\0': 1 } } },
+      'ctx.waitForApproval() details must not contain NUL characters',
+    ],
+    [
+      'details that are a string with NUL',
+      'ship',
+      { title: 'Ship?', details: '\0' },
+      'ctx.waitForApproval() details must not contain NUL characters',
     ],
     ['no options', 'ship', undefined, 'ctx.waitForApproval() requires options with a title'],
     ['null options', 'ship', null, 'ctx.waitForApproval() requires options with a title'],
@@ -764,7 +827,7 @@ describe('approval registration', () => {
     expect(await failure).toMatchObject({
       status: 503,
       code: 'unavailable',
-      message: 'Volcano refused the approval request (503): unavailable',
+      message: 'Volcano refused the approval request (503 unavailable): unavailable',
     });
     await jest.advanceTimersByTimeAsync(60_000);
 
@@ -797,7 +860,7 @@ describe('approval registration', () => {
     await jest.advanceTimersByTimeAsync(1);
 
     expect(await failure).toMatchObject({
-      message: 'Could not reach Volcano to request the approval',
+      message: 'Could not reach Volcano to request the approval: The operation timed out',
       cause: { name: 'TimeoutError' },
     });
     await jest.advanceTimersByTimeAsync(60_000);
@@ -885,8 +948,28 @@ describe('approval registration', () => {
     await jest.advanceTimersByTimeAsync(30_000);
 
     expect(await failure).toMatchObject({
-      message: 'Could not reach Volcano to request the approval',
+      message: 'Could not reach Volcano to request the approval: fetch failed',
       cause,
+    });
+  });
+
+  // The runtime rethrows the failure with its message alone.
+  it.each([
+    [
+      'a chain of causes',
+      new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND api.test.com') }),
+      'fetch failed: getaddrinfo ENOTFOUND api.test.com',
+    ],
+    ['a cause that is not an error', 'socket hang up', 'socket hang up'],
+  ])('names %s in the message', async (_case, cause, reason) => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    fetchMock().mockRejectedValue(cause);
+
+    const failure = failureOf(registered());
+    await jest.advanceTimersByTimeAsync(30_000);
+
+    expect(await failure).toMatchObject({
+      message: `Could not reach Volcano to request the approval: ${reason}`,
     });
   });
 
@@ -929,7 +1012,7 @@ describe('approval registration', () => {
     expect(failure).toBeInstanceOf(Error);
     expect(failure).toMatchObject({
       status,
-      message: `Volcano refused the approval request (${String(status)}): ${body.error}`,
+      message: `Volcano refused the approval request (${[status, code].filter(Boolean).join(' ')}): ${body.error}`,
     });
     expect(failure instanceof Error ? Reflect.get(failure, 'code') : 'not an error').toBe(code);
     expect(fetchMock()).toHaveBeenCalledTimes(1);
