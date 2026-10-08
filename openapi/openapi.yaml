@@ -16,7 +16,7 @@ servers:
     description: Development API server (use VOLCANO_API_URL env var)
 tags:
   - name: Sandboxes
-    description: Isolated Linux sessions and reusable templates.
+    description: 'Preview, not generally available: isolated Linux sessions and reusable templates. Where Sandboxes are not available, every endpoint answers `404` with code `feature_unavailable`. Where they are turned off after use, only creating or starting a session, template, execution, or deployment, and listing presets, answer that `404`, so existing ones can still be read and deleted. A `503` means the Sandbox service is temporarily unavailable.'
   - name: Projects
     description: Project management operations
   - name: Logs
@@ -101,7 +101,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxPresetList'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -132,7 +132,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxTemplatePage'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -172,7 +172,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxTemplate'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -207,7 +207,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxTemplate'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -247,7 +247,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxTemplate'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -277,12 +277,79 @@ paths:
         '202':
           description: Retire a template and terminate its sessions
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
   /projects/{id}/sandboxes/{sandboxId}/deployments:
+    post:
+      tags:
+        - Sandboxes
+      summary: Build and deploy a custom sandbox template
+      description: Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+      operationId: deploySandbox
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - code
+              properties:
+                name:
+                  type: string
+                  pattern: ^[a-z][a-z0-9-]{0,62}$
+                code:
+                  type: string
+                  format: binary
+                  description: Source tar.gz archive, limited to 32 MiB compressed and expanded.
+                memory_mb:
+                  type: integer
+                  enum:
+                    - 1024
+                    - 2048
+                  description: Memory in MiB. Defaults to 1024 when omitted.
+                ports:
+                  type: string
+                  description: JSON array of application ports that must become ready before activation, for example [8080].
+      responses:
+        '202':
+          description: Deployment queued or replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxDeployment'
+        default:
+          description: Invalid source (400), denied access (401, 403), conflicting retry (409), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes or custom templates are not available in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     get:
       tags:
         - Sandboxes
@@ -314,7 +381,149 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxDeploymentPage'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}:
+    get:
+      tags:
+        - Sandboxes
+      summary: Get a sandbox deployment
+      operationId: getSandboxDeployment
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Get a sandbox deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxDeployment'
+        default:
+          description: Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/logs:
+    get:
+      tags:
+        - Sandboxes
+      summary: Read sandbox deployment build logs
+      operationId: getSandboxDeploymentLogs
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Read sandbox deployment build logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxBuildLogPage'
+        default:
+          description: Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/source:
+    get:
+      tags:
+        - Sandboxes
+      summary: Download the retained custom sandbox source
+      operationId: getSandboxDeploymentSource
+      security:
+        - UserToken: []
+        - ServiceRoleKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sandboxId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Download the retained custom sandbox source
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -345,7 +554,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSessionPage'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -385,7 +594,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSession'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -426,7 +635,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxExecutionResult'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -456,7 +665,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSession'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -484,7 +693,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSession'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -513,7 +722,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSession'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -542,7 +751,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxSession'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -584,7 +793,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxCommandResult'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -620,7 +829,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxFileResult'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -652,7 +861,7 @@ paths:
         '204':
           description: Write a workspace file
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -689,7 +898,7 @@ paths:
         '204':
           description: Authorize an authenticated project user for this session
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -719,7 +928,7 @@ paths:
         '204':
           description: Revoke a project user session grant
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -755,7 +964,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SandboxAccess'
         default:
-          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503).
+          description: Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment.
           content:
             application/json:
               schema:
@@ -6368,7 +6577,7 @@ paths:
     post:
       tags:
         - Frontends
-      summary: Configure frontend custom domain (SUPERAGENT)
+      summary: Configure frontend custom domain
       description: |
         Configures one custom domain for a frontend.
         The default Volcano-generated frontend URL remains active.
@@ -6416,7 +6625,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Forbidden - custom domains require SUPERAGENT plan, or a managed TLS request would exceed the account's managed TLS certificate limit
+          description: Forbidden - the plan does not include custom domains, or a managed TLS request would exceed the account's managed TLS certificate limit
           content:
             application/json:
               schema:
@@ -15275,12 +15484,12 @@ components:
           type: integer
           minimum: 30
           maximum: 28800
-          default: 3600
+          description: Inherits the template TTL when omitted (3600 seconds for a new template).
         idle_timeout_seconds:
           type: integer
           minimum: 0
           maximum: 28800
-          default: 0
+          description: Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout.
       required:
         - region
       oneOf:
@@ -15493,6 +15702,27 @@ components:
         - url
         - token
         - expires_at
+    SandboxBuildLogPage:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required:
+              - timestamp
+              - message
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              message:
+                type: string
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Absent when caught up.
     SandboxDeployment:
       type: object
       additionalProperties: false
@@ -16560,7 +16790,6 @@ components:
             version its server runs. Any other value is rejected with 400.
           example: '18'
           enum:
-            - '15'
             - '16'
             - '17'
             - '18'
@@ -21024,6 +21253,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectConfigFrontend'
+        sandboxes:
+          type: array
+          description: Settings for existing templates; Git deploy applies build settings to matching sandbox source directories. Templates are never deleted by omission.
+          items:
+            $ref: '#/components/schemas/ProjectConfigSandbox'
       required:
         - version
     ProjectConfigApplyResult:
@@ -21402,7 +21636,7 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Custom domain with managed or BYOC TLS (SUPERAGENT plan). `tls` is required
+        Custom domain with managed or BYOC TLS. `tls` is required
         when the domain is first created and optional afterwards. For an existing
         domain, omitting `tls` or sending only `tls.mode` keeps the stored
         certificate; new BYOC material for the same domain rotates the
@@ -21441,7 +21675,10 @@ components:
             - '16'
             - '17'
             - '18'
-          description: PostgreSQL major version. Asserted, never written.
+          description: |
+            PostgreSQL major version. Asserted, never written. Also accepts
+            versions new databases can no longer be created on, so an export
+            of an existing database re-applies.
         database_type:
           type: string
           enum:
@@ -21663,6 +21900,7 @@ components:
             - frontend
             - database
             - bucket
+            - sandbox
         name:
           type: string
       required:
@@ -21760,6 +21998,7 @@ components:
             - frontend
             - database
             - bucket
+            - sandbox
         name:
           type: string
         reason:
@@ -23409,6 +23648,41 @@ components:
       required:
         - function
         - path_prefix
+    ProjectConfigSandbox:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+          description: Name of an existing sandbox template or matching Git source directory.
+        memory_mb:
+          type: integer
+          enum:
+            - 1024
+            - 2048
+          description: Immutable deployed memory profile; config apply asserts it and Git deploy builds it.
+        ports:
+          type: array
+          uniqueItems: true
+          maxItems: 16
+          description: Service readiness ports; config apply asserts them and Git deploy builds them.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65532
+        idle_timeout_seconds:
+          type: integer
+          minimum: 0
+          maximum: 28800
+          description: Default idle timeout for new sessions when the caller omits it.
+        ttl_seconds:
+          type: integer
+          minimum: 30
+          maximum: 28800
+          description: Default absolute lifetime for new sessions when the caller omits it.
     DatabaseQueryPerformanceDatabase:
       type: object
       properties:

@@ -68,6 +68,61 @@ export interface paths {
         /** List sandbox deployment history */
         get: operations["listSandboxDeployments"];
         put?: never;
+        /**
+         * Build and deploy a custom sandbox template
+         * @description Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+         */
+        post: operations["deploySandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a sandbox deployment */
+        get: operations["getSandboxDeployment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read sandbox deployment build logs */
+        get: operations["getSandboxDeploymentLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/sandboxes/{sandboxId}/deployments/{deploymentId}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the retained custom sandbox source */
+        get: operations["getSandboxDeploymentSource"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2135,7 +2190,7 @@ export interface paths {
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
-         * Configure frontend custom domain (SUPERAGENT)
+         * Configure frontend custom domain
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
@@ -5460,9 +5515,9 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
-            /** @default 3600 */
+            /** @description Inherits the template TTL when omitted (3600 seconds for a new template). */
             max_duration_seconds?: number;
-            /** @default 0 */
+            /** @description Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout. */
             idle_timeout_seconds?: number;
         } & (unknown | unknown);
         SandboxCommandRequest: {
@@ -5537,6 +5592,15 @@ export interface components {
             token: string;
             /** Format: date-time */
             expires_at: string;
+        };
+        SandboxBuildLogPage: {
+            data: {
+                /** Format: date-time */
+                timestamp: string;
+                message: string;
+            }[];
+            /** @description Opaque cursor for the next page. Absent when caught up. */
+            next_cursor?: string;
         };
         SandboxDeployment: {
             /** Format: uuid */
@@ -6242,7 +6306,7 @@ export interface components {
              * @example 18
              * @enum {string}
              */
-            pg_version: "15" | "16" | "17" | "18";
+            pg_version: "16" | "17" | "18";
             /**
              * @description Compute size tier (optional, defaults to volcano-db-xs).
              *     Determines autoscaling limits for the database.
@@ -8927,6 +8991,8 @@ export interface components {
             auth?: components["schemas"]["ProjectConfigAuth"];
             functions?: components["schemas"]["ProjectConfigFunction"][];
             frontends?: components["schemas"]["ProjectConfigFrontend"][];
+            /** @description Settings for existing templates; Git deploy applies build settings to matching sandbox source directories. Templates are never deleted by omission. */
+            sandboxes?: components["schemas"]["ProjectConfigSandbox"][];
         };
         /** @description Per-resource report for a project config apply (or dry run). */
         ProjectConfigApplyResult: {
@@ -9127,7 +9193,7 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with managed or BYOC TLS (SUPERAGENT plan). `tls` is required
+         * @description Custom domain with managed or BYOC TLS. `tls` is required
          *     when the domain is first created and optional afterwards. For an existing
          *     domain, omitting `tls` or sending only `tls.mode` keeps the stored
          *     certificate; new BYOC material for the same domain rotates the
@@ -9152,7 +9218,9 @@ export interface components {
             /** @description Deployed region ID (e.g. us-east-1). Asserted, never written; region IDs issued by earlier versions of the API match too. */
             region: string;
             /**
-             * @description PostgreSQL major version. Asserted, never written.
+             * @description PostgreSQL major version. Asserted, never written. Also accepts
+             *     versions new databases can no longer be created on, so an export
+             *     of an existing database re-applies.
              * @enum {string}
              */
             pg_version: "15" | "16" | "17" | "18";
@@ -9278,7 +9346,7 @@ export interface components {
         };
         ProjectConfigMissingResource: {
             /** @enum {string} */
-            type: "function" | "frontend" | "database" | "bucket";
+            type: "function" | "frontend" | "database" | "bucket" | "sandbox";
             name: string;
         };
         ProjectConfigOAuthProvider: {
@@ -9324,7 +9392,7 @@ export interface components {
         };
         ProjectConfigSkippedResource: {
             /** @enum {string} */
-            type: "function" | "frontend" | "database" | "bucket";
+            type: "function" | "frontend" | "database" | "bucket" | "sandbox";
             name: string;
             reason: string;
         };
@@ -10291,6 +10359,21 @@ export interface components {
             /** @default false */
             strip_prefix?: boolean;
         };
+        ProjectConfigSandbox: {
+            /** @description Name of an existing sandbox template or matching Git source directory. */
+            name: string;
+            /**
+             * @description Immutable deployed memory profile; config apply asserts it and Git deploy builds it.
+             * @enum {integer}
+             */
+            memory_mb?: 1024 | 2048;
+            /** @description Service readiness ports; config apply asserts them and Git deploy builds them. */
+            ports?: number[];
+            /** @description Default idle timeout for new sessions when the caller omits it. */
+            idle_timeout_seconds?: number;
+            /** @description Default absolute lifetime for new sessions when the caller omits it. */
+            ttl_seconds?: number;
+        };
         DatabaseQueryPerformanceDatabase: {
             /** Format: uuid */
             id: string;
@@ -10835,7 +10918,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxPresetList"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10876,7 +10959,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplatePage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10913,7 +10996,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10945,7 +11028,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10975,7 +11058,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11011,7 +11094,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11053,7 +11136,162 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxDeploymentPage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deploySandbox: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                sandboxId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    name: string;
+                    /**
+                     * Format: binary
+                     * @description Source tar.gz archive, limited to 32 MiB compressed and expanded.
+                     */
+                    code: string;
+                    /**
+                     * @description Memory in MiB. Defaults to 1024 when omitted.
+                     * @enum {integer}
+                     */
+                    memory_mb?: 1024 | 2048;
+                    /** @description JSON array of application ports that must become ready before activation, for example [8080]. */
+                    ports?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Deployment queued or replayed */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDeployment"];
+                };
+            };
+            /** @description Invalid source (400), denied access (401, 403), conflicting retry (409), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes or custom templates are not available in this environment. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a sandbox deployment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDeployment"];
+                };
+            };
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxDeploymentLogs: {
+        parameters: {
+            query: {
+                region: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read sandbox deployment build logs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxBuildLogPage"];
+                };
+            };
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSandboxDeploymentSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sandboxId: string;
+                deploymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Download the retained custom sandbox source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11094,7 +11332,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSessionPage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11131,7 +11369,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11168,7 +11406,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxExecutionResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11199,7 +11437,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11230,7 +11468,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11261,7 +11499,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11292,7 +11530,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11329,7 +11567,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxCommandResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11364,7 +11602,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxFileResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11397,7 +11635,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11431,7 +11669,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11461,7 +11699,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11496,7 +11734,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxAccess"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -18007,7 +18245,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - custom domains require SUPERAGENT plan, or a managed TLS request would exceed the account's managed TLS certificate limit */
+            /** @description Forbidden - the plan does not include custom domains, or a managed TLS request would exceed the account's managed TLS certificate limit */
             403: {
                 headers: {
                     [name: string]: unknown;

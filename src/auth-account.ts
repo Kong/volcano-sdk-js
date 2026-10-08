@@ -6,6 +6,7 @@ import {
   assertAuthUser,
   assertCompleteSession,
   type CompleteSessionFields,
+  isCompleteSession,
   validateCompleteSession,
 } from './auth-validation.ts';
 import { AuthSessionChangedError } from './errors.ts';
@@ -178,11 +179,12 @@ export function setSession(host: AuthAccountHost, session: unknown): Promise<Cur
       error: new TypeError('Session must be cloneable'),
     });
   }
-  const validationError = validateCompleteSession(ownedSession);
-  if (validationError !== null) {
-    return Promise.resolve({ data: { session: null }, error: validationError });
+  if (!isCompleteSession(ownedSession)) {
+    return Promise.resolve({
+      data: { session: null },
+      error: validateCompleteSession(ownedSession),
+    });
   }
-  assertCompleteSession(ownedSession);
   host._adoptSessionInMemory(ownedSession);
   return host.getSession();
 }

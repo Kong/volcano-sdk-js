@@ -1,6 +1,11 @@
 import { defineConfig, defineTransformer } from 'orval';
 
 const sdkOperations = new Set([
+  'getSandboxDeploymentLogs',
+  'deploySandbox',
+  'listSandboxDeployments',
+  'getSandboxDeployment',
+  'getSandboxDeploymentSource',
   'listSandboxPresets',
   'listSandboxes',
   'createSandbox',

@@ -165,6 +165,64 @@ test('sign-in preserves an omitted cookie refresh token without inventing creden
   );
 });
 
+test('sign-in rejects a token response without an integer lifetime before adopting it', async () => {
+  const host = fixture();
+  const adopt = jest.fn<AuthAccountHost['_setSession']>(() => true);
+  host._setSession = adopt;
+  host._transport.authSignin = () =>
+    Promise.resolve({
+      data: {
+        access_token: 'access',
+        refresh_token: 'refresh',
+        token_type: 'Bearer',
+        expires_in: 1.5,
+        user,
+      },
+      status: 200,
+      headers: new Headers(),
+    });
+
+  await expect(signIn(host, credentials)).rejects.toThrow('Auth expires_in must be an integer');
+  expect(adopt).not.toHaveBeenCalled();
+});
+
+test.each([
+  [
+    { access_token: 'access', expires_in: 3600, user },
+    'Session refresh_token must be a non-empty string',
+  ],
+  [
+    { access_token: 'access', refresh_token: 'refresh', expires_in: 1.5, user },
+    'Auth expires_in must be an integer',
+  ],
+])('anonymous sign-in rejects an incomplete session before adopting it', async (data, message) => {
+  const host = fixture();
+  const adopt = jest.fn<AuthAccountHost['_setSession']>(() => true);
+  host._setSession = adopt;
+  host._anonFetch = () => Promise.resolve({ ok: true, status: 200, data, error: null });
+
+  await expect(signInAnonymously(host, {})).rejects.toThrow(message);
+  expect(adopt).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['updateUser', (host: AuthAccountHost) => updateUser(host, { metadata: { plan: 'pro' } })],
+  [
+    'convertAnonymous',
+    (host: AuthAccountHost) => convertAnonymous(host, { ...credentials, metadata: {} }),
+  ],
+])('%s rejects an incomplete wire user without adopting it', async (_name, action) => {
+  const host = fixture();
+  host._authFetchWithContext = () =>
+    Promise.resolve({
+      result: { ok: true, status: 200, data: { user: { id: 'user-1' } }, error: null },
+      context,
+    });
+
+  await expect(action(host)).rejects.toThrow('Auth user email must be a string');
+  expect(host.currentUser).toBeNull();
+});
+
 test('getUser rejects a malformed successful response before adopting a user', async () => {
   const host = fixture();
   host._authFetchWithContext = () =>

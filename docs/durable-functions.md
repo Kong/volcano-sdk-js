@@ -532,11 +532,21 @@ that start and read executions — is in
 
 ## Starting and reading executions
 
-Nothing in this module starts an execution. `volcano.durable.start` does, from
-another function, a backend holding a service key, or a browser holding an anon
-key for a public durable function. A signed-in user's session is used ahead of
-the anon key when there is one, the same as an invoke, which is what lets a
-signed-in user start a durable function that is not public:
+Nothing in this module starts an execution. `volcano.durable.start` does, with
+the same credential an invoke would send: a signed-in user's session when there
+is one, otherwise the client's anon or service key. The durable function's
+[visibility](/platform/functions/durable-functions#who-can-start-executions)
+decides who may start it, the same as for an invoke:
+
+| Visibility          | Service keys and schedulers | Your project's signed-in users | Anon keys with `functions.invoke` |
+| ------------------- | --------------------------- | ------------------------------ | --------------------------------- |
+| `private` (default) | Yes                         | No                             | No                                |
+| `authenticated`     | Yes                         | Yes                            | No                                |
+| `public`            | Yes                         | Yes                            | Yes                               |
+
+Signed-in users include anonymous sign-ins. Keep a durable function `private`
+when only your own functions and backends start it. The call is the same
+whatever the credential:
 
 ```javascript
 const { data, error } = await volcano.durable.start(
@@ -560,9 +570,10 @@ is at most 255 characters; a longer one is refused by `start` itself, with
 `start` resolves rather than throws when the platform refuses. `status` carries
 why — `400` for input that is not JSON, or an execution name holding anything
 but letters, digits, `-`, `_` and `.`,
-`401` for a credential the endpoint does not accept, `403` for an anon key
-starting a durable function that is not public, `404` for a name that is not a
-durable function in this project, `409` while the function is still
+`401` for a credential the endpoint does not accept, `403` for an anon key on an
+`authenticated` function or without `functions.invoke`, `404` for a name that
+is not a durable function in this project or is a `private` one and the caller
+is not a service key, `409` while the function is still
 provisioning or has no deployed region, `413` for an input over 256 KiB, `429`
 for a project with too many executions in flight for its plan or out of either
 durable allowance, and `503` where durable execution is unavailable. `409` is

@@ -106,6 +106,18 @@ test('a successful renewal validates the returned lease fields', async () => {
   );
 });
 
+test('renew and release validate the key and lease before sending a request', async () => {
+  const { api, release, authFetch } = fixture();
+  await expect(api.renew('leader', { ...lease, key: 'follower' }, { ttl: 10 })).rejects.toThrow(
+    'lease must belong to the requested lock and include its token',
+  );
+  await expect(api.release('../leader', { ...lease, key: '../leader' })).rejects.toThrow(
+    'lock key must match',
+  );
+  expect(authFetch).not.toHaveBeenCalled();
+  expect(release).not.toHaveBeenCalled();
+});
+
 test('withLock refuses inconsistent acquisition results without invoking the callback', async () => {
   const { api } = fixture();
   const callback = jest.fn(() => 'done');

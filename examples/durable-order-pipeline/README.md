@@ -17,7 +17,7 @@ machine. Here it is four lines in the middle of the handler.
 | `volcano/functions/order-pipeline/db.js`    | The work each step does, behind one object, so the handler reads as a flow.      |
 | `volcano/functions/orders-api/index.js`     | A standard function that starts executions, reports status, and records reviews. |
 | `volcano/migrations/001_orders.sql`         | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.      |
-| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`.                                    |
+| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`, and who can call each function.    |
 
 ## The pipeline
 
@@ -54,7 +54,9 @@ Three things this demonstrates:
 ## Deploy it
 
 Needs the [Volcano CLI](https://volcano.dev/cli), a project, and `volcano login`
-plus `volcano use <project>`.
+plus `volcano use <project>`. The manifest declares `visibility`, which needs
+CLI 0.42.0 or later: earlier releases reject the field, and every command that
+reads the manifest fails with it, `volcano cloud functions deploy` included.
 
 ```bash
 # 1. Variables first, so the handlers have them on their first run.
@@ -77,10 +79,40 @@ volcano cloud migrations deploy --all -d app
 
 ## Run it
 
-Submit an order as a signed-in user:
+`orders-api` acts for the user in `__volcano_auth`, so call it as a signed-in
+user of the project. `volcano cloud functions invoke` sends the CLI's service
+key, which carries no user, so `orders-api` answers it with `401` by design.
+
+Enable email and password sign-in, create a user, and set `VOLCANO_ANON_KEY`,
+`VOLCANO_USER_EMAIL`, and `VOLCANO_USER_PASSWORD`, as in
+[Getting started](../../docs/getting-started.md). Then save this as
+`call-orders-api.mjs` next to an install of `@volcano.dev/sdk`:
+
+```javascript
+import { VolcanoClient } from '@volcano.dev/sdk';
+
+const volcano = new VolcanoClient({
+  apiUrl: process.env.VOLCANO_API_URL ?? 'https://api.volcano.dev',
+  anonKey: process.env.VOLCANO_ANON_KEY,
+});
+const { error: signInError } = await volcano.auth.signIn({
+  email: process.env.VOLCANO_USER_EMAIL,
+  password: process.env.VOLCANO_USER_PASSWORD,
+});
+if (signInError) throw signInError;
+
+const { data, status, error } = await volcano.functions.invoke(
+  'orders-api',
+  JSON.parse(process.argv[2]),
+);
+if (error) throw error;
+console.log(status, data);
+```
+
+Submit an order:
 
 ```bash
-volcano cloud functions invoke orders-api --payload '{
+node call-orders-api.mjs '{
   "action": "submit",
   "items": [
     { "sku": "VOL-1", "quantity": 2, "price_cents": 1999 },
@@ -107,7 +139,7 @@ volcano cloud durable executions get order-pipeline <execution-id>
 Approve the order, and the same execution resumes and dispatches it:
 
 ```bash
-volcano cloud functions invoke orders-api --payload '{
+node call-orders-api.mjs '{
   "action": "review", "order_id": "9c1f…", "decision": "approved"
 }'
 

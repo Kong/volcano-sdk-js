@@ -344,7 +344,9 @@ if (error) {
   // Pre-flight / caller errors stay plain Error (message is case-sensitive).
   switch (true) {
     case error.message.includes('function not found'):
-      console.error('Developer error: Invalid function name');
+      // error.status is 404. A private function, or any function this caller
+      // may not invoke, looks the same as a missing one.
+      console.error('Developer error: unknown function, or its visibility refuses this caller');
       break;
     default:
       showError('Operation failed. Please try again.');
@@ -392,8 +394,8 @@ if (error) {
       break;
     case 403:
     case 404:
-      // A private function started with an anon key, or a name this project
-      // has no durable function for. Neither improves on a retry.
+      // A caller the function's visibility does not admit, or a name this
+      // project has no durable function for. Neither improves on a retry.
       console.error('Developer error:', error.message);
       break;
     case null:

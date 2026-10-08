@@ -20,11 +20,13 @@ export type CreateSandboxSessionRequest = (unknown & {
      */
   region: string;
   /**
+     * Inherits the template TTL when omitted (3600 seconds for a new template).
      * @minimum 30
      * @maximum 28800
      */
   max_duration_seconds?: number;
   /**
+     * Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout.
      * @minimum 0
      * @maximum 28800
      */

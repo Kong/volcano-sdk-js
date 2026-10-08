@@ -83,6 +83,91 @@ export const deleteSandbox = async (id, sandboxId, options) => {
         method: 'DELETE'
     });
 };
+export const getDeploySandboxUrl = (id, sandboxId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments`;
+};
+/**
+ * Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+ * @summary Build and deploy a custom sandbox template
+ */
+export const deploySandbox = async (id, sandboxId, deploySandboxBody, options) => {
+    const formData = new FormData();
+    formData.append(`name`, deploySandboxBody.name);
+    formData.append(`code`, deploySandboxBody.code);
+    if (deploySandboxBody.memory_mb !== undefined) {
+        formData.append(`memory_mb`, deploySandboxBody.memory_mb.toString());
+    }
+    if (deploySandboxBody.ports !== undefined) {
+        formData.append(`ports`, deploySandboxBody.ports);
+    }
+    return volcanoFetch(getDeploySandboxUrl(id, sandboxId), {
+        ...options,
+        method: 'POST',
+        body: formData
+    });
+};
+export const getListSandboxDeploymentsUrl = (id, sandboxId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments`;
+};
+/**
+ * @summary List sandbox deployment history
+ */
+export const listSandboxDeployments = async (id, sandboxId, params, options) => {
+    return volcanoFetch(getListSandboxDeploymentsUrl(id, sandboxId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentUrl = (id, sandboxId, deploymentId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}`;
+};
+/**
+ * @summary Get a sandbox deployment
+ */
+export const getSandboxDeployment = async (id, sandboxId, deploymentId, options) => {
+    return volcanoFetch(getGetSandboxDeploymentUrl(id, sandboxId, deploymentId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentLogsUrl = (id, sandboxId, deploymentId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs`;
+};
+/**
+ * @summary Read sandbox deployment build logs
+ */
+export const getSandboxDeploymentLogs = async (id, sandboxId, deploymentId, params, options) => {
+    return volcanoFetch(getGetSandboxDeploymentLogsUrl(id, sandboxId, deploymentId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentSourceUrl = (id, sandboxId, deploymentId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/source`;
+};
+/**
+ * @summary Download the retained custom sandbox source
+ */
+export const getSandboxDeploymentSource = async (id, sandboxId, deploymentId, options) => {
+    return volcanoFetch(getGetSandboxDeploymentSourceUrl(id, sandboxId, deploymentId), {
+        ...options,
+        method: 'GET'
+    });
+};
 export const getListSandboxSessionsUrl = (id, params) => {
     const normalizedParams = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
