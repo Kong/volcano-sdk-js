@@ -123,8 +123,8 @@ functions:
     visibility: public
 ```
 
-Deploying `visibility` needs a Volcano CLI release after 0.36.0; 0.36.0 rejects
-the field. `public: false` still means `authenticated` on any version.
+Deploying `visibility` needs Volcano CLI 0.42.0 or later; earlier releases
+reject the field. `public: false` still means `authenticated` on any version.
 
 A caller the level does not admit gets an `error`, and the function does not
 run. `invoke` looks the name up first, and the lookup answers a refused caller
