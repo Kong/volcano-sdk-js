@@ -17324,6 +17324,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The request body is larger than 16 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     denyDurableApproval: {
@@ -17386,6 +17395,15 @@ export interface operations {
              *     `approval_cancelled`.
              */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 16 KiB */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

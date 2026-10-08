@@ -1478,10 +1478,15 @@ export type approveDurableApprovalResponse409 = {
   status: 409
 }
 
+export type approveDurableApprovalResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type approveDurableApprovalResponseSuccess = (approveDurableApprovalResponse200) & {
   headers: Headers;
 };
-export type approveDurableApprovalResponseError = (approveDurableApprovalResponse400 | approveDurableApprovalResponse403 | approveDurableApprovalResponse404 | approveDurableApprovalResponse409) & {
+export type approveDurableApprovalResponseError = (approveDurableApprovalResponse400 | approveDurableApprovalResponse403 | approveDurableApprovalResponse404 | approveDurableApprovalResponse409 | approveDurableApprovalResponse413) & {
   headers: Headers;
 };
 
@@ -1561,10 +1566,15 @@ export type denyDurableApprovalResponse409 = {
   status: 409
 }
 
+export type denyDurableApprovalResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type denyDurableApprovalResponseSuccess = (denyDurableApprovalResponse200) & {
   headers: Headers;
 };
-export type denyDurableApprovalResponseError = (denyDurableApprovalResponse400 | denyDurableApprovalResponse403 | denyDurableApprovalResponse404 | denyDurableApprovalResponse409) & {
+export type denyDurableApprovalResponseError = (denyDurableApprovalResponse400 | denyDurableApprovalResponse403 | denyDurableApprovalResponse404 | denyDurableApprovalResponse409 | denyDurableApprovalResponse413) & {
   headers: Headers;
 };
 
