@@ -5,7 +5,7 @@ description: 'Write functions that checkpoint their progress and resume where th
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to a year, far longer than a single invocation is allowed.
 
-`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — is owner-scoped, so it belongs on your backend, the [CLI](/cli/durable-functions), or the dashboard.
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — and deciding the [approvals](#ctxwaitforapprovalname-options) it asks for are owner-scoped, so they belong on your backend, the [CLI](/cli/durable-functions), or the dashboard.
 
 ```javascript
 const { durable } = require('@volcano.dev/sdk/durable');
@@ -229,15 +229,15 @@ so `(state, { log, attempt })` works when a check wants to log which round it is
 on.
 
 ```javascript
-const approval = await ctx.waitUntil(
-  'await-approval',
+const report = await ctx.waitUntil(
+  'await-report',
   async (state) => {
-    const row = await db.approvals.find(input.order_id);
-    return { ...state, status: row?.status ?? 'pending', checks: state.checks + 1 };
+    const job = await reports.status(input.report_id);
+    return { ...state, status: job.status, checks: state.checks + 1 };
   },
   {
-    initialState: { status: 'pending', checks: 0 },
-    until: (state) => state.status !== 'pending',
+    initialState: { status: 'running', checks: 0 },
+    until: (state) => state.status !== 'running',
     interval: '30s',
     maxInterval: '10m',
     maxAttempts: 200,
@@ -264,9 +264,102 @@ Every check is a metered operation, and the 200 above is 200 of them, so buy the
 wait with a longer `interval` rather than with more checks where you can. See
 [Limits](#limits-and-what-an-operation-costs).
 
-This is how a durable function waits on the outside world: an approval, a
-third-party job, a file that has to land. Whatever signals it — a webhook, an
-endpoint of yours, another function — writes somewhere the check can read.
+This is how a durable function waits on the outside world: a third-party job, a
+file that has to land, a row another system writes. Whatever signals it — a
+webhook, an endpoint of yours, another function — writes somewhere the check can
+read. To wait on a person's sign-off, use
+[`ctx.waitForApproval`](#ctxwaitforapprovalname-options) instead: it costs no
+checks while it waits, and Volcano stores the request and the decision for you.
+
+## `ctx.waitForApproval(name, options)`
+
+Asks the project's owners to approve or deny, and suspends until one of them
+decides. The execution is not running while it waits, and resumes with the
+decision.
+
+```javascript
+const decision = await ctx.waitForApproval('ship-order', {
+  title: `Ship order ${input.order_id}?`,
+  description: 'The total is over the auto-ship limit.',
+  details: { order_id: input.order_id, total: input.total },
+  timeout: '3d',
+});
+
+if (!decision.approved) {
+  // 'denied' or 'expired'
+  return { shipped: false, reason: decision.status, comment: decision.comment };
+}
+
+await ctx.step('ship', () => ship(input.order_id));
+```
+
+The request shows up under **Approvals** in the dashboard, with the function and
+execution that asked. Decide it there, from a terminal, or with
+[`durable.approvals`](#deciding-approvals):
+
+```bash
+volcano cloud durable approvals list
+volcano cloud durable approvals approve <approval-id> --comment "Address checked"
+volcano cloud durable approvals deny <approval-id> --comment "Customer cancelled"
+```
+
+| Option        | Type     | Description                                                                                                   |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `title`       | `string` | Required. What the reviewer sees first. Up to 200 characters.                                                 |
+| `description` | `string` | Longer context for the reviewer. Up to 4,000 characters.                                                      |
+| `details`     | any      | A JSON value shown with the request, such as the record under review. The whole request is limited to 64 KiB. |
+| `timeout`     | duration | How long reviewers have to decide. Unset, the approval stays open as long as the execution.                   |
+
+The name is what the approval is recorded under in the execution history, like
+a step's name. Keep it short: it is up to 237 printable ASCII characters. No
+text, `details` included, may contain a NUL character.
+
+A denial and an expiry are decisions like an approval, so the call resolves
+rather than throws: branch on `approved`.
+
+| Field       | Type                                  | Description                                                                                                                       |
+| ----------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `approved`  | `boolean`                             | `true` only when the status is `approved`.                                                                                        |
+| `status`    | `'approved' \| 'denied' \| 'expired'` | `expired` when `timeout` ran out before anyone decided.                                                                           |
+| `comment`   | `string`                              | The reviewer's comment, or `''` when they left none.                                                                              |
+| `decidedBy` | `{ id, email }` \| `null`             | Who decided. `null` when the approval expired, or when the deciding account was deleted before the decision reached the workflow. |
+| `decidedAt` | `string` \| `null`                    | When they decided, as an ISO 8601 timestamp. `null` on expiry.                                                                    |
+
+Like every operation, the decision is recorded: a resumed execution gets the same
+one back, and the request is registered once however many times the handler
+replays. Approvals inside `ctx.parallel`, `ctx.map`, or `ctx.child` work the same
+way, so a handler can ask several people at once.
+
+The call throws, failing the execution unless you catch it, when the options are
+invalid or Volcano refuses the request — for example when the execution already
+holds too many pending approvals. Invalid options include `details` that cannot
+be serialized as JSON, such as a `BigInt` or a circular object, and a request
+over 64 KiB; both are refused before the approval is opened. The request goes to
+`VOLCANO_PLATFORM_API_URL`, which Volcano sets on every durable function, so a
+handler deployed as a standard function cannot request an approval.
+
+Volcano can take a moment to see a new execution or approval, and the SDK
+retries the request for up to 30 seconds while Volcano does not know the
+execution yet, is not ready for the approval, throttles it, or is unavailable.
+It then throws the last failure. A request that arrives after the approval's
+`timeout` has already run out is not an error: the call resolves `expired`.
+
+Invalid options throw a `TypeError`. A refusal, or a failure that outlasts the
+retries, reaches the handler as the durable runtime's `CallbackSubmitterError`,
+which keeps only the message. The message carries the status and error code,
+or the network failure:
+
+```javascript
+try {
+  await ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
+} catch (error) {
+  // "Volcano refused the approval request (409 too_many_pending_approvals): ..."
+  if (error.message.includes('too_many_pending_approvals')) {
+    return { shipped: false, reason: 'too many approvals waiting' };
+  }
+  throw error;
+}
+```
 
 ## `ctx.map(name?, items, fn, options?)`
 
@@ -549,6 +642,56 @@ repeat, and one that has already finished reports the state it is in.
 All three answer the same `{ data, status, error }` envelope as `start`, with
 `404` for an execution or durable function this project does not have.
 
+### Deciding approvals
+
+`ownerClient.durable.approvals` reads and decides the approvals executions ask
+for with [`ctx.waitForApproval`](#ctxwaitforapprovalname-options). Reading
+accepts the owner's platform user token or a project access token. Deciding
+takes a person, so approve and deny need the platform user token, and a project
+access token gets `403`.
+
+```javascript
+const { data: pending } = await ownerClient.durable.approvals.list(projectId, {
+  status: 'pending',
+  function: 'order-pipeline',
+});
+
+for (const approval of pending?.data ?? []) {
+  console.log(approval.id, approval.title, approval.details);
+}
+
+const { data, error } = await ownerClient.durable.approvals.approve(projectId, approvalId, {
+  comment: 'Address checked',
+});
+if (error) {
+  throw error;
+}
+console.log(data.status); // 'approved'; the execution resumes with the decision
+```
+
+| Method                                         | Description                                                                         |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `list(projectId, options?)`                    | Approvals, most recent first. Pages like `durable.list`.                            |
+| `get(projectId, approvalId)`                   | One approval, with its `decision` once it has one.                                  |
+| `stats(projectId, options?)`                   | Counts by status, approval rate, and time to decision. The last 30 days by default. |
+| `approve(projectId, approvalId, { comment? })` | Approve. The comment is up to 2,000 characters.                                     |
+| `deny(projectId, approvalId, { comment? })`    | Deny, with the same comment.                                                        |
+
+`list` takes `status` (`pending`, `approved`, `denied`, `expired`, or
+`cancelled`), `function` (a durable function's name or id), `executionId`,
+`from` and `to` (RFC 3339 timestamps), `page`, and `limit`. `stats` takes
+`function`, `from`, and `to`, over a window of at most 366 days.
+
+An approval is `cancelled` when its execution ends before anyone decides, so the
+workflow never sees that status. Approvals and their decisions are kept for a
+year, independently of the execution's own retention.
+
+Each method answers the same `{ data, status, error }` envelope. Repeating a
+decision returns the approval unchanged. A conflicting decision, or deciding an
+approval that expired or was cancelled, is `409`, and `error.code` says which:
+`approval_decided`, `approval_expired`, or `approval_cancelled`. An approval this
+project does not have is `404`.
+
 A function that has to report back to an app holding only an anon key writes
 what it produced where the app can read it — a table, a bucket — rather than
 having the browser poll the execution. See
@@ -571,8 +714,9 @@ Durable work is metered on those three allowances rather than on the request
 allowance a standard invocation spends. Every context operation is one
 operation: the execution itself, each `step` attempt — a retry is another
 attempt — each `wait`, each `waitUntil` check, each `child` context, and each
-`map` item or `parallel` branch. Time is not charged, so a suspended execution
-costs nothing while it waits.
+`map` item or `parallel` branch. An approval is three: its own context, the
+wait for its decision, and the step that registers it. Time is not charged, so
+a suspended execution costs nothing while it waits.
 
 That makes the shape of a handler its cost. `ctx.map` over ten thousand items is
 ten thousand operations and will fail on the per-execution ceiling; batch the
@@ -593,19 +737,18 @@ volcano start
 volcano durable deploy --all
 volcano durable start order-pipeline --input '{"order_id":4417}' --name order-4417
 volcano durable executions get order-pipeline <execution-id>
+volcano durable approvals approve <approval-id>
 ```
 
 Local waits resolve immediately by default while preserving checkpoint and replay
 behavior. Set `LOCAL_DURABLE_REAL_TIME=true` before `volcano start` when wait
-timing must match the deployed function. Local executions persist across
-`volcano stop` and `volcano start`.
+timing must match the deployed function. An approval's `timeout` always runs in
+real time. Local executions persist across `volcano stop` and `volcano start`.
 
 ## Not available yet
 
-- **Callbacks.** The runtime can suspend on an externally-completed callback,
-  but Volcano exposes no callback completion API, so the facade leaves it out.
-  Wait on your own state with `ctx.waitUntil` instead. The local engine rejects
-  raw callback operations instead of leaving an execution suspended forever.
+- **Other external signals.** Approvals are the only outside completion Volcano
+  offers. For anything else, wait on your own state with `ctx.waitUntil`.
 - **Durable invoke.** Call another function from inside a step —
   `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
   than chaining durable executions.

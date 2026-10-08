@@ -4,7 +4,7 @@ import type { DurableExecution, PaginatedDurableExecutions } from './sdk-public-
 
 const MAX_EXECUTION_NAME_LENGTH = 255;
 
-interface DurableResult<T> {
+export interface DurableResult<T> {
   data: T | null;
   status: number | null;
   error: Error | null;
@@ -145,7 +145,7 @@ export class DurableFacade {
   }
 }
 
-function failure<T>(error: Error): DurableResult<T> {
+export function failure<T>(error: Error): DurableResult<T> {
   return { data: null, status: null, error };
 }
 
@@ -192,7 +192,9 @@ function listParams(options: DurableOptions): DurableOptions {
   return params;
 }
 
-async function ownerSession(client: DurableClient): Promise<Error | null> {
+export async function ownerSession(
+  client: Pick<DurableClient, 'accessToken' | '_oauthExchangeError' | '_completeOAuthExchange'>,
+): Promise<Error | null> {
   await client._completeOAuthExchange();
   if (client.accessToken === null || client.accessToken.length === 0) {
     return client._oauthExchangeError ?? new Error('No active session');
@@ -200,7 +202,7 @@ async function ownerSession(client: DurableClient): Promise<Error | null> {
   return null;
 }
 
-async function durableResult<T>(
+export async function durableResult<T>(
   message: string,
   validate: (value: unknown) => value is T,
   call: () => Promise<unknown>,

@@ -91,6 +91,7 @@ import {
   QueryBuilder as RuntimeQueryBuilder,
   queryDatabaseSelectTransport,
 } from './database-query.ts';
+import { DurableApprovalsFacade } from './durable-approvals-facade.ts';
 import { DurableFacade } from './durable-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
@@ -115,9 +116,14 @@ import {
 import { functionInvokeUrl, sanitizeFunctionIdentifierForHost } from './function-url.ts';
 import {
   acquireProjectLock,
+  approveDurableApproval,
   authSignin,
+  denyDurableApproval,
   downloadStorageObject,
+  getDurableApproval,
+  getDurableApprovalStats,
   getDurableExecution,
+  listDurableApprovals,
   listDurableExecutions,
   releaseProjectLock,
   startDurableExecutionFromApplication,
@@ -131,6 +137,7 @@ import { SandboxesApi } from './sandboxes.ts';
 import type {
   Auth,
   Durable,
+  DurableApprovals,
   Functions,
   JsonValue,
   Logs,
@@ -192,9 +199,14 @@ const STORAGE_KEY_REFRESH_TOKEN = 'volcano_refresh_token';
 // caller has to read.
 const GENERATED_TRANSPORT = {
   acquireProjectLock,
+  approveDurableApproval,
   authSignin,
+  denyDurableApproval,
   downloadStorageObject,
+  getDurableApproval,
+  getDurableApprovalStats,
   getDurableExecution,
+  listDurableApprovals,
   listDurableExecutions,
   queryDatabaseSelect: queryDatabaseSelectTransport,
   releaseProjectLock,
@@ -207,13 +219,28 @@ type DurableTransportMethod =
   | 'startDurableExecutionFromApplication'
   | 'getDurableExecution'
   | 'listDurableExecutions'
-  | 'stopDurableExecution';
+  | 'stopDurableExecution'
+  | 'listDurableApprovals'
+  | 'getDurableApprovalStats'
+  | 'getDurableApproval'
+  | 'approveDurableApproval'
+  | 'denyDurableApproval';
 
 type RuntimeTransport = {
   [K in keyof typeof GENERATED_TRANSPORT]: K extends DurableTransportMethod
     ? (...args: Parameters<(typeof GENERATED_TRANSPORT)[K]>) => Promise<unknown>
     : (typeof GENERATED_TRANSPORT)[K];
 };
+
+function durableApprovals(facade: DurableApprovalsFacade): DurableApprovals {
+  return {
+    list: facade.list.bind(facade),
+    get: facade.get.bind(facade),
+    stats: facade.stats.bind(facade),
+    approve: facade.approve.bind(facade),
+    deny: facade.deny.bind(facade),
+  };
+}
 
 function requireAnonKey(anonKey: unknown): asserts anonKey is string {
   if (typeof anonKey !== 'string' || anonKey === '') {
@@ -379,6 +406,7 @@ class VolcanoAuth {
       get: this.getDurableExecution.bind(this),
       list: this.listDurableExecutions.bind(this),
       stop: this.stopDurableExecution.bind(this),
+      approvals: durableApprovals(new DurableApprovalsFacade(this)),
     };
 
     this.logs = {

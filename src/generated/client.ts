@@ -17,13 +17,19 @@ import type {
   DatabaseQueryResult,
   DatabaseSelectRequest,
   DeploySandboxBody,
+  DurableApproval,
+  DurableApprovalDecisionRequest,
+  DurableApprovalStats,
   DurableExecution,
   Error,
+  GetDurableApprovalStatsParams,
   GetSandboxDeploymentLogsParams,
+  ListDurableApprovalsParams,
   ListDurableExecutionsParams,
   ListSandboxDeploymentsParams,
   ListSandboxSessionsParams,
   ListSandboxesParams,
+  PaginatedDurableApprovals,
   PaginatedDurableExecutions,
   ProjectLockLease,
   ProjectLockLeaseRequest,
@@ -1543,6 +1549,348 @@ export const stopDurableExecution = async (id: string,
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type listDurableApprovalsResponse200 = {
+  data: PaginatedDurableApprovals
+  status: 200
+}
+
+export type listDurableApprovalsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type listDurableApprovalsResponseSuccess = (listDurableApprovalsResponse200) & {
+  headers: Headers;
+};
+export type listDurableApprovalsResponseError = (listDurableApprovalsResponse400) & {
+  headers: Headers;
+};
+
+export type listDurableApprovalsResponse = (listDurableApprovalsResponseSuccess | listDurableApprovalsResponseError)
+
+export const getListDurableApprovalsUrl = (id: string,
+    params?: ListDurableApprovalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/durable-approvals?${stringifiedParams}` : `/projects/${id}/durable-approvals`
+}
+
+/**
+ * Lists the approvals durable workflows in the project have requested,
+ * newest first. Pending approvals are the ones a workflow is waiting on;
+ * decided, expired, and cancelled ones are kept for a year.
+ *
+ * Project access tokens can list approvals, including read-only ones.
+ * @summary List durable approvals
+ */
+export const listDurableApprovals = async (id: string,
+    params?: ListDurableApprovalsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<listDurableApprovalsResponse> => {
+
+  return volcanoFetch<listDurableApprovalsResponse>(getListDurableApprovalsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDurableApprovalStatsResponse200 = {
+  data: DurableApprovalStats
+  status: 200
+}
+
+export type getDurableApprovalStatsResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type getDurableApprovalStatsResponseSuccess = (getDurableApprovalStatsResponse200) & {
+  headers: Headers;
+};
+export type getDurableApprovalStatsResponseError = (getDurableApprovalStatsResponse400) & {
+  headers: Headers;
+};
+
+export type getDurableApprovalStatsResponse = (getDurableApprovalStatsResponseSuccess | getDurableApprovalStatsResponseError)
+
+export const getGetDurableApprovalStatsUrl = (id: string,
+    params?: GetDurableApprovalStatsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/projects/${id}/durable-approvals/stats?${stringifiedParams}` : `/projects/${id}/durable-approvals/stats`
+}
+
+/**
+ * Counts the project's approvals by outcome over a time window, overall,
+ * per workflow, and per day. The window defaults to the last 30 days and
+ * can cover up to a year. An approval is counted on the day it was
+ * requested.
+ *
+ * Project access tokens can read statistics, including read-only ones.
+ * @summary Get durable approval statistics
+ */
+export const getDurableApprovalStats = async (id: string,
+    params?: GetDurableApprovalStatsParams, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableApprovalStatsResponse> => {
+
+  return volcanoFetch<getDurableApprovalStatsResponse>(getGetDurableApprovalStatsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDurableApprovalResponse200 = {
+  data: DurableApproval
+  status: 200
+}
+
+export type getDurableApprovalResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDurableApprovalResponseSuccess = (getDurableApprovalResponse200) & {
+  headers: Headers;
+};
+export type getDurableApprovalResponseError = (getDurableApprovalResponse404) & {
+  headers: Headers;
+};
+
+export type getDurableApprovalResponse = (getDurableApprovalResponseSuccess | getDurableApprovalResponseError)
+
+export const getGetDurableApprovalUrl = (id: string,
+    approvalId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-approvals/${approvalId}`
+}
+
+/**
+ * Returns one approval: what the workflow asked, the durable function
+ * and execution that asked it, its deadline, and the decision once one
+ * is made.
+ *
+ * Project access tokens can read approvals, including read-only ones.
+ * @summary Get a durable approval
+ */
+export const getDurableApproval = async (id: string,
+    approvalId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableApprovalResponse> => {
+
+  return volcanoFetch<getDurableApprovalResponse>(getGetDurableApprovalUrl(id,approvalId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type approveDurableApprovalResponse200 = {
+  data: DurableApproval
+  status: 200
+}
+
+export type approveDurableApprovalResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type approveDurableApprovalResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type approveDurableApprovalResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type approveDurableApprovalResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type approveDurableApprovalResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type approveDurableApprovalResponseSuccess = (approveDurableApprovalResponse200) & {
+  headers: Headers;
+};
+export type approveDurableApprovalResponseError = (approveDurableApprovalResponse400 | approveDurableApprovalResponse403 | approveDurableApprovalResponse404 | approveDurableApprovalResponse409 | approveDurableApprovalResponse413) & {
+  headers: Headers;
+};
+
+export type approveDurableApprovalResponse = (approveDurableApprovalResponseSuccess | approveDurableApprovalResponseError)
+
+export const getApproveDurableApprovalUrl = (id: string,
+    approvalId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-approvals/${approvalId}/approve`
+}
+
+/**
+ * Approves a pending approval. The workflow resumes with the decision.
+ *
+ * Only a person can decide: use the dashboard or a platform token from
+ * `volcano login`. Project access tokens are refused with `403`.
+ *
+ * Approving an approval that is already approved returns it unchanged.
+ * If the workflow cannot be reached right away, the decision still
+ * stands and Volcano keeps delivering it.
+ * @summary Approve a durable approval
+ */
+export const approveDurableApproval = async (id: string,
+    approvalId: string,
+    durableApprovalDecisionRequest?: DurableApprovalDecisionRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<approveDurableApprovalResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return volcanoFetch<approveDurableApprovalResponse>(getApproveDurableApprovalUrl(id,approvalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(durableApprovalDecisionRequest)
+  }
+);}
+
+
+
+export type denyDurableApprovalResponse200 = {
+  data: DurableApproval
+  status: 200
+}
+
+export type denyDurableApprovalResponse400 = {
+  data: Error
+  status: 400
+}
+
+export type denyDurableApprovalResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type denyDurableApprovalResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type denyDurableApprovalResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type denyDurableApprovalResponse413 = {
+  data: Error
+  status: 413
+}
+
+export type denyDurableApprovalResponseSuccess = (denyDurableApprovalResponse200) & {
+  headers: Headers;
+};
+export type denyDurableApprovalResponseError = (denyDurableApprovalResponse400 | denyDurableApprovalResponse403 | denyDurableApprovalResponse404 | denyDurableApprovalResponse409 | denyDurableApprovalResponse413) & {
+  headers: Headers;
+};
+
+export type denyDurableApprovalResponse = (denyDurableApprovalResponseSuccess | denyDurableApprovalResponseError)
+
+export const getDenyDurableApprovalUrl = (id: string,
+    approvalId: string,) => {
+
+
+
+
+  return `/projects/${id}/durable-approvals/${approvalId}/deny`
+}
+
+/**
+ * Denies a pending approval. The workflow resumes with the decision; a
+ * denial is a value the workflow branches on, not an error.
+ *
+ * Only a person can decide: use the dashboard or a platform token from
+ * `volcano login`. Project access tokens are refused with `403`.
+ *
+ * Denying an approval that is already denied returns it unchanged.
+ * If the workflow cannot be reached right away, the decision still
+ * stands and Volcano keeps delivering it.
+ * @summary Deny a durable approval
+ */
+export const denyDurableApproval = async (id: string,
+    approvalId: string,
+    durableApprovalDecisionRequest?: DurableApprovalDecisionRequest, options?: Parameters<typeof volcanoFetch>[1]): Promise<denyDurableApprovalResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return volcanoFetch<denyDurableApprovalResponse>(getDenyDurableApprovalUrl(id,approvalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(durableApprovalDecisionRequest)
   }
 );}
 

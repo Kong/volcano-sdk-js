@@ -1917,6 +1917,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/durable-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request an approval from inside a workflow
+         * @description Registers an approval request for a running durable execution. The
+         *     Volcano SDK calls this from `ctx.waitForApproval`; applications do not
+         *     call it directly.
+         *
+         *     `execution_ref` and `callback_id` are opaque values the SDK reads from
+         *     the running workflow. Together they are the request's credential, so
+         *     the operation takes no other authentication. The approval belongs to
+         *     the project that owns the execution, and expires when the workflow's
+         *     own approval timeout does.
+         *
+         *     Retrying is safe: a request for an approval that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["requestDurableApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List durable approvals
+         * @description Lists the approvals durable workflows in the project have requested,
+         *     newest first. Pending approvals are the ones a workflow is waiting on;
+         *     decided, expired, and cancelled ones are kept for a year.
+         *
+         *     Project access tokens can list approvals, including read-only ones.
+         */
+        get: operations["listDurableApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get durable approval statistics
+         * @description Counts the project's approvals by outcome over a time window, overall,
+         *     per workflow, and per day. The window defaults to the last 30 days and
+         *     can cover up to a year. An approval is counted on the day it was
+         *     requested.
+         *
+         *     Project access tokens can read statistics, including read-only ones.
+         */
+        get: operations["getDurableApprovalStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a durable approval
+         * @description Returns one approval: what the workflow asked, the durable function
+         *     and execution that asked it, its deadline, and the decision once one
+         *     is made.
+         *
+         *     Project access tokens can read approvals, including read-only ones.
+         */
+        get: operations["getDurableApproval"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a durable approval
+         * @description Approves a pending approval. The workflow resumes with the decision.
+         *
+         *     Only a person can decide: use the dashboard or a platform token from
+         *     `volcano login`. Project access tokens are refused with `403`.
+         *
+         *     Approving an approval that is already approved returns it unchanged.
+         *     If the workflow cannot be reached right away, the decision still
+         *     stands and Volcano keeps delivering it.
+         */
+        post: operations["approveDurableApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-approvals/{approvalId}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deny a durable approval
+         * @description Denies a pending approval. The workflow resumes with the decision; a
+         *     denial is a value the workflow branches on, not an error.
+         *
+         *     Only a person can decide: use the dashboard or a platform token from
+         *     `volcano login`. Project access tokens are refused with `403`.
+         *
+         *     Denying an approval that is already denied returns it unchanged.
+         *     If the workflow cannot be reached right away, the decision still
+         *     stands and Volcano keeps delivering it.
+         */
+        post: operations["denyDurableApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/frontends": {
         parameters: {
             query?: never;
@@ -2031,7 +2190,7 @@ export interface paths {
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
-         * Configure frontend custom domain (SUPERAGENT)
+         * Configure frontend custom domain
          * @description Configures one custom domain for a frontend.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
@@ -5356,9 +5515,9 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
-            /** @default 3600 */
+            /** @description Inherits the template TTL when omitted (3600 seconds for a new template). */
             max_duration_seconds?: number;
-            /** @default 0 */
+            /** @description Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout. */
             idle_timeout_seconds?: number;
         } & (unknown | unknown);
         SandboxCommandRequest: {
@@ -6147,7 +6306,7 @@ export interface components {
              * @example 18
              * @enum {string}
              */
-            pg_version: "15" | "16" | "17" | "18";
+            pg_version: "16" | "17" | "18";
             /**
              * @description Compute size tier (optional, defaults to volcano-db-xs).
              *     Determines autoscaling limits for the database.
@@ -6639,7 +6798,9 @@ export interface components {
              */
             table: string;
             /**
-             * @description Column values to insert
+             * @description Column values to insert. JSON objects and arrays are stored as JSON,
+             *     so send them to `json` or `jsonb` columns. For a Postgres array
+             *     column, send an array literal string such as `"{a,b}"`.
              * @example {
              *       "title": "My New Post",
              *       "content": "This is the content",
@@ -6657,7 +6818,9 @@ export interface components {
              */
             table: string;
             /**
-             * @description Column values to update
+             * @description Column values to update. JSON objects and arrays are stored as JSON,
+             *     so send them to `json` or `jsonb` columns. For a Postgres array
+             *     column, send an array literal string such as `"{a,b}"`.
              * @example {
              *       "title": "Updated Title",
              *       "status": "published"
@@ -8525,6 +8688,113 @@ export interface components {
             /** @description Whether there are more pages available */
             has_more: boolean;
         };
+        /** @description An approval a durable workflow requested. */
+        DurableApproval: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableApprovalStatus"];
+            /** @description The name the workflow gave the approval in `ctx.waitForApproval`. */
+            name: string;
+            title: string;
+            description: string;
+            /**
+             * @description The JSON value the workflow attached for the person deciding, as
+             *     given.
+             */
+            details?: unknown;
+            function: components["schemas"]["DurableApprovalFunction"];
+            execution: components["schemas"]["DurableApprovalExecution"];
+            /** Format: date-time */
+            requested_at: string;
+            /**
+             * Format: date-time
+             * @description When the approval expires if nobody decides. Null when the
+             *     workflow set no timeout; the approval then lasts as long as its
+             *     execution.
+             */
+            expires_at: string | null;
+            decision: components["schemas"]["DurableApprovalDecision"];
+        };
+        /**
+         * @description `pending` means the workflow is waiting for a decision. `approved` and
+         *     `denied` are decisions a person made. `expired` means the workflow's
+         *     approval timeout passed first, and `cancelled` means the execution
+         *     ended while the approval was still pending. Every status but `pending`
+         *     is final.
+         * @enum {string}
+         */
+        DurableApprovalStatus: "pending" | "approved" | "denied" | "expired" | "cancelled";
+        /** @description The registered approval, as the requesting workflow sees it. */
+        DurableApprovalRegistration: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableApprovalStatus"];
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        DurableApprovalStats: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            counts: components["schemas"]["DurableApprovalCounts"];
+            /**
+             * Format: double
+             * @description `approved / (approved + denied)`, from 0 to 1. Null when nothing in
+             *     the window was decided.
+             */
+            approval_rate: number | null;
+            /**
+             * Format: double
+             * @description Median time from request to decision. Null when nothing was decided.
+             */
+            median_seconds_to_decision: number | null;
+            /**
+             * Format: double
+             * @description 90th percentile time from request to decision. Null when nothing was decided.
+             */
+            p90_seconds_to_decision: number | null;
+            /**
+             * @description The ten workflows that requested the most approvals, most first.
+             *     The rest are summed in `other_functions`.
+             */
+            functions: components["schemas"]["DurableApprovalFunctionCounts"][];
+            other_functions: components["schemas"]["DurableApprovalCounts"];
+            /**
+             * @description One entry per UTC day in the window that has approvals, oldest
+             *     first. Days with none are omitted.
+             */
+            daily: components["schemas"]["DurableApprovalDailyCounts"][];
+        };
+        DurableApprovalDecisionRequest: {
+            /** @description A note for the workflow and the approval's history. */
+            comment?: string;
+        };
+        RequestDurableApprovalRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque approval reference, supplied by the SDK. */
+            callback_id: string;
+            name: string;
+            title: string;
+            description?: string;
+            /**
+             * @description Any JSON value to show the person deciding. The whole request is
+             *     limited to 64 KiB.
+             */
+            details?: unknown;
+        };
+        PaginatedDurableApprovals: {
+            data: components["schemas"]["DurableApproval"][];
+            /** @description Current page number (1-indexed) */
+            page: number;
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Total number of items across all pages */
+            total: number;
+            /** @description Whether there are more pages available */
+            has_more: boolean;
+        };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
             /** @description Current page number (1-indexed) */
@@ -8923,7 +9193,7 @@ export interface components {
             definition: string;
         };
         /**
-         * @description Custom domain with managed or BYOC TLS (SUPERAGENT plan). `tls` is required
+         * @description Custom domain with managed or BYOC TLS. `tls` is required
          *     when the domain is first created and optional afterwards. For an existing
          *     domain, omitting `tls` or sending only `tls.mode` keeps the stored
          *     certificate; new BYOC material for the same domain rotates the
@@ -8948,7 +9218,9 @@ export interface components {
             /** @description Deployed region ID (e.g. us-east-1). Asserted, never written; region IDs issued by earlier versions of the API match too. */
             region: string;
             /**
-             * @description PostgreSQL major version. Asserted, never written.
+             * @description PostgreSQL major version. Asserted, never written. Also accepts
+             *     versions new databases can no longer be created on, so an export
+             *     of an existing database re-applies.
              * @enum {string}
              */
             pg_version: "15" | "16" | "17" | "18";
@@ -10232,6 +10504,61 @@ export interface components {
              */
             stage?: "compile" | "publish";
         };
+        /**
+         * @description The durable function that requested the approval. `id` is null once the
+         *     function has been deleted; `name` is kept.
+         */
+        DurableApprovalFunction: {
+            /** Format: uuid */
+            id: string | null;
+            name: string;
+        };
+        /**
+         * @description The durable execution that requested the approval. `id` and `status`
+         *     are null once the execution is no longer retained; `name` is kept.
+         */
+        DurableApprovalExecution: {
+            /** Format: uuid */
+            id: string | null;
+            name: string;
+            status: components["schemas"]["DurableExecutionStatus"] | null;
+        };
+        /** @description The person who decided. Null once their account is deleted. */
+        DurableApprovalDecider: {
+            id: string;
+            email: string;
+        } | null;
+        /** @description Who decided and when. Null unless the approval was approved or denied. */
+        DurableApprovalDecision: {
+            comment: string;
+            decided_by: components["schemas"]["DurableApprovalDecider"];
+            /** Format: date-time */
+            decided_at: string;
+        } | null;
+        /** @description Approvals by status. `requested` is every approval, whatever its status. */
+        DurableApprovalCounts: {
+            /** Format: int64 */
+            requested: number;
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            approved: number;
+            /** Format: int64 */
+            denied: number;
+            /** Format: int64 */
+            expired: number;
+            /** Format: int64 */
+            cancelled: number;
+        };
+        DurableApprovalFunctionCounts: {
+            function: components["schemas"]["DurableApprovalFunction"];
+            counts: components["schemas"]["DurableApprovalCounts"];
+        };
+        DurableApprovalDailyCounts: {
+            /** Format: date */
+            date: string;
+            counts: components["schemas"]["DurableApprovalCounts"];
+        };
         /** @description One WHERE condition. Conditions are combined with AND. */
         DatabaseQueryFilter: {
             /** @example status */
@@ -10456,6 +10783,14 @@ export interface components {
         DurableFunctionId: string;
         /** @description Durable execution ID */
         DurableExecutionId: string;
+        /** @description Durable approval ID */
+        DurableApprovalId: string;
+        /**
+         * @description Only approvals requested by this durable function, given by id or by
+         *     name. A name also matches approvals from a deleted function of that
+         *     name.
+         */
+        DurableApprovalFunctionFilter: string;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -10583,7 +10918,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxPresetList"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10624,7 +10959,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplatePage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10661,7 +10996,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10693,7 +11028,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10723,7 +11058,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10759,7 +11094,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxTemplate"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10801,7 +11136,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxDeploymentPage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10853,7 +11188,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxDeployment"];
                 };
             };
-            /** @description Invalid source, conflicting retry, denied access, or unavailable deployment service */
+            /** @description Invalid source (400), denied access (401, 403), conflicting retry (409), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes or custom templates are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10886,7 +11221,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxDeployment"];
                 };
             };
-            /** @description Denied access, missing resource, or unavailable deployment service */
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10923,7 +11258,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxBuildLogPage"];
                 };
             };
-            /** @description Denied access, missing resource, or unavailable deployment service */
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10956,7 +11291,7 @@ export interface operations {
                     "application/gzip": string;
                 };
             };
-            /** @description Denied access, missing resource, or unavailable deployment service */
+            /** @description Denied access (401, 403), missing resource (404), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -10997,7 +11332,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSessionPage"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11034,7 +11369,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11071,7 +11406,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxExecutionResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11102,7 +11437,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11133,7 +11468,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11164,7 +11499,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11195,7 +11530,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11232,7 +11567,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxCommandResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11267,7 +11602,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxFileResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11300,7 +11635,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11334,7 +11669,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11364,7 +11699,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11399,7 +11734,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxAccess"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and disabled or unavailable (503). */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -16927,6 +17262,395 @@ export interface operations {
             };
         };
     };
+    requestDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestDurableApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description The approval was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalRegistration"];
+                };
+            };
+            /** @description Approval registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval cannot be registered now. `code` says why:
+             *
+             *     - `approval_not_ready`: the workflow has not finished opening the
+             *       approval yet. Retry with a short backoff; the SDK does.
+             *     - `approval_closed`: the workflow is no longer waiting on it.
+             *     - `execution_ended`: the execution has finished.
+             *     - `too_many_pending_approvals`: the execution already has the
+             *       maximum number of pending approvals.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 64 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many approval requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval could not be confirmed with the workflow right now.
+             *     Retry with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableApprovals: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed) for offset pagination. Declares no schema
+                 *     default so the request validator does not inject one: handlers that omit
+                 *     `page` see it unset (nil) and default to 1 in code, while cursor-first
+                 *     endpoints (e.g. the project deployments feed) can detect its absence to
+                 *     stay in keyset/search mode. Supplying `page` selects offset pagination.
+                 */
+                page?: components["parameters"]["Page"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /** @description Return only approvals in this status. */
+                status?: components["schemas"]["DurableApprovalStatus"];
+                /**
+                 * @description Only approvals requested by this durable function, given by id or by
+                 *     name. A name also matches approvals from a deleted function of that
+                 *     name.
+                 */
+                function?: components["parameters"]["DurableApprovalFunctionFilter"];
+                /** @description Return only approvals requested by this durable execution. */
+                execution_id?: string;
+                /** @description Return only approvals requested at or after this time. */
+                from?: string;
+                /** @description Return only approvals requested before this time. */
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDurableApprovals"];
+                };
+            };
+            /** @description A filter is invalid, or `from` is after `to` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableApprovalStats: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only approvals requested by this durable function, given by id or by
+                 *     name. A name also matches approvals from a deleted function of that
+                 *     name.
+                 */
+                function?: components["parameters"]["DurableApprovalFunctionFilter"];
+                /** @description Start of the window. Defaults to 30 days before `to`. */
+                from?: string;
+                /** @description End of the window. Defaults to now. */
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApprovalStats"];
+                };
+            };
+            /** @description The window is invalid or longer than 366 days */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    approveDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DurableApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credential is not a person's */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval was already denied, or has expired or been cancelled.
+             *     `code` is `approval_decided`, `approval_expired`, or
+             *     `approval_cancelled`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 16 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    denyDurableApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable approval ID */
+                approvalId: components["parameters"]["DurableApprovalId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DurableApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Denied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableApproval"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The credential is not a person's */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Approval not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The approval was already approved, or has expired or been
+             *     cancelled. `code` is `approval_decided`, `approval_expired`, or
+             *     `approval_cancelled`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 16 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listFrontends: {
         parameters: {
             query?: {
@@ -17521,7 +18245,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - custom domains require SUPERAGENT plan, or a managed TLS request would exceed the account's managed TLS certificate limit */
+            /** @description Forbidden - the plan does not include custom domains, or a managed TLS request would exceed the account's managed TLS certificate limit */
             403: {
                 headers: {
                     [name: string]: unknown;

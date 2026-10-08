@@ -439,7 +439,9 @@ export const handler = durable(run);
 `ctx.step`, `ctx.map` and `ctx.parallel` are generic in what they return, so a
 step's result type flows into the rest of the handler without a cast.
 `StepOptions`, `WaitUntilOptions`, `BatchOptions`, `BatchResult`, `Retry` and
-`DurableDuration` are exported alongside them for anything you build on top.
+`DurableDuration` are exported alongside them for anything you build on top, as
+are `WaitForApprovalOptions` and the `ApprovalDecision` that `ctx.waitForApproval`
+resolves with.
 
 Starting and reading executions uses the main entry point instead:
 
@@ -461,6 +463,10 @@ the API contract, so they follow the wire's snake_case (`function_id`,
 `created_at`, `result_expired`). `result` is `unknown` there — the platform
 returns whatever the handler produced and cannot know its type, so narrow or
 assert it on the way out.
+
+`volcano.durable.approvals` resolves with `DurableApproval`,
+`PaginatedDurableApprovals`, and `DurableApprovalStats`, generated the same
+way, and takes `DurableApprovalListOptions` and `DurableApprovalStatsOptions`.
 
 ## OAuth Types
 

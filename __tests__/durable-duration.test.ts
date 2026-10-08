@@ -102,6 +102,15 @@ test.each([31622401, '367d', { days: 367 }, { seconds: Number.MAX_VALUE }])(
   },
 );
 
+test('names the field a bounded wait was given for', () => {
+  expect(() => waitDuration('soon', 'timeout')).toThrow('timeout must be a duration');
+  expect(() => waitDuration(0, 'timeout')).toThrow('timeout must be at least 1 second');
+  expect(() => waitDuration('367d', 'timeout')).toThrow(
+    'timeout must be at most 31622400 seconds (366 days)',
+  );
+  expect(waitDuration('2d', 'timeout')).toEqual(waitDuration('2d'));
+});
+
 test('leaves omitted delays absent and lets the engine bound retry delays', () => {
   expect(optionalDuration(undefined, 'interval')).toBeUndefined();
   expect(optionalDuration(0, 'interval')).toEqual({ seconds: 0 });

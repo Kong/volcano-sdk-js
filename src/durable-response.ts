@@ -55,7 +55,7 @@ export function isDurableExecution(value: unknown): value is DurableExecution {
   );
 }
 
-function isPageMetadata(value: Record<string, unknown>): boolean {
+export function isPageMetadata(value: Record<string, unknown>): boolean {
   return (
     typeof value['page'] === 'number' &&
     typeof value['limit'] === 'number' &&
