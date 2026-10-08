@@ -23,7 +23,12 @@ const prepareReports = fileURLToPath(new URL('prepare-test-reports.mjs', import.
 await test('a failing property fails Jest and preserves its seed and minimized counterexample', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-property-policy-'));
   try {
-    const compiled = await transformFileAsync(optionsFile, { configFile });
+    // The generated test require()s this output. Babel 8 compiles modules to
+    // CommonJS only when the caller says it lacks ESM support, as babel-jest does.
+    const compiled = await transformFileAsync(optionsFile, {
+      configFile,
+      caller: { name: 'property-policy-test', supportsStaticESM: false },
+    });
     assert.ok(compiled !== null && typeof compiled.code === 'string');
     await writeFile(join(directory, 'property-options.js'), compiled.code);
     await writeFile(

@@ -90,7 +90,7 @@ describe('retained broadcast subscriptions', () => {
     ],
   ];
   test.each(disposeCases)(
-    '%s discards paused subscriptions and listeners',
+    '%s discards the channel with its paused subscription and listeners',
     async (_name, dispose) => {
       const { realtime, client } = createRealtime();
       const channel = realtime.channel('room');
@@ -102,6 +102,7 @@ describe('retained broadcast subscriptions', () => {
       expect(client.removeSubscription).toHaveBeenCalledWith(subscription);
       expect(channel._subscription).toBeNull();
       expect(channel._callbacks.size).toBe(0);
+      expect(realtime.channel('room')).not.toBe(channel);
     },
   );
 });

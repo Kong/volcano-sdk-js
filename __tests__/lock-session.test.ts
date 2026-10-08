@@ -298,6 +298,17 @@ test('aborts guarded work when the renewal request rejects', async () => {
   await expect(running).resolves.toEqual({ data: 'finished', error });
 });
 
+test('losing ownership stops pending expiry and renewal timers immediately', async () => {
+  const { session } = setup();
+  session.scheduleExpiry();
+  const waiting = session.waitToRenew();
+  expect(jest.getTimerCount()).toBe(2);
+  session.markLost(new Error('ownership lost'));
+  expect(jest.getTimerCount()).toBe(0);
+  await waiting;
+  await session.cleanup();
+});
+
 test('does not overwrite the first loss or restart expiry after loss', async () => {
   const { session } = setup();
   const error = new Error('first loss');

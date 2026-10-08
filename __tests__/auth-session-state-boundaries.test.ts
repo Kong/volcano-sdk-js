@@ -114,6 +114,21 @@ test('setSession rejects stale generations and persists only the accepted creden
   expect(storage.has('volcano_refresh_token')).toBe(false);
 });
 
+test('setSession rejects an invalid user before replacing credentials', () => {
+  const { host, storage } = fixture();
+  const notify = jest.fn<(value: unknown) => void>();
+  host._authCallbacks.push(notify);
+
+  expect(() => setSession(host, { ...nextSession, user: { id: 'user-2' } }, 3)).toThrow(
+    'Auth user email must be a string',
+  );
+  expect(host.accessToken).toBe('old-access');
+  expect(host.currentUser).toBe(user);
+  expect(host._sessionGeneration).toBe(3);
+  expect(storage.get('volcano_access_token')).toBe('old-access');
+  expect(notify).not.toHaveBeenCalled();
+});
+
 test('refresh adopts only the captured session and preserves its user identity', () => {
   const { host, storage } = fixture();
   const notify = jest.fn<(value: unknown) => void>();

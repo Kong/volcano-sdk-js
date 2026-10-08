@@ -94,6 +94,19 @@ test('waits for connection and removes temporary listeners on success', async ()
   expect(client.listeners.get('error')?.size).toBe(0);
 });
 
+test('clears the connection timeout once the transport connects', async () => {
+  jest.useFakeTimers();
+  try {
+    const client = new Client();
+    const waiting = waitForConnection(client);
+    client.emit('connected', {});
+    await expect(waiting).resolves.toBeUndefined();
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test.each([
   [{ error: { message: 'denied' } }, 'denied'],
   [{ error: { message: '' } }, 'Connection failed'],
