@@ -51,6 +51,30 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [2.0.0](https://github.com/Kong/volcano-sdk-js/compare/v1.15.1...v2.0.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **node:** @volcano.dev/sdk now requires Node.js 22 or newer. Upgrade server-side and build environments from Node.js 20 before updating. Browser support is unchanged.
+
+### Features
+
+* **api:** add managed custom-domain TLS types ([#53](https://github.com/Kong/volcano-sdk-js/issues/53)) ([116e98b](https://github.com/Kong/volcano-sdk-js/commit/116e98bd0432978e89a639dd430418073517b560))
+* **durable:** add waitForApproval and the approvals client ([#315](https://github.com/Kong/volcano-sdk-js/issues/315)) ([14732f9](https://github.com/Kong/volcano-sdk-js/commit/14732f96df2f852194d46b17f17d4f8bee2ac842))
+* **node:** require Node.js 22 or newer ([#305](https://github.com/Kong/volcano-sdk-js/issues/305)) ([3537b03](https://github.com/Kong/volcano-sdk-js/commit/3537b036b35e3bccce066c284ce94bc211be133b))
+* **sandboxes:** add JavaScript execution and session facade ([#270](https://github.com/Kong/volcano-sdk-js/issues/270)) ([79fee17](https://github.com/Kong/volcano-sdk-js/commit/79fee17b5956a970df8f860f45c8a774bd783b75))
+* **sandboxes:** expose custom deployment operations ([#308](https://github.com/Kong/volcano-sdk-js/issues/308)) ([d13f67e](https://github.com/Kong/volcano-sdk-js/commit/d13f67e3113f6e1497d441dbeeb74b0156f80e41))
+
+
+### Bug Fixes
+
+* **api:** type project plans with the names Hosting returns ([#304](https://github.com/Kong/volcano-sdk-js/issues/304)) ([177279e](https://github.com/Kong/volcano-sdk-js/commit/177279e74ade6d49263fa19c357e29f9c5e0357d))
+* **deps:** bump orval and example Next.js past advisories ([#288](https://github.com/Kong/volcano-sdk-js/issues/288)) ([a6c20c0](https://github.com/Kong/volcano-sdk-js/commit/a6c20c06de1a111be4ad4c5b2ac9e11b605b86bc))
+* **deps:** clear transitive dev-dependency advisories ([#289](https://github.com/Kong/volcano-sdk-js/issues/289)) ([9fb2253](https://github.com/Kong/volcano-sdk-js/commit/9fb2253c9c5c0747e4469f5d7498425265473046))
+* **deps:** pick up the patched sharp release ([#291](https://github.com/Kong/volcano-sdk-js/issues/291)) ([5b4b084](https://github.com/Kong/volcano-sdk-js/commit/5b4b0849ea0a5ff1d7151e9316774a829d56e044))
+* **deps:** update dev dependencies past known advisories ([#285](https://github.com/Kong/volcano-sdk-js/issues/285)) ([925c328](https://github.com/Kong/volcano-sdk-js/commit/925c32830581a2909c6bfc9040bb30a7dbb911fd))
+
 ## [1.15.1](https://github.com/Kong/volcano-sdk-js/compare/v1.15.0...v1.15.1) (2026-09-28)
 
 ### Bug Fixes
