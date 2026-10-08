@@ -178,22 +178,22 @@ describe('durable.get / durable.list / durable.stop', () => {
   test('escapes every segment it puts in the path', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    await volcano.durable.get('proj/1', 'order pipeline', 'exec#1');
-    await volcano.durable.stop('proj/1', 'order pipeline', 'exec#1');
-    await volcano.durable.list('proj/1', 'order pipeline');
+    await volcano.durable.get('proj?1', 'order pipeline', 'exec#1');
+    await volcano.durable.stop('proj?1', 'order pipeline', 'exec#1');
+    await volcano.durable.list('proj?1', 'order pipeline');
 
     expect(transport.getDurableExecution.mock.calls[0]?.slice(0, 3)).toEqual([
-      'proj%2F1',
+      'proj%3F1',
       'order%20pipeline',
       'exec%231',
     ]);
     expect(transport.stopDurableExecution.mock.calls[0]?.slice(0, 3)).toEqual([
-      'proj%2F1',
+      'proj%3F1',
       'order%20pipeline',
       'exec%231',
     ]);
     expect(transport.listDurableExecutions.mock.calls[0]?.slice(0, 2)).toEqual([
-      'proj%2F1',
+      'proj%3F1',
       'order%20pipeline',
     ]);
   });

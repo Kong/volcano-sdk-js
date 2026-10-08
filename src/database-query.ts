@@ -1,5 +1,6 @@
 import { errorResult } from './api-errors.ts';
 import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
+import { databaseSegment } from './database-name.ts';
 import { getQueryDatabaseSelectUrl } from './generated/client.ts';
 import { volcanoFetch, type VolcanoRequestInit } from './volcano-fetch.ts';
 
@@ -100,7 +101,7 @@ export class QueryBuilder extends FilterBuilder {
       return preflight.result;
     }
     try {
-      return await this.request(preflight.databaseName);
+      return await this.request(preflight.databasePath);
     } catch (error) {
       return { data: null, error: queryError(error), count: 0 };
     }
@@ -113,29 +114,23 @@ export class QueryBuilder extends FilterBuilder {
     return this.execute().then(resolve, reject);
   }
 
-  private preflight(): { ok: true; databaseName: string } | { ok: false; result: SelectResult } {
+  private preflight(): { ok: true; databasePath: string } | { ok: false; result: SelectResult } {
     if (this.client.accessToken === null || this.client.accessToken.length === 0) {
       return {
         ok: false,
         result: { ...errorResult(sessionError(this.client._oauthExchangeError)), count: 0 },
       };
     }
-    const databaseName = this.databaseName;
-    if (databaseName === null || databaseName.length === 0) {
-      return {
-        ok: false,
-        result: {
-          ...errorResult('Database name not set. Use .database(databaseName) first.'),
-          count: 0,
-        },
-      };
+    const database = databaseSegment(this.databaseName);
+    if (database.error !== null) {
+      return { ok: false, result: { ...errorResult(database.error), count: 0 } };
     }
-    return { ok: true, databaseName };
+    return { ok: true, databasePath: database.segment };
   }
 
-  private async request(databaseName: string): Promise<SelectResult> {
+  private async request(databasePath: string): Promise<SelectResult> {
     const response = await this.client._transport.queryDatabaseSelect(
-      encodeURIComponent(databaseName),
+      databasePath,
       this.requestBody(),
       this.client._generatedOptions('session'),
     );

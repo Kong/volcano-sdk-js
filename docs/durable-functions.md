@@ -642,6 +642,11 @@ repeat, and one that has already finished reports the state it is in.
 All three answer the same `{ data, status, error }` envelope as `start`, with
 `404` for an execution or durable function this project does not have.
 
+Project IDs, function names, execution IDs and approval IDs are URL path
+segments. The SDK trims and percent-encodes each one. It refuses one that is
+empty, is `.` or `..`, contains `/`, or has a lone UTF-16 surrogate, with
+`status` null, because nothing was sent.
+
 ### Deciding approvals
 
 `ownerClient.durable.approvals` reads and decides the approvals executions ask

@@ -37,6 +37,11 @@ await volcano.auth.signIn({
 ```
 
 The database name is typically the name you gave your database when creating it in the Volcano dashboard.
+The SDK sends it as one URL path segment. Queries and mutations return an error
+without a request when the name is blank, is `.` or `..`, contains `/`, or has
+a lone UTF-16 surrogate. URL parsers resolve `.` and `..` segments, and Volcano
+routes an encoded `/` as a separator, so such a name would reach a different API
+route.
 
 ## Querying Data (SELECT)
 
@@ -450,6 +455,7 @@ if (error) {
   // - "permission denied" - RLS policy violation
   // - "No active session" - User not authenticated
   // - "Database name not set" - Forgot to call volcano.database()
+  // - "Database name ..." - Blank, ".", "..", contains "/", or not well-formed; nothing was sent
 }
 ```
 

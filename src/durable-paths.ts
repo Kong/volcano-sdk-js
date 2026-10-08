@@ -1,3 +1,5 @@
+import { pathSegment } from './path-segments.ts';
+
 type DurablePathResult<Segments> =
   { segments: Segments; error?: never } | { error: Error; segments?: never };
 
@@ -29,11 +31,11 @@ export function durablePathSegments(
 ): DurablePathResult<Record<string, string>> {
   const segments = new Map<string, string>();
   for (const [field, value] of Object.entries(fields)) {
-    const identifier = typeof value === 'string' ? value.trim() : '';
-    if (identifier.length === 0) {
-      return { error: new Error(`${field} must be a non-empty string`) };
+    const identifier = pathSegment(field, typeof value === 'string' ? value.trim() : value);
+    if (identifier.error !== null) {
+      return { error: identifier.error };
     }
-    segments.set(field, encodeURIComponent(identifier));
+    segments.set(field, identifier.segment);
   }
   return { segments: Object.fromEntries(segments) };
 }

@@ -245,20 +245,20 @@ describe('durable.approvals', () => {
     const { volcano, transport } = clientWithTransport();
     const { approvals } = volcano.durable;
 
-    await approvals.get('proj/1', 'apr#1');
-    await approvals.approve('proj/1', 'apr#1');
-    await approvals.deny('proj/1', 'apr#1');
-    await approvals.list('proj/1');
-    await approvals.stats('proj/1');
+    await approvals.get('proj?1', 'apr#1');
+    await approvals.approve('proj?1', 'apr#1');
+    await approvals.deny('proj?1', 'apr#1');
+    await approvals.list('proj?1');
+    await approvals.stats('proj?1');
     for (const mock of [
       transport.getDurableApproval,
       transport.approveDurableApproval,
       transport.denyDurableApproval,
     ]) {
-      expect(mock.mock.calls[0]?.slice(0, 2)).toEqual(['proj%2F1', 'apr%231']);
+      expect(mock.mock.calls[0]?.slice(0, 2)).toEqual(['proj%3F1', 'apr%231']);
     }
-    expect(transport.listDurableApprovals.mock.calls[0]?.[0]).toBe('proj%2F1');
-    expect(transport.getDurableApprovalStats.mock.calls[0]?.[0]).toBe('proj%2F1');
+    expect(transport.listDurableApprovals.mock.calls[0]?.[0]).toBe('proj%3F1');
+    expect(transport.getDurableApprovalStats.mock.calls[0]?.[0]).toBe('proj%3F1');
   });
 
   // Like durable.get: these routes carry the project's own token, so without

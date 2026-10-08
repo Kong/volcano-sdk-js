@@ -316,6 +316,11 @@ volcano.auth.signInWithHostedAuth(); // or { action: 'signup' }
 //   window.location.assign(url);
 ```
 
+Both methods also accept `{ projectId }`, which takes precedence over the anon
+key's project unless it is blank. The project ID is trimmed and percent-encoded as
+one URL path segment, and both methods throw when it is `.` or `..`, contains
+`/`, or has a lone UTF-16 surrogate.
+
 After a successful login or sign-up, Volcano redirects the user back to your configured `post_auth_redirect_url` with the session in the URL fragment:
 
 ```text
@@ -761,6 +766,12 @@ credentials, including when the request outcome is uncertain; deleting another s
 them. If another authentication operation replaces the session before deletion finishes, the method
 returns an `AuthSessionChangedError` instead of clearing the replacement or acknowledging a stale
 result.
+
+The session ID is percent-encoded as one URL path segment. An ID that is blank, is `.` or `..`,
+contains `/`, or has a lone UTF-16 surrogate returns an error without a request. Numbers, bigints and
+booleans are sent as strings; other non-string IDs are refused. An empty or `.` ID would address
+`/auth/user/sessions/`, the route for deleting every other session, because URL parsers resolve
+`/auth/user/sessions/.` to that path.
 
 ### Sign Out All Other Devices
 

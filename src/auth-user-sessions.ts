@@ -3,6 +3,7 @@ import type { ContextRequest, RequestResult } from './auth-request.ts';
 import { requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { AuthSessionChangedError } from './errors.ts';
+import { convertedPathSegment } from './path-segments.ts';
 import type { AuthSession, SessionsResponse } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
@@ -170,8 +171,13 @@ export async function deleteSession(
   host: AuthUserSessionsHost,
   sessionId: string,
 ): Promise<{ error: Error | null }> {
+  // "" and "." would address "/auth/user/sessions/", which deletes every other session.
+  const session = convertedPathSegment('sessionId', sessionId);
+  if (session.error !== null) {
+    return { error: session.error };
+  }
   const { result, context } = await host._authFetchWithContext(
-    `/auth/user/sessions/${encodeURIComponent(sessionId)}`,
+    `/auth/user/sessions/${session.segment}`,
     { method: 'DELETE' },
   );
   if (shouldClearCurrent(context, sessionId, result)) {

@@ -86,3 +86,42 @@ test('a network failure deleting the current session still clears owned local cr
   expect(await deleteSession(host, sessionId)).toEqual({ error: failure });
   expect(clear).toHaveBeenCalledWith(7);
 });
+
+test.each([
+  ['.', 'sessionId cannot contain "/" or be "." or ".."'],
+  ['..', 'sessionId cannot contain "/" or be "." or ".."'],
+  ['x/..', 'sessionId cannot contain "/" or be "." or ".."'],
+  ['/', 'sessionId cannot contain "/" or be "." or ".."'],
+  ['session/id', 'sessionId cannot contain "/" or be "." or ".."'],
+  ['', 'sessionId must be a non-empty string'],
+  [' \t', 'sessionId must be a non-empty string'],
+])('refuses the session ID %p before a request', async (id, message) => {
+  const { host, clear } = fixture({ ok: true, status: 204, data: null, error: null });
+  const fetch = jest.spyOn(host, '_authFetchWithContext');
+
+  expect(await deleteSession(host, id)).toEqual({ error: new Error(message) });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(clear).not.toHaveBeenCalled();
+});
+
+test.each([
+  [42, null, '/auth/user/sessions/42'],
+  [{}, new Error('sessionId must be a non-empty string'), null],
+])('converts only a primitive session ID %p, as before', async (id, error, path) => {
+  const { host } = fixture({ ok: true, status: 204, data: null, error: null });
+  host._isAuthContextCurrent = () => true;
+  const fetch = jest.spyOn(host, '_authFetchWithContext');
+
+  const result: unknown = await Reflect.apply(deleteSession, undefined, [host, id]);
+  expect(result).toEqual({ error });
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual(path === null ? [] : [path]);
+});
+
+test('encodes a session ID containing dots as one path segment', async () => {
+  const { host } = fixture({ ok: true, status: 204, data: null, error: null });
+  host._isAuthContextCurrent = () => true;
+  const fetch = jest.spyOn(host, '_authFetchWithContext');
+
+  expect(await deleteSession(host, 'a..b?c')).toEqual({ error: null });
+  expect(fetch).toHaveBeenCalledWith('/auth/user/sessions/a..b%3Fc', { method: 'DELETE' });
+});

@@ -25,6 +25,10 @@ for (const event of page.data) console.log(event.timestamp, event.body);
 
 `search()` returns `{ data, error }`. The successful `data` contains `data` (events), `limit`, `has_more`, and an optional `next_cursor`.
 
+`projectId` is sent as one URL path segment. Both methods return an error without
+a request when it is blank or not a string, is `.` or `..`, contains `/`, or has
+a lone UTF-16 surrogate.
+
 ## Continue a search
 
 ```javascript

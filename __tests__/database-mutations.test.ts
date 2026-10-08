@@ -24,12 +24,12 @@ function mockResponse(status: number, body: unknown): void {
 
 test('posts encoded mutations with values and filters, and remains awaitable', async () => {
   mockResponse(200, { data: [{ id: 1 }] });
-  const builder = new MutationBuilder(client(), 'records', 'db / one', 'update', { label: 'new' });
+  const builder = new MutationBuilder(client(), 'records', 'db ? one', 'update', { label: 'new' });
   builder.filters.push({ column: 'id', operator: 'eq', value: 1 });
 
   await expect(builder).resolves.toEqual({ data: [{ id: 1 }], error: null });
   expect(globalThis.fetch).toHaveBeenCalledWith(
-    'https://api.test/databases/db%20%2F%20one/query/update',
+    'https://api.test/databases/db%20%3F%20one/query/update',
     expect.objectContaining({
       method: 'POST',
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
@@ -93,6 +93,29 @@ test.each([null, ''])('rejects an absent database name: %p', async (databaseName
     data: null,
     error: new Error('Database name not set. Use .database(databaseName) first.'),
   });
+});
+
+test.each(['.', '..', 'main/..', 'main/', 'main/branches/dev'])(
+  'rejects the database %p, which is a dot segment or contains "/"',
+  async (databaseName) => {
+    const fetch = jest.spyOn(globalThis, 'fetch');
+    const builder = new MutationBuilder(client(), 'records', databaseName, 'insert', {});
+    await expect(builder.execute()).resolves.toEqual({
+      data: null,
+      error: new Error('Database name cannot contain "/" or be "." or ".."'),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+
+test('returns an error result for a database name with a lone surrogate', async () => {
+  const fetch = jest.spyOn(globalThis, 'fetch');
+  const builder = new MutationBuilder(client(), 'records', 'db\uD800', 'insert', {});
+  await expect(builder.execute()).resolves.toEqual({
+    data: null,
+    error: new Error('Database name is not well-formed Unicode'),
+  });
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 test.each([

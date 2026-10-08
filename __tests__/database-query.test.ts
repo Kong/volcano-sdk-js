@@ -83,13 +83,13 @@ test.each([undefined, 'application/vnd.volcano+json'])(
 
 test('builds a SELECT request with encoded database, projections, filters, order and pagination', async () => {
   const { client, query } = fixture({ data: [{ id: 1 }], count: 2 });
-  const builder = new QueryBuilder(client, 'records', 'db / one');
+  const builder = new QueryBuilder(client, 'records', 'db ? one');
   builder.select('id, label').order('id', { ascending: false }).limit(0).offset(2);
   builder.filters.push({ column: 'id', operator: 'eq', value: 1 });
 
   await expect(builder).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 2 });
   expect(query).toHaveBeenCalledWith(
-    'db%20%2F%20one',
+    'db%20%3F%20one',
     {
       table: 'records',
       select: ['id', 'label'],
@@ -186,6 +186,20 @@ test.each([null, ''])('rejects an absent database: %p', async (databaseName) => 
   expect(query).not.toHaveBeenCalled();
 });
 
+test.each(['.', '..', 'main/..', 'main/', 'main/branches/dev'])(
+  'rejects the database %p, which is a dot segment or contains "/"',
+  async (databaseName) => {
+    const { client, query } = fixture({ data: [] });
+    const builder = new QueryBuilder(client, 'records', databaseName);
+    await expect(builder.execute()).resolves.toEqual({
+      data: null,
+      error: new Error('Database name cannot contain "/" or be "." or ".."'),
+      count: 0,
+    });
+    expect(query).not.toHaveBeenCalled();
+  },
+);
+
 test.each([
   [null, 'Query response is not an object'],
   [12, 'Query response is not an object'],
@@ -226,4 +240,32 @@ test('forwards a rejected OAuth exchange to the thenable rejection callback', as
   client._completeOAuthExchange = () => Promise.reject(failure);
   const builder = new QueryBuilder(client, 'records', 'db');
   await expect(builder.then(undefined, (error: unknown) => error)).resolves.toBe(failure);
+});
+
+function untypedQuery(client: QueryClient, databaseName: unknown): QueryBuilder {
+  const builder: unknown = Reflect.construct(QueryBuilder, [client, 'records', databaseName]);
+  if (!(builder instanceof QueryBuilder)) {
+    throw new TypeError('Expected a query builder');
+  }
+  return builder;
+}
+
+test.each([
+  [' \t', 'Database name must be a non-empty string'],
+  ['db\uD800', 'Database name is not well-formed Unicode'],
+  [undefined, 'Database name not set. Use .database(databaseName) first.'],
+])('rejects the blank or missing database %p as a result', async (name, message) => {
+  const { client, query } = fixture({ data: [] });
+  await expect(untypedQuery(client, name).execute()).resolves.toEqual({
+    data: null,
+    error: new Error(message),
+    count: 0,
+  });
+  expect(query).not.toHaveBeenCalled();
+});
+
+test('sends a non-string database name as its string form, as before', async () => {
+  const { client, query } = fixture({ data: [] });
+  await expect(untypedQuery(client, 42).execute()).resolves.toMatchObject({ error: null });
+  expect(query).toHaveBeenCalledWith('42', expect.anything(), expect.anything());
 });

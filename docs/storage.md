@@ -41,6 +41,43 @@ documents/reports/2024/q1-summary.pdf
 uploads/images/photo-001.png
 ```
 
+### Path Rules
+
+The SDK sends the bucket name and path as URL path segments. URL parsers resolve
+`.` and `..` segments, so a path such as `../../functions/x` would leave the
+storage API. Every storage method checks the bucket name and each object path
+before it sends anything. When a check fails, the method returns its usual error
+result, such as `{ data: null, error }`, without contacting Volcano. The
+`list()` prefix is a query parameter, which URL parsing does not resolve, so
+these rules do not apply to it.
+
+A path is refused when it:
+
+- is empty or is not a string
+- has a `.` or `..` segment, such as `../secret.txt` or `reports/./q1.pdf`
+- has an empty segment: a trailing `/`, a repeated `//`, or more than one leading `/`
+- has a lone UTF-16 surrogate, which cannot be percent-encoded
+
+One leading `/` is allowed and dropped, so `/avatars/user-123.jpg` and
+`avatars/user-123.jpg` name the same object in every method that takes a path.
+Object keys never start with `/`, so pass `list()` a prefix without one.
+
+A dot inside a segment is part of the name, as in `.hidden/notes.txt` or
+`v1.2/notes.txt`. Reserved characters such as `%`, `?`, `#` and `\` are
+percent-encoded, so a literal `%2e%2e` can never act as a parent folder. Volcano
+also refuses any object key that contains `..`, even inside a segment.
+
+A bucket name is refused when it is blank, is `.` or `..`, contains `/`, or has a
+lone UTF-16 surrogate. Numbers, bigints and booleans are converted to strings;
+other non-string values are refused.
+The rules cover `move()` and `copy()` paths and every path passed to `remove()`.
+
+```javascript
+const { data, error } = await volcano.storage.from('documents').download('../secret.txt');
+// data: null
+// error.message: 'Storage path cannot contain empty, ".", or ".." segments'
+```
+
 ### Access Control
 
 Files are **private by default**. Private files require authentication to download. You can make individual files public, allowing anyone to access them via a public URL.
@@ -351,7 +388,7 @@ if (data) {
 ```
 
 **Note:** This constructs the URL locally and doesn't verify the file is actually public. Use `list()` or `updateVisibility()` to get the server-confirmed URL.
-The path must be a non-empty string and cannot contain `.` or `..` segments.
+The path must follow the [path rules](#path-rules).
 
 ## Resumable Uploads
 
@@ -489,6 +526,7 @@ const { data, error } = await volcano.storage.from('uploads').upload('file.txt',
 
 if (error) {
   // Common errors:
+  // - "Storage path ..." or "Bucket name ..." - Breaks the path rules; nothing was sent
   // - "No active session" - User not signed in
   // - "File not found" - File doesn't exist
   // - "Permission denied" - Access policy violation
@@ -630,3 +668,5 @@ inside `data.object`; a single-request `upload()` returns it directly in `data`.
 For `remove()`, top-level error metadata describes the first failed path.
 `error.failures` preserves each failed path and its original error; `data.deleted`
 contains the paths successfully removed. Local validation errors have no failure list.
+If any path in the list breaks the [path rules](#path-rules), `remove()` deletes
+nothing and returns `{ data: null, error }`.

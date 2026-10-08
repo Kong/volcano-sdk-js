@@ -328,12 +328,17 @@ export interface Auth {
    * (login-CSRF / session-fixation defense). The nonce is sent as `state` and
    * echoed back in the post-auth fragment, which the SDK validates on return.
    * Browser-only. Pass `projectId` when the anon key is opaque (not a JWT).
+   * Throws when the project ID is "." or "..", contains "/", or has a lone
+   * UTF-16 surrogate.
    */
   getHostedAuthUrl(options?: {
     projectId?: string;
     action?: 'login' | 'signup' | 'forgot-password';
   }): string;
-  /** Redirect the browser to the managed hosted-auth pages (stores the nonce). */
+  /**
+   * Redirect the browser to the managed hosted-auth pages (stores the nonce).
+   * Throws, without navigating, for the project IDs `getHostedAuthUrl` refuses.
+   */
   signInWithHostedAuth(options?: {
     projectId?: string;
     action?: 'login' | 'signup' | 'forgot-password';
@@ -378,7 +383,11 @@ export interface Auth {
   // Session management methods
   /** Get paginated sessions for the current user */
   getSessions(options?: GetSessionsOptions): Promise<SessionsResponse>;
-  /** Delete a specific session (sign out from that device) */
+  /**
+   * Delete a specific session (sign out from that device). Returns an error
+   * without a request when the ID is blank, is "." or "..", contains "/", or
+   * has a lone UTF-16 surrogate.
+   */
   deleteSession(sessionId: string): Promise<DeleteSessionResponse>;
   /** Delete all sessions except the current one (sign out from all other devices) */
   deleteAllOtherSessions(): Promise<DeleteSessionResponse>;
@@ -900,7 +909,13 @@ export interface ResumableUploadOptions {
   onProgress?: (uploaded: number, total: number) => void;
 }
 
-/** Storage File API for operations on a specific bucket */
+/**
+ * Storage File API for operations on a specific bucket. Every method returns an
+ * error without a request when the bucket name or an object path breaks the
+ * path rules in the storage guide: for example a blank or non-string value, an
+ * empty, "." or ".." path segment, a bucket name that contains "/", or a lone
+ * UTF-16 surrogate. One leading "/" on a path is dropped.
+ */
 export interface StorageFileApi {
   /** Upload a file to the bucket */
   upload(
