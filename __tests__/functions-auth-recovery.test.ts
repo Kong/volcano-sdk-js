@@ -94,7 +94,7 @@ test.each(['resolve', 'invoke'])(
     );
     expect(await resultError(client().functions.invoke('echo', payload))).toBeNull();
     const calls = fetchMock.mock.calls.filter(([url]) => fetchUrl(url).endsWith('/invoke'));
-    expect(calls.length).toBe(stage === 'invoke' ? 2 : 1);
+    expect(calls).toHaveLength(stage === 'invoke' ? 2 : 1);
     for (const [, options] of calls) {
       expect(JSON.parse(bodyText(options))).toEqual({ payload: { values: ['original'] } });
     }

@@ -32,7 +32,8 @@
         "test/types/**/*.ts",
         "examples/durable-order-pipeline/volcano/functions/**/*.js",
         "test/fixtures/**/*.d.ts"
-      ]
+      ],
+      "ignoreDependencies": ["@types/convert-source-map"]
     },
     "examples/nextjs-notes-app": {
       "project": ["src/**/*.{js,css}!", "*.config.js"],

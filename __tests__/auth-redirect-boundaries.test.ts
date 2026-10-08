@@ -111,6 +111,7 @@ test.each([
   expect(client._urlSessionConsumed).toBe(true);
   expect(Reflect.get(client, '_replaceSessionFromUrl')).not.toHaveBeenCalled();
   expect(Reflect.get(client, '_stripAuthHashFromUrl')).toHaveBeenCalledTimes(1);
+  expect(Reflect.get(client, '_takeAuthRedirectURL')).toHaveBeenCalledTimes(1);
 });
 
 test('successful fragment handoff is consumed so it cannot be replayed', () => {
@@ -118,6 +119,7 @@ test('successful fragment handoff is consumed so it cannot be replayed', () => {
   setWindow({ hash: '#access_token=token&state=nonce' });
   expect(consumeSessionFromUrl(client)).toBe(true);
   expect(client._urlSessionConsumed).toBe(true);
+  expect(Reflect.get(client, '_takeAuthRedirectURL')).toHaveBeenCalledTimes(1);
   expect(consumeSessionFromUrl(client)).toBe(false);
   expect(Reflect.get(client, '_replaceSessionFromUrl')).toHaveBeenCalledTimes(1);
 });

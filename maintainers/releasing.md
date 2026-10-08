@@ -16,6 +16,34 @@ release gate is required.
 The checked-in release and publish workflows own versioning and publication.
 This checklist does not authorize a release, a registry mutation or an environment approval.
 
+## Dependabot updates
+
+Dependabot titles every update `chore(deps)` or `chore(deps-dev)`, so merging one
+does not start a release. When an update changes what the package ships, edit
+the squash commit title to `fix(deps): ...` when merging so Release Please
+releases it:
+
+- A change to the `dependencies` range in the root `package.json`, such as a
+  major `centrifuge` or `ws` update. In-range bumps change only
+  `pnpm-lock.yaml`, and the example app's `package.json` is not published.
+- A change to `src/generated` after regenerating, because the build bundles it
+  into `dist`.
+
+Some updates need a commit before CI passes:
+
+- If `pnpm check:openapi` fails, usually after an `openapi-codegen`, prettier or
+  TypeScript update, run `pnpm generate:openapi` and commit the result.
+- If a prettier update fails `pnpm format:check`, run `pnpm format` and commit
+  the result.
+
+Dependabot stops rebasing a pull request once someone else pushes to it, so
+merge it soon after. `@dependabot recreate` starts over and drops those commits.
+
+Dependabot does not read `peerDependencies`, so it never proposes changes to the
+published `@aws/durable-execution-sdk-js` range. When that runtime ships a new
+major version, update the range and the durable tests by hand, and release the
+change as `fix(deps)` or `feat`.
+
 ## Before publication
 
 1. Identify the release PR, exact source commit, version, tag and intended registry account. Inspect the generated changelog and package metadata.

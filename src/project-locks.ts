@@ -39,8 +39,7 @@ export interface LockClient {
 
 const CONTENTION_CODES: ReadonlySet<unknown> = new Set(['lock_held', 'lock_ownership_lost']);
 type LockAttempt =
-  | { response: { data: unknown }; error: null }
-  | { response: null; error: ProjectLockError };
+  { response: { data: unknown }; error: null } | { response: null; error: ProjectLockError };
 
 export class ProjectLocksApi implements ProjectLocks {
   constructor(private readonly client: LockClient) {}

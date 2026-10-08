@@ -14,8 +14,8 @@ function authClient() {
     accessToken: 'original',
     _completeOAuthExchange: jest.fn(() => Promise.resolve()),
     _captureAuthContext: jest.fn(() => context),
-    _refreshSessionForContext: jest.fn(
-      (): Promise<{ error: Error | null }> => Promise.resolve({ error: null }),
+    _refreshSessionForContext: jest.fn((): Promise<{ error: Error | null }> =>
+      Promise.resolve({ error: null }),
     ),
     _isAuthContextCurrent: jest.fn(() => true),
   };

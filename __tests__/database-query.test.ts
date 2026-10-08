@@ -36,7 +36,14 @@ test.each([undefined, 'application/vnd.volcano+json'])(
       },
     );
     const generatedFetch = jest
-      .fn<(path: string, options: RequestInit, mode: 'anon' | 'session') => Promise<Response>>()
+      .fn<
+        (
+          path: string,
+          options: RequestInit,
+          mode: 'anon' | 'session',
+          timeoutMs?: number,
+        ) => Promise<Response>
+      >()
       .mockResolvedValue(fetchResponse);
     const client = { _generatedFetch: generatedFetch };
     const date = new Date('2026-09-23T12:00:00.000Z');
@@ -65,6 +72,7 @@ test.each([undefined, 'application/vnd.volcano+json'])(
         headers: expect.any(Headers),
       }),
       'session',
+      undefined,
     );
     const call = generatedFetch.mock.calls[0];
     expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(

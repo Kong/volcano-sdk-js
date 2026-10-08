@@ -23,7 +23,7 @@ The storage module offers:
 
 ### Buckets
 
-Files are organized into buckets. A bucket is a top-level container, similar to a folder or an S3 bucket. You might have buckets like:
+Files are organized into buckets. A bucket is a top-level container, similar to a folder. You might have buckets like:
 
 - `avatars` - User profile pictures
 - `documents` - PDF reports and files

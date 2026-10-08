@@ -49,11 +49,11 @@ function errorMessage(status, data) {
     return `Request failed with status ${String(status)}`;
 }
 export async function volcanoFetch(path, options) {
-    const { volcanoAuthorization, volcanoClient, volcanoResponseType, ...request } = options;
+    const { volcanoAuthorization, volcanoClient, volcanoResponseType, volcanoTimeoutMs, ...request } = options;
     if (volcanoClient === undefined || volcanoAuthorization === undefined) {
         throw new Error('Generated transport requires a Volcano client and authorization mode');
     }
-    const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization);
+    const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization, volcanoTimeoutMs);
     const data = await responseData(response, volcanoResponseType);
     if (!response.ok) {
         throw responseError(response, data);

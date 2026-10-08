@@ -5,13 +5,13 @@ export interface RealtimeConnectionClient {
 }
 
 export interface ConnectionEvents {
-  connected(context: unknown): void;
-  disconnected(context: unknown): void;
-  error(context: unknown): void;
-  publication(context: unknown): void;
-  join(context: unknown): void;
-  leave(context: unknown): void;
-  subscribed(context: unknown): void;
+  connected: (context: unknown) => void;
+  disconnected: (context: unknown) => void;
+  error: (context: unknown) => void;
+  publication: (context: unknown) => void;
+  join: (context: unknown) => void;
+  leave: (context: unknown) => void;
+  subscribed: (context: unknown) => void;
 }
 
 type ConnectionEvent = keyof ConnectionEvents;

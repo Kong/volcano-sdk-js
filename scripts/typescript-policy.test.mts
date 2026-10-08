@@ -22,8 +22,8 @@ const require = createRequire(import.meta.url);
 const coverageConfig = record(require('../jest.typed.config.cjs'));
 const manifest = record(require('../package.json'));
 const nextPlugin = record(require('@next/eslint-plugin-next'));
-const nextFlatConfig = record(nextPlugin['flatConfig']);
-const nextCoreConfig = record(nextFlatConfig['coreWebVitals']);
+const nextConfigs = record(nextPlugin['configs']);
+const nextCoreConfig = record(nextConfigs['core-web-vitals']);
 const nextRules = record(nextCoreConfig['rules']);
 const approvedComments = new Map([
   [
@@ -441,7 +441,7 @@ const contexts: [string, string][] = [
   ],
   [
     '__tests__',
-    "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(true).toBe(true); });\n",
+    "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(Math.max(1, 2)).toBe(2); });\n",
   ],
 ];
 

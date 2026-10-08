@@ -1,4 +1,455 @@
 import { volcanoFetch } from '../volcano-fetch';
+export const getListSandboxPresetsUrl = () => {
+    return `/sandboxes/presets`;
+};
+/**
+ * @summary List available sandbox presets
+ */
+export const listSandboxPresets = async (options) => {
+    return volcanoFetch(getListSandboxPresetsUrl(), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getListSandboxesUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes?${stringifiedParams}` : `/projects/${id}/sandboxes`;
+};
+/**
+ * @summary List sandbox templates
+ */
+export const listSandboxes = async (id, params, options) => {
+    return volcanoFetch(getListSandboxesUrl(id, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateSandboxUrl = (id) => {
+    return `/projects/${id}/sandboxes`;
+};
+/**
+ * @summary Create a sandbox template from a verified preset
+ */
+export const createSandbox = async (id, createSandboxTemplateRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getCreateSandboxUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createSandboxTemplateRequest)
+    });
+};
+export const getGetSandboxUrl = (id, sandboxId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}`;
+};
+/**
+ * @summary Get a sandbox template
+ */
+export const getSandbox = async (id, sandboxId, options) => {
+    return volcanoFetch(getGetSandboxUrl(id, sandboxId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getDeleteSandboxUrl = (id, sandboxId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}`;
+};
+/**
+ * @summary Retire a template and terminate its sessions
+ */
+export const deleteSandbox = async (id, sandboxId, options) => {
+    return volcanoFetch(getDeleteSandboxUrl(id, sandboxId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getDeploySandboxUrl = (id, sandboxId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments`;
+};
+/**
+ * Upload a tar.gz context with a Dockerfile. The template ID may be new. Retries with the same Idempotency-Key and content return the same deployment. Existing sessions retain their image while the replacement builds and validates.
+ * @summary Build and deploy a custom sandbox template
+ */
+export const deploySandbox = async (id, sandboxId, deploySandboxBody, options) => {
+    const formData = new FormData();
+    formData.append(`name`, deploySandboxBody.name);
+    formData.append(`code`, deploySandboxBody.code);
+    if (deploySandboxBody.memory_mb !== undefined) {
+        formData.append(`memory_mb`, deploySandboxBody.memory_mb.toString());
+    }
+    if (deploySandboxBody.ports !== undefined) {
+        formData.append(`ports`, deploySandboxBody.ports);
+    }
+    return volcanoFetch(getDeploySandboxUrl(id, sandboxId), {
+        ...options,
+        method: 'POST',
+        body: formData
+    });
+};
+export const getListSandboxDeploymentsUrl = (id, sandboxId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments`;
+};
+/**
+ * @summary List sandbox deployment history
+ */
+export const listSandboxDeployments = async (id, sandboxId, params, options) => {
+    return volcanoFetch(getListSandboxDeploymentsUrl(id, sandboxId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentUrl = (id, sandboxId, deploymentId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}`;
+};
+/**
+ * @summary Get a sandbox deployment
+ */
+export const getSandboxDeployment = async (id, sandboxId, deploymentId, options) => {
+    return volcanoFetch(getGetSandboxDeploymentUrl(id, sandboxId, deploymentId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentLogsUrl = (id, sandboxId, deploymentId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs?${stringifiedParams}` : `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/logs`;
+};
+/**
+ * @summary Read sandbox deployment build logs
+ */
+export const getSandboxDeploymentLogs = async (id, sandboxId, deploymentId, params, options) => {
+    return volcanoFetch(getGetSandboxDeploymentLogsUrl(id, sandboxId, deploymentId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetSandboxDeploymentSourceUrl = (id, sandboxId, deploymentId) => {
+    return `/projects/${id}/sandboxes/${sandboxId}/deployments/${deploymentId}/source`;
+};
+/**
+ * @summary Download the retained custom sandbox source
+ */
+export const getSandboxDeploymentSource = async (id, sandboxId, deploymentId, options) => {
+    return volcanoFetch(getGetSandboxDeploymentSourceUrl(id, sandboxId, deploymentId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getListSandboxSessionsUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/sandbox-sessions?${stringifiedParams}` : `/projects/${id}/sandbox-sessions`;
+};
+/**
+ * @summary List project sandbox sessions
+ */
+export const listSandboxSessions = async (id, params, options) => {
+    return volcanoFetch(getListSandboxSessionsUrl(id, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getCreateSandboxSessionUrl = (id) => {
+    return `/projects/${id}/sandbox-sessions`;
+};
+/**
+ * @summary Start a sandbox session
+ */
+export const createSandboxSession = async (id, createSandboxSessionRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getCreateSandboxSessionUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(createSandboxSessionRequest)
+    });
+};
+export const getExecuteSandboxUrl = (id) => {
+    return `/projects/${id}/sandbox-executions`;
+};
+/**
+ * @summary Execute once and return after confirmed termination
+ */
+export const executeSandbox = async (id, sandboxExecutionRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getExecuteSandboxUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxExecutionRequest)
+    });
+};
+export const getGetSandboxSessionUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}`;
+};
+/**
+ * @summary Get a sandbox session
+ */
+export const getSandboxSession = async (sessionId, options) => {
+    return volcanoFetch(getGetSandboxSessionUrl(sessionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getTerminateSandboxSessionUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}`;
+};
+/**
+ * @summary Request sandbox termination
+ */
+export const terminateSandboxSession = async (sessionId, options) => {
+    return volcanoFetch(getTerminateSandboxSessionUrl(sessionId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getSuspendSandboxSessionUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/suspend`;
+};
+/**
+ * @summary Suspend a sandbox session
+ */
+export const suspendSandboxSession = async (sessionId, options) => {
+    return volcanoFetch(getSuspendSandboxSessionUrl(sessionId), {
+        ...options,
+        method: 'POST'
+    });
+};
+export const getResumeSandboxSessionUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/resume`;
+};
+/**
+ * @summary Resume a sandbox session
+ */
+export const resumeSandboxSession = async (sessionId, options) => {
+    return volcanoFetch(getResumeSandboxSessionUrl(sessionId), {
+        ...options,
+        method: 'POST'
+    });
+};
+export const getExecuteSandboxSessionUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/exec`;
+};
+/**
+ * @summary Execute a command within a session
+ */
+export const executeSandboxSession = async (sessionId, sandboxCommandRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getExecuteSandboxSessionUrl(sessionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxCommandRequest)
+    });
+};
+export const getReadSandboxSessionFileUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/files/read`;
+};
+/**
+ * @summary Read a workspace file
+ */
+export const readSandboxSessionFile = async (sessionId, sandboxFileReadRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getReadSandboxSessionFileUrl(sessionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxFileReadRequest)
+    });
+};
+export const getWriteSandboxSessionFileUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/files/write`;
+};
+/**
+ * @summary Write a workspace file
+ */
+export const writeSandboxSessionFile = async (sessionId, sandboxFileWriteRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getWriteSandboxSessionFileUrl(sessionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxFileWriteRequest)
+    });
+};
+export const getGrantSandboxSessionUrl = (sessionId, subjectId) => {
+    return `/sandbox-sessions/${sessionId}/grants/${subjectId}`;
+};
+/**
+ * @summary Authorize an authenticated project user for this session
+ */
+export const grantSandboxSession = async (sessionId, subjectId, sandboxSubjectGrantRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getGrantSandboxSessionUrl(sessionId, subjectId), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxSubjectGrantRequest)
+    });
+};
+export const getRevokeSandboxSessionUrl = (sessionId, subjectId) => {
+    return `/sandbox-sessions/${sessionId}/grants/${subjectId}`;
+};
+/**
+ * @summary Revoke a project user session grant
+ */
+export const revokeSandboxSession = async (sessionId, subjectId, options) => {
+    return volcanoFetch(getRevokeSandboxSessionUrl(sessionId, subjectId), {
+        ...options,
+        method: 'DELETE'
+    });
+};
+export const getCreateSandboxSessionAccessUrl = (sessionId) => {
+    return `/sandbox-sessions/${sessionId}/access`;
+};
+/**
+ * @summary Issue a short-lived port-scoped access credential
+ */
+export const createSandboxSessionAccess = async (sessionId, sandboxAccessRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getCreateSandboxSessionAccessUrl(sessionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sandboxAccessRequest)
+    });
+};
 export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
     return `/durable-functions/${functionId}/executions`;
 };
@@ -13,11 +464,16 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
  * `/projects/{id}/durable-functions/...` remains the owner's management
  * surface.
  *
- * **With a service key or an auth user token:** any durable function in
- * the project.
+ * **With a service key:** any durable function in the project.
+ *
+ * **With an auth user token:** a durable function whose `visibility` is
+ * `authenticated` or `public`.
  *
  * **With an anon key:** requires the `functions.invoke` permission, and
- * the function must have `is_public: true`.
+ * the function must have `visibility: public`.
+ *
+ * A `private` durable function answers every credential but a service key
+ * exactly as a missing one, with 404.
  *
  * Starting is all this endpoint does. Reading a result or stopping an
  * execution requires the project owner's token, because an anon key is
@@ -41,9 +497,15 @@ export const startDurableExecutionFromApplication = async (functionId, startDura
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getStartDurableExecutionFromApplicationUrl(functionId), {
         ...options,
@@ -134,9 +596,15 @@ export const queryDatabaseSelect = async (databaseName, databaseSelectRequest, o
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getQueryDatabaseSelectUrl(databaseName), {
         ...options,
@@ -165,9 +633,15 @@ export const authSignin = async (authSigninBody, options) => {
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getAuthSigninUrl(), {
         ...options,
@@ -193,9 +667,15 @@ export const acquireProjectLock = async (key, projectLockLeaseRequest, options) 
             return {};
         if (h instanceof Headers)
             return Object.fromEntries(h.entries());
-        if (Array.isArray(h))
-            return Object.fromEntries(h);
-        return h;
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
     };
     return volcanoFetch(getAcquireProjectLockUrl(key), {
         ...options,

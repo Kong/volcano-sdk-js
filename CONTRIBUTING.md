@@ -4,7 +4,7 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 
 ## Local Prerequisites
 
-- Node.js 22.23.3 from `.node-version` for development. The package supports Node.js 20 or newer.
+- Node.js 22.23.3 from `.node-version` for development. The package supports Node.js 22 or newer.
 - pnpm 10.34.1.
 
 ## Common Workflows
@@ -29,7 +29,7 @@ platform implementation.
 [Are the Types Wrong](https://github.com/arethetypeswrong/arethetypeswrong.github.io/blob/main/packages/cli/README.md)
 against the same tarball. ATTW's native `node16` profile checks CommonJS, ESM,
 and bundler resolution through the package export map. Legacy Node 10 resolution
-is outside the SDK's Node 20+ support; no diagnostic rules or entrypoints are ignored.
+is outside the SDK's Node 22+ support; no diagnostic rules or entrypoints are ignored.
 `pnpm test:quickstart` also installs that tarball in an isolated consumer and
 checks realtime imports and the documented quickstart.
 
