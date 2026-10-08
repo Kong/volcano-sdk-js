@@ -101,7 +101,49 @@ invoke through the API host instead. Same call, same result.
 
 ## Authentication
 
-The SDK uses the user's access token when a user is signed in. The function receives the user's context and can:
+A function's [visibility](/platform/functions/creating-functions#choose-who-can-invoke-it)
+decides which credentials can invoke it. New functions are `private`.
+
+| Visibility          | Service keys and schedulers | Your project's signed-in users | Anon keys with `functions.invoke` |
+| ------------------- | --------------------------- | ------------------------------ | --------------------------------- |
+| `private` (default) | Yes                         | No                             | No                                |
+| `authenticated`     | Yes                         | Yes                            | No                                |
+| `public`            | Yes                         | Yes                            | Yes                               |
+
+Signed-in users include anonymous sign-ins. Set the level in
+`volcano-config.yaml` for every function your app calls:
+
+```yaml
+# volcano-config.yaml
+version: 1
+functions:
+  - name: get-my-profile
+    visibility: authenticated
+  - name: contact-form
+    visibility: public
+```
+
+Deploying `visibility` needs Volcano CLI 0.42.0 or later; earlier releases
+reject the field. `public: false` still means `authenticated` on any version.
+
+A caller the level does not admit gets an `error`, and the function does not
+run. `invoke` looks the name up first, and the lookup answers a refused caller
+exactly as it answers a missing function: `error.status` is `404` and `status`
+is `null`, because the invocation was never sent. So a signed-in user can't
+tell a `private` function exists, and neither can an anon key on any function
+that isn't `public`. `403` comes only from requests that skip the lookup: a
+direct `POST /functions/{id}/invoke` with an anon key on an `authenticated`
+function, and
+[`durable.start`](./durable-functions.md#starting-and-reading-executions).
+
+The SDK remembers a failed lookup for about 30 seconds per credential. After you
+widen a function's level, a client that was just refused keeps getting `404`
+until that passes.
+
+### As a signed-in user
+
+When a user is signed in, the SDK sends their access token. The function must be
+`authenticated` or `public`. It receives the user's context and can:
 
 1. Verify the user's identity
 2. Query the database with Row-Level Security
@@ -116,7 +158,12 @@ const { data } = await volcano.functions.invoke('get-my-profile');
 // Returns Alice's profile data
 ```
 
-When no user is signed in, the SDK uses the project's anon key. This works only for functions configured as public. Public invocations do not receive user context.
+### With the anon key
+
+When no user is signed in, the SDK sends the project's anon key. This works only
+for `public` functions, and the anon key needs the `functions.invoke`
+permission. These invocations do not receive user context. Anon keys ship in
+browser code, so treat a `public` function as internet-facing.
 
 ```javascript
 const volcano = new VolcanoAuth({ anonKey: process.env.NEXT_PUBLIC_VOLCANO_ANON_KEY });
