@@ -51,6 +51,12 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [2.0.1](https://github.com/Kong/volcano-sdk-js/compare/v2.0.0...v2.0.1) (2026-10-09)
+
+### Bug Fixes
+
+- **storage:** refuse dot segments in storage paths and bucket names ([#317](https://github.com/Kong/volcano-sdk-js/issues/317)) ([aecaaf5](https://github.com/Kong/volcano-sdk-js/commit/aecaaf53b66cb5e8a2d37ddcaa51496ea2814cbf))
+
 ## [2.0.0](https://github.com/Kong/volcano-sdk-js/compare/v1.15.1...v2.0.0) (2026-10-08)
 
 ### ⚠ BREAKING CHANGES
