@@ -941,8 +941,18 @@ test('remove reports each deleted path as the caller wrote it', async () => {
 
 test('remove validates a very long path list without spreading it into arguments', async () => {
   const given = fixture();
+  // If validation is skipped, fail at the first deletion and hold it there.
+  // Letting it continue would send 200,000 deletions before the assertion runs.
+  const firstDeletion = new Promise<never>((_resolve, reject) => {
+    given.fetch.mockImplementation(() => {
+      reject(new Error('remove sent a deletion before rejecting the list'));
+      return new Promise<Response>(() => {
+        // Never settle, so the deletion loop stops at this request.
+      });
+    });
+  });
   const paths = [...Array.from({ length: 200_000 }, (_, index) => `file-${String(index)}`), '..'];
-  await expect(given.api.remove(paths)).resolves.toEqual({
+  await expect(Promise.race([given.api.remove(paths), firstDeletion])).resolves.toEqual({
     data: null,
     error: new Error(UNSAFE_PATH),
   });
