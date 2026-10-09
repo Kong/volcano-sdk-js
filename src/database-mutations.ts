@@ -1,6 +1,7 @@
 import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
+import { databaseSegment } from './database-name.ts';
 import { safeJsonParse } from './response-json.ts';
 
 type Operation = 'insert' | 'update' | 'delete';
@@ -38,7 +39,7 @@ export class MutationBuilder extends FilterBuilder {
     }
 
     try {
-      return await this.request(preflight.databaseName);
+      return await this.request(preflight.databasePath);
     } catch (error) {
       return {
         data: null,
@@ -54,24 +55,21 @@ export class MutationBuilder extends FilterBuilder {
     return this.execute().then(resolve, reject);
   }
 
-  private preflight(): { ok: true; databaseName: string } | { ok: false; result: MutationResult } {
+  private preflight(): { ok: true; databasePath: string } | { ok: false; result: MutationResult } {
     if (this.client.accessToken === null || this.client.accessToken.length === 0) {
       return {
         ok: false,
         result: errorResult(sessionError(this.client._oauthExchangeError)),
       };
     }
-    const databaseName = this.databaseName;
-    if (databaseName === null || databaseName.length === 0) {
-      return {
-        ok: false,
-        result: errorResult('Database name not set. Use .database(databaseName) first.'),
-      };
+    const database = databaseSegment(this.databaseName);
+    if (database.error !== null) {
+      return { ok: false, result: errorResult(database.error) };
     }
-    return { ok: true, databaseName };
+    return { ok: true, databasePath: database.segment };
   }
 
-  private async request(databaseName: string): Promise<MutationResult> {
+  private async request(databasePath: string): Promise<MutationResult> {
     const body: { table: string; values?: Record<string, unknown>; filters?: DatabaseFilter[] } = {
       table: this.table,
     };
@@ -84,7 +82,7 @@ export class MutationBuilder extends FilterBuilder {
 
     const response = await fetchWithAuthRetry(
       this.client,
-      `${this.client.apiUrl}/databases/${encodeURIComponent(databaseName)}/query/${encodeURIComponent(this.operation)}`,
+      `${this.client.apiUrl}/databases/${databasePath}/query/${encodeURIComponent(this.operation)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

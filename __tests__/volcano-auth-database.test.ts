@@ -46,51 +46,51 @@ describe('VolcanoAuth database and initialization', () => {
   describe('Database Query - URL Encoding', () => {
     it('should URL-encode databaseName in SELECT query URL', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with/special&chars');
+      volcano.database('db-with?special&chars');
 
       fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
 
       await volcano.from('users').execute();
 
       const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with/special&chars'));
-      expect(lastUrl).not.toContain('db-with/special&chars');
+      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
+      expect(lastUrl).not.toContain('db-with?special&chars');
     });
 
     it('should URL-encode databaseName in INSERT mutation URL', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with/special&chars');
+      volcano.database('db-with?special&chars');
 
       fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
 
       await volcano.insert('users', { name: 'test' }).execute();
 
       const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with/special&chars'));
+      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
     });
 
     it('should URL-encode databaseName in UPDATE mutation URL', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with/special&chars');
+      volcano.database('db-with?special&chars');
 
       fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
 
       await volcano.update('users', { name: 'test' }).eq('id', '1').execute();
 
       const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with/special&chars'));
+      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
     });
 
     it('should URL-encode databaseName in DELETE mutation URL', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with/special&chars');
+      volcano.database('db-with?special&chars');
 
       fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
 
       await volcano.delete('users').eq('id', '1').execute();
 
       const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with/special&chars'));
+      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
     });
   });
 

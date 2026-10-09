@@ -20,7 +20,12 @@ import type {
   UploadPartResponse,
   UploadSessionStatusResponse,
 } from './index.js';
-import { buildStorageUrl, encodeStoragePath } from './storage-paths.ts';
+import {
+  bucketRelativePath,
+  buildStorageUrl,
+  encodeStoragePath,
+  storageTargetError,
+} from './storage-paths.ts';
 import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
 import {
@@ -93,6 +98,31 @@ function legacyValueDefault(value: unknown, fallback: unknown): unknown {
   return Boolean(value) ? value : fallback;
 }
 
+/** Refuse a bucket or path before a URL parser can resolve it outside the bucket route. */
+function invalidTarget(bucketName: string, paths: readonly unknown[]): StorageResult<never> | null {
+  const message = storageTargetError(bucketName, paths);
+  return message === null ? null : errorResult(message);
+}
+
+async function preflightPaths(
+  host: StorageFileApi,
+  paths: readonly unknown[],
+): Promise<StorageResult<never> | null> {
+  return invalidTarget(host.bucketName, paths) ?? (await host._checkAuth());
+}
+
+function preflight(
+  host: StorageFileApi,
+  ...paths: unknown[]
+): Promise<StorageResult<never> | null> {
+  return preflightPaths(host, paths);
+}
+
+// Validated paths always end in a non-empty segment.
+function fileName(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
 function uploadFileBody(
   path: string,
   fileBody: unknown,
@@ -102,7 +132,7 @@ function uploadFileBody(
     return fileBody;
   }
   if (fileBody instanceof Blob || fileBody instanceof ArrayBuffer) {
-    return new File([fileBody], legacyStringDefault(path.split('/').pop(), 'file'), {
+    return new File([fileBody], fileName(path), {
       type: legacyStringDefault(options.contentType, 'application/octet-stream'),
     });
   }
@@ -188,11 +218,11 @@ interface RemovedPath {
 
 async function deletePaths(
   host: StorageFileApi,
-  paths: string | string[],
+  paths: readonly string[],
 ): Promise<{ deleted: string[]; failures: RemovedPath[] }> {
   const deleted: string[] = [];
   const failures: RemovedPath[] = [];
-  for (const path of Array.isArray(paths) ? paths : [paths]) {
+  for (const path of paths) {
     const result = await host._storageRequest(host._buildUrl(path), { method: 'DELETE' });
     if (result.error === null) {
       deleted.push(path);
@@ -203,9 +233,13 @@ async function deletePaths(
   return { deleted, failures };
 }
 
+function transferBody(fromPath: string, toPath: string): string {
+  return JSON.stringify({ from: bucketRelativePath(fromPath), to: bucketRelativePath(toPath) });
+}
+
 function uploadSessionBody(path: string, options: Partial<CreateUploadSessionOptions>): object {
   return {
-    filename: legacyStringDefault(path.split('/').pop(), path),
+    filename: fileName(path),
     content_type: legacyValueDefault(options.contentType, 'application/octet-stream'),
     total_size: options.totalSize,
     part_size: options.partSize,
@@ -297,9 +331,9 @@ export class StorageFileApi {
     fileBody: unknown,
     options: StorageUploadOptions = {},
   ): Promise<StorageUploadResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
     return uploadWithFile(this, path, fileBody, options);
   }
@@ -311,9 +345,9 @@ export class StorageFileApi {
     path: string,
     options: StorageDownloadOptions = {},
   ): Promise<StorageDownloadResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     try {
@@ -332,9 +366,9 @@ export class StorageFileApi {
    * List files in the bucket
    */
   async list(prefix: unknown = '', options: StorageListOptions = {}): Promise<StorageListResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return { data: null, error: authError.error, nextCursor: null };
+    const rejected = await preflight(this);
+    if (rejected !== null) {
+      return { data: null, error: rejected.error, nextCursor: null };
     }
 
     const result = await this._storageRequest(listUrl(this, prefix, options), {
@@ -353,12 +387,14 @@ export class StorageFileApi {
    * Delete one or more files from the bucket
    */
   async remove(paths: string | string[]): Promise<StorageRemoveResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    // Copy the list so the paths deleted are the paths checked.
+    const requested = Array.isArray(paths) ? paths.slice() : [paths];
+    const rejected = await preflightPaths(this, requested);
+    if (rejected !== null) {
+      return rejected;
     }
 
-    const { deleted, failures } = await deletePaths(this, paths);
+    const { deleted, failures } = await deletePaths(this, requested);
     const first = failures[0];
     if (first !== undefined) {
       return { data: { deleted }, error: removeError(failures, first.error) };
@@ -371,9 +407,9 @@ export class StorageFileApi {
    * Move/rename a file within the bucket
    */
   async move(fromPath: string, toPath: string): Promise<StorageMoveResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, fromPath, toPath);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -382,7 +418,7 @@ export class StorageFileApi {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: fromPath, to: toPath }),
+          body: transferBody(fromPath, toPath),
         },
       ),
       isStorageObject,
@@ -394,9 +430,9 @@ export class StorageFileApi {
    * Copy a file within the bucket
    */
   async copy(fromPath: string, toPath: string): Promise<StorageMoveResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, fromPath, toPath);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -405,7 +441,7 @@ export class StorageFileApi {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: fromPath, to: toPath }),
+          body: transferBody(fromPath, toPath),
         },
       ),
       isStorageObject,
@@ -429,9 +465,9 @@ export class StorageFileApi {
    * Update the visibility (public/private) of a file
    */
   async updateVisibility(path: string, isPublic: boolean): Promise<StorageVisibilityResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -453,9 +489,9 @@ export class StorageFileApi {
     path: string,
     options: Partial<CreateUploadSessionOptions> | null | undefined,
   ): Promise<CreateUploadSessionResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     if (options === null || options === undefined || !Boolean(options.totalSize)) {
@@ -479,9 +515,9 @@ export class StorageFileApi {
     partNumber: number,
     partData: ArrayBuffer | Blob,
   ): Promise<UploadPartResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -503,9 +539,9 @@ export class StorageFileApi {
     path: string,
     sessionId: string,
   ): Promise<CompleteUploadSessionResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -524,9 +560,9 @@ export class StorageFileApi {
   }
 
   async getUploadSession(path: string, sessionId: string): Promise<UploadSessionStatusResponse> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return authError;
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return rejected;
     }
 
     return validatedResult(
@@ -543,9 +579,9 @@ export class StorageFileApi {
     path: string,
     sessionId: string,
   ): Promise<{ error: StorageError | null }> {
-    const authError = await this._checkAuth();
-    if (authError !== null) {
-      return { error: authError.error };
+    const rejected = await preflight(this, path);
+    if (rejected !== null) {
+      return { error: rejected.error };
     }
 
     const result = await this._storageRequest(this._buildUrl(path), {
@@ -561,6 +597,10 @@ export class StorageFileApi {
     fileBody: File | Blob,
     options: ResumableUploadOptions = {},
   ): Promise<CompleteUploadSessionResponse> {
+    const invalid = invalidTarget(this.bucketName, [path]);
+    if (invalid !== null) {
+      return invalid;
+    }
     return validatedResult(
       await runResumableUpload(this, path, fileBody, options),
       isCompletedUpload,

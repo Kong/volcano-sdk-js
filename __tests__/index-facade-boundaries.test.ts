@@ -126,15 +126,39 @@ describe('facade log request boundary', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test.each(['.', '..', 'x/..', 'project/id'])(
+    'rejects the project %p before building the log URL',
+    async (projectId) => {
+      const sdk = client();
+      const fetch = jest.spyOn(sdk, '_authFetch');
+      await expect(sdk._postProjectLogRequest(projectId, 'search', {})).resolves.toEqual({
+        data: null,
+        error: new Error('projectId cannot contain "/" or be "." or ".."'),
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  test('encodes a project containing dots as one log path segment', async () => {
+    const sdk = client();
+    const result: RequestResult = { ok: true, status: 200, data: {}, error: null };
+    const fetch = jest.spyOn(sdk, '_authFetch').mockResolvedValue(result);
+    await sdk._postProjectLogRequest('..x', 'activity', {});
+    expect(fetch).toHaveBeenCalledWith('/projects/..x/logs/activity', {
+      method: 'POST',
+      body: '{}',
+    });
+  });
+
   test('uses an empty object for an absent log request body', async () => {
     const sdk = client();
     const result: RequestResult = { ok: true, status: 200, data: {}, error: null };
     const fetch = jest.spyOn(sdk, '_authFetch').mockResolvedValue(result);
-    await expect(sdk._postProjectLogRequest('project/id', 'search', null)).resolves.toEqual({
+    await expect(sdk._postProjectLogRequest('project?id', 'search', null)).resolves.toEqual({
       data: {},
       error: null,
     });
-    expect(fetch).toHaveBeenCalledWith('/projects/project%2Fid/logs/search', {
+    expect(fetch).toHaveBeenCalledWith('/projects/project%3Fid/logs/search', {
       method: 'POST',
       body: '{}',
     });

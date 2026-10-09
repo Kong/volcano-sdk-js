@@ -192,3 +192,43 @@ test('OAuth redirect defaults on blank input and adds one nonce parameter', () =
     'https://app.example.test/other',
   );
 });
+
+test('hosted auth encodes the project ID as one path segment', () => {
+  browser();
+  const { host } = fixture();
+  host._resolveProjectIdForHostedAuth = () => 'team project?x#y';
+
+  const url = new URL(getHostedAuthUrl(host, {}));
+
+  expect(url.pathname).toBe('/projects/team%20project%3Fx%23y/auth/hosted');
+  expect([...url.searchParams.keys()]).toEqual(['anon_key', 'state']);
+  expect(url.hash).toBe('');
+});
+
+test.each(['.', '..', '../x', 'team/project'])(
+  'hosted auth refuses the project ID %p before storing state',
+  (projectId) => {
+    browser();
+    const { host, stored } = fixture();
+    host._resolveProjectIdForHostedAuth = () => projectId;
+
+    expect(() => getHostedAuthUrl(host, {})).toThrow(
+      new Error('projectId cannot contain "/" or be "." or ".."'),
+    );
+    expect(stored).not.toHaveBeenCalled();
+  },
+);
+
+test('hosted sign-in throws for a refused project ID without navigating', () => {
+  const navigate = jest.fn<(url: string) => void>();
+  browser(navigate);
+  const { host, stored } = fixture();
+  host._resolveProjectIdForHostedAuth = () => '..';
+  host.getHostedAuthUrl = (options) => getHostedAuthUrl(host, options ?? {});
+
+  expect(() => signInWithHostedAuth(host, { projectId: '..' })).toThrow(
+    new Error('projectId cannot contain "/" or be "." or ".."'),
+  );
+  expect(stored).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
+});

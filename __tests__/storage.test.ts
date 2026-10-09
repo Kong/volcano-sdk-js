@@ -940,12 +940,49 @@ describe('Storage', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it.each(['.', 'avatars/../secret.txt'])('should reject dot segment path %s', (path) => {
-      const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+    it.each(['.', 'avatars/../secret.txt', 'avatars//secret.txt', 'avatars/'])(
+      'should reject an empty or dot segment path %s',
+      (path) => {
+        const { data, error } = volcanoWithValidKey.storage.from('avatars').getPublicUrl(path);
+
+        expect(data).toBeNull();
+        expect(error?.message).toBe('Storage path cannot contain empty, ".", or ".." segments');
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('path traversal', () => {
+    it('does not let a download path leave the storage route', async () => {
+      const { data, error } = await volcano.storage.from('files').download('../../functions/x');
 
       expect(data).toBeNull();
-      expect(error?.message).toBe('Public URL paths cannot contain dot segments');
+      expect(error).toEqual(new Error('Storage path cannot contain empty, ".", or ".." segments'));
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it.each(['.', '..', 'photos/avatar.png'])(
+      'does not let the bucket name %s leave the storage route',
+      async (bucket) => {
+        const { data, error } = await volcano.storage.from(bucket).download('functions/x');
+
+        expect(data).toBeNull();
+        expect(error).toEqual(new Error('Bucket name cannot contain "/" or be "." or ".."'));
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it('sends a literal percent-encoded dot path as an object name', async () => {
+      fetchMock.mockResolvedValueOnce(
+        responseFixture({ ok: true, blob: () => Promise.resolve(new Blob(['data'])) }),
+      );
+
+      const { error } = await volcano.storage.from('files').download('%2e%2e/%2E%2E/x');
+
+      expect(error).toBeNull();
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.test.com/storage/files/%252e%252e/%252E%252E/x',
+      );
     });
   });
 

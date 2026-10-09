@@ -190,6 +190,10 @@ if (error) {
     case error.message.includes('Database name not set'):
       console.error('Developer error: Call volcano.database() first');
       break;
+    case error.message.startsWith('Database name'):
+      // Blank, ".", "..", containing "/", or not well-formed; refused before any request
+      console.error('Developer error: Invalid database name', error.message);
+      break;
     case error.message.includes('column') && error.message.includes('does not exist'):
       console.error('Developer error: Invalid column name in query');
       break;
@@ -269,7 +273,12 @@ if (error) {
       showError('Please sign in to upload files.');
       break;
     case error.message.includes('Bucket not found'):
-      console.error('Developer error: Invalid bucket name');
+    case error.message.startsWith('Bucket name'):
+      console.error('Developer error: Invalid bucket name', error.message);
+      break;
+    case error.message.startsWith('Storage path'):
+      // Refused before any request; see Path Rules in the storage guide
+      showError('That file name is not allowed.');
       break;
     case error.message.includes('File too large'):
       showError('File is too large. Maximum size is 100MB.');

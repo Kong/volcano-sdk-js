@@ -2,6 +2,7 @@ import { OAUTH_RESPONSE_QUERY_KEYS } from './auth-browser.ts';
 import { optionalField } from './auth-response.ts';
 import { sanitizeProvider } from './auth-validation.ts';
 import { isBrowser } from './next/request.ts';
+import { pathSegment } from './path-segments.ts';
 import { extractRequiredProjectIdFromToken } from './token-claims.ts';
 
 interface HostedAuthOptions {
@@ -89,10 +90,13 @@ export function getHostedAuthUrl(host: AuthOAuthUrlHost, options: HostedAuthOpti
   if (!isBrowser()) {
     throw new Error('getHostedAuthUrl is only available in the browser.');
   }
-  const projectId = host._resolveProjectIdForHostedAuth(options.projectId);
+  const project = pathSegment('projectId', host._resolveProjectIdForHostedAuth(options.projectId));
+  if (project.error !== null) {
+    throw project.error;
+  }
   const nonce = host._generateAuthStateNonce();
   host._storeAuthState(nonce);
-  const url = new URL(`${host.apiUrl}/projects/${projectId}/auth/hosted`);
+  const url = new URL(`${host.apiUrl}/projects/${project.segment}/auth/hosted`);
   url.searchParams.set('anon_key', host.anonKey);
   if (options.action !== undefined && options.action !== '') {
     url.searchParams.set('action', options.action);

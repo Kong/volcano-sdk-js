@@ -131,6 +131,7 @@ import {
   uploadStorageObject,
 } from './generated/client.ts';
 import { isBrowser } from './next/request.ts';
+import { pathSegment } from './path-segments.ts';
 import { ProjectLocksApi } from './project-locks.ts';
 import { logActivityResult, logSearchResult } from './project-logs.ts';
 import { SandboxesApi } from './sandboxes.ts';
@@ -453,17 +454,15 @@ class VolcanoAuth {
     endpoint: string,
     request: unknown,
   ): Promise<{ data: unknown; error: Error | null }> {
-    if (typeof projectId !== 'string' || projectId.trim() === '') {
-      return { data: null, error: new Error('projectId must be a non-empty string') };
+    const project = pathSegment('projectId', projectId);
+    if (project.error !== null) {
+      return { data: null, error: project.error };
     }
 
-    const result = await this._authFetch(
-      `/projects/${encodeURIComponent(projectId)}/logs/${endpoint}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(Boolean(request) ? request : {}),
-      },
-    );
+    const result = await this._authFetch(`/projects/${project.segment}/logs/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify(Boolean(request) ? request : {}),
+    });
 
     if (result.ok !== true) {
       return { data: null, error: result.error };
