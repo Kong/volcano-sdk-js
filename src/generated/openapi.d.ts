@@ -2311,6 +2311,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/variable-environments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List variable Environments */
+        get: operations["listVariableEnvironments"];
+        put?: never;
+        /**
+         * Create a variable Environment
+         * @description Creates a custom variable Environment. Global is reserved and already exists. A Project may have at most 100 custom Environments.
+         */
+        post: operations["createVariableEnvironment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/variable-environments/{environmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        /** Get a variable Environment */
+        get: operations["getVariableEnvironment"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a variable Environment
+         * @description Deletes a custom Environment. Global cannot be deleted.
+         */
+        delete: operations["deleteVariableEnvironment"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a variable Environment
+         * @description Renames a custom Environment without changing its stable ID. Global cannot be renamed.
+         */
+        patch: operations["renameVariableEnvironment"];
+        trace?: never;
+    };
     "/projects/{id}/variables": {
         parameters: {
             query?: never;
@@ -3988,7 +4039,8 @@ export interface paths {
          *     `subject` field is ignored. Sending `subject` alone (no
          *     bodies) is rejected with 400 to avoid a silently-dropped
          *     subject or a blank message. Also rejects with 400 if
-         *     `email_enabled=false` or `smtp_host` is empty.
+         *     `email_enabled=false`, `smtp_host` is empty, or the saved
+         *     `smtp_password` can't be read and must be set again.
          */
         post: operations["testEmailConfig"];
         delete?: never;
@@ -5350,6 +5402,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List capabilities
+         * @description Lists which product capabilities accept new work in this environment. Check it
+         *     to decide what to offer, instead of calling a route to see whether it fails.
+         *
+         *     | ID | Covers |
+         *     | --- | --- |
+         *     | `sandboxes` | The Sandbox API: presets, templates, sessions, and executions |
+         *     | `sandboxes.sessions` | Starting and resuming sessions, and one-shot executions |
+         *     | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
+         *
+         *     A capability missing from the list is unavailable, and a capability under
+         *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
+         *     While a capability is unavailable, requests that start new work answer `404`
+         *     or `400` with code `feature_unavailable`; refresh this list when you receive
+         *     that code. Reading, deleting, and terminating what already exists keep
+         *     working unless the whole feature is absent from the environment. Every caller
+         *     in an environment gets the same answer.
+         */
+        get: operations["listCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -5491,8 +5578,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             project_id: string;
-            /** Format: uuid */
-            sandbox_id: string;
+            /**
+             * Format: uuid
+             * @description Explicit template used to create the session. Null when created directly from a preset.
+             */
+            sandbox_id: string | null;
             /** @enum {string} */
             state: "starting" | "running" | "suspending" | "suspended" | "resuming" | "terminating" | "terminated" | "unknown";
             /** @enum {string} */
@@ -5503,8 +5593,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             started_at?: string;
-            /** Format: date-time */
-            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Absolute VM expiry. Null means unlimited in local mode.
+             */
+            expires_at: string | null;
         };
         CreateSandboxSessionRequest: {
             /** @description Preset ID from the available Sandbox preset catalog. */
@@ -5515,14 +5608,12 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
-            /** @description Inherits the template TTL when omitted (3600 seconds for a new template). */
+            /** @description Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud accepts 30–28800 seconds; local accepts 0 for unlimited or a positive lifetime. */
             max_duration_seconds?: number;
-            /** @description Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout. */
-            idle_timeout_seconds?: number;
         } & (unknown | unknown);
         SandboxCommandRequest: {
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5537,8 +5628,10 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
+            /** @description Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud accepts 30–28800 seconds; local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes. */
+            max_duration_seconds?: number;
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5631,6 +5724,23 @@ export interface components {
         SandboxPresetList: {
             data: components["schemas"]["SandboxPreset"][];
         };
+        /** @description A product capability and whether it accepts new work in this environment. */
+        Capability: {
+            /**
+             * @description Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, or `sandboxes.custom_templates`. New IDs may appear at any time.
+             * @example sandboxes.sessions
+             */
+            id: string;
+            status: components["schemas"]["CapabilityStatus"];
+        };
+        /**
+         * @description `available` means the capability accepts new work; a temporary outage still answers `503`. `unavailable` means requests that start new work answer `404` or `400` with code `feature_unavailable`. Treat any other value as `unavailable`.
+         * @enum {string}
+         */
+        CapabilityStatus: "available" | "unavailable";
+        CapabilityList: {
+            data: components["schemas"]["Capability"][];
+        };
         SandboxCapacity: {
             region: string;
             /** Format: int64 */
@@ -5690,6 +5800,11 @@ export interface components {
              */
             refresh_token_lifetime?: number;
             /**
+             * @description A refresh within this many seconds of the refresh token being issued returns the same refresh token instead of rotating it, so concurrent refreshes from several tabs all succeed
+             * @default 10
+             */
+            refresh_token_reuse_interval?: number;
+            /**
              * @description Force re-login after inactivity (seconds, 0=never)
              * @default 0
              */
@@ -5738,6 +5853,11 @@ export interface components {
              * @default 1000
              */
             rate_limit_token_refresh?: number;
+            /**
+             * @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off.
+             * @default 10
+             */
+            rate_limit_password_reset?: number;
             /** @default false */
             cors_enabled?: boolean;
             /**
@@ -5868,6 +5988,10 @@ export interface components {
              * @example https://app.acme.com/device
              */
             device_verification_url?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
         /** @enum {string} */
         AuthInsightsInterval: "day" | "week" | "month";
@@ -6499,6 +6623,31 @@ export interface components {
             /** @description Project variable name. Function runtime names such as AWS_REGION are reserved and return 400; see the environment variables guide for the full list. */
             name: string;
             value: string;
+        };
+        /** @description Stable identity for a Project-owned variable Environment. */
+        VariableEnvironment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            /** @description Whether this is the reserved Global Environment. */
+            is_global: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        VariableEnvironmentList: {
+            data: components["schemas"]["VariableEnvironment"][];
+        };
+        CreateVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
+        };
+        RenameVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
         };
         /** @description PostgreSQL database with automatic scalability and security features. */
         Database: {
@@ -7548,6 +7697,7 @@ export interface components {
             verification_status: "pending" | "verified" | "failed";
             /** @description Failure category, present only when managed TLS setup has failed. Current values are provider, certificate, ownership, and internal; ownership means another account has already claimed the hostname through ownership verification. Treat unrecognized values as internal. */
             failure_reason?: string;
+            /** @description DNS records to publish now. For a managed domain whose hostname the account already owns, the create response names the `_acme-challenge` CNAME that authorizes certificate issuance and renewal. Otherwise it names the `_volcano` TXT record that proves ownership of the hostname's registrable domain, and reads return the CNAME once Volcano sees that record. Usually empty for BYOC. */
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             /**
              * @deprecated
@@ -8779,8 +8929,11 @@ export interface components {
             title: string;
             description?: string;
             /**
-             * @description Any JSON value to show the person deciding. The whole request is
-             *     limited to 64 KiB.
+             * @description Any JSON value to show the person deciding. A number's exponent must
+             *     be between -324 and 324, and a number too large or too precise to
+             *     store is refused with `400`. Numbers are read back written out in
+             *     full, so the exponents' absolute values may total at most 65,536.
+             *     The whole request is limited to 64 KiB.
              */
             details?: unknown;
         };
@@ -9977,8 +10130,11 @@ export interface components {
         UpdateAuthConfigRequest: {
             access_token_lifetime?: number;
             refresh_token_lifetime?: number;
+            refresh_token_reuse_interval?: number;
             inactivity_timeout?: number;
             max_session_duration?: number;
+            /** @description TTL in seconds for platform tokens minted via `/auth/platform/exchange`. From 3600 (1 hour) to 31536000 (365 days). */
+            platform_token_ttl?: number;
             min_password_length?: number;
             require_uppercase?: boolean;
             require_lowercase?: boolean;
@@ -9991,6 +10147,17 @@ export interface components {
             rate_limit_signup?: number;
             rate_limit_signin?: number;
             rate_limit_token_refresh?: number;
+            /** @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off. */
+            rate_limit_password_reset?: number;
+            cors_enabled?: boolean;
+            /**
+             * @description Replaces the allowed origins list.
+             * @example [
+             *       "https://myapp.com",
+             *       "http://localhost:3000"
+             *     ]
+             */
+            cors_allowed_origins?: string[];
             cors_allow_credentials?: boolean;
             cors_max_age?: number;
             enable_anonymous_signins?: boolean;
@@ -10369,9 +10536,7 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Service readiness ports; config apply asserts them and Git deploy builds them. */
             ports?: number[];
-            /** @description Default idle timeout for new sessions when the caller omits it. */
-            idle_timeout_seconds?: number;
-            /** @description Default absolute lifetime for new sessions when the caller omits it. */
+            /** @description Default absolute lifetime for new sessions when the caller omits it. Cloud accepts 30–28800 seconds; local accepts 0 for unlimited or a positive lifetime. */
             ttl_seconds?: number;
         };
         DatabaseQueryPerformanceDatabase: {
@@ -10773,6 +10938,8 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
+        /** @description Variable Environment ID */
+        VariableEnvironmentId: string;
         /** @description Frontend ID */
         FrontendId: string;
         /** @description Frontend Function route ID */
@@ -18785,6 +18952,371 @@ export interface operations {
                 };
             };
             /** @description Failed to delete Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVariableEnvironments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environments, with Global first and custom Environments ordered by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironmentList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list variable Environments */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict or the 100-custom-Environment
+             *     limit has been reached, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_conflict`,
+             *     `variable_environment_limit_reached`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Global is protected, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_immutable` or
+             *     `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict, an attempt to rename Global, or
+             *     a Project being deleted. Tell them apart with `code`, which is
+             *     `variable_environment_conflict`,
+             *     `variable_environment_immutable`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to rename the variable Environment */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -27268,6 +27800,44 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    listCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capabilities in this environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": [
+                     *         {
+                     *           "id": "sandboxes",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.sessions",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.custom_templates",
+                     *           "status": "unavailable"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CapabilityList"];
                 };
             };
         };

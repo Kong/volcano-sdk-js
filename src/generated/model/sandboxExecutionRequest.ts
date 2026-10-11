@@ -21,13 +21,20 @@ export type SandboxExecutionRequest = (unknown & {
      */
   region: string;
   /**
+     * Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud accepts 30–28800 seconds; local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes.
+     * @minimum 0
+     * @maximum 2147483647
+     */
+  max_duration_seconds?: number;
+  /**
      * @minLength 1
      * @maxLength 65536
      */
   command: string;
   /**
-     * @minimum 1
-     * @maximum 60
+     * Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work.
+     * @minimum 0
+     * @maximum 2147483647
      */
   timeout_seconds?: number;
   environment?: SandboxExecutionRequestEnvironment;

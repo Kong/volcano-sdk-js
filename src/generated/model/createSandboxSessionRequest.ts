@@ -20,15 +20,9 @@ export type CreateSandboxSessionRequest = (unknown & {
      */
   region: string;
   /**
-     * Inherits the template TTL when omitted (3600 seconds for a new template).
-     * @minimum 30
-     * @maximum 28800
+     * Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud accepts 30–28800 seconds; local accepts 0 for unlimited or a positive lifetime.
+     * @minimum 0
+     * @maximum 2147483647
      */
   max_duration_seconds?: number;
-  /**
-     * Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout.
-     * @minimum 0
-     * @maximum 28800
-     */
-  idle_timeout_seconds?: number;
 });
