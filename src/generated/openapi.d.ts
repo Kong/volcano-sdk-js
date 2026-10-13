@@ -582,13 +582,15 @@ export interface paths {
          *     Publish a TXT record named `_volcano.<domain>`, then send this request.
          *     Without the record, the response is `409` with
          *     `code: ownership_verification_required` and the `required_record` to
-         *     publish. Its value is the same on every request. The record must be
-         *     served at that name itself; a record reached through a CNAME does not
-         *     count.
+         *     publish. Its value stays the same until Volcano rotates the key it is
+         *     derived from. The record must be served at that name itself; a record
+         *     reached through a CNAME does not count.
          *
          *     When another account verified the domain, publishing your record moves
          *     the domain to your account once that account's record is no longer
-         *     published. Keep your record published so the domain stays yours.
+         *     published. Keep your record published so the domain stays yours. After
+         *     Volcano rotates the key the value is derived from, only a record with
+         *     the new value counts.
          *
          *     Verifying a domain the account already verified returns `200`.
          */
@@ -1409,6 +1411,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages from an application
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next; that is how a client catches up after a live subscription
+         *     reconnects.
+         *
+         *     Access follows the same rules as sending.
+         */
+        get: operations["listDurableMessagesFromApplication"];
+        put?: never;
+        /**
+         * Send a message to a durable execution from an application
+         * @description Sends a named message to a running execution. The workflow receives it
+         *     from `ctx.waitForMessage` with the same name. A message sent before
+         *     anything waits for its name is kept, and each wait takes the oldest
+         *     one, so messages arrive in the order they were sent.
+         *
+         *     Messages never decide an approval: a workflow waiting in
+         *     `ctx.waitForApproval` is not resumed by one.
+         *
+         *     **With a service key:** any execution in the project.
+         *
+         *     **With an auth user token:** an execution the user started, or one
+         *     whose `X-Volcano-Client-Token` the request carries, of a durable
+         *     function whose `visibility` is `authenticated` or `public`.
+         *
+         *     **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+         *     request carries, of a function with `visibility: public`.
+         *
+         *     Any other execution answers `404`, as a missing one does.
+         *
+         *     Send `Idempotency-Key` to make a retry safe: a repeat with a key the
+         *     execution has seen returns the first message with `200` and sends
+         *     nothing.
+         */
+        post: operations["sendDurableMessageFromApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/functions/resolve": {
         parameters: {
             query?: never;
@@ -1917,6 +1969,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next.
+         *
+         *     Project access tokens can list messages, including read-only ones.
+         */
+        get: operations["listDurableMessages"];
+        put?: never;
+        /**
+         * Send a message to a durable execution
+         * @description Sends a named message to a running execution, as
+         *     `POST /durable-functions/{functionId}/executions/{executionId}/messages`
+         *     does for an application. The workflow receives it from
+         *     `ctx.waitForMessage` with the same name; until then it is kept, and
+         *     waits take messages oldest first.
+         *
+         *     Project access tokens can send messages, but read-only ones cannot.
+         *     A message never decides an approval.
+         */
+        post: operations["sendDurableMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/message-waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's open message waits
+         * @description Lists the waits an execution has open in `ctx.waitForMessage`, oldest
+         *     first, so you can see which message names it is waiting for.
+         *
+         *     Project access tokens can list waits, including read-only ones.
+         */
+        get: operations["listDurableMessageWaits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wait for a message from inside a workflow
+         * @description Registers a wait for a named message. The Volcano SDK calls this from
+         *     `ctx.waitForMessage`; applications do not call it directly.
+         *
+         *     `execution_ref` and `callback_id` are opaque values the SDK reads from
+         *     the running workflow. Together they are the request's credential, so
+         *     the operation takes no other authentication. When a message for the
+         *     name is already queued, the wait takes the oldest one at once.
+         *
+         *     Retrying is safe: a request for a wait that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["registerDurableMessageWait"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a messages session from inside a workflow
+         * @description Opens the session a workflow publishes messages with. The Volcano SDK
+         *     calls this once per workflow context, on its first `ctx.publish`;
+         *     applications do not call it directly.
+         *
+         *     As for a wait, `execution_ref` and `callback_id` are the credential.
+         *     The session's token is delivered to the workflow itself and never
+         *     appears in a response.
+         *
+         *     Retrying is safe: a request for a session that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["openDurableMessageSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a message from inside a workflow
+         * @description Publishes a named message from a running workflow. The Volcano SDK
+         *     calls this from `ctx.publish`; applications do not call it directly.
+         *
+         *     The message is stored, listed with the execution's messages, and
+         *     delivered live to clients subscribed to the execution. Live delivery
+         *     counts against the project's Realtime messages.
+         *
+         *     The SDK sends an `Idempotency-Key` that a rerun of the publishing step
+         *     repeats, so a step that runs again returns the first message with
+         *     `200` and publishes nothing.
+         */
+        post: operations["publishDurableMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/durable-approvals": {
         parameters: {
             query?: never;
@@ -2309,6 +2506,57 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/variable-environments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List variable Environments */
+        get: operations["listVariableEnvironments"];
+        put?: never;
+        /**
+         * Create a variable Environment
+         * @description Creates a custom variable Environment. Global is reserved and already exists. A Project may have at most 100 custom Environments.
+         */
+        post: operations["createVariableEnvironment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/variable-environments/{environmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        /** Get a variable Environment */
+        get: operations["getVariableEnvironment"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a variable Environment
+         * @description Deletes a custom Environment. Global cannot be deleted.
+         */
+        delete: operations["deleteVariableEnvironment"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a variable Environment
+         * @description Renames a custom Environment without changing its stable ID. Global cannot be renamed.
+         */
+        patch: operations["renameVariableEnvironment"];
         trace?: never;
     };
     "/projects/{id}/variables": {
@@ -3687,14 +3935,22 @@ export interface paths {
         /**
          * Get auth user insights
          * @description Returns current and deleted auth-user totals, rolling 24-hour and 30-day
-         *     active users, and zero-filled signup, deletion, net-growth, and successful
-         *     sign-in counts for an inclusive UTC date range. Weeks start on Monday.
-         *     Signups remain counted after deletion; net growth is signups minus
-         *     deletions. Deleted users contribute to active counts until their last
-         *     activity leaves the rolling window. Token refreshes affect active users
-         *     but not the sign-in series. Collection starts at deployment, with signup
-         *     history backfilled from accounts still present then. Earlier hard-deleted
-         *     accounts cannot be recovered.
+         *     active users, and zero-filled daily activity and account-retention counts
+         *     for an inclusive UTC date range. Weeks start on Monday.
+         *     The existing deletions series counts accounts by deletion date; net_growth
+         *     remains signups minus deletions and is not affected by bans.
+         *     The banned_users, deleted_users, and available_users fields describe the
+         *     current state of users registered in each bucket. Banned users exclude
+         *     deleted users and expired bans. Available users are signups minus
+         *     banned_users minus deleted_users. Unban and expiry restore availability in
+         *     the original signup bucket. These current-state cohorts can change after
+         *     the requested dates have passed, without rewriting activity counts.
+         *     Sign-in counts remain grouped by session creation date. Deleted users
+         *     contribute to active counts until their last activity leaves the rolling
+         *     window. Token refreshes affect active users but not the sign-in series.
+         *     Signup history is backfilled from accounts present when collection was
+         *     deployed. Accounts hard-deleted before deletion-history collection cannot
+         *     be recovered. Current bans require no separate event-history collection.
          */
         get: operations["getAuthInsights"];
         put?: never;
@@ -3988,7 +4244,8 @@ export interface paths {
          *     `subject` field is ignored. Sending `subject` alone (no
          *     bodies) is rejected with 400 to avoid a silently-dropped
          *     subject or a blank message. Also rejects with 400 if
-         *     `email_enabled=false` or `smtp_host` is empty.
+         *     `email_enabled=false`, `smtp_host` is empty, or the saved
+         *     `smtp_password` can't be read and must be set again.
          */
         post: operations["testEmailConfig"];
         delete?: never;
@@ -5350,6 +5607,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List capabilities
+         * @description Lists which product capabilities accept new work in this environment. Check it
+         *     to decide what to offer, instead of calling a route to see whether it fails.
+         *
+         *     | ID | Covers |
+         *     | --- | --- |
+         *     | `sandboxes` | The Sandbox API: presets, templates, sessions, and executions |
+         *     | `sandboxes.sessions` | Starting and resuming sessions, and one-shot executions |
+         *     | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
+         *
+         *     A capability missing from the list is unavailable, and a capability under
+         *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
+         *     While a capability is unavailable, requests that start new work answer `404`
+         *     or `400` with code `feature_unavailable`; refresh this list when you receive
+         *     that code. Reading, deleting, and terminating what already exists keep
+         *     working unless the whole feature is absent from the environment. Every caller
+         *     in an environment gets the same answer.
+         */
+        get: operations["listCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -5491,8 +5783,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             project_id: string;
-            /** Format: uuid */
-            sandbox_id: string;
+            /**
+             * Format: uuid
+             * @description Explicit template used to create the session. Null when created directly from a preset.
+             */
+            sandbox_id: string | null;
             /** @enum {string} */
             state: "starting" | "running" | "suspending" | "suspended" | "resuming" | "terminating" | "terminated" | "unknown";
             /** @enum {string} */
@@ -5503,26 +5798,30 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             started_at?: string;
-            /** Format: date-time */
-            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Absolute VM expiry. Null means unlimited in local mode.
+             */
+            expires_at: string | null;
         };
         CreateSandboxSessionRequest: {
             /** @description Preset ID from the available Sandbox preset catalog. */
             preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
-            /** @enum {integer} */
+            /**
+             * @description Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits.
+             * @enum {integer}
+             */
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
-            /** @description Inherits the template TTL when omitted (3600 seconds for a new template). */
+            /** @description Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. */
             max_duration_seconds?: number;
-            /** @description Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout. */
-            idle_timeout_seconds?: number;
         } & (unknown | unknown);
         SandboxCommandRequest: {
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5533,12 +5832,17 @@ export interface components {
             preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
-            /** @enum {integer} */
+            /**
+             * @description Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits.
+             * @enum {integer}
+             */
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
+            /** @description Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes. */
+            max_duration_seconds?: number;
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5631,6 +5935,23 @@ export interface components {
         SandboxPresetList: {
             data: components["schemas"]["SandboxPreset"][];
         };
+        /** @description A product capability and whether it accepts new work in this environment. */
+        Capability: {
+            /**
+             * @description Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, or `sandboxes.custom_templates`. New IDs may appear at any time.
+             * @example sandboxes.sessions
+             */
+            id: string;
+            status: components["schemas"]["CapabilityStatus"];
+        };
+        /**
+         * @description `available` means the capability accepts new work; a temporary outage still answers `503`. `unavailable` means requests that start new work answer `404` or `400` with code `feature_unavailable`. Treat any other value as `unavailable`.
+         * @enum {string}
+         */
+        CapabilityStatus: "available" | "unavailable";
+        CapabilityList: {
+            data: components["schemas"]["Capability"][];
+        };
         SandboxCapacity: {
             region: string;
             /** Format: int64 */
@@ -5690,6 +6011,11 @@ export interface components {
              */
             refresh_token_lifetime?: number;
             /**
+             * @description A refresh within this many seconds of the refresh token being issued returns the same refresh token instead of rotating it, so concurrent refreshes from several tabs all succeed
+             * @default 10
+             */
+            refresh_token_reuse_interval?: number;
+            /**
              * @description Force re-login after inactivity (seconds, 0=never)
              * @default 0
              */
@@ -5738,6 +6064,11 @@ export interface components {
              * @default 1000
              */
             rate_limit_token_refresh?: number;
+            /**
+             * @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off.
+             * @default 10
+             */
+            rate_limit_password_reset?: number;
             /** @default false */
             cors_enabled?: boolean;
             /**
@@ -5868,6 +6199,10 @@ export interface components {
              * @example https://app.acme.com/device
              */
             device_verification_url?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
         /** @enum {string} */
         AuthInsightsInterval: "day" | "week" | "month";
@@ -5895,12 +6230,27 @@ export interface components {
             signins: number;
             /**
              * Format: int64
+             * @description Users registered in this bucket who are currently banned. Excludes deleted users, lifted bans, expired temporary bans, and internal test identities.
+             */
+            banned_users: number;
+            /**
+             * Format: int64
+             * @description Users registered in this bucket who are now deleted, counted once across soft and hard deletion. Grouped by signup date, not deletion date.
+             */
+            deleted_users: number;
+            /**
+             * Format: int64
+             * @description Currently available users registered in this bucket (signups minus banned_users minus deleted_users). Unban or expiry restores availability in the original signup bucket. This measures account availability, not return activity.
+             */
+            available_users: number;
+            /**
+             * Format: int64
              * @description Accounts deleted during this bucket, counted once across soft and hard deletion.
              */
             deletions: number;
             /**
              * Format: int64
-             * @description Registrations minus deletions during this bucket. May be negative.
+             * @description Registrations minus deletions during this bucket. May be negative. Bans do not affect this value.
              */
             net_growth: number;
             /** @description Whether the requested window or observation time clips this bucket. */
@@ -6499,6 +6849,31 @@ export interface components {
             /** @description Project variable name. Function runtime names such as AWS_REGION are reserved and return 400; see the environment variables guide for the full list. */
             name: string;
             value: string;
+        };
+        /** @description Stable identity for a Project-owned variable Environment. */
+        VariableEnvironment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            /** @description Whether this is the reserved Global Environment. */
+            is_global: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        VariableEnvironmentList: {
+            data: components["schemas"]["VariableEnvironment"][];
+        };
+        CreateVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
+        };
+        RenameVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
         };
         /** @description PostgreSQL database with automatic scalability and security features. */
         Database: {
@@ -7487,6 +7862,11 @@ export interface components {
              *     reach the target function at these paths without a credential.
              */
             function_routes: components["schemas"]["FrontendFunctionRoute"][];
+            /**
+             * Format: date-time
+             * @description Recorded completion time of the most recent deploy or redeploy with status active. Omitted when no such deployment has a recorded completion time. Site traffic, pending deployments, degraded deployments, failed deployments, and deletion do not change this value.
+             */
+            last_deployed_at?: string;
             /** Format: date-time */
             last_invoked_at?: string;
             /** Format: date-time */
@@ -7548,6 +7928,7 @@ export interface components {
             verification_status: "pending" | "verified" | "failed";
             /** @description Failure category, present only when managed TLS setup has failed. Current values are provider, certificate, ownership, and internal; ownership means another account has already claimed the hostname through ownership verification. Treat unrecognized values as internal. */
             failure_reason?: string;
+            /** @description DNS records to publish now. For a managed domain whose hostname the account already owns, the create response names the `_acme-challenge` CNAME that authorizes certificate issuance and renewal. Otherwise it names the `_volcano` TXT record that proves ownership of the hostname's registrable domain, and reads return the CNAME once Volcano sees that record. Usually empty for BYOC. */
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             /**
              * @deprecated
@@ -7617,7 +7998,7 @@ export interface components {
             type: string;
             value: string;
         };
-        /** @description Domain ownership conflict. With `code: ownership_verification_required`, the account has not proven it owns the domain: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. Other conflicts omit both fields. */
+        /** @description Domain ownership conflict. With `code: ownership_verification_required`, the account has not proven it owns the domain: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. With `code: custom_domain_releasing`, a removed domain still holds the hostname or the frontend while Volcano releases it: send the same request again after the response's `Retry-After` seconds. A release that will not finish within a few minutes is a plain conflict. Other conflicts omit both fields. */
         FrontendCustomDomainConflictError: components["schemas"]["Error"] & {
             required_record?: components["schemas"]["FrontendDomainVerificationRecord"];
         };
@@ -8002,6 +8383,12 @@ export interface components {
              * @description Present once the execution has reached a terminal status.
              */
             completed_at?: string;
+            /**
+             * @description Lets a browser read and send the execution's messages. Returned only
+             *     by the start that created the execution, never by a repeat under the
+             *     same name or by a read. Send it as `X-Volcano-Client-Token`.
+             */
+            client_token?: string;
         };
         /**
          * @description Lifecycle state of an execution. `pending` covers the window between the
@@ -8513,12 +8900,19 @@ export interface components {
              *     at times the time it spent running, in megabyte-seconds; the allowance for it is
              *     published in gigabyte-seconds, which is 1024 of these.
              *     "Sandbox Running (MiB-Seconds)", "Sandbox Suspended (Seconds)", and
-             *     "Sandbox Uncertain (MiB-Seconds)" are preview-only usage; they do not
-             *     debit credits. Running reports configured memory times observed runtime,
-             *     not measured CPU or elastic memory consumption. Uncertain includes
-             *     observation gaps and unconfirmed state transitions. Suspended reports
-             *     duration, not snapshot size. Local sessions do not contribute.
-             *     Totals are rounded down after aggregating millisecond measurements.
+             *     "Sandbox Uncertain (MiB-Seconds)" report cloud Sandbox usage. Running
+             *     reports configured baseline memory times confirmed runtime, not measured
+             *     CPU or elastic memory consumption. For sessions admitted after the pricing
+             *     release, confirmed running time consumes the account's runtime allowance;
+             *     SUPERAGENT overage debits credits according to the account's pricing terms.
+             *     Suspended time and uncertain usage do not consume runtime allowance or
+             *     debit credits. Uncertain includes observation gaps and unconfirmed state
+             *     transitions. Suspended reports duration, not snapshot size; snapshot costs
+             *     are included in runtime pricing. Local and platform image-validation
+             *     sessions do not contribute. Existing preview sessions remain unbilled,
+             *     and preview history is never charged retroactively. Displayed totals are
+             *     rounded down after aggregating millisecond measurements; billing uses
+             *     unrounded measurements in the monthly account billing cycle.
              *     "Database Storage (Bytes)" is a current observed gauge,
              *     not a cumulative counter. It is the sum of the latest samples exposed as
              *     `storage_bytes` by the project's database list, so it includes what each
@@ -8779,8 +9173,11 @@ export interface components {
             title: string;
             description?: string;
             /**
-             * @description Any JSON value to show the person deciding. The whole request is
-             *     limited to 64 KiB.
+             * @description Any JSON value to show the person deciding. A number's exponent must
+             *     be between -324 and 324, and a number too large or too precise to
+             *     store is refused with `400`. Numbers are read back written out in
+             *     full, so the exponents' absolute values may total at most 65,536.
+             *     The whole request is limited to 64 KiB.
              */
             details?: unknown;
         };
@@ -8794,6 +9191,110 @@ export interface components {
             total: number;
             /** @description Whether there are more pages available */
             has_more: boolean;
+        };
+        /**
+         * @description The name a workflow waits on or publishes under: up to 237 printable
+         *     ASCII characters.
+         */
+        DurableMessageName: string;
+        /**
+         * @description `in` is a message sent to the execution. `out` is one the execution
+         *     published.
+         * @enum {string}
+         */
+        DurableMessageDirection: "in" | "out";
+        /** @description A message sent to, or published by, a durable execution. */
+        DurableMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            execution_id: string;
+            direction: components["schemas"]["DurableMessageDirection"];
+            /**
+             * Format: int64
+             * @description Orders the execution's messages in both directions. It increases
+             *     with every message but can skip numbers. Pass the last one you read
+             *     as `after` to read what came next.
+             */
+            seq: number;
+            name: string;
+            /** @description The JSON value sent or published, or null. */
+            data: unknown;
+            sender: components["schemas"]["DurableMessageSender"];
+            status: components["schemas"]["DurableMessageStatus"];
+            /**
+             * Format: date-time
+             * @description When the execution received the message. Null until then, and for `out` messages.
+             */
+            delivered_at: string | null;
+            /** Format: date-time */
+            sent_at: string;
+        };
+        DurableMessageList: {
+            /** @description Messages after `after`, oldest first. */
+            data: components["schemas"]["DurableMessage"][];
+            /**
+             * @description Whether more messages follow. Read them with `after` set to the
+             *     last message's `seq`.
+             */
+            has_more: boolean;
+        };
+        /** @description A wait an execution has open for a message. */
+        DurableMessageWait: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /**
+             * Format: date-time
+             * @description When the wait times out. Null when the workflow set no timeout.
+             */
+            expires_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DurableMessageWaitList: {
+            /** @description Open waits, oldest first. */
+            data: components["schemas"]["DurableMessageWait"][];
+        };
+        SendDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
+        };
+        RegisterDurableMessageWaitRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque wait reference, supplied by the SDK. */
+            callback_id: string;
+            name: components["schemas"]["DurableMessageName"];
+        };
+        /** @description The registered wait, as the waiting workflow sees it. */
+        DurableMessageWaitRegistration: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        OpenDurableMessageSessionRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque session reference, supplied by the SDK. */
+            callback_id: string;
+        };
+        /**
+         * @description The registered session. Its token reaches the workflow through the
+         *     workflow itself, never in this response.
+         */
+        DurableMessageSessionRegistration: {
+            /** Format: uuid */
+            id: string;
+        };
+        PublishDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
         };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
@@ -9977,8 +10478,11 @@ export interface components {
         UpdateAuthConfigRequest: {
             access_token_lifetime?: number;
             refresh_token_lifetime?: number;
+            refresh_token_reuse_interval?: number;
             inactivity_timeout?: number;
             max_session_duration?: number;
+            /** @description TTL in seconds for platform tokens minted via `/auth/platform/exchange`. From 3600 (1 hour) to 31536000 (365 days). */
+            platform_token_ttl?: number;
             min_password_length?: number;
             require_uppercase?: boolean;
             require_lowercase?: boolean;
@@ -9991,6 +10495,17 @@ export interface components {
             rate_limit_signup?: number;
             rate_limit_signin?: number;
             rate_limit_token_refresh?: number;
+            /** @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off. */
+            rate_limit_password_reset?: number;
+            cors_enabled?: boolean;
+            /**
+             * @description Replaces the allowed origins list.
+             * @example [
+             *       "https://myapp.com",
+             *       "http://localhost:3000"
+             *     ]
+             */
+            cors_allowed_origins?: string[];
             cors_allow_credentials?: boolean;
             cors_max_age?: number;
             enable_anonymous_signins?: boolean;
@@ -10369,9 +10884,7 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Service readiness ports; config apply asserts them and Git deploy builds them. */
             ports?: number[];
-            /** @description Default idle timeout for new sessions when the caller omits it. */
-            idle_timeout_seconds?: number;
-            /** @description Default absolute lifetime for new sessions when the caller omits it. */
+            /** @description Default absolute lifetime for new sessions when the caller omits it. Cloud templates accept 30–28800 seconds; inherited lifetimes are clamped to the session plan limit (3600 for HOBBY, 28800 for SUPERAGENT). Local accepts 0 for unlimited or a positive lifetime. */
             ttl_seconds?: number;
         };
         DatabaseQueryPerformanceDatabase: {
@@ -10430,6 +10943,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description Who sent the message. */
+        DurableMessageSender: {
+            /**
+             * @description The credential the message was sent with. `project` is the
+             *     project's owner or one of its access tokens, and `execution` is the
+             *     execution itself publishing.
+             * @enum {string}
+             */
+            type: "service_key" | "user" | "anon" | "project" | "execution";
+            /** @description The auth user who sent it. Null unless `type` is `user`. */
+            user_id: string | null;
+        };
+        /**
+         * @description An `in` message is `queued` until a wait for its name takes it,
+         *     `delivering` while it is handed over, and `delivered` once the
+         *     execution has it. It is `dropped` if the execution ended before any
+         *     wait took it. Every `out` message is `published`.
+         * @enum {string}
+         */
+        DurableMessageStatus: "queued" | "delivering" | "delivered" | "dropped" | "published";
         /** @description Deployment log selector for deployable resources. */
         LogDeploymentRequestSelector: {
             /** @description Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources. */
@@ -10504,6 +11037,14 @@ export interface components {
              */
             stage?: "compile" | "publish";
         };
+        /**
+         * @description `waiting` until a message for its name arrives, `matched` while that
+         *     message is handed over, then `delivered`. `expired` means the wait's
+         *     timeout passed first, and `cancelled` that the execution stopped
+         *     waiting.
+         * @enum {string}
+         */
+        DurableMessageWaitStatus: "waiting" | "matched" | "delivered" | "expired" | "cancelled";
         /**
          * @description The durable function that requested the approval. `id` is null once the
          *     function has been deleted; `name` is kept.
@@ -10773,6 +11314,8 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
+        /** @description Variable Environment ID */
+        VariableEnvironmentId: string;
         /** @description Frontend ID */
         FrontendId: string;
         /** @description Frontend Function route ID */
@@ -10791,6 +11334,25 @@ export interface components {
          *     name.
          */
         DurableApprovalFunctionFilter: string;
+        /**
+         * @description Makes a send safe to retry. A repeat with a key the execution has
+         *     already seen returns the first message and sends nothing. Up to 255
+         *     characters.
+         */
+        DurableMessageIdempotencyKey: string;
+        /**
+         * @description The `client_token` the execution's start returned. Lets an anon key,
+         *     or a user who did not start the execution, reach it.
+         */
+        DurableClientToken: string;
+        /** @description Return only messages travelling this way. */
+        DurableMessageDirectionFilter: components["schemas"]["DurableMessageDirection"];
+        /** @description Return only messages with this name. */
+        DurableMessageNameFilter: components["schemas"]["DurableMessageName"];
+        /** @description Return only messages whose `seq` is greater than this. */
+        DurableMessageAfter: number;
+        /** @description Most messages to return. */
+        DurableMessageLimit: number;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -11369,7 +11931,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11406,7 +11968,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxExecutionResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11530,7 +12092,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -15675,6 +16237,219 @@ export interface operations {
             };
         };
     };
+    listDurableMessagesFromApplication: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: {
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function is `authenticated` and the request carries an anon
+             *     key, or the request's origin is refused by the project's CORS
+             *     policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessageFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the execution has
+                 *     already seen returns the first message and sends nothing. Up to 255
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /**
+             * @description Message sent. `status` is `delivered` when a wait took it at once,
+             *     and `queued` when it is kept for the next wait.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function is `authenticated` and the request carries an anon
+             *     key, or the request's origin is refused by the project's CORS
+             *     policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution. A `private` function answers every credential
+             *     but a service key this way.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` says why:
+             *
+             *     - `execution_not_running`: the execution has finished.
+             *     - `too_many_queued_messages`: the execution already holds the
+             *       maximum number of messages nothing has taken.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many messages sent to this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resolveFunctionForInvocation: {
         parameters: {
             query: {
@@ -17262,6 +18037,466 @@ export interface operations {
             };
         };
     };
+    listDurableMessages: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the execution has
+                 *     already seen returns the first message and sends nothing. Up to 255
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description Message sent */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` is `execution_not_running` or
+             *     `too_many_queued_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many messages sent to this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableMessageWaits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitList"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    registerDurableMessageWait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterDurableMessageWaitRequest"];
+            };
+        };
+        responses: {
+            /** @description The wait was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description Wait registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait cannot be registered now. `code` says why:
+             *
+             *     - `callback_not_ready`: the workflow has not finished opening the
+             *       wait yet. Retry with a short backoff; the SDK does.
+             *     - `callback_closed`: the workflow is no longer waiting on it, or
+             *       it is an approval's.
+             *     - `execution_ended`: the execution has finished.
+             *     - `too_many_message_waits`: the execution already has the maximum
+             *       number of open waits.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait could not be confirmed with the workflow right now. Retry
+             *     with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    openDurableMessageSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenDurableMessageSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description Session opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session cannot be opened now. `code` is `callback_not_ready`,
+             *     `callback_closed`, `execution_ended`, or
+             *     `too_many_message_sessions`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session could not be confirmed with the workflow right now.
+             *     Retry with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishDurableMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The session token the workflow received when its session opened. */
+                "X-Volcano-Durable-Session": string;
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the execution has
+                 *     already seen returns the first message and sends nothing. Up to 255
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already published; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description Message published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The session token is missing or not valid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be published. `code` is
+             *     `execution_not_running` or `too_many_published_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     requestDurableApproval: {
         parameters: {
             query?: never;
@@ -18263,9 +19498,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - ownership not verified, custom domain owned or reserved by another account, already in use, still detaching, or frontend already has a custom domain */
+            /** @description Conflict - ownership not verified, custom domain owned or reserved by another account, already in use, still detaching, or frontend already has a custom domain. While a removed domain detaches and Volcano releases it (about a minute for BYOC, a few minutes for managed TLS), adding its hostname to any frontend, or any domain to its frontend, returns `code: custom_domain_releasing` and a `Retry-After` header; send the same request again after that many seconds. A release that will not finish within a few minutes returns the conflict without `code`. */
             409: {
                 headers: {
+                    /** @description Seconds to wait before sending the same request again. Sent only with code `custom_domain_releasing`. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -18785,6 +20022,371 @@ export interface operations {
                 };
             };
             /** @description Failed to delete Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVariableEnvironments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environments, with Global first and custom Environments ordered by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironmentList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list variable Environments */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict or the 100-custom-Environment
+             *     limit has been reached, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_conflict`,
+             *     `variable_environment_limit_reached`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Global is protected, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_immutable` or
+             *     `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict, an attempt to rename Global, or
+             *     a Project being deleted. Tell them apart with `code`, which is
+             *     `variable_environment_conflict`,
+             *     `variable_environment_immutable`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to rename the variable Environment */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -22569,6 +24171,9 @@ export interface operations {
                      *           "signups": 12,
                      *           "signins": 97,
                      *           "deletions": 3,
+                     *           "banned_users": 2,
+                     *           "deleted_users": 3,
+                     *           "available_users": 7,
                      *           "net_growth": 9,
                      *           "is_partial": true
                      *         }
@@ -27268,6 +28873,44 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    listCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capabilities in this environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": [
+                     *         {
+                     *           "id": "sandboxes",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.sessions",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.custom_templates",
+                     *           "status": "unavailable"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CapabilityList"];
                 };
             };
         };

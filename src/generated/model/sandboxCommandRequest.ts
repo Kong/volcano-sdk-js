@@ -16,8 +16,9 @@ export interface SandboxCommandRequest {
      */
   command: string;
   /**
-     * @minimum 1
-     * @maximum 3600
+     * Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work.
+     * @minimum 0
+     * @maximum 2147483647
      */
   timeout_seconds?: number;
   environment?: SandboxCommandRequestEnvironment;

@@ -8,6 +8,9 @@
  * OpenAPI spec version: 3.0.0
  */
 
+/**
+ * Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits.
+ */
 export type CreateSandboxSessionRequestMemoryMb = typeof CreateSandboxSessionRequestMemoryMb[keyof typeof CreateSandboxSessionRequestMemoryMb];
 
 

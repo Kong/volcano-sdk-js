@@ -514,6 +514,82 @@ export const startDurableExecutionFromApplication = async (functionId, startDura
         body: JSON.stringify(startDurableExecutionFromApplicationBody)
     });
 };
+export const getSendDurableMessageFromApplicationUrl = (functionId, executionId) => {
+    return `/durable-functions/${functionId}/executions/${executionId}/messages`;
+};
+/**
+ * Sends a named message to a running execution. The workflow receives it
+ * from `ctx.waitForMessage` with the same name. A message sent before
+ * anything waits for its name is kept, and each wait takes the oldest
+ * one, so messages arrive in the order they were sent.
+ *
+ * Messages never decide an approval: a workflow waiting in
+ * `ctx.waitForApproval` is not resumed by one.
+ *
+ * **With a service key:** any execution in the project.
+ *
+ * **With an auth user token:** an execution the user started, or one
+ * whose `X-Volcano-Client-Token` the request carries, of a durable
+ * function whose `visibility` is `authenticated` or `public`.
+ *
+ * **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+ * request carries, of a function with `visibility: public`.
+ *
+ * Any other execution answers `404`, as a missing one does.
+ *
+ * Send `Idempotency-Key` to make a retry safe: a repeat with a key the
+ * execution has seen returns the first message with `200` and sends
+ * nothing.
+ * @summary Send a message to a durable execution from an application
+ */
+export const sendDurableMessageFromApplication = async (functionId, executionId, sendDurableMessageRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getSendDurableMessageFromApplicationUrl(functionId, executionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sendDurableMessageRequest)
+    });
+};
+export const getListDurableMessagesFromApplicationUrl = (functionId, executionId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/durable-functions/${functionId}/executions/${executionId}/messages?${stringifiedParams}` : `/durable-functions/${functionId}/executions/${executionId}/messages`;
+};
+/**
+ * Lists the messages sent to and published by an execution, oldest
+ * first. Pass the last `seq` you read as `after` to read only what came
+ * next; that is how a client catches up after a live subscription
+ * reconnects.
+ *
+ * Access follows the same rules as sending.
+ * @summary List a durable execution's messages from an application
+ */
+export const listDurableMessagesFromApplication = async (functionId, executionId, params, options) => {
+    return volcanoFetch(getListDurableMessagesFromApplicationUrl(functionId, executionId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
 export const getListDurableExecutionsUrl = (id, functionId, params) => {
     const normalizedParams = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -570,6 +646,67 @@ export const stopDurableExecution = async (id, functionId, executionId, options)
     return volcanoFetch(getStopDurableExecutionUrl(id, functionId, executionId), {
         ...options,
         method: 'POST'
+    });
+};
+export const getSendDurableMessageUrl = (id, functionId, executionId) => {
+    return `/projects/${id}/durable-functions/${functionId}/executions/${executionId}/messages`;
+};
+/**
+ * Sends a named message to a running execution, as
+ * `POST /durable-functions/{functionId}/executions/{executionId}/messages`
+ * does for an application. The workflow receives it from
+ * `ctx.waitForMessage` with the same name; until then it is kept, and
+ * waits take messages oldest first.
+ *
+ * Project access tokens can send messages, but read-only ones cannot.
+ * A message never decides an approval.
+ * @summary Send a message to a durable execution
+ */
+export const sendDurableMessage = async (id, functionId, executionId, sendDurableMessageRequest, options) => {
+    const getHeaders = (h) => {
+        if (!h)
+            return {};
+        if (h instanceof Headers)
+            return Object.fromEntries(h.entries());
+        if (Symbol.iterator in h) {
+            return Object.fromEntries(Array.from(h, (entry) => Array.from(entry)));
+        }
+        const headers = {};
+        for (const [name, value] of Object.entries(h)) {
+            if (value !== undefined)
+                headers[name] = value;
+        }
+        return headers;
+    };
+    return volcanoFetch(getSendDurableMessageUrl(id, functionId, executionId), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+        body: JSON.stringify(sendDurableMessageRequest)
+    });
+};
+export const getListDurableMessagesUrl = (id, functionId, executionId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/projects/${id}/durable-functions/${functionId}/executions/${executionId}/messages?${stringifiedParams}` : `/projects/${id}/durable-functions/${functionId}/executions/${executionId}/messages`;
+};
+/**
+ * Lists the messages sent to and published by an execution, oldest
+ * first. Pass the last `seq` you read as `after` to read only what came
+ * next.
+ *
+ * Project access tokens can list messages, including read-only ones.
+ * @summary List a durable execution's messages
+ */
+export const listDurableMessages = async (id, functionId, executionId, params, options) => {
+    return volcanoFetch(getListDurableMessagesUrl(id, functionId, executionId, params), {
+        ...options,
+        method: 'GET'
     });
 };
 export const getListDurableApprovalsUrl = (id, params) => {

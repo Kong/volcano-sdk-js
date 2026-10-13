@@ -13,12 +13,20 @@ import type { SandboxSessionState } from './sandboxSessionState';
 export interface SandboxSession {
   id: string;
   project_id: string;
-  sandbox_id: string;
+  /**
+     * Explicit template used to create the session. Null when created directly from a preset.
+     * @nullable
+     */
+  sandbox_id: string | null;
   state: SandboxSessionState;
   desired_state: SandboxSessionDesiredState;
   region: string;
   memory_mb: number;
   created_at: string;
   started_at?: string;
-  expires_at: string;
+  /**
+     * Absolute VM expiry. Null means unlimited in local mode.
+     * @nullable
+     */
+  expires_at: string | null;
 }

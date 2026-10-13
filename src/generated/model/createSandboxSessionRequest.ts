@@ -13,6 +13,7 @@ export type CreateSandboxSessionRequest = (unknown & {
   /** Preset ID from the available Sandbox preset catalog. */
   preset?: string;
   sandbox_id?: string;
+  /** Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits. */
   memory_mb?: CreateSandboxSessionRequestMemoryMb;
   /**
      * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
@@ -20,15 +21,9 @@ export type CreateSandboxSessionRequest = (unknown & {
      */
   region: string;
   /**
-     * Inherits the template TTL when omitted (3600 seconds for a new template).
-     * @minimum 30
-     * @maximum 28800
+     * Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime.
+     * @minimum 0
+     * @maximum 2147483647
      */
   max_duration_seconds?: number;
-  /**
-     * Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout.
-     * @minimum 0
-     * @maximum 28800
-     */
-  idle_timeout_seconds?: number;
 });
