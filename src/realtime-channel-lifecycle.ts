@@ -9,7 +9,10 @@ export interface ChannelSubscription {
 }
 
 export interface ChannelClient {
-  newSubscription(name: string, options: { joinLeave: boolean }): ChannelSubscription;
+  newSubscription(
+    name: string,
+    options: { joinLeave: boolean; data?: Record<string, string> },
+  ): ChannelSubscription;
   removeSubscription(subscription: ChannelSubscription): void;
   presence(name: string): Promise<unknown>;
 }
@@ -24,6 +27,8 @@ export interface ChannelLifecycleState {
   _name: string;
   _type: string;
   _subscription: ChannelSubscription | null;
+  _subscribeData: Record<string, string> | null;
+  _onSubscriptionState: ((state: string) => void) | null;
   _lifecycleVersion: number;
   _paused: boolean;
   _callbacks: Map<unknown, ((data: unknown, context?: unknown) => void)[]>;
@@ -173,9 +178,16 @@ function bindSubscriptionEvents(
   subscription: ChannelSubscription,
 ): void {
   subscribeEvent(state, subscription, 'state', (context) => {
+    if (state._subscription !== subscription) {
+      return;
+    }
+    const newState = property(context, 'newState');
     // Recovery publications can arrive before ready() resumes.
-    if (state._subscription === subscription && property(context, 'newState') === 'subscribed') {
+    if (newState === 'subscribed') {
       state._paused = false;
+    }
+    if (typeof newState === 'string') {
+      state._onSubscriptionState?.(newState);
     }
   });
   subscribeEvent(state, subscription, 'publication', (context) => {
@@ -227,9 +239,11 @@ export async function subscribeChannel(state: ChannelLifecycleState): Promise<vo
   if (client === null) {
     throw new Error('Not connected to realtime server');
   }
-  const subscription = client.newSubscription(state._name, {
-    joinLeave: state._type === 'presence',
-  });
+  const joinLeave = state._type === 'presence';
+  const subscription = client.newSubscription(
+    state._name,
+    state._subscribeData === null ? { joinLeave } : { joinLeave, data: state._subscribeData },
+  );
   state._subscription = subscription;
   bindSubscriptionEvents(state, subscription);
   await state._activateSubscription();

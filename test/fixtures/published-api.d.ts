@@ -1,5 +1,5 @@
 // Main 3ec5cf3 API with the nine approved return-type corrections and the additive Sandbox session,
-// Sandbox deployment, and durable approvals facades.
+// Sandbox deployment, durable approvals, and durable messages facades.
 import type { FilterValue } from '../../dist/database-filters';
 export type { FilterValue } from '../../dist/database-filters';
 export type {
@@ -16,6 +16,9 @@ export type DurableApproval = GeneratedComponents['schemas']['DurableApproval'];
 export type DurableApprovalStatus = GeneratedComponents['schemas']['DurableApprovalStatus'];
 export type DurableApprovalStats = GeneratedComponents['schemas']['DurableApprovalStats'];
 export type PaginatedDurableApprovals = GeneratedComponents['schemas']['PaginatedDurableApprovals'];
+export type DurableMessage = GeneratedComponents['schemas']['DurableMessage'];
+export type DurableMessageDirection = GeneratedComponents['schemas']['DurableMessageDirection'];
+export type DurableMessageList = GeneratedComponents['schemas']['DurableMessageList'];
 export interface VolcanoAuthConfig {
   /** HTTP request timeout in milliseconds. Sandbox execution may extend this budget. */
   timeout?: number;
@@ -303,6 +306,7 @@ export interface Durable {
     error: Error | null;
   }>;
   approvals: DurableApprovals;
+  messages: DurableMessages;
 }
 export interface DurableApprovalListOptions {
   status?: DurableApprovalStatus;
@@ -362,6 +366,56 @@ export interface DurableApprovals {
     },
   ): Promise<{
     data: DurableApproval | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+}
+export interface DurableMessageTarget {
+  functionName: string;
+  executionId: string;
+  clientToken?: string;
+  projectId?: string;
+}
+export interface DurableMessageSendOptions {
+  idempotencyKey?: string;
+}
+export interface DurableMessageListOptions {
+  direction?: DurableMessageDirection;
+  name?: string;
+  after?: number;
+  limit?: number;
+}
+export interface DurableMessageSubscribeOptions {
+  realtime: import('../../dist/realtime').VolcanoRealtime;
+}
+export interface DurableMessageSubscription {
+  unsubscribe(): Promise<void>;
+}
+export interface DurableMessages {
+  send(
+    target: DurableMessageTarget,
+    name: string,
+    data?: unknown,
+    options?: DurableMessageSendOptions,
+  ): Promise<{
+    data: DurableMessage | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  list(
+    target: DurableMessageTarget,
+    options?: DurableMessageListOptions,
+  ): Promise<{
+    data: DurableMessageList | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  subscribe(
+    target: DurableMessageTarget,
+    handler: (message: DurableMessage) => void,
+    options: DurableMessageSubscribeOptions,
+  ): Promise<{
+    data: DurableMessageSubscription | null;
     status: number | null;
     error: Error | null;
   }>;

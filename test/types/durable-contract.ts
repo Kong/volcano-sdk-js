@@ -4,7 +4,10 @@ import {
   durable,
   type DurableContext,
   type DurableStepScope,
+  type PublishedMessage,
+  type ReceivedMessage,
   type WaitForApprovalOptions,
+  type WaitForMessageOptions,
 } from '../../src/durable.js';
 
 interface OrderInput {
@@ -15,6 +18,22 @@ interface OrderInput {
 interface Charge {
   id: string;
   amount: number;
+}
+
+async function exchangeMessages(ctx: DurableContext) {
+  const progress: PublishedMessage = await ctx.publish('progress', { percent: 50 });
+  await ctx.publish('started');
+  const waitFor: WaitForMessageOptions = { timeout: { hours: 2 } };
+  const confirmation: ReceivedMessage | null = await ctx.waitForMessage('confirm', waitFor);
+  await ctx.waitForMessage('confirm');
+  // @ts-expect-error a message needs a name
+  void ctx.publish();
+  if (confirmation === null) {
+    return { published: progress.seq, confirmedBy: null, confirmedData: null };
+  }
+  const confirmedBy: string | null = confirmation.sender.userId;
+  const confirmedData: unknown = confirmation.data;
+  return { published: progress.seq, confirmedBy, confirmedData };
 }
 
 export const handler = durable<OrderInput, { charge: string; shipped: number }>(
@@ -49,6 +68,7 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
     const reviewed = decision.approved ? decision.comment : decision.decidedAt;
     // @ts-expect-error a title is required
     void ctx.waitForApproval('untitled', {});
+    const confirmation = await exchangeMessages(ctx);
 
     const shipped: BatchResult<string> = await ctx.map(
       'ship',
@@ -84,6 +104,7 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       outcome,
       reviewed,
       grouped,
+      confirmation,
     };
   },
   { logger: console },

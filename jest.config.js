@@ -25,7 +25,9 @@ module.exports = {
     'src/lock-random.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-paths.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
     'src/durable-approval.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
-    'src/durable-approval-request.ts': {
+    'src/durable-callback.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
+    'src/durable-message.ts': { branches: 100, functions: 100, lines: 100, statements: 100 },
+    'src/durable-platform-request.ts': {
       branches: 100,
       functions: 100,
       lines: 100,

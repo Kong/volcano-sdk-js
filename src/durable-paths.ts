@@ -15,6 +15,10 @@ export function durablePathSegments(fields: {
 }): DurablePathResult<{ projectId: string; functionName: string }>;
 export function durablePathSegments(fields: {
   functionName: unknown;
+  executionId: unknown;
+}): DurablePathResult<{ functionName: string; executionId: string }>;
+export function durablePathSegments(fields: {
+  functionName: unknown;
 }): DurablePathResult<{ functionName: string }>;
 export function durablePathSegments(fields: {
   projectId: unknown;

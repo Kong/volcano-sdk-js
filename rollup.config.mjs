@@ -92,7 +92,7 @@ export default [
   {
     input: 'src/durable.ts',
     plugins: [typescript({ tsconfig: './tsconfig.build.json' })],
-    external: ['@aws/durable-execution-sdk-js'],
+    external: ['@aws/durable-execution-sdk-js', 'node:crypto'],
     output: [
       {
         dir: 'dist',

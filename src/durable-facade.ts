@@ -170,7 +170,7 @@ function validatedExecutionName(value: unknown): { name: string | null; error: E
   return { name: value.trim(), error: null };
 }
 
-function credentialMode(token: string | null): 'anon' | 'session' {
+export function credentialMode(token: string | null): 'anon' | 'session' {
   return token === null || token.length === 0 ? 'anon' : 'session';
 }
 

@@ -77,7 +77,7 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 | [Storage](./docs/storage.md)                     | File upload and management                       |
 | [Realtime](./docs/realtime.md)                   | Live subscriptions and presence                  |
 | [Functions](./docs/functions.md)                 | Serverless function invocation                   |
-| [Durable functions](./docs/durable-functions.md) | Checkpointed, long-running work, human approvals |
+| [Durable functions](./docs/durable-functions.md) | Long-running work, human approvals, and messages |
 | [Project locks](./docs/locks.md)                 | Renewable backend leases                         |
 | [Next.js](./docs/nextjs.md)                      | Server components and middleware                 |
 | [TypeScript](./docs/typescript.md)               | Type definitions                                 |

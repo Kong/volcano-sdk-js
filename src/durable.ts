@@ -1,8 +1,10 @@
-import { type CallbackContext, waitForApproval } from './durable-approval.ts';
+import { waitForApproval } from './durable-approval.ts';
 import { batchResult, type EngineBatch } from './durable-batch-result.ts';
+import type { CallbackContext } from './durable-callback.ts';
 import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
 import { waitDuration } from './durable-duration.ts';
 import { loadEngine } from './durable-engine.ts';
+import { messagePublisher, waitForMessage } from './durable-message.ts';
 import { parallelBranches } from './durable-parallel-branches.ts';
 import type {
   BatchOptions,
@@ -15,6 +17,7 @@ import type {
   ParallelBranch,
   StepOptions,
   WaitForApprovalOptions,
+  WaitForMessageOptions,
   WaitUntilOptions,
 } from './durable-types.ts';
 
@@ -186,6 +189,7 @@ function durableContext(
   engine: Engine,
   ref: string | undefined,
 ): DurableContext {
+  const publisher = messagePublisher(context, ref);
   return {
     log: context.logger,
 
@@ -226,6 +230,14 @@ function durableContext(
 
     waitForApproval(name: string, options: WaitForApprovalOptions) {
       return waitForApproval(context, ref, name, options);
+    },
+
+    waitForMessage(name: string, options?: WaitForMessageOptions) {
+      return waitForMessage(context, ref, name, options);
+    },
+
+    publish(name: string, data?: unknown) {
+      return publisher(name, data);
     },
 
     waitUntil<State>(
@@ -304,11 +316,15 @@ export type {
   DurableLog,
   DurableOptions,
   DurableStepScope,
+  MessageSender,
   ParallelBranch,
+  PublishedMessage,
+  ReceivedMessage,
   Retry,
   RetryDecision,
   RetryOptions,
   StepOptions,
   WaitForApprovalOptions,
+  WaitForMessageOptions,
   WaitUntilOptions,
 } from './durable-types.ts';
