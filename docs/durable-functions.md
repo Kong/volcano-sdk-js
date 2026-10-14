@@ -850,8 +850,8 @@ token can list but not send.
 
 `subscribe` delivers the execution's published messages on a connected
 [`VolcanoRealtime`](./realtime.md) client, in `seq` order and once each. It reads
-the list before resolving, and again after each reconnect, so a message
-published before or while subscribing is not missed:
+the list before resolving, again after each reconnect, and whenever a live
+message shows that an earlier one was lost, so no published message is missed:
 
 ```javascript
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';

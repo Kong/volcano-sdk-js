@@ -36,6 +36,22 @@ export function isDurableMessage(value: unknown): value is DurableMessage {
   return isRecord(value) && isEnvelope(value) && isDelivery(value);
 }
 
+/**
+ * A message as the execution's channel broadcasts it: the stored message and
+ * the seq of the execution's publish before it. An older server leaves the
+ * seq out, read as 0 so it never names a publish that was missed.
+ */
+export function liveMessage(value: unknown): { message: DurableMessage; prevSeq: number } | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const { prev_seq: prevSeq, ...message } = value;
+  if (!isDurableMessage(message)) {
+    return null;
+  }
+  return { message, prevSeq: typeof prevSeq === 'number' ? prevSeq : 0 };
+}
+
 export function isDurableMessageList(value: unknown): value is DurableMessageList {
   return (
     isRecord(value) &&

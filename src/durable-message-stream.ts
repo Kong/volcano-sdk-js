@@ -1,5 +1,5 @@
 import { type DurableResult, failure } from './durable-facade.ts';
-import { isDurableMessage } from './durable-message-response.ts';
+import { liveMessage } from './durable-message-response.ts';
 import type { DurableMessage, DurableMessageList } from './sdk-public-types.ts';
 
 type ListAfter = (after: number) => Promise<DurableResult<DurableMessageList>>;
@@ -11,7 +11,9 @@ type ListAfter = (after: number) => Promise<DurableResult<DurableMessageList>>;
  * A live message can only be delivered once everything before it has been
  * listed, or the missed ones would fall below `lastSeq` and be skipped. So
  * live messages are held from `hold()` (the channel is not subscribed) until a
- * catch-up has read what was missed.
+ * catch-up has read what was missed. Each broadcast names the publish before
+ * it, so one that follows a lost or still-arriving broadcast starts a catch-up
+ * too.
  */
 export class DurableMessageStream {
   private lastSeq = 0;
@@ -27,14 +29,21 @@ export class DurableMessageStream {
   ) {}
 
   live(data: unknown): void {
-    if (!isDurableMessage(data) || data.direction !== 'out') {
+    const live = liveMessage(data);
+    if (live?.message.direction !== 'out') {
       return;
     }
-    if (this.holding || this.catchUps > 0) {
-      this.held.push(data);
+    if (this.behind()) {
+      this.held.push(live.message);
       return;
     }
-    this.deliver(data);
+    if (live.prevSeq > this.lastSeq) {
+      this.held.push(live.message);
+      // A failed catch-up leaves the gap; the held message is still released.
+      void this.catchUp();
+      return;
+    }
+    this.deliver(live.message);
   }
 
   hold(): void {
@@ -58,6 +67,10 @@ export class DurableMessageStream {
     this.closed = true;
   }
 
+  private behind(): boolean {
+    return this.holding || this.catchUps > 0;
+  }
+
   private async readMissed(): Promise<DurableResult<DurableMessageList>> {
     try {
       return await this.readPages();
@@ -70,18 +83,20 @@ export class DurableMessageStream {
   }
 
   private async readPages(): Promise<DurableResult<DurableMessageList>> {
-    for (;;) {
-      const page = await this.listAfter(this.lastSeq);
+    let after: number;
+    let page: DurableResult<DurableMessageList>;
+    do {
+      after = this.lastSeq;
+      page = await this.listAfter(after);
       if (page.data === null) {
         return page;
       }
       page.data.data.forEach((message) => {
         this.deliver(message);
       });
-      if (!page.data.has_more || page.data.data.length === 0) {
-        return page;
-      }
-    }
+      // A page that delivered nothing would be asked for again unchanged.
+    } while (page.data.has_more && this.lastSeq !== after);
+    return page;
   }
 
   private release(): void {

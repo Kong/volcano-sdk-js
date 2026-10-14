@@ -21,8 +21,12 @@ export interface PlatformRequest {
   closedCode?: string;
 }
 
-type Outcome =
-  { body: unknown; error?: never; retryable: false } | { error: Error; retryable: boolean };
+interface Failure {
+  error: Error;
+  retryable: boolean;
+}
+
+type Outcome = { body: unknown; failure?: never } | { failure: Failure };
 
 const DEADLINE_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -44,14 +48,17 @@ export async function postToPlatform(apiUrl: string, request: PlatformRequest): 
   const deadline = Date.now() + DEADLINE_MS;
   let outcome = await send(url, init, request, REQUEST_TIMEOUT_MS);
   for (const delay of RETRY_DELAYS_MS) {
-    const timeout = await retryTimeout(outcome.retryable, delay, deadline);
+    if (outcome.failure === undefined) {
+      return outcome.body;
+    }
+    const timeout = await retryTimeout(outcome.failure, delay, deadline);
     if (timeout === null) {
       break;
     }
     outcome = await send(url, init, request, timeout);
   }
-  if (outcome.error !== undefined) {
-    throw outcome.error;
+  if (outcome.failure !== undefined) {
+    throw outcome.failure.error;
   }
   return outcome.body;
 }
@@ -59,11 +66,11 @@ export async function postToPlatform(apiUrl: string, request: PlatformRequest): 
 // Waits out the delay and answers how long the next attempt may take, or null
 // when the failure is final or no time would be left for another attempt.
 async function retryTimeout(
-  retryable: boolean,
+  failure: Failure,
   delay: number,
   deadline: number,
 ): Promise<number | null> {
-  if (!retryable || deadline - Date.now() <= delay) {
+  if (!failure.retryable || deadline - Date.now() <= delay) {
     return null;
   }
   await sleep(delay);
@@ -82,10 +89,12 @@ async function send(
     response = await fetch(url, { method: 'POST', ...init, signal: AbortSignal.timeout(timeout) });
   } catch (cause) {
     return {
-      error: new Error(`Could not reach Volcano to ${request.action}: ${reasons(cause)}`, {
-        cause,
-      }),
-      retryable: true,
+      failure: {
+        error: new Error(`Could not reach Volcano to ${request.action}: ${reasons(cause)}`, {
+          cause,
+        }),
+        retryable: true,
+      },
     };
   }
   const data = await safeJsonParse(response);
@@ -93,7 +102,7 @@ async function send(
 }
 
 function settled(body?: unknown): Outcome {
-  return { body, retryable: false };
+  return { body };
 }
 
 // The runtime rethrows a failed submitter with only its message, so the
@@ -120,8 +129,10 @@ function refusal(response: Response, data: unknown, request: PlatformRequest): O
   }
   error.message = `Volcano refused ${request.subject} (${refusalLabel(response.status, error.code)}): ${error.message}`;
   return {
-    error,
-    retryable: isRetryable(response.status) || isCode(conflict, request.notReadyCode),
+    failure: {
+      error,
+      retryable: isRetryable(response.status) || isCode(conflict, request.notReadyCode),
+    },
   };
 }
 

@@ -169,8 +169,13 @@ const ANSWERS: Record<string, unknown> = {
   [`${API_URL}/durable-messages/waits`]: { id: 'wait-1', status: 'waiting', expires_at: null },
 };
 
+// A final refusal for any other URL, so a wrong one fails at once rather than
+// retrying on real timers.
 function answer(url: unknown): Response {
-  return Response.json(ANSWERS[String(url)], { status: 201 });
+  const body = ANSWERS[String(url)];
+  return body === undefined
+    ? Response.json({ error: 'no such route' }, { status: 400 })
+    : Response.json(body, { status: 201 });
 }
 
 function requestAt(index: number): { url: unknown; init: RequestInit | undefined } {
