@@ -258,6 +258,7 @@ interface CustomDomainResponseShape {
   domain_status:
     'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
   verification_status: 'pending' | 'verified' | 'failed';
+  serving_certificate?: 'uploaded' | 'managed';
   failure_reason?: string;
   verification_records?: CustomDomainVerificationRecordShape[];
   required_routing_record?: { record_type: 'CNAME'; name: string; value: string };

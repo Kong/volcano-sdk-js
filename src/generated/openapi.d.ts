@@ -582,13 +582,15 @@ export interface paths {
          *     Publish a TXT record named `_volcano.<domain>`, then send this request.
          *     Without the record, the response is `409` with
          *     `code: ownership_verification_required` and the `required_record` to
-         *     publish. Its value is the same on every request. The record must be
-         *     served at that name itself; a record reached through a CNAME does not
-         *     count.
+         *     publish. Its value stays the same until Volcano rotates the key it is
+         *     derived from. The record must be served at that name itself; a record
+         *     reached through a CNAME does not count.
          *
          *     When another account verified the domain, publishing your record moves
          *     the domain to your account once that account's record is no longer
-         *     published. Keep your record published so the domain stays yours.
+         *     published. Keep your record published so the domain stays yours. After
+         *     Volcano rotates the key the value is derived from, only a record with
+         *     the new value counts.
          *
          *     Verifying a domain the account already verified returns `200`.
          */
@@ -1948,6 +1950,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List issues
+         * @description Lists the project's issues, most recently seen first. An issue groups
+         *     the runtime errors one function or frontend raised with the same error
+         *     type and stack, or the same message when there is no stack.
+         *
+         *     Project access tokens can list issues, including read-only ones.
+         */
+        get: operations["listIssues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/issues/{issueId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an issue
+         * @description Returns one issue: the resource that raised it, how often and when it
+         *     was seen, and its status.
+         *
+         *     Project access tokens can read issues, including read-only ones.
+         */
+        get: operations["getIssue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update an issue
+         * @description Sets an issue's status. A resolved issue that is seen again after it
+         *     was resolved reopens, and `regressed_at` records when. An ignored issue
+         *     stays ignored while it keeps being counted.
+         *
+         *     Setting the status an issue already has is safe to repeat.
+         */
+        patch: operations["updateIssue"];
+        trace?: never;
+    };
+    "/projects/{id}/autofix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get autofix settings
+         * @description Returns whether Volcano diagnoses the project's issues with AI, how far
+         *     a run may go, and which model it uses. A project that never saved
+         *     settings returns the defaults, with autofix off.
+         *
+         *     Your API key is never returned. `api_key_configured`,
+         *     `api_key_provider`, and `api_key_last4` show whether one is set and
+         *     which provider it belongs to.
+         *
+         *     Where autofix is not available, saved settings stay readable. A project
+         *     that never saved any answers `404` with code `feature_unavailable`.
+         */
+        get: operations["getAutofixSettings"];
+        /**
+         * Replace autofix settings
+         * @description Replaces the project's autofix settings. Omitted fields take their
+         *     defaults, except three: an omitted `provider` or `model` keeps its saved
+         *     value, and an omitted `api_key` keeps the stored key. So
+         *     `{"enabled": false}` turns autofix off and keeps the key.
+         *
+         *     Project access tokens are refused. Autofix opens pull requests in the
+         *     project's repository, so a person turns it on with a platform token or
+         *     in the dashboard.
+         *
+         *     Turning autofix on needs a plan that includes it. Settings that are
+         *     already on stay stored after a downgrade, and saving them again is not
+         *     refused, but no run starts until the plan includes autofix again. Other
+         *     saves need no plan.
+         *
+         *     Provider `anthropic` runs on your own API key. A key belongs to the
+         *     provider it was saved with, and turning autofix on with a provider that
+         *     runs on your own key needs one for it. Turning autofix off or switching
+         *     providers keeps the stored key; only
+         *     `DELETE /projects/{id}/autofix/api-key` removes it. Turning autofix on
+         *     with provider `volcano` needs the `autofix.managed_models` capability;
+         *     without it the request answers `400` with code `feature_unavailable`.
+         *
+         *     Where autofix is not available, a project with saved settings can
+         *     still change them with `enabled: false`. Turning autofix on answers
+         *     `404` with code `feature_unavailable`.
+         */
+        put: operations["updateAutofixSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/autofix/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete the API key
+         * @description Deletes the project's stored API key and returns the settings. Autofix
+         *     on the key's provider runs on that key, so it turns off; on another
+         *     provider it stays as it is. Deleting when no key is stored succeeds.
+         *
+         *     Turning autofix off or switching providers never deletes the key, and
+         *     neither does applying a project configuration. This works where
+         *     autofix is not available, for a project that saved settings.
+         *
+         *     Project access tokens are refused.
+         */
+        delete: operations["deleteAutofixAPIKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/durable-approvals": {
         parameters: {
             query?: never;
@@ -2197,6 +2339,8 @@ export interface paths {
          *     The account must own the hostname: it must have verified the hostname or a domain above it (see `POST /user/domains`). A certificate does not prove ownership.
          *     When the account owns no domain covering the hostname, Volcano asks for a TXT record at `_volcano.<registrable domain>`, such as `_volcano.example.com`. Publishing it verifies the whole domain, so later subdomains need no record. A managed TLS request reserves the hostname and returns that record in `verification_records`; the reservation expires after 72 hours unless the record is published. A BYOC request gets `409` with `code: ownership_verification_required` and the record in `required_record`; publish it and send the same request again.
          *     Managed TLS then returns the CNAME that authorizes certificate issuance and renewal.
+         *     To move an active BYOC domain to managed TLS without downtime, send `tls.mode: managed` for the same hostname. The response is `200` with the CNAME to publish; the uploaded certificate keeps serving until Volcano issues the managed one, and `serving_certificate` changes from `uploaded` to `managed`.
+         *     To move an active managed domain to BYOC without downtime, send `tls.mode: byoc` with the certificate for the same hostname. The response is `200`; the uploaded certificate replaces the managed one at once, and Volcano stops renewing the managed certificate.
          *     An unverified reservation does not block an account that proves ownership. When another account holds one, a request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. When another account verified the domain, the same `409` names the record that moves the domain to the caller once the other account's record is no longer published. A hostname below a domain another account owns otherwise returns `409` without `code`.
          */
         post: operations["createFrontendCustomDomain"];
@@ -2309,6 +2453,57 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/variable-environments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List variable Environments */
+        get: operations["listVariableEnvironments"];
+        put?: never;
+        /**
+         * Create a variable Environment
+         * @description Creates a custom variable Environment. Global is reserved and already exists. A Project may have at most 100 custom Environments.
+         */
+        post: operations["createVariableEnvironment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/variable-environments/{environmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        /** Get a variable Environment */
+        get: operations["getVariableEnvironment"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a variable Environment
+         * @description Deletes a custom Environment. Global cannot be deleted.
+         */
+        delete: operations["deleteVariableEnvironment"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a variable Environment
+         * @description Renames a custom Environment without changing its stable ID. Global cannot be renamed.
+         */
+        patch: operations["renameVariableEnvironment"];
         trace?: never;
     };
     "/projects/{id}/variables": {
@@ -3687,14 +3882,22 @@ export interface paths {
         /**
          * Get auth user insights
          * @description Returns current and deleted auth-user totals, rolling 24-hour and 30-day
-         *     active users, and zero-filled signup, deletion, net-growth, and successful
-         *     sign-in counts for an inclusive UTC date range. Weeks start on Monday.
-         *     Signups remain counted after deletion; net growth is signups minus
-         *     deletions. Deleted users contribute to active counts until their last
-         *     activity leaves the rolling window. Token refreshes affect active users
-         *     but not the sign-in series. Collection starts at deployment, with signup
-         *     history backfilled from accounts still present then. Earlier hard-deleted
-         *     accounts cannot be recovered.
+         *     active users, and zero-filled daily activity and account-retention counts
+         *     for an inclusive UTC date range. Weeks start on Monday.
+         *     The existing deletions series counts accounts by deletion date; net_growth
+         *     remains signups minus deletions and is not affected by bans.
+         *     The banned_users, deleted_users, and available_users fields describe the
+         *     current state of users registered in each bucket. Banned users exclude
+         *     deleted users and expired bans. Available users are signups minus
+         *     banned_users minus deleted_users. Unban and expiry restore availability in
+         *     the original signup bucket. These current-state cohorts can change after
+         *     the requested dates have passed, without rewriting activity counts.
+         *     Sign-in counts remain grouped by session creation date. Deleted users
+         *     contribute to active counts until their last activity leaves the rolling
+         *     window. Token refreshes affect active users but not the sign-in series.
+         *     Signup history is backfilled from accounts present when collection was
+         *     deployed. Accounts hard-deleted before deletion-history collection cannot
+         *     be recovered. Current bans require no separate event-history collection.
          */
         get: operations["getAuthInsights"];
         put?: never;
@@ -3988,7 +4191,8 @@ export interface paths {
          *     `subject` field is ignored. Sending `subject` alone (no
          *     bodies) is rejected with 400 to avoid a silently-dropped
          *     subject or a blank message. Also rejects with 400 if
-         *     `email_enabled=false` or `smtp_host` is empty.
+         *     `email_enabled=false`, `smtp_host` is empty, or the saved
+         *     `smtp_password` can't be read and must be set again.
          */
         post: operations["testEmailConfig"];
         delete?: never;
@@ -5350,6 +5554,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List capabilities
+         * @description Lists which product capabilities accept new work in this environment. Check it
+         *     to decide what to offer, instead of calling a route to see whether it fails.
+         *
+         *     | ID | Covers |
+         *     | --- | --- |
+         *     | `sandboxes` | The Sandbox API: presets, templates, sessions, and executions |
+         *     | `sandboxes.sessions` | Starting and resuming sessions, and one-shot executions |
+         *     | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
+         *     | `issues` | The Issues API: listing, reading, and updating grouped runtime errors |
+         *     | `autofix` | The Autofix API: a project's AI diagnosis and fix settings |
+         *     | `autofix.managed_models` | Turning autofix on with Volcano-managed models instead of your own API key |
+         *
+         *     A capability missing from the list is unavailable, and a capability under
+         *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
+         *     While a capability is unavailable, requests that start new work answer `404`
+         *     or `400` with code `feature_unavailable`; refresh this list when you receive
+         *     that code. Reading, deleting, and terminating what already exists keep
+         *     working unless the whole feature is absent from the environment. Every caller
+         *     in an environment gets the same answer.
+         */
+        get: operations["listCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -5491,8 +5733,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             project_id: string;
-            /** Format: uuid */
-            sandbox_id: string;
+            /**
+             * Format: uuid
+             * @description Explicit template used to create the session. Null when created directly from a preset.
+             */
+            sandbox_id: string | null;
             /** @enum {string} */
             state: "starting" | "running" | "suspending" | "suspended" | "resuming" | "terminating" | "terminated" | "unknown";
             /** @enum {string} */
@@ -5503,26 +5748,30 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             started_at?: string;
-            /** Format: date-time */
-            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Absolute VM expiry. Null means unlimited in local mode.
+             */
+            expires_at: string | null;
         };
         CreateSandboxSessionRequest: {
             /** @description Preset ID from the available Sandbox preset catalog. */
             preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
-            /** @enum {integer} */
+            /**
+             * @description Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits.
+             * @enum {integer}
+             */
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
-            /** @description Inherits the template TTL when omitted (3600 seconds for a new template). */
+            /** @description Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. */
             max_duration_seconds?: number;
-            /** @description Inherits the template idle timeout when omitted, capped at the session duration. Set zero to disable idle timeout. */
-            idle_timeout_seconds?: number;
         } & (unknown | unknown);
         SandboxCommandRequest: {
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5533,12 +5782,17 @@ export interface components {
             preset?: string;
             /** Format: uuid */
             sandbox_id?: string;
-            /** @enum {integer} */
+            /**
+             * @description Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits.
+             * @enum {integer}
+             */
             memory_mb?: 1024 | 2048;
             /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
             region: string;
+            /** @description Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes. */
+            max_duration_seconds?: number;
             command: string;
-            /** @default 60 */
+            /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
             timeout_seconds?: number;
             environment?: {
                 [key: string]: string;
@@ -5631,6 +5885,23 @@ export interface components {
         SandboxPresetList: {
             data: components["schemas"]["SandboxPreset"][];
         };
+        /** @description A product capability and whether it accepts new work in this environment. */
+        Capability: {
+            /**
+             * @description Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, `sandboxes.custom_templates`, `issues`, or `autofix`. New IDs may appear at any time.
+             * @example sandboxes.sessions
+             */
+            id: string;
+            status: components["schemas"]["CapabilityStatus"];
+        };
+        /**
+         * @description `available` means the capability accepts new work; a temporary outage still answers `503`. `unavailable` means requests that start new work answer `404` or `400` with code `feature_unavailable`. Treat any other value as `unavailable`.
+         * @enum {string}
+         */
+        CapabilityStatus: "available" | "unavailable";
+        CapabilityList: {
+            data: components["schemas"]["Capability"][];
+        };
         SandboxCapacity: {
             region: string;
             /** Format: int64 */
@@ -5690,6 +5961,11 @@ export interface components {
              */
             refresh_token_lifetime?: number;
             /**
+             * @description A refresh within this many seconds of the refresh token being issued returns the same refresh token instead of rotating it, so concurrent refreshes from several tabs all succeed
+             * @default 10
+             */
+            refresh_token_reuse_interval?: number;
+            /**
              * @description Force re-login after inactivity (seconds, 0=never)
              * @default 0
              */
@@ -5738,6 +6014,11 @@ export interface components {
              * @default 1000
              */
             rate_limit_token_refresh?: number;
+            /**
+             * @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off.
+             * @default 10
+             */
+            rate_limit_password_reset?: number;
             /** @default false */
             cors_enabled?: boolean;
             /**
@@ -5868,6 +6149,10 @@ export interface components {
              * @example https://app.acme.com/device
              */
             device_verification_url?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
         /** @enum {string} */
         AuthInsightsInterval: "day" | "week" | "month";
@@ -5895,12 +6180,27 @@ export interface components {
             signins: number;
             /**
              * Format: int64
+             * @description Users registered in this bucket who are currently banned. Excludes deleted users, lifted bans, expired temporary bans, and internal test identities.
+             */
+            banned_users: number;
+            /**
+             * Format: int64
+             * @description Users registered in this bucket who are now deleted, counted once across soft and hard deletion. Grouped by signup date, not deletion date.
+             */
+            deleted_users: number;
+            /**
+             * Format: int64
+             * @description Currently available users registered in this bucket (signups minus banned_users minus deleted_users). Unban or expiry restores availability in the original signup bucket. This measures account availability, not return activity.
+             */
+            available_users: number;
+            /**
+             * Format: int64
              * @description Accounts deleted during this bucket, counted once across soft and hard deletion.
              */
             deletions: number;
             /**
              * Format: int64
-             * @description Registrations minus deletions during this bucket. May be negative.
+             * @description Registrations minus deletions during this bucket. May be negative. Bans do not affect this value.
              */
             net_growth: number;
             /** @description Whether the requested window or observation time clips this bucket. */
@@ -6499,6 +6799,31 @@ export interface components {
             /** @description Project variable name. Function runtime names such as AWS_REGION are reserved and return 400; see the environment variables guide for the full list. */
             name: string;
             value: string;
+        };
+        /** @description Stable identity for a Project-owned variable Environment. */
+        VariableEnvironment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            name: string;
+            /** @description Whether this is the reserved Global Environment. */
+            is_global: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        VariableEnvironmentList: {
+            data: components["schemas"]["VariableEnvironment"][];
+        };
+        CreateVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
+        };
+        RenameVariableEnvironmentRequest: {
+            /** @description Leading and trailing ASCII whitespace is trimmed before validating 1–64 ASCII letters, digits, underscores, or hyphens. Global is reserved. */
+            name: string;
         };
         /** @description PostgreSQL database with automatic scalability and security features. */
         Database: {
@@ -7487,6 +7812,11 @@ export interface components {
              *     reach the target function at these paths without a credential.
              */
             function_routes: components["schemas"]["FrontendFunctionRoute"][];
+            /**
+             * Format: date-time
+             * @description Recorded completion time of the most recent deploy or redeploy with status active. Omitted when no such deployment has a recorded completion time. Site traffic, pending deployments, degraded deployments, failed deployments, and deletion do not change this value.
+             */
+            last_deployed_at?: string;
             /** Format: date-time */
             last_invoked_at?: string;
             /** Format: date-time */
@@ -7546,8 +7876,14 @@ export interface components {
              * @enum {string}
              */
             verification_status: "pending" | "verified" | "failed";
-            /** @description Failure category, present only when managed TLS setup has failed. Current values are provider, certificate, ownership, and internal; ownership means another account has already claimed the hostname through ownership verification. Treat unrecognized values as internal. */
+            /**
+             * @description Certificate the domain serves, present only while it is active. `uploaded`: the BYOC certificate, including after the domain switched to managed TLS and until Volcano issues the managed one; `failure_reason` then reports an issuance failure. `managed`: a certificate Volcano issued.
+             * @enum {string}
+             */
+            serving_certificate?: "uploaded" | "managed";
+            /** @description Failure category, present when managed TLS setup has failed, or when issuance is failing for a domain that switched to managed TLS and still serves its uploaded certificate. Current values are provider, certificate, ownership, and internal; ownership means another account has already claimed the hostname through ownership verification. Treat unrecognized values as internal. */
             failure_reason?: string;
+            /** @description DNS records to publish now. For a managed domain whose hostname the account already owns, the create response names the `_acme-challenge` CNAME that authorizes certificate issuance and renewal. Otherwise it names the `_volcano` TXT record that proves ownership of the hostname's registrable domain, and reads return the CNAME once Volcano sees that record. Usually empty for BYOC. */
             verification_records?: components["schemas"]["FrontendDomainVerificationRecord"][];
             /**
              * @deprecated
@@ -7617,7 +7953,7 @@ export interface components {
             type: string;
             value: string;
         };
-        /** @description Domain ownership conflict. With `code: ownership_verification_required`, the account has not proven it owns the domain: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. Other conflicts omit both fields. */
+        /** @description Domain ownership conflict. With `code: ownership_verification_required`, the account has not proven it owns the domain: publish `required_record` in DNS and send the same request again. The retry succeeds once Volcano can see the record. With `code: custom_domain_releasing`, a removed domain still holds the hostname or the frontend while Volcano releases it: send the same request again after the response's `Retry-After` seconds. A release that will not finish within a few minutes is a plain conflict. Other conflicts omit both fields. */
         FrontendCustomDomainConflictError: components["schemas"]["Error"] & {
             required_record?: components["schemas"]["FrontendDomainVerificationRecord"];
         };
@@ -8513,12 +8849,19 @@ export interface components {
              *     at times the time it spent running, in megabyte-seconds; the allowance for it is
              *     published in gigabyte-seconds, which is 1024 of these.
              *     "Sandbox Running (MiB-Seconds)", "Sandbox Suspended (Seconds)", and
-             *     "Sandbox Uncertain (MiB-Seconds)" are preview-only usage; they do not
-             *     debit credits. Running reports configured memory times observed runtime,
-             *     not measured CPU or elastic memory consumption. Uncertain includes
-             *     observation gaps and unconfirmed state transitions. Suspended reports
-             *     duration, not snapshot size. Local sessions do not contribute.
-             *     Totals are rounded down after aggregating millisecond measurements.
+             *     "Sandbox Uncertain (MiB-Seconds)" report cloud Sandbox usage. Running
+             *     reports configured baseline memory times confirmed runtime, not measured
+             *     CPU or elastic memory consumption. For sessions admitted after the pricing
+             *     release, confirmed running time consumes the account's runtime allowance;
+             *     SUPERAGENT overage debits credits according to the account's pricing terms.
+             *     Suspended time and uncertain usage do not consume runtime allowance or
+             *     debit credits. Uncertain includes observation gaps and unconfirmed state
+             *     transitions. Suspended reports duration, not snapshot size; snapshot costs
+             *     are included in runtime pricing. Local and platform image-validation
+             *     sessions do not contribute. Existing preview sessions remain unbilled,
+             *     and preview history is never charged retroactively. Displayed totals are
+             *     rounded down after aggregating millisecond measurements; billing uses
+             *     unrounded measurements in the monthly account billing cycle.
              *     "Database Storage (Bytes)" is a current observed gauge,
              *     not a cumulative counter. It is the sum of the latest samples exposed as
              *     `storage_bytes` by the project's database list, so it includes what each
@@ -8779,8 +9122,11 @@ export interface components {
             title: string;
             description?: string;
             /**
-             * @description Any JSON value to show the person deciding. The whole request is
-             *     limited to 64 KiB.
+             * @description Any JSON value to show the person deciding. A number's exponent must
+             *     be between -324 and 324, and a number too large or too precise to
+             *     store is refused with `400`. Numbers are read back written out in
+             *     full, so the exponents' absolute values may total at most 65,536.
+             *     The whole request is limited to 64 KiB.
              */
             details?: unknown;
         };
@@ -8794,6 +9140,126 @@ export interface components {
             total: number;
             /** @description Whether there are more pages available */
             has_more: boolean;
+        };
+        /** @description Runtime errors from one function or frontend, grouped by error type and stack. */
+        Issue: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            resource: components["schemas"]["ResourceReference"];
+            /**
+             * @description The error type and message, with values such as IDs, numbers, and
+             *     URLs replaced by placeholders like `<uuid>` and `<n>`.
+             */
+            title: string;
+            /** @description The exception class, such as `TypeError`. Omitted when the error has none. */
+            error_type?: string;
+            /** @description The innermost frame of your code in the stack, as `function (file)`. Omitted without a stack. */
+            culprit?: string;
+            status: components["schemas"]["IssueStatus"];
+            /**
+             * Format: int64
+             * @description Errors counted in this issue. A retried delivery can count an error twice.
+             */
+            event_count: number;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** @description The region that served the latest error, such as `us-east-1`. */
+            last_region?: string;
+            /** @description The ID of the latest error's log event, while logs retain it. */
+            sample_event_id?: string;
+            /**
+             * Format: date-time
+             * @description When the latest error's log event was written.
+             */
+            sample_event_at?: string;
+            /**
+             * Format: date-time
+             * @description When the issue was resolved. Present only while it is resolved.
+             */
+            resolved_at?: string;
+            /**
+             * Format: date-time
+             * @description When a resolved issue was last seen again and reopened.
+             */
+            regressed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @description `open` until someone resolves or ignores the issue. A resolved issue
+         *     seen again reopens.
+         * @enum {string}
+         */
+        IssueStatus: "open" | "resolved" | "ignored";
+        PaginatedIssues: {
+            data: components["schemas"]["Issue"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page (present if has_more is true) */
+            next_cursor?: string;
+        };
+        UpdateIssueRequest: {
+            status: components["schemas"]["IssueStatus"];
+        };
+        AutofixSettings: {
+            /** Format: uuid */
+            project_id: string;
+            /** @description Whether Volcano diagnoses the project's issues with AI. */
+            enabled: boolean;
+            max_stage: components["schemas"]["AutofixStage"];
+            /** @description Whether a new or reopened issue starts a run on its own. When false, runs start only on request. */
+            auto_trigger: boolean;
+            provider: components["schemas"]["AutofixProvider"];
+            model: components["schemas"]["AutofixModel"];
+            /** @description Whether your own API key is stored. The key itself is never returned. */
+            api_key_configured: boolean;
+            /** @description The provider the stored key belongs to, present when one is stored. */
+            api_key_provider?: components["schemas"]["AutofixProvider"];
+            /** @description The stored key's last four characters, present when one is stored. */
+            api_key_last4?: string;
+            /** @description Whether the owner's plan includes autofix. When false, saved settings stay stored and no run starts. Absent when a save that needed no plan succeeded but the plan could not be resolved. */
+            plan_includes_autofix?: boolean;
+            /**
+             * Format: date-time
+             * @description When the settings were last saved. Absent until the first save.
+             */
+            updated_at?: string;
+        };
+        /**
+         * @description How far a run may go. `diagnose` stops at a root-cause diagnosis. `pull_request` may also open a draft pull request with a fix in the project's connected repository.
+         * @enum {string}
+         */
+        AutofixStage: "diagnose" | "pull_request";
+        /**
+         * @description Who serves the model. `volcano` runs on Volcano's models. `anthropic` runs on your own Anthropic API key.
+         * @enum {string}
+         */
+        AutofixProvider: "volcano" | "anthropic";
+        /**
+         * @description The Claude model a run uses. `claude-opus-5-5` is the default.
+         * @enum {string}
+         */
+        AutofixModel: "claude-fable-5-1" | "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5" | "claude-opus-5" | "claude-sonnet-5" | "claude-haiku-4-5";
+        UpdateAutofixSettingsRequest: {
+            enabled: boolean;
+            max_stage?: components["schemas"]["AutofixStage"];
+            /** @default false */
+            auto_trigger?: boolean;
+            provider?: components["schemas"]["AutofixProvider"];
+            model?: components["schemas"]["AutofixModel"];
+            /**
+             * Format: password
+             * @description Your own API key for `provider`, such as an Anthropic key for `anthropic`. Omit it to keep the stored key. Encrypted at rest and never returned.
+             */
+            api_key?: string;
         };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
@@ -8988,6 +9454,7 @@ export interface components {
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
             realtime?: components["schemas"]["ProjectConfigRealtime"];
+            autofix?: components["schemas"]["ProjectConfigAutofix"];
             auth?: components["schemas"]["ProjectConfigAuth"];
             functions?: components["schemas"]["ProjectConfigFunction"][];
             frontends?: components["schemas"]["ProjectConfigFrontend"][];
@@ -9198,8 +9665,9 @@ export interface components {
          *     domain, omitting `tls` or sending only `tls.mode` keeps the stored
          *     certificate; new BYOC material for the same domain rotates the
          *     certificate in place (zero downtime). Changing `tls.mode` for the same
-         *     hostname, or the hostname of a managed domain, requires deleting the
-         *     domain first. BYOC TLS material is write-only; exports render only
+         *     hostname switches an active domain in place (zero downtime); a domain
+         *     that is not yet active, or a managed domain changing hostname, must be
+         *     deleted first. BYOC TLS material is write-only; exports render only
          *     `tls.mode`.
          */
         ProjectConfigCustomDomain: {
@@ -9380,6 +9848,14 @@ export interface components {
             broadcast_enabled?: boolean;
             presence_enabled?: boolean;
             postgres_changes_enabled?: boolean;
+        };
+        /** @description AI diagnosis and fix settings. Omitted fields keep their current value. Your API key is never part of the manifest, and an apply never sets or deletes it: set it with `PUT /projects/{id}/autofix` before turning on a provider that runs on your own key. */
+        ProjectConfigAutofix: {
+            enabled?: boolean;
+            max_stage?: components["schemas"]["AutofixStage"];
+            auto_trigger?: boolean;
+            provider?: components["schemas"]["AutofixProvider"];
+            model?: components["schemas"]["AutofixModel"];
         };
         ProjectConfigScheduler: {
             name: string;
@@ -9977,8 +10453,11 @@ export interface components {
         UpdateAuthConfigRequest: {
             access_token_lifetime?: number;
             refresh_token_lifetime?: number;
+            refresh_token_reuse_interval?: number;
             inactivity_timeout?: number;
             max_session_duration?: number;
+            /** @description TTL in seconds for platform tokens minted via `/auth/platform/exchange`. From 3600 (1 hour) to 31536000 (365 days). */
+            platform_token_ttl?: number;
             min_password_length?: number;
             require_uppercase?: boolean;
             require_lowercase?: boolean;
@@ -9991,6 +10470,17 @@ export interface components {
             rate_limit_signup?: number;
             rate_limit_signin?: number;
             rate_limit_token_refresh?: number;
+            /** @description Password reset requests per hour per IP. Unlike the other limits, 0 applies the default of 10 instead of turning the limit off. */
+            rate_limit_password_reset?: number;
+            cors_enabled?: boolean;
+            /**
+             * @description Replaces the allowed origins list.
+             * @example [
+             *       "https://myapp.com",
+             *       "http://localhost:3000"
+             *     ]
+             */
+            cors_allowed_origins?: string[];
             cors_allow_credentials?: boolean;
             cors_max_age?: number;
             enable_anonymous_signins?: boolean;
@@ -10369,9 +10859,7 @@ export interface components {
             memory_mb?: 1024 | 2048;
             /** @description Service readiness ports; config apply asserts them and Git deploy builds them. */
             ports?: number[];
-            /** @description Default idle timeout for new sessions when the caller omits it. */
-            idle_timeout_seconds?: number;
-            /** @description Default absolute lifetime for new sessions when the caller omits it. */
+            /** @description Default absolute lifetime for new sessions when the caller omits it. Cloud templates accept 30–28800 seconds; inherited lifetimes are clamped to the session plan limit (3600 for HOBBY, 28800 for SUPERAGENT). Local accepts 0 for unlimited or a positive lifetime. */
             ttl_seconds?: number;
         };
         DatabaseQueryPerformanceDatabase: {
@@ -10773,6 +11261,8 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
+        /** @description Variable Environment ID */
+        VariableEnvironmentId: string;
         /** @description Frontend ID */
         FrontendId: string;
         /** @description Frontend Function route ID */
@@ -10785,6 +11275,13 @@ export interface components {
         DurableExecutionId: string;
         /** @description Durable approval ID */
         DurableApprovalId: string;
+        /** @description Issue ID */
+        IssueId: string;
+        /**
+         * @description Opaque cursor from a previous response's `next_cursor`. Pages forward;
+         *     keep the same filters while paging.
+         */
+        IssueCursor: string;
         /**
          * @description Only approvals requested by this durable function, given by id or by
          *     name. A name also matches approvals from a deleted function of that
@@ -11369,7 +11866,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11406,7 +11903,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxExecutionResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -11530,7 +12027,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -17361,6 +17858,312 @@ export interface operations {
             };
         };
     };
+    listIssues: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward;
+                 *     keep the same filters while paging.
+                 */
+                cursor?: components["parameters"]["IssueCursor"];
+                /** @description Return only issues in this status. */
+                status?: components["schemas"]["IssueStatus"];
+                /** @description Return only issues raised by this function or frontend. */
+                resource_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedIssues"];
+                };
+            };
+            /** @description A filter or the cursor is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found. Code `feature_unavailable` means issues are not available in this environment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Issue ID */
+                issueId: components["parameters"]["IssueId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            /** @description Issue not found. Code `feature_unavailable` means issues are not available in this environment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Issue ID */
+                issueId: components["parameters"]["IssueId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Issue not found. Code `feature_unavailable` means issues are not available in this environment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAutofixSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixSettings"];
+                };
+            };
+            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owner's plan could not be resolved. Retry later. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAutofixSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAutofixSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixSettings"];
+                };
+            };
+            /** @description The request body is invalid, the key does not fit the provider, or turning autofix on with a provider that runs on your own key has no key for it. Code `feature_unavailable` means Volcano-managed models are not available in this environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owner's plan does not include autofix, or the request used a project access token. Only a person changes autofix settings. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment, which refuses turning it on and a project's first save. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Turning autofix on needs the owner's plan, which could not be resolved. Nothing was saved. Retry later. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAutofixAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixSettings"];
+                };
+            };
+            /** @description The request used a project access token. Only a person deletes the key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listDurableApprovals: {
         parameters: {
             query?: {
@@ -18209,7 +19012,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Custom domain already configured with same hostname */
+            /** @description Custom domain already configured with the same hostname. A request with the other TLS mode for the frontend's active domain switches it in place. To managed TLS, the uploaded certificate keeps serving, with `serving_certificate: uploaded`, until Volcano issues the managed certificate. To BYOC, the uploaded certificate replaces the managed one at once. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -18263,9 +19066,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - ownership not verified, custom domain owned or reserved by another account, already in use, still detaching, or frontend already has a custom domain */
+            /** @description Conflict - ownership not verified, custom domain owned or reserved by another account, already in use, still detaching, or frontend already has a custom domain. While a removed domain detaches and Volcano releases it (about a minute for BYOC, a few minutes for managed TLS), adding its hostname to any frontend, or any domain to its frontend, returns `code: custom_domain_releasing` and a `Retry-After` header; send the same request again after that many seconds. A release that will not finish within a few minutes returns the conflict without `code`. */
             409: {
                 headers: {
+                    /** @description Seconds to wait before sending the same request again. Sent only with code `custom_domain_releasing`. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -18342,6 +19147,15 @@ export interface operations {
             };
             /** @description Frontend or custom domain not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The custom domain switched TLS mode while the request ran. Send it again. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18785,6 +19599,371 @@ export interface operations {
                 };
             };
             /** @description Failed to delete Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listVariableEnvironments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environments, with Global first and custom Environments ordered by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironmentList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list variable Environments */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict or the 100-custom-Environment
+             *     limit has been reached, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_conflict`,
+             *     `variable_environment_limit_reached`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variable Environment deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Global is protected, or the Project is being deleted. Tell them
+             *     apart with `code`, which is `variable_environment_immutable` or
+             *     `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete the variable Environment */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameVariableEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Variable Environment ID */
+                environmentId: components["parameters"]["VariableEnvironmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameVariableEnvironmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Variable Environment renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariableEnvironment"];
+                };
+            };
+            /**
+             * @description Invalid name, or the reserved Global name. Schema-invalid names
+             *     return the generic invalid-request error; a reserved name returns
+             *     `invalid_variable_environment`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Variable Environment not found in this Project */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A case-insensitive name conflict, an attempt to rename Global, or
+             *     a Project being deleted. Tell them apart with `code`, which is
+             *     `variable_environment_conflict`,
+             *     `variable_environment_immutable`, or `project_deleting`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to rename the variable Environment */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -22569,6 +23748,9 @@ export interface operations {
                      *           "signups": 12,
                      *           "signins": 97,
                      *           "deletions": 3,
+                     *           "banned_users": 2,
+                     *           "deleted_users": 3,
+                     *           "available_users": 7,
                      *           "net_growth": 9,
                      *           "is_partial": true
                      *         }
@@ -27268,6 +28450,56 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    listCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capabilities in this environment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": [
+                     *         {
+                     *           "id": "sandboxes",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.sessions",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "sandboxes.custom_templates",
+                     *           "status": "unavailable"
+                     *         },
+                     *         {
+                     *           "id": "issues",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "autofix",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "autofix.managed_models",
+                     *           "status": "unavailable"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["CapabilityList"];
                 };
             };
         };
