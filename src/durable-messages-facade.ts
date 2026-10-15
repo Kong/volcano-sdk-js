@@ -1,3 +1,4 @@
+import { MAX_NAME_LENGTH, OPERATION_NAME } from './durable-callback.ts';
 import {
   credentialMode,
   type DurableClient,
@@ -19,7 +20,10 @@ import type {
 type Query = Record<string, unknown>;
 type Headers = Record<string, string>;
 
+// The spec's bounds on Idempotency-Key, X-Volcano-Client-Token, and a page.
 const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
+const MAX_CLIENT_TOKEN_LENGTH = 128;
+const MAX_LIST_LIMIT = 500;
 
 const LIST_PARAMS = ['direction', 'name', 'after', 'limit'] as const;
 
@@ -124,7 +128,11 @@ export class DurableMessagesFacade {
     if (addressed instanceof Error) {
       return failure(addressed);
     }
-    return this.listTarget(addressed, listQuery(options));
+    const query = listQuery(options);
+    if (query instanceof Error) {
+      return failure(query);
+    }
+    return this.listTarget(addressed, query);
   }
 
   async subscribe(
@@ -315,6 +323,11 @@ function optionalClientToken(value: unknown): Checked<string | null> {
   if (typeof value !== 'string' || value === '') {
     return { error: new Error('clientToken must be a non-empty string when provided') };
   }
+  if (value.length > MAX_CLIENT_TOKEN_LENGTH) {
+    return {
+      error: new Error(`clientToken must be at most ${String(MAX_CLIENT_TOKEN_LENGTH)} characters`),
+    };
+  }
   return { value };
 }
 
@@ -328,21 +341,29 @@ function sendRequest(
   if (addressed instanceof Error) {
     return addressed;
   }
-  const messageName = nonEmptyName(name);
-  if (messageName.error !== undefined) {
-    return messageName.error;
+  const checkedName = messageName(name);
+  if (checkedName.error !== undefined) {
+    return checkedName.error;
   }
   const headers = idempotencyHeaders(idempotencyKey);
   if (headers instanceof Error) {
     return headers;
   }
-  const body = data === undefined ? { name: messageName.value } : { name: messageName.value, data };
+  const body = data === undefined ? { name: checkedName.value } : { name: checkedName.value, data };
   return { target: addressed, headers, body };
 }
 
-function nonEmptyName(name: unknown): Checked<string> {
+// The names ctx.publish and ctx.waitForMessage accept.
+function messageName(name: unknown): Checked<string> {
   if (typeof name !== 'string' || name.trim() === '') {
     return { error: new Error('name must be a non-empty string') };
+  }
+  if (name.length > MAX_NAME_LENGTH || !OPERATION_NAME.test(name)) {
+    return {
+      error: new Error(
+        `name must be at most ${String(MAX_NAME_LENGTH)} printable ASCII characters`,
+      ),
+    };
   }
   return { value: name };
 }
@@ -377,13 +398,36 @@ function idempotencyHeaders(key: unknown): Headers | Error {
   return { 'Idempotency-Key': key };
 }
 
-function listQuery(options: object): Query {
+function isIntegerBetween(value: unknown, min: number, max: number): boolean {
+  return Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max;
+}
+
+const LIST_FILTER_ERRORS: Record<(typeof LIST_PARAMS)[number], (value: unknown) => Error | null> = {
+  direction: (value) =>
+    value === 'in' || value === 'out' ? null : new Error("direction must be 'in' or 'out'"),
+  name: (value) => messageName(value).error ?? null,
+  after: (value) =>
+    isIntegerBetween(value, 0, Number.MAX_SAFE_INTEGER)
+      ? null
+      : new Error('after must be a non-negative integer'),
+  limit: (value) =>
+    isIntegerBetween(value, 1, MAX_LIST_LIMIT)
+      ? null
+      : new Error(`limit must be an integer between 1 and ${String(MAX_LIST_LIMIT)}`),
+};
+
+function listQuery(options: object): Query | Error {
   const params: Query = {};
   for (const name of LIST_PARAMS) {
     const value: unknown = Reflect.get(options, name);
-    if (value !== undefined) {
-      params[name] = value;
+    if (value === undefined) {
+      continue;
     }
+    const error = LIST_FILTER_ERRORS[name](value);
+    if (error !== null) {
+      return error;
+    }
+    params[name] = value;
   }
   return params;
 }

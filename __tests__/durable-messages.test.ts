@@ -199,8 +199,20 @@ describe('durable.messages.send', () => {
       [{ ...target, clientToken: 7 }, 'go'],
       'clientToken must be a non-empty string when provided',
     ],
+    [
+      'a long client token',
+      [{ ...target, clientToken: 't'.repeat(129) }, 'go'],
+      'clientToken must be at most 128 characters',
+    ],
     ['no name', [target], 'name must be a non-empty string'],
     ['a blank name', [target, '  '], 'name must be a non-empty string'],
+    ['a name that is not text', [target, 7], 'name must be a non-empty string'],
+    [
+      'a long name',
+      [target, 'n'.repeat(238)],
+      'name must be at most 237 printable ASCII characters',
+    ],
+    ['a name with a tab', [target, 'g\to'], 'name must be at most 237 printable ASCII characters'],
     [
       'an empty idempotency key',
       [target, 'go', null, { idempotencyKey: '' }],
@@ -228,12 +240,25 @@ describe('durable.messages.send', () => {
     }
   });
 
-  test('accepts the longest idempotency key', async () => {
+  test('accepts the longest name, client token, and idempotency key', async () => {
     const { volcano, transport } = clientWithTransport();
+    const name = 'n'.repeat(237);
+    const clientToken = 't'.repeat(128);
+    const idempotencyKey = 'k'.repeat(255);
 
-    await volcano.durable.messages.send(target, 'go', null, { idempotencyKey: 'k'.repeat(255) });
+    await volcano.durable.messages.send({ ...target, clientToken }, name, null, {
+      idempotencyKey,
+    });
 
-    expect(transport.sendDurableMessageFromApplication).toHaveBeenCalledTimes(1);
+    expect(transport.sendDurableMessageFromApplication).toHaveBeenCalledWith(
+      'checkout',
+      'exec-1',
+      { name, data: null },
+      options(volcano, 'anon', {
+        'Idempotency-Key': idempotencyKey,
+        'X-Volcano-Client-Token': clientToken,
+      }),
+    );
   });
 
   test('escapes every segment it puts in the path', async () => {
@@ -338,6 +363,41 @@ describe('durable.messages.list', () => {
       volcano.durable.messages.list({ functionName: '', executionId: 'exec-1' }),
     ).resolves.toEqual(refused('functionName must be a non-empty string'));
     expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
+  });
+
+  test.each<[string, Record<string, unknown>, string]>([
+    ['an unknown direction', { direction: 'both' }, "direction must be 'in' or 'out'"],
+    [
+      'a name with a tab',
+      { name: 'pro\tgress' },
+      'name must be at most 237 printable ASCII characters',
+    ],
+    ['a negative after', { after: -1 }, 'after must be a non-negative integer'],
+    ['a fractional after', { after: 1.5 }, 'after must be a non-negative integer'],
+    ['an after that is text', { after: '3' }, 'after must be a non-negative integer'],
+    ['a zero limit', { limit: 0 }, 'limit must be an integer between 1 and 500'],
+    ['a limit over a page', { limit: 501 }, 'limit must be an integer between 1 and 500'],
+    ['a fractional limit', { limit: 1.5 }, 'limit must be an integer between 1 and 500'],
+    ['a limit that is text', { limit: '50' }, 'limit must be an integer between 1 and 500'],
+  ])('refuses %s before reaching the platform', async (_case, filters, error) => {
+    const { volcano, transport } = clientWithTransport();
+
+    await expect(volcano.durable.messages.list(target, filters)).resolves.toEqual(refused(error));
+    expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [0, 1],
+    [7, 500],
+  ])('pages from after %p with a limit of %p', async (after, limit) => {
+    const { volcano, transport } = clientWithTransport();
+
+    await volcano.durable.messages.list(target, { after, limit });
+
+    expect(transport.listDurableMessagesFromApplication.mock.calls[0]?.[2]).toStrictEqual({
+      after,
+      limit,
+    });
   });
 
   test('accepts every status and sender user', async () => {
