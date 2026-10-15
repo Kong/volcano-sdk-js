@@ -16,7 +16,9 @@ All notable changes to the Volcano SDK will be documented in this file.
   succeeds, `connect()` rejects with the generic `Connection timeout`, which
   omits the underlying error. Rejected or timed-out attempts release their
   transport and handlers, stopping background reconnection; call `connect()`
-  again to retry.
+  again to retry. Automatic failure cleanup resets channel subscriptions while
+  retaining application listeners, so the same channel can subscribe on the next
+  connection.
 
 - Generate public declarations from the TypeScript implementation. Nine response
   types now represent optional or nullable values already returned at runtime;

@@ -241,8 +241,8 @@ export function unsubscribeChannel(state: ChannelLifecycleState): void {
   clearTimeout(state._presenceTimeoutId ?? undefined);
   state._presenceTimeoutId = null;
   cancelPendingFetches(state);
-  state._subscription?.unsubscribe();
   state._presenceState = {};
+  state._subscription?.unsubscribe();
 }
 
 function cancelPendingFetches(state: ChannelLifecycleState): void {
@@ -256,15 +256,22 @@ function cancelPendingFetches(state: ChannelLifecycleState): void {
 }
 
 export function resetChannelForIdentityChange(state: ChannelLifecycleState): void {
-  state.unsubscribe();
+  try {
+    state.unsubscribe();
+  } finally {
+    detachChannelSubscription(state);
+  }
+}
+
+function detachChannelSubscription(state: ChannelLifecycleState): void {
   const subscription = state._subscription;
+  state._subscription = null;
   if (subscription === null) {
     return;
   }
   detachSubscriptionHandlers(state, subscription);
   state._eventHandlers = {};
   removeSubscription(state, subscription);
-  state._subscription = null;
 }
 
 function detachSubscriptionHandlers(

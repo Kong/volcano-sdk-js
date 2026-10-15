@@ -122,6 +122,9 @@ the underlying transport or token-refresh error. Earlier SDK versions rejected
 Rejected or timed-out attempts release their transport and handlers and stop
 background reconnection. Call `connect()` again to retry; a failed attempt will
 no longer recover later through `onConnect` without a new connection attempt.
+Automatic cleanup of a failed attempt resets channel subscriptions, preserving
+their application listeners. After reconnecting, call `subscribe()` again on the
+same channel to create a subscription on the new transport.
 Once the transport has started, calling `disconnect()` while `connect()` is
 pending also rejects that attempt promptly with the transport's disconnect reason,
 rather than timing out.

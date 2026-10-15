@@ -268,6 +268,13 @@ class VolcanoRealtime {
       return;
     }
     detachConnectionHandlers(candidate, handlers);
+    for (const channel of this._channels.values()) {
+      try {
+        channel._resetForIdentityChange();
+      } catch {
+        // Preserve the startup failure and continue resetting other channels.
+      }
+    }
     this._client = null;
     this._clientHandlers = null;
     this._connected = false;
