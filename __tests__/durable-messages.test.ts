@@ -1540,12 +1540,52 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
 
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
     latestSubscription().move('unsubscribed');
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await settled();
 
     expect(received).toEqual([]);
     expect(list).toHaveBeenCalledTimes(1);
+    realtime.disconnect();
+  });
+
+  test('reports a subscription the server ends and lets the execution be subscribed to again', async () => {
+    const realtime = await connectedRealtime();
+    const { volcano } = clientWithTransport({
+      listDurableMessagesFromApplication: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => listed(page([]))),
+    });
+    await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    latestSubscription().move('unsubscribed');
+    const again = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith(
+      '[Realtime] The server ended the durable message subscription; subscribe again to resume',
+    );
+    expect(again.error).toBeNull();
+    realtime.disconnect();
+  });
+
+  test('reports nothing when the client ends the subscription', async () => {
+    const realtime = await connectedRealtime();
+    const { volcano } = clientWithTransport({
+      listDurableMessagesFromApplication: jest
+        .fn<TransportOperation>()
+        .mockImplementation(() => listed(page([]))),
+    });
+    const subscription = await volcano.durable.messages.subscribe(target, jest.fn(), {
+      realtime,
+    });
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    await subscription.data?.unsubscribe();
+
+    expect(reported).not.toHaveBeenCalled();
     realtime.disconnect();
   });
 
@@ -1629,6 +1669,7 @@ describe('durable.messages.subscribe', () => {
     await expect(result).resolves.toEqual(refused('The durable message subscription has ended'));
     expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
+    expect(removeDurableChannel).toHaveBeenCalledTimes(1);
     expect(removeDurableChannel).toHaveBeenCalledWith(channel);
   });
 

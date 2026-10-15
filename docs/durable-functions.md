@@ -880,7 +880,11 @@ before `unsubscribe` resolves with an error. `disconnect()`,
 end the subscription too, and a read still in flight delivers nothing; call
 `unsubscribe` before subscribing to the execution again. Ended while it is
 still catching up, `subscribe` resolves with an error. When the realtime server
-refuses the subscription, `error.cause` holds its `code` and `message`. A
+refuses the subscription, `error.cause` holds its `code` and `message`. Once
+`subscribe` has resolved, the realtime server can still end the subscription,
+for example by refusing it on resubscribing after a reconnect. The SDK then
+logs the end with `console.error` and delivers nothing more; subscribe to the
+execution again to resume. A
 handler that throws while `subscribe` is still catching up ends the
 subscription, which delivers nothing more and resolves with that error; once it
 has resolved, the subscription carries on past a handler that throws, including

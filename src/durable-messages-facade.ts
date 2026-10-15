@@ -77,6 +77,7 @@ interface DurableChannel {
   on(event: string, callback: (data: unknown) => void): unknown;
   subscribe(): Promise<void>;
   _onSubscriptionState: ((state: string) => void) | null;
+  readonly _paused: boolean;
 }
 
 interface DurableRealtime {
@@ -192,6 +193,10 @@ export class DurableMessagesFacade {
       // signed-in user, or the server ended it.
       if (state === 'unsubscribed') {
         stream.close();
+        // Before it starts, subscribe() returns the failure instead.
+        if (started) {
+          leaveIfServerEnded(channel, realtime);
+        }
         return;
       }
       // The first catch-up follows subscribing below.
@@ -377,6 +382,19 @@ function messageName(name: unknown): Checked<string> {
     };
   }
   return { value: name };
+}
+
+// The SDK pauses a channel before it unsubscribes one, so one unsubscribed
+// unpaused was ended by the server, refusing a resubscription for one. Leaving
+// it lets the execution be subscribed to again.
+function leaveIfServerEnded(channel: DurableChannel, realtime: DurableRealtime): void {
+  if (channel._paused) {
+    return;
+  }
+  console.error(
+    '[Realtime] The server ended the durable message subscription; subscribe again to resume',
+  );
+  realtime._removeDurableChannel(channel);
 }
 
 function subscriberOf(handler: unknown, realtime: unknown): Subscriber | Error {
