@@ -9,8 +9,8 @@
  */
 
 /**
- * Makes a send safe to retry. A repeat with a key the execution has
- * already seen returns the first message and sends nothing. Up to 255
- * characters.
+ * Makes a send safe to retry. A repeat with a key the same sender has
+ * used on the execution returns the first message and sends nothing.
+ * Keys of different senders never collide. Up to 255 characters.
  */
 export type DurableMessageIdempotencyKeyParameter = string;

@@ -1421,10 +1421,15 @@ export type sendDurableMessageFromApplicationResponse429 = {
   status: 429
 }
 
+export type sendDurableMessageFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type sendDurableMessageFromApplicationResponseSuccess = (sendDurableMessageFromApplicationResponse200 | sendDurableMessageFromApplicationResponse201) & {
   headers: Headers;
 };
-export type sendDurableMessageFromApplicationResponseError = (sendDurableMessageFromApplicationResponse400 | sendDurableMessageFromApplicationResponse401 | sendDurableMessageFromApplicationResponse403 | sendDurableMessageFromApplicationResponse404 | sendDurableMessageFromApplicationResponse409 | sendDurableMessageFromApplicationResponse413 | sendDurableMessageFromApplicationResponse429) & {
+export type sendDurableMessageFromApplicationResponseError = (sendDurableMessageFromApplicationResponse400 | sendDurableMessageFromApplicationResponse401 | sendDurableMessageFromApplicationResponse403 | sendDurableMessageFromApplicationResponse404 | sendDurableMessageFromApplicationResponse409 | sendDurableMessageFromApplicationResponse413 | sendDurableMessageFromApplicationResponse429 | sendDurableMessageFromApplicationResponse503) & {
   headers: Headers;
 };
 
@@ -1460,8 +1465,8 @@ export const getSendDurableMessageFromApplicationUrl = (functionId: string,
  * Any other execution answers `404`, as a missing one does.
  *
  * Send `Idempotency-Key` to make a retry safe: a repeat with a key the
- * execution has seen returns the first message with `200` and sends
- * nothing.
+ * same sender has used on the execution returns the first message with
+ * `200` and sends nothing.
  * @summary Send a message to a durable execution from an application
  */
 export const sendDurableMessageFromApplication = async (functionId: string,
@@ -1518,10 +1523,20 @@ export type listDurableMessagesFromApplicationResponse404 = {
   status: 404
 }
 
+export type listDurableMessagesFromApplicationResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type listDurableMessagesFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
 export type listDurableMessagesFromApplicationResponseSuccess = (listDurableMessagesFromApplicationResponse200) & {
   headers: Headers;
 };
-export type listDurableMessagesFromApplicationResponseError = (listDurableMessagesFromApplicationResponse400 | listDurableMessagesFromApplicationResponse401 | listDurableMessagesFromApplicationResponse403 | listDurableMessagesFromApplicationResponse404) & {
+export type listDurableMessagesFromApplicationResponseError = (listDurableMessagesFromApplicationResponse400 | listDurableMessagesFromApplicationResponse401 | listDurableMessagesFromApplicationResponse403 | listDurableMessagesFromApplicationResponse404 | listDurableMessagesFromApplicationResponse429 | listDurableMessagesFromApplicationResponse503) & {
   headers: Headers;
 };
 
@@ -1766,6 +1781,11 @@ export type sendDurableMessageResponse400 = {
   status: 400
 }
 
+export type sendDurableMessageResponse403 = {
+  data: Error
+  status: 403
+}
+
 export type sendDurableMessageResponse404 = {
   data: Error
   status: 404
@@ -1789,7 +1809,7 @@ export type sendDurableMessageResponse429 = {
 export type sendDurableMessageResponseSuccess = (sendDurableMessageResponse200 | sendDurableMessageResponse201) & {
   headers: Headers;
 };
-export type sendDurableMessageResponseError = (sendDurableMessageResponse400 | sendDurableMessageResponse404 | sendDurableMessageResponse409 | sendDurableMessageResponse413 | sendDurableMessageResponse429) & {
+export type sendDurableMessageResponseError = (sendDurableMessageResponse400 | sendDurableMessageResponse403 | sendDurableMessageResponse404 | sendDurableMessageResponse409 | sendDurableMessageResponse413 | sendDurableMessageResponse429) & {
   headers: Headers;
 };
 

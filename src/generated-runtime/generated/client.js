@@ -538,8 +538,8 @@ export const getSendDurableMessageFromApplicationUrl = (functionId, executionId)
  * Any other execution answers `404`, as a missing one does.
  *
  * Send `Idempotency-Key` to make a retry safe: a repeat with a key the
- * execution has seen returns the first message with `200` and sends
- * nothing.
+ * same sender has used on the execution returns the first message with
+ * `200` and sends nothing.
  * @summary Send a message to a durable execution from an application
  */
 export const sendDurableMessageFromApplication = async (functionId, executionId, sendDurableMessageRequest, options) => {

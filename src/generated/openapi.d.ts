@@ -1451,8 +1451,8 @@ export interface paths {
          *     Any other execution answers `404`, as a missing one does.
          *
          *     Send `Idempotency-Key` to make a retry safe: a repeat with a key the
-         *     execution has seen returns the first message with `200` and sends
-         *     nothing.
+         *     same sender has used on the execution returns the first message with
+         *     `200` and sends nothing.
          */
         post: operations["sendDurableMessageFromApplication"];
         delete?: never;
@@ -11622,9 +11622,9 @@ export interface components {
          */
         DurableApprovalFunctionFilter: string;
         /**
-         * @description Makes a send safe to retry. A repeat with a key the execution has
-         *     already seen returns the first message and sends nothing. Up to 255
-         *     characters.
+         * @description Makes a send safe to retry. A repeat with a key the same sender has
+         *     used on the execution returns the first message and sends nothing.
+         *     Keys of different senders never collide. Up to 255 characters.
          */
         DurableMessageIdempotencyKey: string;
         /**
@@ -16581,9 +16581,10 @@ export interface operations {
                 };
             };
             /**
-             * @description The function is `authenticated` and the request carries an anon
-             *     key, or the request's origin is refused by the project's CORS
-             *     policy.
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
              */
             403: {
                 headers: {
@@ -16605,6 +16606,27 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /**
+             * @description The function's rate limit, which lists share with its invocations
+             *     and starts.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     sendDurableMessageFromApplication: {
@@ -16612,9 +16634,9 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Makes a send safe to retry. A repeat with a key the execution has
-                 *     already seen returns the first message and sends nothing. Up to 255
-                 *     characters.
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
                  */
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
                 /**
@@ -16648,7 +16670,8 @@ export interface operations {
             };
             /**
              * @description Message sent. `status` is `delivered` when a wait took it at once,
-             *     and `queued` when it is kept for the next wait.
+             *     `delivering` when a wait took it and the handover is still being
+             *     confirmed, and `queued` when it is kept for the next wait.
              */
             201: {
                 headers: {
@@ -16677,9 +16700,10 @@ export interface operations {
                 };
             };
             /**
-             * @description The function is `authenticated` and the request carries an anon
-             *     key, or the request's origin is refused by the project's CORS
-             *     policy.
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
              */
             403: {
                 headers: {
@@ -16726,8 +16750,20 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many messages sent to this execution */
+            /**
+             * @description Too many messages sent to this execution, or the function's rate
+             *     limit, which sends share with its invocations and starts.
+             */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18383,9 +18419,9 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Makes a send safe to retry. A repeat with a key the execution has
-                 *     already seen returns the first message and sends nothing. Up to 255
-                 *     characters.
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
                  */
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
             };
@@ -18414,7 +18450,10 @@ export interface operations {
                     "application/json": components["schemas"]["DurableMessage"];
                 };
             };
-            /** @description Message sent */
+            /**
+             * @description Message sent. `status` is `delivered`, `delivering`, or `queued`,
+             *     as on the application route.
+             */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -18425,6 +18464,15 @@ export interface operations {
             };
             /** @description The name, data or idempotency key is invalid */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18563,8 +18611,9 @@ export interface operations {
              *
              *     - `callback_not_ready`: the workflow has not finished opening the
              *       wait yet. Retry with a short backoff; the SDK does.
-             *     - `callback_closed`: the workflow is no longer waiting on it, or
-             *       it is an approval's.
+             *     - `callback_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as an
+             *       approval or a messages session.
              *     - `execution_ended`: the execution has finished.
              *     - `too_many_message_waits`: the execution already has the maximum
              *       number of open waits.
@@ -18660,8 +18709,9 @@ export interface operations {
             };
             /**
              * @description The session cannot be opened now. `code` is `callback_not_ready`,
-             *     `callback_closed`, `execution_ended`, or
-             *     `too_many_message_sessions`.
+             *     `callback_closed`, `callback_taken` (the callback is already
+             *     registered as an approval or a message wait), `execution_ended`,
+             *     or `too_many_message_sessions`.
              */
             409: {
                 headers: {
@@ -18710,9 +18760,9 @@ export interface operations {
                 /** @description The session token the workflow received when its session opened. */
                 "X-Volcano-Durable-Session": string;
                 /**
-                 * @description Makes a send safe to retry. A repeat with a key the execution has
-                 *     already seen returns the first message and sends nothing. Up to 255
-                 *     characters.
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
                  */
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
             };
@@ -18743,7 +18793,7 @@ export interface operations {
                     "application/json": components["schemas"]["DurableMessage"];
                 };
             };
-            /** @description The name, data or idempotency key is invalid */
+            /** @description The session token header is missing, or the name, data or idempotency key is invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -18752,7 +18802,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The session token is missing or not valid */
+            /** @description The session token is not valid */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -18775,6 +18825,15 @@ export interface operations {
             };
             /** @description The request body is larger than 72 KiB */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this address with session tokens that are not valid */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18839,6 +18898,8 @@ export interface operations {
              *     - `approval_not_ready`: the workflow has not finished opening the
              *       approval yet. Retry with a short backoff; the SDK does.
              *     - `approval_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as a
+             *       message wait or a messages session.
              *     - `execution_ended`: the execution has finished.
              *     - `too_many_pending_approvals`: the execution already has the
              *       maximum number of pending approvals.
