@@ -608,6 +608,7 @@ const listed = (data: DurableMessageList) => Promise.resolve({ data, status: 200
 
 describe('durable.messages.subscribe', () => {
   afterEach(() => {
+    jest.useRealTimers();
     jest.restoreAllMocks();
     transports.length = 0;
     nextReady = Promise.resolve();
@@ -783,7 +784,87 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
-  test('keeps delivering live messages when a later catch-up fails', async () => {
+  test('retries a catch-up that fails after resubscribing, holding live messages past the gap', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestSubscription().move('subscribing');
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(499);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(received).toEqual([1]);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 1 });
+    expect(received).toEqual([1, 2, 3]);
+    latestTransport().publication({ ...message(4), prev_seq: 3 });
+    expect(received).toEqual([1, 2, 3, 4]);
+    realtime.disconnect();
+  });
+
+  test('retries a catch-up that fails after resubscribing with nothing held', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([message(2)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(499);
+    expect(list).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 1 });
+    expect(received).toEqual([1, 2]);
+    realtime.disconnect();
+  });
+
+  test('catches up at once on a broadcast past a gap, replacing a waiting retry', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(0);
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(received).toEqual([1, 2, 3]);
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(list).toHaveBeenCalledTimes(3);
+    realtime.disconnect();
+  });
+
+  test('releases a held message that follows on even when the catch-up fails', async () => {
     const realtime = await connectedRealtime();
     const list = jest
       .fn<TransportOperation>()
@@ -794,23 +875,141 @@ describe('durable.messages.subscribe', () => {
     await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
       realtime,
     });
+    jest.useFakeTimers({ timerLimit: 100 });
 
     latestSubscription().move('subscribing');
-    latestTransport().publication(message(3));
+    latestTransport().publication({ ...message(2), prev_seq: 1 });
+    latestTransport().publication({ ...message(4), prev_seq: 3 });
     latestSubscription().move('subscribed');
-    await settled();
-    latestTransport().publication(message(4));
+    await jest.advanceTimersByTimeAsync(0);
 
-    expect(received).toEqual([1, 3, 4]);
+    expect(received).toEqual([1, 2]);
     realtime.disconnect();
   });
 
-  test('survives a handler that throws during a later catch-up', async () => {
+  test('backs off between retries, doubling from half a second to 30 seconds', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockRejectedValue(new Error('unavailable'));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    await jest.advanceTimersByTimeAsync(0);
+    for (const delay of [500, 1000, 2000, 4000, 8000, 16_000, 30_000, 30_000]) {
+      const calls = list.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(delay - 1);
+      expect(list).toHaveBeenCalledTimes(calls);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(list).toHaveBeenCalledTimes(calls + 1);
+    }
+
+    realtime.disconnect();
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(list).toHaveBeenCalledTimes(10);
+  });
+
+  test('starts the backoff over once a catch-up succeeds', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([])))
+      .mockRejectedValue(new Error('unavailable'));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(1500);
+    expect(list).toHaveBeenCalledTimes(4);
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(499);
+    expect(list).toHaveBeenCalledTimes(5);
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(list).toHaveBeenCalledTimes(6);
+    realtime.disconnect();
+  });
+
+  test('reads again when a catch-up does not reach what a held message follows', async () => {
+    const realtime = await connectedRealtime();
+    const first = deferred<{ data: unknown; status: number }>();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])))
+      .mockImplementationOnce(() => listed(page([])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => received.push(delivered.seq),
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    jest.useFakeTimers({ timerLimit: 100 });
+    first.resolve({ data: page([message(1)]), status: 200 });
+    await pending;
+    expect(received).toEqual([1]);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(list.mock.calls[1]?.[2]).toEqual({ direction: 'out', after: 1 });
+    expect(received).toEqual([1, 2, 3]);
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(0);
+    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 3 });
+    realtime.disconnect();
+  });
+
+  test('resumes a later catch-up page after the message a handler threw on', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => listed(page([message(2), message(3), message(4)])))
+      .mockImplementationOnce(() => listed(page([message(3), message(4)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(
+      target,
+      (delivered) => {
+        received.push(delivered.seq);
+        if (delivered.seq === 2) {
+          throw new Error('handler failed');
+        }
+      },
+      { realtime },
+    );
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestTransport().publication({ ...message(5), prev_seq: 4 });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(received).toEqual([1, 2]);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
+    expect(received).toEqual([1, 2, 3, 4, 5]);
+    realtime.disconnect();
+  });
+
+  test('survives a handler that throws during a later catch-up, and reads on after it', async () => {
     const realtime = await connectedRealtime();
     const list = jest
       .fn<TransportOperation>()
       .mockImplementationOnce(() => listed(page([])))
-      .mockImplementationOnce(() => listed(page([message(1)])));
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => listed(page([])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
     await volcano.durable.messages.subscribe(
@@ -823,14 +1022,16 @@ describe('durable.messages.subscribe', () => {
       },
       { realtime },
     );
+    jest.useFakeTimers({ timerLimit: 100 });
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
-    await until(() => received.length > 0);
-    await settled();
+    await jest.advanceTimersByTimeAsync(0);
     latestTransport().publication(message(2));
-
     expect(received).toEqual([1, 2]);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
     realtime.disconnect();
   });
 
@@ -904,26 +1105,100 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
-  test('releases a broadcast that started a catch-up even when the catch-up fails', async () => {
+  test('holds a broadcast that started a catch-up until a retry reads what it follows', async () => {
     const realtime = await connectedRealtime();
     const list = jest
       .fn<TransportOperation>()
       .mockImplementationOnce(() => listed(page([message(1)])))
-      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')));
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    await jest.advanceTimersByTimeAsync(0);
+    latestTransport().publication(message(4));
+    expect(received).toEqual([1]);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(received).toEqual([1, 2, 3, 4]);
+    realtime.disconnect();
+  });
+
+  test('stops retrying once the channel resubscribes, and catches up then', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => Promise.reject(new Error('unavailable')))
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+    jest.useFakeTimers({ timerLimit: 100 });
+
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    await jest.advanceTimersByTimeAsync(0);
+    latestSubscription().move('subscribing');
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(list).toHaveBeenCalledTimes(2);
+    latestSubscription().move('subscribed');
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(received).toEqual([1, 2, 3]);
+    realtime.disconnect();
+  });
+
+  test.each<[string, (realtime: VolcanoRealtime) => void]>([
+    [
+      'disconnects',
+      (realtime) => {
+        realtime.disconnect();
+      },
+    ],
+    [
+      'removes all channels',
+      (realtime) => {
+        realtime.removeAllChannels();
+      },
+    ],
+    [
+      'switches identity',
+      (realtime) => {
+        realtime._adoptAccessToken('new-token');
+      },
+    ],
+  ])('delivers nothing a catch-up reads after the realtime client %s', async (_case, discard) => {
+    const realtime = await connectedRealtime();
+    const reread = deferred<{ data: unknown; status: number }>();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([])))
+      .mockImplementationOnce(() => reread.promise);
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
     await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
       realtime,
     });
 
-    latestTransport().publication({ ...message(3), prev_seq: 2 });
-    await until(() => received.length === 2);
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await until(() => list.mock.calls.length > 1);
+    discard(realtime);
+    reread.resolve({ data: page([message(1)]), status: 200 });
+    await settled();
 
-    expect(received).toEqual([1, 3]);
+    expect(received).toEqual([]);
     realtime.disconnect();
   });
 
-  test('delivers nothing a catch-up reads after unsubscribing', async () => {
+  test('delivers nothing a catch-up reads after unsubscribing, and reads no more', async () => {
     const realtime = await connectedRealtime();
     const reread = deferred<{ data: unknown; status: number }>();
     const list = jest
@@ -937,15 +1212,18 @@ describe('durable.messages.subscribe', () => {
       (delivered) => received.push(delivered.seq),
       { realtime },
     );
+    jest.useFakeTimers({ timerLimit: 100 });
 
     latestSubscription().move('subscribing');
     latestTransport().publication(message(2));
+    latestTransport().publication({ ...message(4), prev_seq: 3 });
     latestSubscription().move('subscribed');
     await data?.unsubscribe();
     reread.resolve({ data: page([message(1)]), status: 200 });
-    await settled();
+    await jest.advanceTimersByTimeAsync(60_000);
 
     expect(received).toEqual([]);
+    expect(list).toHaveBeenCalledTimes(2);
   });
 
   test('lists through the project when the target names one', async () => {

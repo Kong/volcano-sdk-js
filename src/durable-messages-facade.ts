@@ -166,7 +166,6 @@ export class DurableMessagesFacade {
     );
     const subscription = {
       unsubscribe(): Promise<void> {
-        stream.close();
         realtime._removeDurableChannel(channel);
         return Promise.resolve();
       },
@@ -182,8 +181,15 @@ export class DurableMessagesFacade {
     }
     channel._onSubscriptionState = (state) => {
       if (state === 'subscribed') {
-        // A failed catch-up leaves the gap; live delivery goes on.
+        // The stream retries a catch-up that fails.
         void stream.catchUp();
+        return;
+      }
+      // An unsubscribed channel does not come back: it was discarded by
+      // unsubscribing, disconnect(), removeAllChannels(), or a change of
+      // signed-in user, or the server ended it.
+      if (state === 'unsubscribed') {
+        stream.close();
         return;
       }
       stream.hold();

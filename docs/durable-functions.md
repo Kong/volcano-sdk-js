@@ -851,7 +851,9 @@ token can list but not send.
 `subscribe` delivers the execution's published messages on a connected
 [`VolcanoRealtime`](./realtime.md) client, in `seq` order and once each. It reads
 the list before resolving, again after each reconnect, and whenever a live
-message shows that an earlier one was lost, so no published message is missed:
+message shows that an earlier one was lost. Until that read succeeds it holds
+the live messages after the gap and retries, backing off to every 30 seconds, so
+no published message is missed:
 
 ```javascript
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
@@ -872,11 +874,13 @@ await subscription?.unsubscribe();
 ```
 
 A realtime client holds one subscription per execution; subscribing again
-before `unsubscribe` resolves with an error. When the realtime client switches
-identity, its channels pause, and this one with them: unsubscribe and subscribe
-again to resume. A handler that throws while `subscribe` is still catching up
-ends the subscription, which resolves with that error; once it has resolved,
-the subscription carries on past a handler that throws.
+before `unsubscribe` resolves with an error. `disconnect()`,
+`removeAllChannels()`, and a change of signed-in user on the realtime client
+end the subscription too, and a read still in flight delivers nothing; call
+`unsubscribe` before subscribing to the execution again. A handler that throws
+while `subscribe` is still catching up ends the subscription, which resolves
+with that error; once it has resolved, the subscription carries on past a
+handler that throws.
 
 All three answer `{ data, status, error }`. `status` is `409` with
 `error.code` `execution_not_running` for a send to an execution that has ended,

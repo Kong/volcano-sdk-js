@@ -178,6 +178,17 @@ function answer(url: unknown): Response {
     : Response.json(body, { status: 201 });
 }
 
+// A response whose body fails partway, as one does when the request times out
+// while reading it.
+function unreadable(status: number): Response {
+  const body = new ReadableStream({
+    pull(controller) {
+      controller.error(new DOMException('The operation timed out', 'TimeoutError'));
+    },
+  });
+  return new Response(body, { status });
+}
+
 function requestAt(index: number): { url: unknown; init: RequestInit | undefined } {
   const call = fetchMock().mock.calls[index];
   if (call === undefined) {
@@ -338,6 +349,13 @@ describe('ctx.waitForMessage()', () => {
 
     expect(fetchMock()).toHaveBeenCalledTimes(2);
     expect(bodyAt(1)).toEqual(bodyAt(0));
+  });
+
+  it('settles the registration without reading what Volcano answered', async () => {
+    fetchMock().mockResolvedValueOnce(unreadable(201));
+
+    await expect(receive(() => Promise.resolve(sent()))).resolves.toMatchObject({ id: 'msg-1' });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
   it('names the wait in a final refusal', async () => {
@@ -834,6 +852,61 @@ describe('ctx.publish()', () => {
 
     const [first, second] = publishRequests();
     expect(second).toEqual(first);
+  });
+
+  it('retries a publish whose answer cannot be read, with the same key', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    fetchMock()
+      .mockResolvedValueOnce(Response.json({ id: 'ses-1' }, { status: 201 }))
+      .mockResolvedValueOnce(unreadable(201));
+
+    let result: unknown;
+    const pending = run(async (_input, ctx) => {
+      result = await ctx.publish('progress');
+    });
+    await jest.advanceTimersByTimeAsync(500);
+    await pending;
+
+    const [first, second] = publishRequests();
+    expect(second).toEqual(first);
+    expect(result).toEqual({ id: 'msg-2', seq: 4 });
+  });
+
+  it('names the message when its answer cannot be read', async () => {
+    jest.useFakeTimers({ timerLimit: 100 });
+    fetchMock()
+      .mockResolvedValueOnce(Response.json({ id: 'ses-1' }, { status: 201 }))
+      .mockImplementation(() => Promise.resolve(unreadable(201)));
+
+    const failure = failureOf(run((_input, ctx) => ctx.publish('progress')));
+    await jest.advanceTimersByTimeAsync(30_000);
+
+    expect(await failure).toMatchObject({
+      message: 'Could not reach Volcano to publish the message: The operation timed out',
+    });
+  });
+
+  it('opens the session again for the next publish after it failed to open', async () => {
+    fetchMock().mockResolvedValueOnce(
+      Response.json({ error: 'malformed request' }, { status: 400 }),
+    );
+
+    let second: unknown;
+    await run(async (_input, ctx) => {
+      await expect(ctx.publish('first')).rejects.toThrow(
+        'Volcano refused the messages session (400): malformed request',
+      );
+      second = await ctx.publish('second');
+    });
+
+    expect(second).toEqual({ id: 'msg-2', seq: 4 });
+    expect(callbackCalls.map((call) => call.name)).toEqual([SESSION, SESSION]);
+    expect(publishRequests()).toEqual([
+      {
+        headers: expect.objectContaining({ 'Idempotency-Key': `${SESSION_HASH}:2` }),
+        body: { name: 'second', data: null },
+      },
+    ]);
   });
 
   it('names the message when Volcano cannot be reached', async () => {

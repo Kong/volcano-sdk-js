@@ -4,22 +4,34 @@ import type { DurableMessage, DurableMessageList } from './sdk-public-types.ts';
 
 type ListAfter = (after: number) => Promise<DurableResult<DurableMessageList>>;
 
+interface Held {
+  message: DurableMessage;
+  prevSeq: number;
+}
+
+// Half a second doubling to a 30 second cap.
+const FIRST_RETRY_MS = 500;
+const MAX_RETRY_MS = 30_000;
+
 /**
  * Delivers what an execution publishes in `seq` order, once each, from two
  * sources: the realtime channel and the list endpoint.
  *
- * A live message can only be delivered once everything before it has been
- * listed, or the missed ones would fall below `lastSeq` and be skipped. So
- * live messages are held from `hold()` (the channel is not subscribed) until a
- * catch-up has read what was missed. Each broadcast names the publish before
- * it, so one that follows a lost or still-arriving broadcast starts a catch-up
- * too.
+ * A live message can only be delivered once everything before it has been,
+ * or the missed ones would fall below `lastSeq` and be skipped. Each broadcast
+ * names the publish before it, so a live message is held, with that name,
+ * while the channel is not subscribed, while a catch-up reads, while it does
+ * not follow `lastSeq`, and behind any message already held. A catch-up that
+ * fails, or that leaves a held message still short of its predecessor, is
+ * tried again until one reads it.
  */
 export class DurableMessageStream {
   private lastSeq = 0;
   private holding = true;
   private catchUps = 0;
-  private held: DurableMessage[] = [];
+  private held: Held[] = [];
+  private failures = 0;
+  private retry: ReturnType<typeof setTimeout> | undefined;
   private closed = false;
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -34,12 +46,11 @@ export class DurableMessageStream {
       return;
     }
     if (this.behind()) {
-      this.held.push(live.message);
+      this.held.push(live);
       return;
     }
     if (live.prevSeq > this.lastSeq) {
-      this.held.push(live.message);
-      // A failed catch-up leaves the gap; the held message is still released.
+      this.held.push(live);
       void this.catchUp();
       return;
     }
@@ -48,11 +59,14 @@ export class DurableMessageStream {
 
   hold(): void {
     this.holding = true;
+    // The catch-up that follows subscribing again replaces any retry.
+    this.cancelRetry();
   }
 
   /** Resolves with the last page read, or the failure, including a handler's. */
   catchUp(): Promise<DurableResult<DurableMessageList>> {
     this.holding = false;
+    this.cancelRetry();
     // Counted now, not when the queued read starts, so nothing is delivered
     // live while a catch-up waits its turn.
     this.catchUps += 1;
@@ -65,19 +79,23 @@ export class DurableMessageStream {
 
   close(): void {
     this.closed = true;
+    this.cancelRetry();
   }
 
   private behind(): boolean {
-    return this.holding || this.catchUps > 0;
+    return this.holding || this.catchUps > 0 || this.held.length > 0;
   }
 
   private async readMissed(): Promise<DurableResult<DurableMessageList>> {
+    let read = false;
     try {
-      return await this.readPages();
+      const page = await this.readPages();
+      read = page.error === null;
+      return page;
     } finally {
       this.catchUps -= 1;
       if (this.catchUps === 0 && !this.holding) {
-        this.release();
+        this.release(read);
       }
     }
   }
@@ -99,13 +117,42 @@ export class DurableMessageStream {
     return page;
   }
 
-  private release(): void {
-    const held = this.held;
-    this.held = [];
-    held.sort((a, b) => a.seq - b.seq);
-    held.forEach((message) => {
-      this.deliver(message);
-    });
+  // Delivers the held messages that follow on from `lastSeq` and keeps the
+  // rest. One a handler throws on is already delivered, so a retry resumes
+  // after it.
+  private release(read: boolean): void {
+    this.held.sort((a, b) => a.message.seq - b.message.seq);
+    try {
+      let next = this.held[0];
+      while (next !== undefined && next.prevSeq <= this.lastSeq) {
+        this.held.shift();
+        this.deliver(next.message);
+        next = this.held[0];
+      }
+    } finally {
+      if (read && this.held.length === 0) {
+        this.failures = 0;
+      } else {
+        this.retryLater();
+      }
+    }
+  }
+
+  private retryLater(): void {
+    if (this.closed) {
+      return;
+    }
+    const delay = Math.min(FIRST_RETRY_MS * 2 ** this.failures, MAX_RETRY_MS);
+    this.failures += 1;
+    this.retry = setTimeout(() => {
+      this.retry = undefined;
+      void this.catchUp();
+    }, delay);
+  }
+
+  private cancelRetry(): void {
+    clearTimeout(this.retry);
+    this.retry = undefined;
   }
 
   private deliver(message: DurableMessage): void {

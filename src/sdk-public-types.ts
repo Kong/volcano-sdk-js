@@ -624,9 +624,11 @@ export interface DurableMessages {
 
   /**
    * Receive what the execution publishes, in `seq` order and once each. It
-   * catches up from the list after subscribing, and again whenever the
-   * connection resubscribes, so a message published before or during either
-   * is not missed. One subscription per execution per realtime client.
+   * catches up from the list after subscribing, whenever the connection
+   * resubscribes, and when a live message shows an earlier one was lost,
+   * retrying a read that fails, so no published message is missed. One
+   * subscription per execution per realtime client;
+   * `disconnect()` and `removeAllChannels()` on it end the subscription.
    *
    * @example
    * ```typescript

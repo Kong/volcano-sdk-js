@@ -1,5 +1,4 @@
 import { apiRequestError } from './api-errors.ts';
-import { safeJsonParse } from './response-json.ts';
 
 /** A request a workflow makes to Volcano's runtime routes. */
 export interface PlatformRequest {
@@ -11,6 +10,11 @@ export interface PlatformRequest {
   action: string;
   /** Ends "Volcano refused …", such as `the approval request`. */
   subject: string;
+  /**
+   * Whether the caller reads the answer. A registration does not, so an
+   * accepted request settles without waiting for its body.
+   */
+  readsAnswer?: boolean;
   /** The conflict code for a callback Volcano cannot see waiting yet. */
   notReadyCode?: string;
   /**
@@ -84,9 +88,19 @@ async function send(
   request: PlatformRequest,
   timeout: number,
 ): Promise<Outcome> {
-  let response: Response;
+  // The timeout covers reading the body too, so a body that stalls is a
+  // transport failure like one that never starts.
   try {
-    response = await fetch(url, { method: 'POST', ...init, signal: AbortSignal.timeout(timeout) });
+    const response = await fetch(url, {
+      method: 'POST',
+      ...init,
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (response.ok && request.readsAnswer !== true) {
+      return settled();
+    }
+    const data = jsonOf(await response.text());
+    return response.ok ? settled(data) : refusal(response, data, request);
   } catch (cause) {
     return {
       failure: {
@@ -97,12 +111,21 @@ async function send(
       },
     };
   }
-  const data = await safeJsonParse(response);
-  return response.ok ? settled(data) : refusal(response, data, request);
 }
 
 function settled(body?: unknown): Outcome {
   return { body };
+}
+
+// A refusal whose body is not JSON still reports its status.
+function jsonOf(text: string): unknown {
+  let value: unknown = {};
+  try {
+    value = JSON.parse(text);
+  } catch {
+    // Read as an empty body.
+  }
+  return value;
 }
 
 // The runtime rethrows a failed submitter with only its message, so the

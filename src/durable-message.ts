@@ -88,7 +88,12 @@ export function messagePublisher(
     // gives every publish the position it had before.
     published += 1;
     const position = published;
-    session ??= openSession(context, apiUrl, execution);
+    // Forget a session that failed to open, so the next publish opens another.
+    // A replay takes the same path, because the failed callback is checkpointed.
+    session ??= openSession(context, apiUrl, execution).catch((error: unknown) => {
+      session = undefined;
+      throw error;
+    });
     const token = await session;
     const key = publishKey(token, position);
     return context.step(
@@ -133,6 +138,7 @@ function publish(
     headers: { 'X-Volcano-Durable-Session': token, 'Idempotency-Key': key },
     action: 'publish the message',
     subject: 'the message',
+    readsAnswer: true,
   });
 }
 
