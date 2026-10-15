@@ -112,11 +112,16 @@ If no reason is available, the message is `Connection disconnected`. The
 
 An auth-only public key cannot connect to realtime. Include `realtime.connect`
 on the key, plus `realtime.subscribe` for channel subscriptions. Retryable
-transport interruptions and temporary token-refresh errors continue reconnecting
-and still reach `onError`; a connection that never becomes ready rejects with
-`Connection timeout` after ten seconds.
+transport interruptions and temporary token-refresh errors reach `onError`
+without immediately rejecting `connect()`. The attempt continues reconnecting
+until it succeeds or reaches its ten-second deadline. At that deadline,
+`connect()` rejects with the generic `Connection timeout`, which does not include
+the underlying transport or token-refresh error. Earlier SDK versions rejected
+`connect()` on the first error event with that error's message.
 
-Failed connection attempts release their transport and handlers before a retry.
+Rejected or timed-out attempts release their transport and handlers and stop
+background reconnection. Call `connect()` again to retry; a failed attempt will
+no longer recover later through `onConnect` without a new connection attempt.
 Once the transport has started, calling `disconnect()` while `connect()` is
 pending also rejects that attempt promptly with the transport's disconnect reason,
 rather than timing out.
