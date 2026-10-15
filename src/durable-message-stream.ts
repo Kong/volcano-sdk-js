@@ -171,14 +171,17 @@ export class DurableMessageStream {
   // after it.
   private release(read: boolean, report: boolean): void {
     this.held.sort(bySeq);
+    let released = 0;
     try {
-      let next = this.held[0];
-      while (next !== undefined && next.prevSeq <= this.lastSeq) {
-        this.held.shift();
+      for (const next of this.held) {
+        if (next.prevSeq > this.lastSeq) {
+          break;
+        }
+        released += 1;
         this.deliver(next.message, report);
-        next = this.held[0];
       }
     } finally {
+      this.held.splice(0, released);
       if (read && this.held.length === 0) {
         this.failures = 0;
       } else {
