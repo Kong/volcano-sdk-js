@@ -1,5 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { describe, expect, jest, test } from '@jest/globals';
+import type { SandboxCreateOptions } from '../src/index.ts';
 import { commandRequest, pathId, requestOptions } from '../src/sandbox-request.ts';
 import {
   commandResult,
@@ -133,14 +134,21 @@ test('omits absent optional wire properties', () => {
       preset: 'node22',
       region: 'aws-us-east-1',
       maxDurationSeconds: 300,
-      idleTimeoutSeconds: 60,
     }),
   ).toStrictEqual({
     preset: 'node22',
     region: 'aws-us-east-1',
     max_duration_seconds: 300,
-    idle_timeout_seconds: 60,
   });
+});
+
+test('never sends the idle timeout the API removed, even for an untyped caller', () => {
+  // CreateSandboxSessionRequest rejects unknown fields, so a leftover option must not reach the wire.
+  const untyped: SandboxCreateOptions = Object.assign(
+    { preset: 'node22', region: 'aws-us-east-1' },
+    { idleTimeoutSeconds: 60 },
+  );
+  expect(sessionRequest(untyped)).toStrictEqual({ preset: 'node22', region: 'aws-us-east-1' });
 });
 
 test.each([0, 1, 1023, 1025, 2047, 2049, Number.NaN])(

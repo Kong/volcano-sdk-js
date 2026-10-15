@@ -796,7 +796,6 @@ export interface SandboxSelectionOptions extends SandboxReplayOptions {
 }
 export interface SandboxCreateOptions extends SandboxSelectionOptions {
   maxDurationSeconds?: number;
-  idleTimeoutSeconds?: number;
 }
 export interface SandboxExecOptions extends SandboxSelectionOptions {
   timeoutSeconds?: number;
@@ -838,7 +837,7 @@ export interface SandboxSession extends AsyncDisposable {
   readonly projectId: string;
   readonly region: string;
   readonly state: SandboxState;
-  readonly expiresAt: string;
+  readonly expiresAt: string | null;
   refresh(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   exec(
     command: string,

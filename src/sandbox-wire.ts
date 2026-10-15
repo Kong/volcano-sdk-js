@@ -19,6 +19,10 @@ export function text(value: unknown): string {
   }
   return value;
 }
+/** A text field the API may return as `null`, such as the expiry of a session with no lifetime limit. */
+export function nullableText(value: unknown): string | null {
+  return value === null ? null : text(value);
+}
 function number(value: unknown): number {
   if (!Number.isFinite(value)) {
     throw new TypeError('Invalid Sandbox numeric field');
@@ -136,9 +140,6 @@ export function sessionRequest(
     ...(options.maxDurationSeconds === undefined
       ? {}
       : { max_duration_seconds: options.maxDurationSeconds }),
-    ...(options.idleTimeoutSeconds === undefined
-      ? {}
-      : { idle_timeout_seconds: options.idleTimeoutSeconds }),
   };
 }
 
