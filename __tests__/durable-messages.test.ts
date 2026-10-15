@@ -1015,21 +1015,21 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
-  test('resumes a later catch-up page after the message a handler threw on', async () => {
+  test('reports a handler that throws during a later catch-up and delivers the rest of the page', async () => {
     const realtime = await connectedRealtime();
     const list = jest
       .fn<TransportOperation>()
       .mockImplementationOnce(() => listed(page([message(1)])))
-      .mockImplementationOnce(() => listed(page([message(2), message(3), message(4)])))
-      .mockImplementationOnce(() => listed(page([message(3), message(4)])));
+      .mockImplementationOnce(() => listed(page([message(2), message(3), message(4)])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
+    const thrown = new Error('handler failed');
     await volcano.durable.messages.subscribe(
       target,
       (delivered) => {
         received.push(delivered.seq);
         if (delivered.seq === 2) {
-          throw new Error('handler failed');
+          throw thrown;
         }
       },
       { realtime },
@@ -1039,50 +1039,48 @@ describe('durable.messages.subscribe', () => {
 
     latestTransport().publication({ ...message(5), prev_seq: 4 });
     await jest.advanceTimersByTimeAsync(0);
-    expect(received).toEqual([1, 2]);
-    expect(reported).toHaveBeenCalledTimes(1);
-    await jest.advanceTimersByTimeAsync(500);
-
-    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
     expect(received).toEqual([1, 2, 3, 4, 5]);
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
     realtime.disconnect();
   });
 
-  test('survives a handler that throws during a later catch-up, and reads on after it', async () => {
+  test('reports a handler that throws on a released message and delivers the ones after it', async () => {
     const realtime = await connectedRealtime();
+    const reread = deferred<{ data: unknown; status: number }>();
     const list = jest
       .fn<TransportOperation>()
-      .mockImplementationOnce(() => listed(page([])))
       .mockImplementationOnce(() => listed(page([message(1)])))
-      .mockImplementationOnce(() => listed(page([])));
+      .mockImplementationOnce(() => reread.promise);
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
+    const thrown = new Error('handler failed');
     await volcano.durable.messages.subscribe(
       target,
       (delivered) => {
         received.push(delivered.seq);
-        if (delivered.seq === 1) {
-          throw new Error('handler failed');
+        if (delivered.seq === 3) {
+          throw thrown;
         }
       },
       { realtime },
     );
     jest.useFakeTimers({ timerLimit: 100 });
-
     const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
-    latestSubscription().move('subscribing');
-    latestSubscription().move('subscribed');
-    await jest.advanceTimersByTimeAsync(0);
-    latestTransport().publication(message(2));
-    expect(received).toEqual([1, 2]);
-    await jest.advanceTimersByTimeAsync(500);
 
-    expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    latestTransport().publication({ ...message(4), prev_seq: 3 });
+    reread.resolve({ data: page([message(2)]), status: 200 });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(received).toEqual([1, 2, 3, 4]);
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(list).toHaveBeenCalledTimes(2);
     expect(reported).toHaveBeenCalledTimes(1);
-    expect(reported).toHaveBeenCalledWith(
-      '[Realtime] Error in durable message handler:',
-      new Error('handler failed'),
-    );
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
     realtime.disconnect();
   });
 
@@ -1307,6 +1305,30 @@ describe('durable.messages.subscribe', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  test('retries nothing when a catch-up fails after unsubscribing', async () => {
+    const realtime = await connectedRealtime();
+    const answer = signal();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([])))
+      .mockImplementationOnce(async () => {
+        await answer.promise;
+        throw new Error('unavailable');
+      });
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const { data } = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+    jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    latestSubscription().move('subscribing');
+    latestSubscription().move('subscribed');
+    await data?.unsubscribe();
+    answer.resolve();
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   test('lists through the project when the target names one', async () => {
     const realtime = await connectedRealtime();
     const { volcano, transport } = clientWithTransport(
@@ -1412,6 +1434,46 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
+  test('fails when its channels are removed during the first catch-up', async () => {
+    const realtime = await connectedRealtime();
+    const first = deferred<{ data: unknown; status: number }>();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => first.promise);
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => received.push(delivered.seq),
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    realtime.removeAllChannels();
+    first.resolve({ data: page([message(1)]), status: 200 });
+
+    await expect(pending).resolves.toEqual(refused('The durable message subscription has ended'));
+    expect(received).toEqual([]);
+    expect(realtime._channels.has('durable:exec-1')).toBe(false);
+    realtime.disconnect();
+  });
+
+  test('reads nothing for a broadcast that arrives after the server ends the subscription', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest.fn<TransportOperation>().mockImplementation(() => listed(page([])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+
+    latestSubscription().move('unsubscribed');
+    latestTransport().publication({ ...message(3), prev_seq: 2 });
+    await settled();
+
+    expect(received).toEqual([]);
+    expect(list).toHaveBeenCalledTimes(1);
+    realtime.disconnect();
+  });
+
   test('delivers nothing it held once the first catch-up fails to read', async () => {
     const realtime = await connectedRealtime();
     const answer = signal();
@@ -1440,17 +1502,22 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
+  const refusal = { code: 103, message: 'permission denied' };
   test.each([
     ['an error', new Error('Subscription refused'), new Error('Subscription refused')],
     ['a value that is not an error', 'permission denied', new Error('permission denied')],
+    ["the realtime server's refusal", refusal, new Error('permission denied', { cause: refusal })],
+    ['an object without a message', { code: 3 }, new Error('[object Object]')],
+    ['null', null, new Error('null')],
   ])('ends the subscription when subscribing fails with %s', async (_case, failure, error) => {
     nextReady = rejectWithForeignValue(failure);
     const realtime = await connectedRealtime();
     const { volcano, transport } = clientWithTransport();
 
-    await expect(
-      volcano.durable.messages.subscribe(target, jest.fn(), { realtime }),
-    ).resolves.toEqual({ data: null, status: null, error });
+    const result = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
+
+    expect(result).toEqual({ data: null, status: null, error });
+    expect(result.error?.cause).toBe(error.cause);
     expect(realtime._channels.has('durable:exec-1')).toBe(false);
     expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
     realtime.disconnect();

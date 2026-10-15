@@ -16,6 +16,7 @@ const MAX_RETRY_MS = 30_000;
 // a dropped one names a predecessor at or past it, so it waits for a read
 // that lists the dropped one.
 const HELD_LIMIT = 128;
+const ENDED = 'The durable message subscription has ended';
 
 /**
  * Delivers what an execution publishes in `seq` order, once each, from two
@@ -45,8 +46,8 @@ export class DurableMessageStream {
   ) {}
 
   live(data: unknown): void {
-    const live = liveMessage(data);
-    if (live?.message.direction !== 'out') {
+    const live = this.published(data);
+    if (live === null) {
       return;
     }
     if (this.behind()) {
@@ -58,7 +59,7 @@ export class DurableMessageStream {
       this.catchUpInBackground();
       return;
     }
-    this.deliverLive(live.message);
+    this.deliver(live.message, true);
   }
 
   hold(): void {
@@ -70,22 +71,31 @@ export class DurableMessageStream {
   /**
    * The first catch-up. Resolves with the last page read, or the failure,
    * including a handler's, which closes the stream before anything held is
-   * delivered. A stream closed before it is called reads nothing.
+   * delivered. A stream closed before it is called reads nothing, and one
+   * closed while it reads fails.
    */
   catchUp(): Promise<DurableResult<DurableMessageList>> {
     if (this.closed) {
-      return Promise.resolve(failure(new Error('The durable message subscription has ended')));
+      return Promise.resolve(failure(new Error(ENDED)));
     }
-    return this.read(true).catch((error: unknown) => failure<DurableMessageList>(toError(error)));
+    return this.read(true).then(
+      (page) =>
+        page.error === null && this.closed ? failure<DurableMessageList>(new Error(ENDED)) : page,
+      (error: unknown) => failure<DurableMessageList>(toError(error)),
+    );
   }
 
-  /** A catch-up nobody waits for: a failed read is reported and retried, and a handler's throw reported. */
+  /**
+   * A catch-up nobody waits for. A failed read is reported and retried; what
+   * a handler throws is reported and the read goes on, as live delivery does.
+   */
   catchUpInBackground(): void {
-    this.read(false).then(reportFailedRead, reportHandlerError);
+    void this.read(false).then(reportFailedRead);
   }
 
   close(): void {
     this.closed = true;
+    this.held.length = 0;
     this.cancelRetry();
   }
 
@@ -100,6 +110,12 @@ export class DurableMessageStream {
     return run;
   }
 
+  // A closed stream keeps nothing it can no longer deliver.
+  private published(data: unknown): Held | null {
+    const live = liveMessage(data);
+    return live?.message.direction === 'out' && !this.closed ? live : null;
+  }
+
   private behind(): boolean {
     return this.holding || this.catchUps > 0 || this.held.length > 0;
   }
@@ -112,10 +128,14 @@ export class DurableMessageStream {
     }
   }
 
+  // Past the first read, what a handler throws is reported and the read goes
+  // on; backing off is for failed reads. The first read's handler errors end
+  // the subscription instead.
   private async readMissed(first: boolean): Promise<DurableResult<DurableMessageList>> {
+    const report = !first;
     let read = false;
     try {
-      const page = await this.readPages();
+      const page = await this.readPages(report);
       read = page.error === null;
       return page;
     } finally {
@@ -124,12 +144,12 @@ export class DurableMessageStream {
         this.close();
       }
       if (this.catchUps === 0 && !this.holding) {
-        this.release(read);
+        this.release(read, report);
       }
     }
   }
 
-  private async readPages(): Promise<DurableResult<DurableMessageList>> {
+  private async readPages(report: boolean): Promise<DurableResult<DurableMessageList>> {
     let after: number;
     let page: DurableResult<DurableMessageList>;
     do {
@@ -139,7 +159,7 @@ export class DurableMessageStream {
         return page;
       }
       page.data.data.forEach((message) => {
-        this.deliver(message);
+        this.deliver(message, report);
       });
       // A page that delivered nothing would be asked for again unchanged.
     } while (page.data.has_more && this.lastSeq !== after);
@@ -149,13 +169,13 @@ export class DurableMessageStream {
   // Delivers the held messages that follow on from `lastSeq` and keeps the
   // rest. One a handler throws on is already delivered, so a retry resumes
   // after it.
-  private release(read: boolean): void {
+  private release(read: boolean, report: boolean): void {
     this.held.sort(bySeq);
     try {
       let next = this.held[0];
       while (next !== undefined && next.prevSeq <= this.lastSeq) {
         this.held.shift();
-        this.deliver(next.message);
+        this.deliver(next.message, report);
         next = this.held[0];
       }
     } finally {
@@ -184,26 +204,35 @@ export class DurableMessageStream {
     this.retry = undefined;
   }
 
-  // A throw would reach the realtime client, which then stops dispatching.
-  private deliverLive(message: DurableMessage): void {
-    try {
-      this.deliver(message);
-    } catch (error) {
-      reportHandlerError(error);
-    }
-  }
-
-  private deliver(message: DurableMessage): void {
+  // A live throw would reach the realtime client, which then stops
+  // dispatching.
+  private deliver(message: DurableMessage, report: boolean): void {
     if (this.closed || message.seq <= this.lastSeq) {
       return;
     }
     this.lastSeq = message.seq;
-    this.handler(message);
+    if (!report) {
+      this.handler(message);
+      return;
+    }
+    try {
+      this.handler(message);
+    } catch (error) {
+      reportHandlerError(error);
+    }
   }
 }
 
+// Centrifuge refuses a subscription with a plain `{ code, message }` object.
 export function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
+  if (error instanceof Error) {
+    return error;
+  }
+  const message: unknown =
+    typeof error === 'object' && error !== null ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string'
+    ? new Error(message, { cause: error })
+    : new Error(String(error));
 }
 
 function bySeq(a: Held, b: Held): number {

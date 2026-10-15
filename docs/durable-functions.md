@@ -878,11 +878,14 @@ A realtime client holds one subscription per execution; subscribing again
 before `unsubscribe` resolves with an error. `disconnect()`,
 `removeAllChannels()`, and a change of signed-in user on the realtime client
 end the subscription too, and a read still in flight delivers nothing; call
-`unsubscribe` before subscribing to the execution again. A handler that throws
-while `subscribe` is still catching up ends the subscription, which delivers
-nothing more and resolves with that error; once it has resolved, the subscription carries on past a
-handler that throws and logs the error with `console.error`. Catch errors in the
-handler to handle them yourself.
+`unsubscribe` before subscribing to the execution again. Ended while it is
+still catching up, `subscribe` resolves with an error. When the realtime server
+refuses the subscription, `error.cause` holds its `code` and `message`. A
+handler that throws while `subscribe` is still catching up ends the
+subscription, which delivers nothing more and resolves with that error; once it
+has resolved, the subscription carries on past a handler that throws, including
+during a later read-back, and logs the error with `console.error`. Catch errors
+in the handler to handle them yourself.
 
 All three answer `{ data, status, error }`. `status` is `409` with
 `error.code` `execution_not_running` for a send to an execution that has ended,
