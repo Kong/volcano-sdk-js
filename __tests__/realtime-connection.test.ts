@@ -126,7 +126,7 @@ test('rejects immediately with the terminal disconnect reason and code', async (
   }
 });
 
-test.each([{ reason: '', code: '3507' }, { reason: 3 }, null])(
+test.each([{ reason: '', code: '3507' }, { reason: 3 }, null, undefined, 'denied', 3])(
   'handles a terminal disconnect without a valid reason or code: %p',
   async (context) => {
     const client = new Client();
