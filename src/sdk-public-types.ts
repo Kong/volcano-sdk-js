@@ -559,8 +559,9 @@ export interface DurableMessageTarget {
 
 export interface DurableMessageSendOptions {
   /**
-   * Makes a retry safe: a repeat with a key the execution has seen returns the
-   * first message with status 200 and sends nothing. Up to 255 characters.
+   * Makes a retry safe: a repeat with a key the same sender has used on the
+   * execution returns the first message with status 200 and sends nothing. Up
+   * to 255 characters.
    */
   idempotencyKey?: string;
 }
