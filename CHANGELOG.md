@@ -11,6 +11,8 @@ All notable changes to the Volcano SDK will be documented in this file.
   `RealtimeConnectionError` exposes the reason and an optional non-enumerable
   numeric `code`; use its `is()` guard to narrow unknown errors in TypeScript.
   Failed attempts release their transport and handlers before retrying.
+  Retryable startup errors still reach `onError` and allow automatic recovery
+  until the connection deadline.
 
 - Generate public declarations from the TypeScript implementation. Nine response
   types now represent optional or nullable values already returned at runtime;

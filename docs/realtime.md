@@ -112,8 +112,9 @@ If no reason is available, the message is `Connection disconnected`. The
 
 An auth-only public key cannot connect to realtime. Include `realtime.connect`
 on the key, plus `realtime.subscribe` for channel subscriptions. Retryable
-transport interruptions continue reconnecting; a connection that never becomes
-ready still rejects with `Connection timeout` after ten seconds.
+transport interruptions and temporary token-refresh errors continue reconnecting
+and still reach `onError`; a connection that never becomes ready rejects with
+`Connection timeout` after ten seconds.
 
 Failed connection attempts release their transport and handlers before a retry.
 Once the transport has started, calling `disconnect()` while `connect()` is

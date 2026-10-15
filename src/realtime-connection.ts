@@ -75,15 +75,6 @@ function objectProperty(value: unknown, property: string): unknown {
   return Reflect.get(value, property);
 }
 
-function errorMessage(context: unknown): string | undefined {
-  const message = objectProperty(objectProperty(context, 'error'), 'message');
-  return typeof message === 'string' && message !== '' ? message : undefined;
-}
-
-function connectionError(context: unknown): Error {
-  return new Error(errorMessage(context) ?? 'Connection failed');
-}
-
 function disconnectError(context: unknown): Error {
   const reason = objectProperty(context, 'reason');
   const code = objectProperty(context, 'code');
@@ -103,18 +94,12 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
     function cleanup(): void {
       clearTimeout(timeout);
       client.off('connected', connected);
-      client.off('error', error);
       client.off('disconnected', disconnected);
     }
 
     function connected(): void {
       cleanup();
       resolve();
-    }
-
-    function error(context: unknown): void {
-      cleanup();
-      reject(connectionError(context));
     }
 
     function disconnected(context: unknown): void {
@@ -125,7 +110,8 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
     }
 
     client.on('connected', connected);
-    client.on('error', error);
+    // Retryable errors are reported by the persistent facade handler. Keep
+    // waiting so Centrifuge can reconnect and refresh tokens before the deadline.
     client.on('disconnected', disconnected);
     let started = false;
     try {

@@ -258,13 +258,37 @@ describe('realtime client facade', () => {
     transport.disconnect.mockImplementationOnce(() => {
       throw new Error('cleanup failed');
     });
-    transport.emit('error', { error: { message: 'connection failed' } });
+    transport.emit('disconnected', { code: 3507, reason: 'connection failed' });
     expect(await failed).toEqual(new Error('connection failed'));
     expect(realtime.getClient()).toBeNull();
     expect(realtime._clientHandlers).toBeNull();
     for (const listeners of transport.listeners.values()) {
       expect(listeners.size).toBe(0);
     }
+  });
+
+  test('reports retryable startup errors without disposing the recovering transport', async () => {
+    jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
+    ready = false;
+    const realtime = client();
+    const onError = jest.fn();
+    realtime.onError(onError);
+    const started = nextConnection();
+    const connecting = realtime.connect();
+    const transport = await started;
+    transport.emit('error', { error: { code: 109, message: 'token expired' } });
+    await Promise.resolve();
+    expect(transport.disconnect).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith({
+      error: { code: 109, message: 'token expired' },
+      code: 109,
+      message: 'token expired',
+    });
+    transport.emit('connected', {});
+    await connecting;
+    expect(realtime.isConnected()).toBe(true);
+    expect(realtime.getClient()).toBe(transport);
+    realtime.disconnect();
   });
 
   test('releases a timed-out transport and prevents late connections', async () => {
