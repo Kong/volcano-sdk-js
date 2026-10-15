@@ -7,6 +7,7 @@ type Listener = (context: unknown) => void;
 
 const transports: MockTransport[] = [];
 let ready = true;
+let connectStarted: ((transport: MockTransport) => void) | undefined;
 
 class MockTransport {
   readonly listeners = new Map<string, Set<Listener>>();
@@ -38,6 +39,7 @@ class MockTransport {
   }
 
   connect(): void {
+    connectStarted?.(this);
     if (ready) {
       this.emit('connected', { client: 'connected', latency: 1 });
     }
@@ -76,10 +78,17 @@ function client(): VolcanoRealtime {
   });
 }
 
+function nextConnection(): Promise<MockTransport> {
+  return new Promise((resolve) => {
+    connectStarted = resolve;
+  });
+}
+
 afterEach(() => {
   jest.restoreAllMocks();
   transports.length = 0;
   ready = true;
+  connectStarted = undefined;
 });
 
 describe('realtime client facade', () => {
@@ -179,11 +188,10 @@ describe('realtime client facade', () => {
     jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
     ready = false;
     const realtime = client();
+    const started = nextConnection();
     const first = realtime.connect();
     const second = realtime.connect();
-    await Promise.resolve();
-    await Promise.resolve();
-    const transport = latestTransport();
+    const transport = await started;
     transport.emit('connected', {});
     await Promise.all([first, second]);
     expect(realtime._connectionPromise).toBeNull();
@@ -199,23 +207,34 @@ describe('realtime client facade', () => {
     const realtime = client();
     const onDisconnect = jest.fn();
     realtime.onDisconnect(onDisconnect);
+    const started = nextConnection();
     const first = realtime.connect();
     const second = realtime.connect();
     const firstRejection = first.catch((error: unknown) => error);
     const secondRejection = second.catch((error: unknown) => error);
-    await Promise.resolve();
-    await Promise.resolve();
-    const transport = latestTransport();
+    const transport = await started;
     transport.emit('disconnected', { code: 3507, reason: 'permission denied' });
     expect(await firstRejection).toMatchObject({ message: 'permission denied', code: 3507 });
     expect(await secondRejection).toMatchObject({ message: 'permission denied', code: 3507 });
     expect(realtime._connectionPromise).toBeNull();
     expect(realtime.isConnected()).toBe(false);
     expect(onDisconnect).toHaveBeenCalledWith({ code: 3507, reason: 'permission denied' });
-    // Only the persistent callback remains after both callers have rejected.
-    expect(transport.listeners.get('disconnected')?.size).toBe(1);
-    realtime.disconnect();
+    expect(realtime.getClient()).toBeNull();
+    expect(realtime._clientHandlers).toBeNull();
+    expect(transport.disconnect).toHaveBeenCalledTimes(1);
     expect(transport.listeners.get('disconnected')?.size).toBe(0);
+    for (const listeners of transport.listeners.values()) {
+      expect(listeners.size).toBe(0);
+    }
+    ready = true;
+    await realtime.connect();
+    expect(latestTransport()).not.toBe(transport);
+    expect(realtime.isConnected()).toBe(true);
+    // Stale clients can no longer change the new connection's state.
+    transport.emit('disconnected', { code: 3507, reason: 'old failure' });
+    expect(realtime.isConnected()).toBe(true);
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
+    realtime.disconnect();
   });
 
   test('rejects an invalid transport without marking the client connected', async () => {
@@ -227,6 +246,69 @@ describe('realtime client facade', () => {
     await expect(realtime.connect()).rejects.toThrow('required client methods');
     expect(realtime._connectionPromise).toBeNull();
     expect(realtime.getClient()).toBeNull();
+  });
+
+  test('preserves a connection failure when transport disposal throws', async () => {
+    jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
+    ready = false;
+    const realtime = client();
+    const started = nextConnection();
+    const failed = realtime.connect().catch((error: unknown) => error);
+    const transport = await started;
+    transport.disconnect.mockImplementationOnce(() => {
+      throw new Error('cleanup failed');
+    });
+    transport.emit('error', { error: { message: 'connection failed' } });
+    expect(await failed).toEqual(new Error('connection failed'));
+    expect(realtime.getClient()).toBeNull();
+    expect(realtime._clientHandlers).toBeNull();
+    for (const listeners of transport.listeners.values()) {
+      expect(listeners.size).toBe(0);
+    }
+  });
+
+  test('releases a timed-out transport and prevents late connections', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
+      ready = false;
+      const realtime = client();
+      const started = nextConnection();
+      const failed = realtime.connect().catch((error: unknown) => error);
+      const transport = await started;
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(await failed).toEqual(new Error('Connection timeout'));
+      expect(realtime.getClient()).toBeNull();
+      expect(transport.disconnect).toHaveBeenCalledTimes(1);
+      for (const listeners of transport.listeners.values()) {
+        expect(listeners.size).toBe(0);
+      }
+      transport.emit('connected', {});
+      expect(realtime.isConnected()).toBe(false);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('rejects a manually cancelled pending connection without disposing twice', async () => {
+    jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
+    ready = false;
+    const realtime = client();
+    const started = nextConnection();
+    const failed = realtime.connect().catch((error: unknown) => error);
+    const transport = await started;
+    transport.disconnect.mockImplementationOnce(() => {
+      transport.emit('disconnected', { code: 0, reason: 'disconnect called' });
+    });
+    realtime.disconnect();
+    expect(await failed).toMatchObject({ message: 'disconnect called', code: 0 });
+    expect(transport.disconnect).toHaveBeenCalledTimes(1);
+    expect(realtime.getClient()).toBeNull();
+    expect(realtime._clientHandlers).toBeNull();
+    for (const listeners of transport.listeners.values()) {
+      expect(listeners.size).toBe(0);
+    }
   });
 
   test('loads the default WebSocket and adopts refreshed credentials', async () => {

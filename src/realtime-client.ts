@@ -219,7 +219,7 @@ class VolcanoRealtime {
     this._client = candidate;
 
     // Set up event handlers (store references for cleanup)
-    this._clientHandlers = {
+    const handlers: ClientHandlers = {
       connected: (ctx) => {
         this._connected = true;
         this._onConnect.forEach((cb) => {
@@ -251,8 +251,31 @@ class VolcanoRealtime {
       },
     };
 
-    attachConnectionHandlers(this._client, this._clientHandlers);
-    return waitForConnection(this._client);
+    this._clientHandlers = handlers;
+    attachConnectionHandlers(candidate, handlers);
+    try {
+      await waitForConnection(candidate);
+    } catch (error) {
+      this._disposeFailedConnection(candidate, handlers);
+      throw error;
+    }
+  }
+
+  /** @internal */
+  _disposeFailedConnection(candidate: TransportClient, handlers: ClientHandlers): void {
+    // A manual disconnect may already have disposed this attempt.
+    if (this._client !== candidate) {
+      return;
+    }
+    detachConnectionHandlers(candidate, handlers);
+    this._client = null;
+    this._clientHandlers = null;
+    this._connected = false;
+    try {
+      candidate.disconnect();
+    } catch {
+      // Preserve the original connection failure if transport cleanup fails.
+    }
   }
 
   /** @internal */

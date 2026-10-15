@@ -6,6 +6,7 @@ import {
   type RealtimeConnectionClient,
   waitForConnection,
 } from '../src/realtime-connection.ts';
+import { RealtimeConnectionError } from '../src/realtime-connection-error.ts';
 
 class Client implements RealtimeConnectionClient {
   readonly listeners = new Map<string, Set<(context: unknown) => void>>();
@@ -116,7 +117,9 @@ test('rejects immediately with the terminal disconnect reason and code', async (
     client.emit('disconnected', { code: 3507, reason: 'permission denied' });
     expect(jest.getTimerCount()).toBe(0);
     expect(await waiting).toMatchObject({ message: 'permission denied', code: 3507 });
-    expect(await waiting).toBeInstanceOf(Error);
+    expect(await waiting).toBeInstanceOf(RealtimeConnectionError);
+    expect(JSON.stringify(await waiting)).toBe('{}');
+    expect(Object.getOwnPropertyDescriptor(await waiting, 'code')?.enumerable).toBe(false);
     expect(client.listeners.get('connected')?.size).toBe(0);
     expect(client.listeners.get('error')?.size).toBe(0);
     expect(client.listeners.get('disconnected')?.size).toBe(0);

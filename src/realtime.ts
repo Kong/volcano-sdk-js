@@ -47,6 +47,7 @@
 export { RealtimeChannel } from './realtime-channel.ts';
 export { VolcanoRealtime } from './realtime-client.ts';
 export { VolcanoRealtime as default } from './realtime-client.ts';
+export { RealtimeConnectionError } from './realtime-connection-error.ts';
 export type {
   CentrifugeClient,
   ChannelOptions,

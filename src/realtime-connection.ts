@@ -1,3 +1,5 @@
+import { RealtimeConnectionError } from './realtime-connection-error.ts';
+
 export interface RealtimeConnectionClient {
   connect(): void;
   on(event: string, listener: (context: unknown) => void): void;
@@ -85,9 +87,9 @@ function connectionError(context: unknown): Error {
 function disconnectError(context: unknown): Error {
   const reason = objectProperty(context, 'reason');
   const code = objectProperty(context, 'code');
-  return Object.assign(
-    new Error(typeof reason === 'string' && reason !== '' ? reason : 'Connection disconnected'),
-    typeof code === 'number' ? { code } : {},
+  return new RealtimeConnectionError(
+    typeof reason === 'string' && reason !== '' ? reason : 'Connection disconnected',
+    typeof code === 'number' ? code : undefined,
   );
 }
 

@@ -1,12 +1,14 @@
-import type {
-  ErrorContext as EsmErrorContext,
-  RealtimeChannel as EsmChannel,
-  VolcanoRealtime as EsmRealtime,
+import {
+  type ErrorContext as EsmErrorContext,
+  type RealtimeChannel as EsmChannel,
+  RealtimeConnectionError as EsmConnectionError,
+  type VolcanoRealtime as EsmRealtime,
 } from '../../dist/realtime.esm.mjs';
-import type {
-  ErrorContext as CjsErrorContext,
-  RealtimeChannel as CjsChannel,
-  VolcanoRealtime as CjsRealtime,
+import {
+  type ErrorContext as CjsErrorContext,
+  type RealtimeChannel as CjsChannel,
+  RealtimeConnectionError as CjsConnectionError,
+  type VolcanoRealtime as CjsRealtime,
 } from '../../dist/realtime.js';
 
 declare const cjs: CjsRealtime;
@@ -37,6 +39,14 @@ export function cjsErrorMessage(context: CjsErrorContext): string | undefined {
 
 export function esmErrorMessage(context: EsmErrorContext): string | undefined {
   return context.error instanceof Error ? context.error.message : context.message;
+}
+
+export function cjsDisconnectCode(error: unknown): number | undefined {
+  return CjsConnectionError.is(error) ? error.code : undefined;
+}
+
+export function esmDisconnectCode(error: unknown): number | undefined {
+  return error instanceof EsmConnectionError ? error.code : undefined;
 }
 
 // @ts-expect-error Subscription state is not part of the public CJS API.

@@ -84,9 +84,29 @@ console.log('Connected to realtime server');
 ```
 
 In the JavaScript SDK, `connect()` rejects immediately when the transport enters
-its terminal disconnected state before connecting. The rejection is an `Error`
-whose `message` contains the disconnect reason (for example, `permission denied`)
-and whose `code` property contains the numeric transport code when available.
+its terminal disconnected state before connecting. The rejection is a
+`RealtimeConnectionError` whose `message` contains the disconnect reason (for
+example, `permission denied`) and whose optional, read-only `code` contains the
+numeric transport code. Its properties are non-enumerable, so JSON serialization
+retains the native `Error` shape (`{}`). Import the error from the realtime
+entrypoint and narrow an unknown rejection without casting:
+
+```typescript
+import { RealtimeConnectionError } from '@volcano.dev/sdk/realtime';
+
+try {
+  await realtime.connect();
+} catch (error: unknown) {
+  if (RealtimeConnectionError.is(error)) {
+    console.warn(error.message, error.code); // code: number | undefined
+  } else {
+    throw error;
+  }
+}
+```
+
+The type guard works across multiple copies of the SDK; `instanceof
+RealtimeConnectionError` also narrows errors created by the same SDK copy.
 If no reason is available, the message is `Connection disconnected`. The
 `onDisconnect` callback still receives the disconnect context.
 
@@ -94,6 +114,11 @@ An auth-only public key cannot connect to realtime. Include `realtime.connect`
 on the key, plus `realtime.subscribe` for channel subscriptions. Retryable
 transport interruptions continue reconnecting; a connection that never becomes
 ready still rejects with `Connection timeout` after ten seconds.
+
+Failed connection attempts release their transport and handlers before a retry.
+Once the transport has started, calling `disconnect()` while `connect()` is
+pending also rejects that attempt promptly with the transport's disconnect reason,
+rather than timing out.
 
 ### Connection Events
 
