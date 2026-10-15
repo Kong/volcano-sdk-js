@@ -82,6 +82,15 @@ function connectionError(context: unknown): Error {
   return new Error(errorMessage(context) ?? 'Connection failed');
 }
 
+function disconnectError(context: unknown): Error {
+  const reason = objectProperty(context, 'reason');
+  const code = objectProperty(context, 'code');
+  return Object.assign(
+    new Error(typeof reason === 'string' && reason !== '' ? reason : 'Connection disconnected'),
+    typeof code === 'number' ? { code } : {},
+  );
+}
+
 export function waitForConnection(client: RealtimeConnectionClient): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -93,6 +102,7 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
       clearTimeout(timeout);
       client.off('connected', connected);
       client.off('error', error);
+      client.off('disconnected', disconnected);
     }
 
     function connected(): void {
@@ -105,8 +115,16 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
       reject(connectionError(context));
     }
 
+    function disconnected(context: unknown): void {
+      // Centrifuge emits `connecting` while retrying and `disconnected` when
+      // it stops. Surface that terminal failure instead of waiting for timeout.
+      cleanup();
+      reject(disconnectError(context));
+    }
+
     client.on('connected', connected);
     client.on('error', error);
+    client.on('disconnected', disconnected);
     let started = false;
     try {
       client.connect();

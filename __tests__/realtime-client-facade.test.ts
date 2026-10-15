@@ -193,6 +193,31 @@ describe('realtime client facade', () => {
     realtime.disconnect();
   });
 
+  test('rejects shared connection attempts with the terminal transport reason', async () => {
+    jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
+    ready = false;
+    const realtime = client();
+    const onDisconnect = jest.fn();
+    realtime.onDisconnect(onDisconnect);
+    const first = realtime.connect();
+    const second = realtime.connect();
+    const firstRejection = first.catch((error: unknown) => error);
+    const secondRejection = second.catch((error: unknown) => error);
+    await Promise.resolve();
+    await Promise.resolve();
+    const transport = latestTransport();
+    transport.emit('disconnected', { code: 3507, reason: 'permission denied' });
+    expect(await firstRejection).toMatchObject({ message: 'permission denied', code: 3507 });
+    expect(await secondRejection).toMatchObject({ message: 'permission denied', code: 3507 });
+    expect(realtime._connectionPromise).toBeNull();
+    expect(realtime.isConnected()).toBe(false);
+    expect(onDisconnect).toHaveBeenCalledWith({ code: 3507, reason: 'permission denied' });
+    // Only the persistent callback remains after both callers have rejected.
+    expect(transport.listeners.get('disconnected')?.size).toBe(1);
+    realtime.disconnect();
+    expect(transport.listeners.get('disconnected')?.size).toBe(0);
+  });
+
   test('rejects an invalid transport without marking the client connected', async () => {
     class InvalidTransport {
       readonly invalid = true;

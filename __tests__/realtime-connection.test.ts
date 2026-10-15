@@ -92,6 +92,7 @@ test('waits for connection and removes temporary listeners on success', async ()
   await expect(waiting).resolves.toBeUndefined();
   expect(client.listeners.get('connected')?.size).toBe(0);
   expect(client.listeners.get('error')?.size).toBe(0);
+  expect(client.listeners.get('disconnected')?.size).toBe(0);
 });
 
 test('clears the connection timeout once the transport connects', async () => {
@@ -105,6 +106,46 @@ test('clears the connection timeout once the transport connects', async () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test('rejects immediately with the terminal disconnect reason and code', async () => {
+  jest.useFakeTimers();
+  try {
+    const client = new Client();
+    const waiting = waitForConnection(client).catch((error: unknown) => error);
+    client.emit('disconnected', { code: 3507, reason: 'permission denied' });
+    expect(jest.getTimerCount()).toBe(0);
+    expect(await waiting).toMatchObject({ message: 'permission denied', code: 3507 });
+    expect(await waiting).toBeInstanceOf(Error);
+    expect(client.listeners.get('connected')?.size).toBe(0);
+    expect(client.listeners.get('error')?.size).toBe(0);
+    expect(client.listeners.get('disconnected')?.size).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test.each([{ reason: '', code: '3507' }, { reason: 3 }, null])(
+  'handles a terminal disconnect without a valid reason or code: %p',
+  async (context) => {
+    const client = new Client();
+    const waiting = waitForConnection(client).catch((error: unknown) => error);
+    client.emit('disconnected', context);
+    expect(await waiting).toEqual(new Error('Connection disconnected'));
+    expect(await waiting).not.toHaveProperty('code');
+  },
+);
+
+test('continues waiting while the transport reconnects', async () => {
+  const client = new Client();
+  const settled = jest.fn();
+  const waiting = waitForConnection(client).then(settled);
+  client.emit('connecting', { code: 3001, reason: 'shutdown' });
+  await Promise.resolve();
+  expect(settled).not.toHaveBeenCalled();
+  client.emit('connected', {});
+  await waiting;
+  expect(settled).toHaveBeenCalledTimes(1);
 });
 
 test.each([
@@ -122,6 +163,7 @@ test.each([
   await expect(waiting).rejects.toThrow(message);
   expect(client.listeners.get('connected')?.size).toBe(0);
   expect(client.listeners.get('error')?.size).toBe(0);
+  expect(client.listeners.get('disconnected')?.size).toBe(0);
 });
 
 test('rejects a connection that never becomes ready', async () => {
@@ -133,6 +175,7 @@ test('rejects a connection that never becomes ready', async () => {
     await expect(waiting).rejects.toThrow('Connection timeout');
     expect(client.listeners.get('connected')?.size).toBe(0);
     expect(client.listeners.get('error')?.size).toBe(0);
+    expect(client.listeners.get('disconnected')?.size).toBe(0);
   } finally {
     jest.useRealTimers();
   }
@@ -147,4 +190,5 @@ test('removes temporary listeners when a transport throws during connection', as
   await expect(waitForConnection(client)).rejects.toBe(failure);
   expect(client.listeners.get('connected')?.size).toBe(0);
   expect(client.listeners.get('error')?.size).toBe(0);
+  expect(client.listeners.get('disconnected')?.size).toBe(0);
 });

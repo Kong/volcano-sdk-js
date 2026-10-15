@@ -83,6 +83,18 @@ await realtime.connect();
 console.log('Connected to realtime server');
 ```
 
+In the JavaScript SDK, `connect()` rejects immediately when the transport enters
+its terminal disconnected state before connecting. The rejection is an `Error`
+whose `message` contains the disconnect reason (for example, `permission denied`)
+and whose `code` property contains the numeric transport code when available.
+If no reason is available, the message is `Connection disconnected`. The
+`onDisconnect` callback still receives the disconnect context.
+
+An auth-only public key cannot connect to realtime. Include `realtime.connect`
+on the key, plus `realtime.subscribe` for channel subscriptions. Retryable
+transport interruptions continue reconnecting; a connection that never becomes
+ready still rejects with `Connection timeout` after ten seconds.
+
 ### Connection Events
 
 Monitor the connection status:
