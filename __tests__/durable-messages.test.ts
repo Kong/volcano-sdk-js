@@ -595,7 +595,11 @@ class FakeSubscription extends Emitter {
     return Promise.resolve();
   }
 
+  // Like Centrifuge, which reports a state only when it changes.
   move(state: string): void {
+    if (state === this.state) {
+      return;
+    }
     this.state = state;
     this.emit('state', { newState: state });
   }
@@ -660,6 +664,8 @@ function latestSubscription(): FakeSubscription {
   return latest;
 }
 
+const realtimes: VolcanoRealtime[] = [];
+
 async function connectedRealtime(): Promise<VolcanoRealtime> {
   jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(FakeTransport);
   const realtime = new VolcanoRealtime({
@@ -667,22 +673,45 @@ async function connectedRealtime(): Promise<VolcanoRealtime> {
     anonKey: 'ak-durable',
     webSocket: WebSocket,
   });
-  await realtime.connect();
+  realtimes.push(realtime);
+  await soon(realtime.connect());
   return realtime;
 }
 
 const settled = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
+// Bounded so a wait that can never finish fails at once instead of at the test
+// timeout, which mutation testing reports as a timeout rather than a kill.
 async function until(condition: () => boolean): Promise<void> {
-  while (!condition()) {
+  for (let turn = 0; turn < 20; turn += 1) {
+    if (condition()) {
+      return;
+    }
     await settled();
   }
+  throw new Error('condition not reached');
+}
+
+// The fake transport connects at once, so a connection still pending after a
+// few turns never will; its own timeout is longer than a test's.
+function soon<T>(promise: Promise<T>): Promise<T> {
+  let done = false;
+  const finish = (): void => {
+    done = true;
+  };
+  void promise.then(finish, finish);
+  return Promise.race([promise, until(() => done).then(() => promise)]);
 }
 
 const listed = (data: DurableMessageList) => Promise.resolve({ data, status: 200 });
 
 describe('durable.messages.subscribe', () => {
   afterEach(() => {
+    // A test that fails before disconnecting would leave its retries running
+    // into the next suite.
+    for (const realtime of realtimes.splice(0)) {
+      realtime.disconnect();
+    }
     jest.useRealTimers();
     jest.restoreAllMocks();
     transports.length = 0;
