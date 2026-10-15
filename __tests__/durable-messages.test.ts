@@ -1359,6 +1359,40 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
+  // The channel can be discarded after it is ready but before subscribe()
+  // returns to the subscription, which then must not catch up.
+  test('ends the subscription when its channel is discarded while it subscribes', async () => {
+    class DiscardedWhileSubscribing {
+      _onSubscriptionState: ((state: string) => void) | null = null;
+      readonly on = jest.fn();
+
+      subscribe(): Promise<void> {
+        this._onSubscriptionState?.('unsubscribed');
+        return Promise.resolve();
+      }
+    }
+    const channel = new DiscardedWhileSubscribing();
+    const removeDurableChannel = jest.fn();
+    const realtime = {
+      _durableChannel: () => channel,
+      _removeDurableChannel: removeDurableChannel,
+    };
+    const { volcano, transport } = clientWithTransport();
+    const { messages } = volcano.durable;
+    const handler = jest.fn();
+
+    const result: unknown = Reflect.apply(messages.subscribe.bind(messages), undefined, [
+      target,
+      handler,
+      { realtime },
+    ]);
+
+    await expect(result).resolves.toEqual(refused('The durable message subscription has ended'));
+    expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+    expect(removeDurableChannel).toHaveBeenCalledWith(channel);
+  });
+
   test.each([
     [
       'an invalid target',

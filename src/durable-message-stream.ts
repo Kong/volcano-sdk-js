@@ -63,8 +63,14 @@ export class DurableMessageStream {
     this.cancelRetry();
   }
 
-  /** Resolves with the last page read, or the failure, including a handler's. */
+  /**
+   * Resolves with the last page read, or the failure, including a handler's.
+   * A stream closed before it is called reads nothing.
+   */
   catchUp(): Promise<DurableResult<DurableMessageList>> {
+    if (this.closed) {
+      return Promise.resolve(failure(new Error('The durable message subscription has ended')));
+    }
     return this.read().catch((error: unknown) => failure<DurableMessageList>(toError(error)));
   }
 

@@ -173,17 +173,10 @@ export class DurableMessagesFacade {
     channel.on('*', (data) => {
       stream.live(data);
     });
-    try {
-      await channel.subscribe();
-    } catch (error) {
-      await subscription.unsubscribe();
-      return failure(toError(error));
-    }
+    // Set before subscribing, so a channel discarded while it subscribes
+    // still closes the stream.
+    let started = false;
     channel._onSubscriptionState = (state) => {
-      if (state === 'subscribed') {
-        stream.catchUpInBackground();
-        return;
-      }
       // An unsubscribed channel does not come back: it was discarded by
       // unsubscribing, disconnect(), removeAllChannels(), or a change of
       // signed-in user, or the server ended it.
@@ -191,8 +184,23 @@ export class DurableMessagesFacade {
         stream.close();
         return;
       }
+      // The first catch-up follows subscribing below.
+      if (!started) {
+        return;
+      }
+      if (state === 'subscribed') {
+        stream.catchUpInBackground();
+        return;
+      }
       stream.hold();
     };
+    try {
+      await channel.subscribe();
+    } catch (error) {
+      await subscription.unsubscribe();
+      return failure(toError(error));
+    }
+    started = true;
     const caughtUp = await stream.catchUp();
     if (caughtUp.error !== null) {
       await subscription.unsubscribe();
