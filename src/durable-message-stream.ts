@@ -12,6 +12,10 @@ interface Held {
 // Half a second doubling to a 30 second cap.
 const FIRST_RETRY_MS = 500;
 const MAX_RETRY_MS = 30_000;
+// Live messages held past this are dropped, oldest first. Each one held after
+// a dropped one names a predecessor at or past it, so it waits for a read
+// that lists the dropped one.
+const HELD_LIMIT = 128;
 
 /**
  * Delivers what an execution publishes in `seq` order, once each, from two
@@ -46,11 +50,11 @@ export class DurableMessageStream {
       return;
     }
     if (this.behind()) {
-      this.held.push(live);
+      this.keep(live);
       return;
     }
     if (live.prevSeq > this.lastSeq) {
-      this.held.push(live);
+      this.keep(live);
       this.catchUpInBackground();
       return;
     }
@@ -64,19 +68,20 @@ export class DurableMessageStream {
   }
 
   /**
-   * Resolves with the last page read, or the failure, including a handler's.
-   * A stream closed before it is called reads nothing.
+   * The first catch-up. Resolves with the last page read, or the failure,
+   * including a handler's, which closes the stream before anything held is
+   * delivered. A stream closed before it is called reads nothing.
    */
   catchUp(): Promise<DurableResult<DurableMessageList>> {
     if (this.closed) {
       return Promise.resolve(failure(new Error('The durable message subscription has ended')));
     }
-    return this.read().catch((error: unknown) => failure<DurableMessageList>(toError(error)));
+    return this.read(true).catch((error: unknown) => failure<DurableMessageList>(toError(error)));
   }
 
-  /** A catch-up nobody waits for: a failed read is retried, and a handler's throw reported. */
+  /** A catch-up nobody waits for: a failed read is reported and retried, and a handler's throw reported. */
   catchUpInBackground(): void {
-    this.read().catch(reportHandlerError);
+    this.read(false).then(reportFailedRead, reportHandlerError);
   }
 
   close(): void {
@@ -84,13 +89,13 @@ export class DurableMessageStream {
     this.cancelRetry();
   }
 
-  private read(): Promise<DurableResult<DurableMessageList>> {
+  private read(first: boolean): Promise<DurableResult<DurableMessageList>> {
     this.holding = false;
     this.cancelRetry();
     // Counted now, not when the queued read starts, so nothing is delivered
     // live while a catch-up waits its turn.
     this.catchUps += 1;
-    const run = this.queue.then(() => this.readMissed());
+    const run = this.queue.then(() => this.readMissed(first));
     this.queue = Promise.allSettled([run]);
     return run;
   }
@@ -99,7 +104,15 @@ export class DurableMessageStream {
     return this.holding || this.catchUps > 0 || this.held.length > 0;
   }
 
-  private async readMissed(): Promise<DurableResult<DurableMessageList>> {
+  private keep(live: Held): void {
+    this.held.push(live);
+    if (this.held.length > HELD_LIMIT) {
+      this.held.sort(bySeq);
+      this.held.shift();
+    }
+  }
+
+  private async readMissed(first: boolean): Promise<DurableResult<DurableMessageList>> {
     let read = false;
     try {
       const page = await this.readPages();
@@ -107,6 +120,9 @@ export class DurableMessageStream {
       return page;
     } finally {
       this.catchUps -= 1;
+      if (first && !read) {
+        this.close();
+      }
       if (this.catchUps === 0 && !this.holding) {
         this.release(read);
       }
@@ -134,7 +150,7 @@ export class DurableMessageStream {
   // rest. One a handler throws on is already delivered, so a retry resumes
   // after it.
   private release(read: boolean): void {
-    this.held.sort((a, b) => a.message.seq - b.message.seq);
+    this.held.sort(bySeq);
     try {
       let next = this.held[0];
       while (next !== undefined && next.prevSeq <= this.lastSeq) {
@@ -188,6 +204,16 @@ export class DurableMessageStream {
 
 export function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function bySeq(a: Held, b: Held): number {
+  return a.message.seq - b.message.seq;
+}
+
+function reportFailedRead(page: DurableResult<DurableMessageList>): void {
+  if (page.error !== null) {
+    console.error('[Realtime] Durable message catch-up failed:', page.error);
+  }
 }
 
 function reportHandlerError(error: unknown): void {

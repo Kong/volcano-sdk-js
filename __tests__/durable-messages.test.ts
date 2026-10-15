@@ -797,6 +797,7 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestSubscription().move('subscribing');
     latestTransport().publication({ ...message(3), prev_seq: 2 });
@@ -813,7 +814,7 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
-  test('retries a catch-up that fails after resubscribing with nothing held', async () => {
+  test('reports and retries a catch-up that fails after resubscribing with nothing held', async () => {
     const realtime = await connectedRealtime();
     const list = jest
       .fn<TransportOperation>()
@@ -826,15 +827,21 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
     await jest.advanceTimersByTimeAsync(499);
     expect(list).toHaveBeenCalledTimes(2);
+    expect(reported).toHaveBeenCalledWith(
+      '[Realtime] Durable message catch-up failed:',
+      expect.objectContaining({ message: 'unavailable' }),
+    );
     await jest.advanceTimersByTimeAsync(1);
 
     expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 1 });
     expect(received).toEqual([1, 2]);
+    expect(reported).toHaveBeenCalledTimes(1);
     realtime.disconnect();
   });
 
@@ -851,6 +858,7 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
@@ -876,6 +884,7 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestSubscription().move('subscribing');
     latestTransport().publication({ ...message(2), prev_seq: 1 });
@@ -896,6 +905,7 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
@@ -924,6 +934,7 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
@@ -969,6 +980,38 @@ describe('durable.messages.subscribe', () => {
     latestSubscription().move('subscribed');
     await jest.advanceTimersByTimeAsync(0);
     expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 3 });
+    realtime.disconnect();
+  });
+
+  test('drops the oldest of more than 128 held messages and reads them back', async () => {
+    const realtime = await connectedRealtime();
+    const first = deferred<{ data: unknown; status: number }>();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => received.push(delivered.seq),
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    const live = latestTransport();
+    live.publication({ ...message(131), prev_seq: 130 });
+    for (let seq = 2; seq <= 130; seq += 1) {
+      live.publication({ ...message(seq), prev_seq: seq - 1 });
+    }
+    jest.useFakeTimers({ timerLimit: 100 });
+    first.resolve({ data: page([message(1)]), status: 200 });
+    await pending;
+    expect(received).toEqual([1]);
+    await jest.advanceTimersByTimeAsync(500);
+
+    expect(list.mock.calls[1]?.[2]).toEqual({ direction: 'out', after: 1 });
+    expect(received).toEqual(Array.from({ length: 131 }, (_, index) => index + 1));
     realtime.disconnect();
   });
 
@@ -1154,6 +1197,7 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
@@ -1178,6 +1222,7 @@ describe('durable.messages.subscribe', () => {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
+    jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
@@ -1342,6 +1387,58 @@ describe('durable.messages.subscribe', () => {
       realtime.disconnect();
     },
   );
+
+  test('delivers nothing it held once the handler throws during the first catch-up', async () => {
+    const realtime = await connectedRealtime();
+    const first = deferred<{ data: unknown; status: number }>();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => first.promise);
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => {
+        received.push(delivered.seq);
+        throw new Error('handler failed');
+      },
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    latestTransport().publication({ ...message(2), prev_seq: 1 });
+    first.resolve({ data: page([message(1)]), status: 200 });
+
+    await expect(pending).resolves.toEqual(refused('handler failed'));
+    expect(received).toEqual([1]);
+    realtime.disconnect();
+  });
+
+  test('delivers nothing it held once the first catch-up fails to read', async () => {
+    const realtime = await connectedRealtime();
+    const answer = signal();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(async () => {
+      await answer.promise;
+      throw Object.assign(new Error('forbidden'), { status: 403 });
+    });
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => received.push(delivered.seq),
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    latestTransport().publication({ ...message(1), prev_seq: 0 });
+    answer.resolve();
+
+    await expect(pending).resolves.toEqual({
+      data: null,
+      status: 403,
+      error: new Error('forbidden'),
+    });
+    expect(received).toEqual([]);
+    realtime.disconnect();
+  });
 
   test.each([
     ['an error', new Error('Subscription refused'), new Error('Subscription refused')],

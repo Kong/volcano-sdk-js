@@ -852,8 +852,9 @@ token can list but not send.
 [`VolcanoRealtime`](./realtime.md) client, in `seq` order and once each. It reads
 the list before resolving, again after each reconnect, and whenever a live
 message shows that an earlier one was lost. Until that read succeeds it holds
-the live messages after the gap and retries, backing off to every 30 seconds, so
-no published message is missed:
+the live messages after the gap and retries, backing off to every 30 seconds and
+logging each failed read with `console.error`, so no published message is
+missed:
 
 ```javascript
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
@@ -878,8 +879,8 @@ before `unsubscribe` resolves with an error. `disconnect()`,
 `removeAllChannels()`, and a change of signed-in user on the realtime client
 end the subscription too, and a read still in flight delivers nothing; call
 `unsubscribe` before subscribing to the execution again. A handler that throws
-while `subscribe` is still catching up ends the subscription, which resolves
-with that error; once it has resolved, the subscription carries on past a
+while `subscribe` is still catching up ends the subscription, which delivers
+nothing more and resolves with that error; once it has resolved, the subscription carries on past a
 handler that throws and logs the error with `console.error`. Catch errors in the
 handler to handle them yourself.
 
