@@ -97,6 +97,7 @@ async function send(
       signal: AbortSignal.timeout(timeout),
     });
     if (response.ok && request.readsAnswer !== true) {
+      await release(response);
       return settled();
     }
     const data = jsonOf(await response.text());
@@ -111,6 +112,14 @@ async function send(
       },
     };
   }
+}
+
+// An unread body holds its connection until it is collected.
+async function release(response: Response): Promise<void> {
+  await response.body?.cancel().catch(() => {
+    // Volcano already answered; failing to let go of the answer is no reason
+    // to send the request again.
+  });
 }
 
 function settled(body?: unknown): Outcome {

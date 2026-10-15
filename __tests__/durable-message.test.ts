@@ -358,6 +358,39 @@ describe('ctx.waitForMessage()', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  it('lets go of the answer it does not read', async () => {
+    let cancelled = 0;
+    const body = new ReadableStream({
+      cancel() {
+        cancelled += 1;
+      },
+    });
+    fetchMock().mockResolvedValueOnce(new Response(body, { status: 201 }));
+
+    await receive(() => Promise.resolve(sent()));
+
+    expect(cancelled).toBe(1);
+  });
+
+  it('settles the registration when its answer cannot be let go of', async () => {
+    const body = new ReadableStream({
+      cancel() {
+        throw new Error('connection already gone');
+      },
+    });
+    fetchMock().mockResolvedValueOnce(new Response(body, { status: 201 }));
+
+    await expect(receive(() => Promise.resolve(sent()))).resolves.toMatchObject({ id: 'msg-1' });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a registration answered with no body', async () => {
+    fetchMock().mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    await expect(receive(() => Promise.resolve(sent()))).resolves.toMatchObject({ id: 'msg-1' });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
   it('names the wait in a final refusal', async () => {
     fetchMock().mockResolvedValueOnce(
       Response.json(
@@ -672,6 +705,24 @@ describe('ctx.publish()', () => {
       new TypeError('ctx.publish() data must be at most 64 KiB as JSON'),
     );
     expect(callbackCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ['in a string', 'a\0b'],
+    ['in a key', { ok: 1, 'a\0b': 2 }],
+    ['nested in an array', { items: [1, ['ok', 'a\0b']] }],
+  ])('refuses data holding a NUL %s before opening a session', async (_case, data) => {
+    await expect(run((_input, ctx) => ctx.publish('progress', data))).rejects.toThrow(
+      new TypeError('ctx.publish() data must not contain NUL characters'),
+    );
+    expect(callbackCalls).toHaveLength(0);
+    expect(fetchMock()).not.toHaveBeenCalled();
+  });
+
+  it('accepts data that spells out an escaped NUL', async () => {
+    await run((_input, ctx) => ctx.publish('progress', { note: '\\u0000' }));
+
+    expect(publishRequests()[0]?.body).toEqual({ name: 'progress', data: { note: '\\u0000' } });
   });
 
   it.each([

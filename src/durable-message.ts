@@ -161,6 +161,18 @@ function messageData(value: unknown): unknown {
   if (value === undefined) {
     return null;
   }
+  const text = messageJson(value);
+  if (new TextEncoder().encode(text).byteLength > MAX_DATA_BYTES) {
+    throw new TypeError(`${PUBLISH} data must be at most 64 KiB as JSON`);
+  }
+  const snapshot: unknown = JSON.parse(text);
+  if (hasNul(snapshot)) {
+    throw new TypeError(`${PUBLISH} data must not contain NUL characters`);
+  }
+  return snapshot;
+}
+
+function messageJson(value: unknown): string {
   // A function or symbol serializes to nothing rather than throwing.
   let text: unknown;
   try {
@@ -171,11 +183,19 @@ function messageData(value: unknown): unknown {
   if (typeof text !== 'string') {
     throw notJson();
   }
-  if (new TextEncoder().encode(text).byteLength > MAX_DATA_BYTES) {
-    throw new TypeError(`${PUBLISH} data must be at most 64 KiB as JSON`);
+  return text;
+}
+
+// Volcano refuses a NUL anywhere in message data, keys included. An array's
+// entries are its items, under index keys.
+function hasNul(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.includes('\0');
   }
-  const snapshot: unknown = JSON.parse(text);
-  return snapshot;
+  return (
+    isRecord(value) &&
+    Object.entries(value).some(([key, item]) => key.includes('\0') || hasNul(item))
+  );
 }
 
 function notJson(options?: ErrorOptions): TypeError {

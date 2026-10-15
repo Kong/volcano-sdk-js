@@ -453,8 +453,8 @@ runs again after a crash returns the message it already published. The first
 only this execution can publish with. It shows up in the history as a `child`
 named `volcano:messages-session`.
 
-`publish` throws on an invalid name, data that cannot be serialized as JSON or
-is over 64 KiB, and refusals such as an execution that has already published
+`publish` throws on an invalid name, data that cannot be serialized as JSON, is
+over 64 KiB, or holds a NUL character in a string or key, and refusals such as an execution that has already published
 1,000 messages: `Volcano refused the message (409 too_many_published_messages): ...`.
 
 ## `ctx.map(name?, items, fn, options?)`
