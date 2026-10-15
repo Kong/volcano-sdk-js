@@ -204,6 +204,11 @@ describe('durable.messages.send', () => {
       [{ ...target, clientToken: 't'.repeat(129) }, 'go'],
       'clientToken must be at most 128 characters',
     ],
+    [
+      'a client token that is not ASCII',
+      [{ ...target, clientToken: 'tök' }, 'go'],
+      'clientToken must be printable ASCII',
+    ],
     ['no name', [target], 'name must be a non-empty string'],
     ['a blank name', [target, '  '], 'name must be a non-empty string'],
     ['a name that is not text', [target, 7], 'name must be a non-empty string'],
@@ -227,6 +232,16 @@ describe('durable.messages.send', () => {
       'a long idempotency key',
       [target, 'go', null, { idempotencyKey: 'k'.repeat(256) }],
       'idempotencyKey must be at most 255 characters',
+    ],
+    [
+      'an idempotency key that is not ASCII',
+      [target, 'go', null, { idempotencyKey: 'confirm-café' }],
+      'idempotencyKey must be printable ASCII',
+    ],
+    [
+      'an idempotency key with a line break',
+      [target, 'go', null, { idempotencyKey: 'a\nb' }],
+      'idempotencyKey must be printable ASCII',
     ],
   ])('refuses %s before reaching the platform', async (_case, args, error) => {
     const { volcano, transport } = clientWithTransport();

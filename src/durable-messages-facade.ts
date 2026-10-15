@@ -24,6 +24,8 @@ type Headers = Record<string, string>;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
 const MAX_CLIENT_TOKEN_LENGTH = 128;
 const MAX_LIST_LIMIT = 500;
+// A header value carries printable ASCII only.
+const HEADER_VALUE = /^[\u0020-\u007E]+$/;
 
 const LIST_PARAMS = ['direction', 'name', 'after', 'limit'] as const;
 
@@ -317,18 +319,27 @@ function optionalProject(value: unknown): Checked<string | null> {
 }
 
 function optionalClientToken(value: unknown): Checked<string | null> {
+  return optionalHeaderValue(value, 'clientToken', MAX_CLIENT_TOKEN_LENGTH);
+}
+
+function optionalHeaderValue(value: unknown, field: string, limit: number): Checked<string | null> {
   if (value === undefined) {
     return { value: null };
   }
   if (typeof value !== 'string' || value === '') {
-    return { error: new Error('clientToken must be a non-empty string when provided') };
+    return { error: new Error(`${field} must be a non-empty string when provided`) };
   }
-  if (value.length > MAX_CLIENT_TOKEN_LENGTH) {
-    return {
-      error: new Error(`clientToken must be at most ${String(MAX_CLIENT_TOKEN_LENGTH)} characters`),
-    };
+  const error = headerValueError(value, field, limit);
+  return error === null ? { value } : { error };
+}
+
+function headerValueError(value: string, field: string, limit: number): Error | null {
+  if (!HEADER_VALUE.test(value)) {
+    return new Error(`${field} must be printable ASCII`);
   }
-  return { value };
+  return value.length > limit
+    ? new Error(`${field} must be at most ${String(limit)} characters`)
+    : null;
 }
 
 function sendRequest(
@@ -384,18 +395,11 @@ function subscriberOf(handler: unknown, realtime: unknown): Subscriber | Error {
 }
 
 function idempotencyHeaders(key: unknown): Headers | Error {
-  if (key === undefined) {
-    return {};
+  const checked = optionalHeaderValue(key, 'idempotencyKey', MAX_IDEMPOTENCY_KEY_LENGTH);
+  if (checked.error !== undefined) {
+    return checked.error;
   }
-  if (typeof key !== 'string' || key === '') {
-    return new Error('idempotencyKey must be a non-empty string when provided');
-  }
-  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-    return new Error(
-      `idempotencyKey must be at most ${String(MAX_IDEMPOTENCY_KEY_LENGTH)} characters`,
-    );
-  }
-  return { 'Idempotency-Key': key };
+  return checked.value === null ? {} : { 'Idempotency-Key': checked.value };
 }
 
 function isIntegerBetween(value: unknown, min: number, max: number): boolean {
