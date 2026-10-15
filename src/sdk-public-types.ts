@@ -588,9 +588,11 @@ export interface DurableMessageSubscription {
 export interface DurableMessages {
   /**
    * Send a message to a running execution. It resolves with status 201, and
-   * the message's `status` is `delivered` when a wait took it at once or
-   * `queued` until one does. An execution that has ended answers 409
-   * `execution_not_running`.
+   * the message's `status` is `delivered` when a wait took it at once,
+   * `delivering` while the handover to that wait is still being confirmed,
+   * or `queued` until one does. An execution that has ended answers 409
+   * `execution_not_running`, and one holding 100 untaken messages 409
+   * `too_many_queued_messages`.
    *
    * @example
    * ```typescript

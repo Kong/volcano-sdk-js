@@ -818,7 +818,7 @@ const { data: message, error } = await volcano.durable.messages.send(
   { address_id: 'addr_19' },
   { idempotencyKey: 'confirm-addr_19' },
 );
-console.log(message?.status); // 'delivered', or 'queued' when nothing waits for it yet
+console.log(message?.status); // 'delivered', 'delivering' while the handover is confirmed, or 'queued'
 
 const { data: page } = await volcano.durable.messages.list(target, { direction: 'out' });
 for (const published of page?.data ?? []) {
