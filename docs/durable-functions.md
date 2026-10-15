@@ -880,7 +880,8 @@ end the subscription too, and a read still in flight delivers nothing; call
 `unsubscribe` before subscribing to the execution again. A handler that throws
 while `subscribe` is still catching up ends the subscription, which resolves
 with that error; once it has resolved, the subscription carries on past a
-handler that throws.
+handler that throws and logs the error with `console.error`. Catch errors in the
+handler to handle them yourself.
 
 All three answer `{ data, status, error }`. `status` is `409` with
 `error.code` `execution_not_running` for a send to an execution that has ended,

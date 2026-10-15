@@ -51,10 +51,10 @@ export class DurableMessageStream {
     }
     if (live.prevSeq > this.lastSeq) {
       this.held.push(live);
-      void this.catchUp();
+      this.catchUpInBackground();
       return;
     }
-    this.deliver(live.message);
+    this.deliverLive(live.message);
   }
 
   hold(): void {
@@ -65,21 +65,28 @@ export class DurableMessageStream {
 
   /** Resolves with the last page read, or the failure, including a handler's. */
   catchUp(): Promise<DurableResult<DurableMessageList>> {
-    this.holding = false;
-    this.cancelRetry();
-    // Counted now, not when the queued read starts, so nothing is delivered
-    // live while a catch-up waits its turn.
-    this.catchUps += 1;
-    const run = this.queue
-      .then(() => this.readMissed())
-      .catch((error: unknown) => failure<DurableMessageList>(toError(error)));
-    this.queue = run;
-    return run;
+    return this.read().catch((error: unknown) => failure<DurableMessageList>(toError(error)));
+  }
+
+  /** A catch-up nobody waits for: a failed read is retried, and a handler's throw reported. */
+  catchUpInBackground(): void {
+    this.read().catch(reportHandlerError);
   }
 
   close(): void {
     this.closed = true;
     this.cancelRetry();
+  }
+
+  private read(): Promise<DurableResult<DurableMessageList>> {
+    this.holding = false;
+    this.cancelRetry();
+    // Counted now, not when the queued read starts, so nothing is delivered
+    // live while a catch-up waits its turn.
+    this.catchUps += 1;
+    const run = this.queue.then(() => this.readMissed());
+    this.queue = Promise.allSettled([run]);
+    return run;
   }
 
   private behind(): boolean {
@@ -146,13 +153,22 @@ export class DurableMessageStream {
     this.failures += 1;
     this.retry = setTimeout(() => {
       this.retry = undefined;
-      void this.catchUp();
+      this.catchUpInBackground();
     }, delay);
   }
 
   private cancelRetry(): void {
     clearTimeout(this.retry);
     this.retry = undefined;
+  }
+
+  // A throw would reach the realtime client, which then stops dispatching.
+  private deliverLive(message: DurableMessage): void {
+    try {
+      this.deliver(message);
+    } catch (error) {
+      reportHandlerError(error);
+    }
   }
 
   private deliver(message: DurableMessage): void {
@@ -166,4 +182,8 @@ export class DurableMessageStream {
 
 export function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function reportHandlerError(error: unknown): void {
+  console.error('[Realtime] Error in durable message handler:', error);
 }

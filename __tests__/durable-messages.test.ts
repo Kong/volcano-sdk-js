@@ -992,10 +992,12 @@ describe('durable.messages.subscribe', () => {
       { realtime },
     );
     jest.useFakeTimers({ timerLimit: 100 });
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
     latestTransport().publication({ ...message(5), prev_seq: 4 });
     await jest.advanceTimersByTimeAsync(0);
     expect(received).toEqual([1, 2]);
+    expect(reported).toHaveBeenCalledTimes(1);
     await jest.advanceTimersByTimeAsync(500);
 
     expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
@@ -1024,6 +1026,7 @@ describe('durable.messages.subscribe', () => {
     );
     jest.useFakeTimers({ timerLimit: 100 });
 
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
     await jest.advanceTimersByTimeAsync(0);
@@ -1032,6 +1035,39 @@ describe('durable.messages.subscribe', () => {
     await jest.advanceTimersByTimeAsync(500);
 
     expect(list.mock.calls[2]?.[2]).toEqual({ direction: 'out', after: 2 });
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith(
+      '[Realtime] Error in durable message handler:',
+      new Error('handler failed'),
+    );
+    realtime.disconnect();
+  });
+
+  test('reports a handler that throws on a live message and delivers the next one', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    const thrown = new Error('handler failed');
+    await volcano.durable.messages.subscribe(
+      target,
+      (delivered) => {
+        received.push(delivered.seq);
+        if (delivered.seq === 1) {
+          throw thrown;
+        }
+      },
+      { realtime },
+    );
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    latestTransport().publication(message(1));
+    latestTransport().publication(message(2));
+
+    expect(received).toEqual([1, 2]);
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
+    expect(list).toHaveBeenCalledTimes(1);
     realtime.disconnect();
   });
 

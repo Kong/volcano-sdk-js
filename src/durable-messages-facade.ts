@@ -181,8 +181,7 @@ export class DurableMessagesFacade {
     }
     channel._onSubscriptionState = (state) => {
       if (state === 'subscribed') {
-        // The stream retries a catch-up that fails.
-        void stream.catchUp();
+        stream.catchUpInBackground();
         return;
       }
       // An unsubscribed channel does not come back: it was discarded by
