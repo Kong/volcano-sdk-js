@@ -266,9 +266,8 @@ function reportHandlerError(error: unknown): void {
 }
 
 // Delivery does not wait for a handler's promise, so nothing else would hear
-// it reject.
+// it reject. Any thenable counts: another realm's promise fails instanceof,
+// and a query builder runs only once something calls its then.
 function reportRejection(result: unknown): void {
-  if (result instanceof Promise) {
-    result.catch(reportHandlerError);
-  }
+  Promise.resolve(result).catch(reportHandlerError);
 }

@@ -1326,6 +1326,27 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
+  test('runs a thenable a handler returns and reports its rejection', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const thrown = new Error('handler failed');
+    const then = jest.fn(
+      (_resolve: (value: unknown) => void, reject: (reason: unknown) => void) => {
+        reject(thrown);
+      },
+    );
+    await volcano.durable.messages.subscribe(target, () => ({ then }), { realtime });
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    latestTransport().publication(message(1));
+    await until(() => reported.mock.calls.length > 0);
+
+    expect(then).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
+    realtime.disconnect();
+  });
+
   test('reports an async handler that rejects while subscribe catches up, without ending it', async () => {
     const realtime = await connectedRealtime();
     const list = jest
