@@ -51,6 +51,16 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [2.1.0](https://github.com/Kong/volcano-sdk-js/compare/v2.0.1...v2.1.0) (2026-10-16)
+
+### Features
+
+- **durable:** send, wait for, publish, and subscribe to durable messages ([#319](https://github.com/Kong/volcano-sdk-js/issues/319)) ([c76c6f8](https://github.com/Kong/volcano-sdk-js/commit/c76c6f8798cfd736c1b8e516cd473716af9074c5))
+
+### Bug Fixes
+
+- **sandboxes:** sync runtime billing API contract ([#324](https://github.com/Kong/volcano-sdk-js/issues/324)) ([32f6711](https://github.com/Kong/volcano-sdk-js/commit/32f6711a4a661860f7de5becec065168822a2d99))
+
 ## [2.0.1](https://github.com/Kong/volcano-sdk-js/compare/v2.0.0...v2.0.1) (2026-10-09)
 
 ### Bug Fixes
