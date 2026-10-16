@@ -437,9 +437,10 @@ export interface Durable {
    *
    * A durable function is never invoked synchronously: it can run for up to 366 days, so
    * the platform accepts the start and answers with an execution to poll.
-   * Starting is the only durable operation an application credential may
-   * perform — reading a result or stopping an execution needs the project
-   * owner's platform user token, so poll from your own backend or with the CLI.
+   * Besides messaging an execution through `durable.messages`, starting is the
+   * only durable operation an application credential may perform — reading a
+   * result or stopping an execution needs the project owner's platform user
+   * token, so poll from your own backend or with the CLI.
    *
    * @param functionName - Durable function name, or its id.
    * @param input - JSON-serializable input handed to the function.
