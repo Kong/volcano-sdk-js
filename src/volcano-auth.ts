@@ -93,6 +93,7 @@ import {
 } from './database-query.ts';
 import { DurableApprovalsFacade } from './durable-approvals-facade.ts';
 import { DurableFacade } from './durable-facade.ts';
+import { DurableMessagesFacade } from './durable-messages-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import {
@@ -125,7 +126,11 @@ import {
   getDurableExecution,
   listDurableApprovals,
   listDurableExecutions,
+  listDurableMessages,
+  listDurableMessagesFromApplication,
   releaseProjectLock,
+  sendDurableMessage,
+  sendDurableMessageFromApplication,
   startDurableExecutionFromApplication,
   stopDurableExecution,
   uploadStorageObject,
@@ -139,6 +144,7 @@ import type {
   Auth,
   Durable,
   DurableApprovals,
+  DurableMessages,
   Functions,
   JsonValue,
   Logs,
@@ -209,8 +215,12 @@ const GENERATED_TRANSPORT = {
   getDurableExecution,
   listDurableApprovals,
   listDurableExecutions,
+  listDurableMessages,
+  listDurableMessagesFromApplication,
   queryDatabaseSelect: queryDatabaseSelectTransport,
   releaseProjectLock,
+  sendDurableMessage,
+  sendDurableMessageFromApplication,
   startDurableExecutionFromApplication,
   stopDurableExecution,
   uploadStorageObject,
@@ -225,7 +235,11 @@ type DurableTransportMethod =
   | 'getDurableApprovalStats'
   | 'getDurableApproval'
   | 'approveDurableApproval'
-  | 'denyDurableApproval';
+  | 'denyDurableApproval'
+  | 'sendDurableMessage'
+  | 'sendDurableMessageFromApplication'
+  | 'listDurableMessages'
+  | 'listDurableMessagesFromApplication';
 
 type RuntimeTransport = {
   [K in keyof typeof GENERATED_TRANSPORT]: K extends DurableTransportMethod
@@ -240,6 +254,14 @@ function durableApprovals(facade: DurableApprovalsFacade): DurableApprovals {
     stats: facade.stats.bind(facade),
     approve: facade.approve.bind(facade),
     deny: facade.deny.bind(facade),
+  };
+}
+
+function durableMessages(facade: DurableMessagesFacade): DurableMessages {
+  return {
+    send: facade.send.bind(facade),
+    list: facade.list.bind(facade),
+    subscribe: facade.subscribe.bind(facade),
   };
 }
 
@@ -408,6 +430,7 @@ class VolcanoAuth {
       list: this.listDurableExecutions.bind(this),
       stop: this.stopDurableExecution.bind(this),
       approvals: durableApprovals(new DurableApprovalsFacade(this)),
+      messages: durableMessages(new DurableMessagesFacade(this)),
     };
 
     this.logs = {

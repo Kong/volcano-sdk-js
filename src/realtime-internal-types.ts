@@ -1,6 +1,8 @@
 import type { ChannelOptions } from './realtime-public-types.ts';
 
 export type ChannelType = NonNullable<ChannelOptions['type']>;
+/** `durable` channels are opened only by `durable.messages.subscribe`. */
+export type InternalChannelType = ChannelType | 'durable';
 export type ChannelCallback = (data: unknown, context?: unknown) => void;
 export type EventHandler = (context: unknown) => void;
 export type RecoveryIdentity =

@@ -1411,6 +1411,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages from an application
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next; that is how a client catches up after a live subscription
+         *     reconnects.
+         *
+         *     Access follows the same rules as sending.
+         */
+        get: operations["listDurableMessagesFromApplication"];
+        put?: never;
+        /**
+         * Send a message to a durable execution from an application
+         * @description Sends a named message to a running execution. The workflow receives it
+         *     from `ctx.waitForMessage` with the same name. A message sent before
+         *     anything waits for its name is kept, and each wait takes the oldest
+         *     one, so messages arrive in the order they were sent.
+         *
+         *     Messages never decide an approval: a workflow waiting in
+         *     `ctx.waitForApproval` is not resumed by one.
+         *
+         *     **With a service key:** any execution in the project.
+         *
+         *     **With an auth user token:** an execution the user started, or one
+         *     whose `X-Volcano-Client-Token` the request carries, of a durable
+         *     function whose `visibility` is `authenticated` or `public`.
+         *
+         *     **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+         *     request carries, of a function with `visibility: public`.
+         *
+         *     Any other execution answers `404`, as a missing one does.
+         *
+         *     Send `Idempotency-Key` to make a retry safe: a repeat with a key the
+         *     same sender has used on the execution returns the first message with
+         *     `200` and sends nothing.
+         */
+        post: operations["sendDurableMessageFromApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/functions/resolve": {
         parameters: {
             query?: never;
@@ -1913,6 +1963,151 @@ export interface paths {
          *     response carries the state it settled in.
          */
         post: operations["stopDurableExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next.
+         *
+         *     Project access tokens can list messages, including read-only ones.
+         */
+        get: operations["listDurableMessages"];
+        put?: never;
+        /**
+         * Send a message to a durable execution
+         * @description Sends a named message to a running execution, as
+         *     `POST /durable-functions/{functionId}/executions/{executionId}/messages`
+         *     does for an application. The workflow receives it from
+         *     `ctx.waitForMessage` with the same name; until then it is kept, and
+         *     waits take messages oldest first.
+         *
+         *     Project access tokens can send messages, but read-only ones cannot.
+         *     A message never decides an approval.
+         */
+        post: operations["sendDurableMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/message-waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's open message waits
+         * @description Lists the waits an execution has open in `ctx.waitForMessage`, oldest
+         *     first, so you can see which message names it is waiting for.
+         *
+         *     Project access tokens can list waits, including read-only ones.
+         */
+        get: operations["listDurableMessageWaits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wait for a message from inside a workflow
+         * @description Registers a wait for a named message. The Volcano SDK calls this from
+         *     `ctx.waitForMessage`; applications do not call it directly.
+         *
+         *     `execution_ref` and `callback_id` are opaque values the SDK reads from
+         *     the running workflow. Together they are the request's credential, so
+         *     the operation takes no other authentication. When a message for the
+         *     name is already queued, the wait takes the oldest one at once.
+         *
+         *     Retrying is safe: a request for a wait that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["registerDurableMessageWait"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a messages session from inside a workflow
+         * @description Opens the session a workflow publishes messages with. The Volcano SDK
+         *     calls this once per workflow context, on its first `ctx.publish`;
+         *     applications do not call it directly.
+         *
+         *     As for a wait, `execution_ref` and `callback_id` are the credential.
+         *     The session's token is delivered to the workflow itself and never
+         *     appears in a response.
+         *
+         *     Retrying is safe: a request for a session that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["openDurableMessageSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a message from inside a workflow
+         * @description Publishes a named message from a running workflow. The Volcano SDK
+         *     calls this from `ctx.publish`; applications do not call it directly.
+         *
+         *     The message is stored, listed with the execution's messages, and
+         *     delivered live to clients subscribed to the execution. Live delivery
+         *     counts against the project's Realtime messages.
+         *
+         *     The SDK sends an `Idempotency-Key` that a rerun of the publishing step
+         *     repeats, so a step that runs again returns the first message with
+         *     `200` and publishes nothing.
+         */
+        post: operations["publishDurableMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8338,6 +8533,12 @@ export interface components {
              * @description Present once the execution has reached a terminal status.
              */
             completed_at?: string;
+            /**
+             * @description Lets a browser read and send the execution's messages. Returned only
+             *     by the start that created the execution, never by a repeat under the
+             *     same name or by a read. Send it as `X-Volcano-Client-Token`.
+             */
+            client_token?: string;
         };
         /**
          * @description Lifecycle state of an execution. `pending` covers the window between the
@@ -9140,6 +9341,110 @@ export interface components {
             total: number;
             /** @description Whether there are more pages available */
             has_more: boolean;
+        };
+        /**
+         * @description The name a workflow waits on or publishes under: up to 237 printable
+         *     ASCII characters.
+         */
+        DurableMessageName: string;
+        /**
+         * @description `in` is a message sent to the execution. `out` is one the execution
+         *     published.
+         * @enum {string}
+         */
+        DurableMessageDirection: "in" | "out";
+        /** @description A message sent to, or published by, a durable execution. */
+        DurableMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            execution_id: string;
+            direction: components["schemas"]["DurableMessageDirection"];
+            /**
+             * Format: int64
+             * @description Orders the execution's messages in both directions. It increases
+             *     with every message but can skip numbers. Pass the last one you read
+             *     as `after` to read what came next.
+             */
+            seq: number;
+            name: string;
+            /** @description The JSON value sent or published, or null. */
+            data: unknown;
+            sender: components["schemas"]["DurableMessageSender"];
+            status: components["schemas"]["DurableMessageStatus"];
+            /**
+             * Format: date-time
+             * @description When the execution received the message. Null until then, and for `out` messages.
+             */
+            delivered_at: string | null;
+            /** Format: date-time */
+            sent_at: string;
+        };
+        DurableMessageList: {
+            /** @description Messages after `after`, oldest first. */
+            data: components["schemas"]["DurableMessage"][];
+            /**
+             * @description Whether more messages follow. Read them with `after` set to the
+             *     last message's `seq`.
+             */
+            has_more: boolean;
+        };
+        /** @description A wait an execution has open for a message. */
+        DurableMessageWait: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /**
+             * Format: date-time
+             * @description When the wait times out. Null when the workflow set no timeout.
+             */
+            expires_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DurableMessageWaitList: {
+            /** @description Open waits, oldest first. */
+            data: components["schemas"]["DurableMessageWait"][];
+        };
+        SendDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
+        };
+        RegisterDurableMessageWaitRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque wait reference, supplied by the SDK. */
+            callback_id: string;
+            name: components["schemas"]["DurableMessageName"];
+        };
+        /** @description The registered wait, as the waiting workflow sees it. */
+        DurableMessageWaitRegistration: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        OpenDurableMessageSessionRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque session reference, supplied by the SDK. */
+            callback_id: string;
+        };
+        /**
+         * @description The registered session. Its token reaches the workflow through the
+         *     workflow itself, never in this response.
+         */
+        DurableMessageSessionRegistration: {
+            /** Format: uuid */
+            id: string;
+        };
+        PublishDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
         };
         /** @description Runtime errors from one function or frontend, grouped by error type and stack. */
         Issue: {
@@ -10918,6 +11223,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description Who sent the message. */
+        DurableMessageSender: {
+            /**
+             * @description The credential the message was sent with. `project` is the
+             *     project's owner or one of its access tokens, and `execution` is the
+             *     execution itself publishing.
+             * @enum {string}
+             */
+            type: "service_key" | "user" | "anon" | "project" | "execution";
+            /** @description The auth user who sent it. Null unless `type` is `user`. */
+            user_id: string | null;
+        };
+        /**
+         * @description An `in` message is `queued` until a wait for its name takes it,
+         *     `delivering` while it is handed over, and `delivered` once the
+         *     execution has it. It is `dropped` if the execution ended before any
+         *     wait took it. Every `out` message is `published`.
+         * @enum {string}
+         */
+        DurableMessageStatus: "queued" | "delivering" | "delivered" | "dropped" | "published";
         /** @description Deployment log selector for deployable resources. */
         LogDeploymentRequestSelector: {
             /** @description Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources. */
@@ -10992,6 +11317,14 @@ export interface components {
              */
             stage?: "compile" | "publish";
         };
+        /**
+         * @description `waiting` until a message for its name arrives, `matched` while that
+         *     message is handed over, then `delivered`. `expired` means the wait's
+         *     timeout passed first, and `cancelled` that the execution stopped
+         *     waiting.
+         * @enum {string}
+         */
+        DurableMessageWaitStatus: "waiting" | "matched" | "delivered" | "expired" | "cancelled";
         /**
          * @description The durable function that requested the approval. `id` is null once the
          *     function has been deleted; `name` is kept.
@@ -11288,6 +11621,25 @@ export interface components {
          *     name.
          */
         DurableApprovalFunctionFilter: string;
+        /**
+         * @description Makes a send safe to retry. A repeat with a key the same sender has
+         *     used on the execution returns the first message and sends nothing.
+         *     Keys of different senders never collide. Up to 255 characters.
+         */
+        DurableMessageIdempotencyKey: string;
+        /**
+         * @description The `client_token` the execution's start returned. Lets an anon key,
+         *     or a user who did not start the execution, reach it.
+         */
+        DurableClientToken: string;
+        /** @description Return only messages travelling this way. */
+        DurableMessageDirectionFilter: components["schemas"]["DurableMessageDirection"];
+        /** @description Return only messages with this name. */
+        DurableMessageNameFilter: components["schemas"]["DurableMessageName"];
+        /** @description Return only messages whose `seq` is greater than this. */
+        DurableMessageAfter: number;
+        /** @description Most messages to return. */
+        DurableMessageLimit: number;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -16172,6 +16524,255 @@ export interface operations {
             };
         };
     };
+    listDurableMessagesFromApplication: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: {
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function's rate limit, which lists share with its invocations
+             *     and starts.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessageFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /**
+             * @description Message sent. `status` is `delivered` when a wait took it at once,
+             *     `delivering` when a wait took it and the handover is still being
+             *     confirmed, and `queued` when it is kept for the next wait.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution. A `private` function answers every credential
+             *     but a service key this way.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` says why:
+             *
+             *     - `execution_not_running`: the execution has finished.
+             *     - `too_many_queued_messages`: the execution already holds the
+             *       maximum number of messages nothing has taken.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Too many messages sent to this execution, or the function's rate
+             *     limit, which sends share with its invocations and starts.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resolveFunctionForInvocation: {
         parameters: {
             query: {
@@ -17759,6 +18360,480 @@ export interface operations {
             };
         };
     };
+    listDurableMessages: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /**
+             * @description Message sent. `status` is `delivered`, `delivering`, or `queued`,
+             *     as on the application route.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` is `execution_not_running` or
+             *     `too_many_queued_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many messages sent to this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableMessageWaits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitList"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    registerDurableMessageWait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterDurableMessageWaitRequest"];
+            };
+        };
+        responses: {
+            /** @description The wait was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description Wait registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait cannot be registered now. `code` says why:
+             *
+             *     - `callback_not_ready`: the workflow has not finished opening the
+             *       wait yet. Retry with a short backoff; the SDK does.
+             *     - `callback_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as an
+             *       approval or a messages session.
+             *     - `execution_ended`: the execution has finished.
+             *     - `too_many_message_waits`: the execution already has the maximum
+             *       number of open waits.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait could not be confirmed with the workflow right now. Retry
+             *     with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    openDurableMessageSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenDurableMessageSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description Session opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session cannot be opened now. `code` is `callback_not_ready`,
+             *     `callback_closed`, `callback_taken` (the callback is already
+             *     registered as an approval or a message wait), `execution_ended`,
+             *     or `too_many_message_sessions`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution or address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session could not be confirmed with the workflow right now.
+             *     Retry with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishDurableMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The session token the workflow received when its session opened. */
+                "X-Volcano-Durable-Session": string;
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already published; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description Message published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The session token header is missing, or the name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The session token is not valid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be published. `code` is
+             *     `execution_not_running` or `too_many_published_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     requestDurableApproval: {
         parameters: {
             query?: never;
@@ -17814,6 +18889,8 @@ export interface operations {
              *     - `approval_not_ready`: the workflow has not finished opening the
              *       approval yet. Retry with a short backoff; the SDK does.
              *     - `approval_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as a
+             *       message wait or a messages session.
              *     - `execution_ended`: the execution has finished.
              *     - `too_many_pending_approvals`: the execution already has the
              *       maximum number of pending approvals.

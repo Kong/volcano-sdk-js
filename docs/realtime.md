@@ -15,6 +15,8 @@ The realtime module provides three types of channels:
 
 All channels respect Row-Level Security, so users only receive notifications for data they're allowed to see.
 
+A durable function's published messages also arrive over a `VolcanoRealtime` connection. Subscribe to them with [`volcano.durable.messages.subscribe`](./durable-functions.md#sending-and-reading-messages) rather than a channel of your own.
+
 ## Installation
 
 Realtime support is included with `@volcano.dev/sdk` and is imported from

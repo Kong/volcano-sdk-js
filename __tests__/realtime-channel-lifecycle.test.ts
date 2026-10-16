@@ -58,14 +58,17 @@ class Subscription implements ChannelSubscription {
 
 class Client implements ChannelClient {
   readonly subscription = new Subscription();
-  readonly created: { name: string; joinLeave: boolean }[] = [];
+  readonly created: { name: string; joinLeave: boolean; data?: Record<string, string> }[] = [];
   readonly removed: ChannelSubscription[] = [];
   presenceResult: Promise<unknown> = Promise.resolve({ clients: {} });
   presenceCalls: string[] = [];
   failRemove = false;
 
-  newSubscription(name: string, options: { joinLeave: boolean }): ChannelSubscription {
-    this.created.push({ name, joinLeave: options.joinLeave });
+  newSubscription(
+    name: string,
+    options: { joinLeave: boolean; data?: Record<string, string> },
+  ): ChannelSubscription {
+    this.created.push({ name, ...options });
     return this.subscription;
   }
 
@@ -88,6 +91,8 @@ class State implements ChannelLifecycleState {
   _name = 'broadcast:room';
   _type = 'broadcast';
   _subscription: ChannelSubscription | null = null;
+  _subscribeData: Record<string, string> | null = null;
+  _onSubscriptionState: ((state: string) => void) | null = null;
   _lifecycleVersion = 0;
   _paused = false;
   _callbacks = new Map<unknown, ((data: unknown, context?: unknown) => void)[]>();
@@ -214,6 +219,44 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
   state._paused = true;
   await client.subscription.emit('state', { newState: 'subscribed' });
   expect(state._paused).toBe(true);
+});
+
+test('subscribes with the channel data and reports each state of the current subscription', async () => {
+  const state = new State();
+  const client = state.client;
+  if (client === null) {
+    throw new Error('client missing');
+  }
+  state._name = 'durable:execution';
+  state._type = 'durable';
+  state._subscribeData = { client_token: 'token' };
+  const states: string[] = [];
+  state._onSubscriptionState = (newState) => states.push(newState);
+  await subscribeChannel(state);
+  expect(client.created).toEqual([
+    { name: 'durable:execution', joinLeave: false, data: { client_token: 'token' } },
+  ]);
+  expect(Object.keys(client.created[0] ?? {})).toEqual(['name', 'joinLeave', 'data']);
+  await client.subscription.emit('state', { newState: 'subscribing' });
+  await client.subscription.emit('state', { newState: 'subscribed' });
+  await client.subscription.emit('state', { newState: 7 });
+  await client.subscription.emit('state', null);
+  expect(states).toEqual(['subscribing', 'subscribed']);
+  state._paused = true;
+  state._subscription = null;
+  await client.subscription.emit('state', { newState: 'subscribing' });
+  expect(states).toEqual(['subscribing', 'subscribed']);
+});
+
+test('subscribes without data when the channel has none', async () => {
+  const state = new State();
+  const client = state.client;
+  if (client === null) {
+    throw new Error('client missing');
+  }
+  await subscribeChannel(state);
+  await client.subscription.emit('state', { newState: 'subscribed' });
+  expect(Object.keys(client.created[0] ?? {})).toEqual(['name', 'joinLeave']);
 });
 
 test('listeners registered during delivery receive only subsequent publications', async () => {

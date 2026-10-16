@@ -17,8 +17,8 @@ import { channelFetchConfig } from './realtime-config.ts';
 import type {
   ActiveFetchConfig,
   ChannelCallback,
-  ChannelType,
   EventHandler,
+  InternalChannelType,
   PendingBatch,
   PendingRow,
   TransportSubscription,
@@ -50,9 +50,13 @@ class RealtimeChannel {
   /** @internal */
   readonly _name: string;
   /** @internal */
-  readonly _type: ChannelType;
+  readonly _type: InternalChannelType;
   /** @internal */
   readonly _options: ChannelOptions;
+  /** @internal */
+  _subscribeData: Record<string, string> | null = null;
+  /** @internal */
+  _onSubscriptionState: ((state: string) => void) | null = null;
   /** @internal */
   _subscription: TransportSubscription | null = null;
   /** @internal */
@@ -75,7 +79,12 @@ class RealtimeChannel {
   _myPresenceState: Record<string, unknown> = {};
 
   /** @internal */
-  constructor(realtime: VolcanoRealtime, name: string, type: ChannelType, options: ChannelOptions) {
+  constructor(
+    realtime: VolcanoRealtime,
+    name: string,
+    type: InternalChannelType,
+    options: ChannelOptions,
+  ) {
     this._realtime = realtime;
     this._name = name;
     this._type = type;

@@ -15,6 +15,8 @@ export const esmHandler = esmDurable<{ orderId: number }, number>(
   async (input, context: EsmContext) => {
     await context.wait('1s');
     const decision = await context.waitForApproval('ship', { title: 'Ship it?' });
-    return decision.approved ? input.orderId : 0;
+    await context.publish('decided', { approved: decision.approved });
+    const confirmed = await context.waitForMessage('confirmed', { timeout: '1h' });
+    return decision.approved && confirmed !== null ? input.orderId : 0;
   },
 );

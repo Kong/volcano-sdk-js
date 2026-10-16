@@ -1,23 +1,24 @@
-import { type ApprovalRequest, requestApproval } from './durable-approval-request.ts';
-import { waitDuration } from './durable-duration.ts';
+import {
+  callbackConfig,
+  type CallbackContext,
+  callbackResult,
+  callbacks,
+  isCallbackTimeout,
+  isRecord,
+  MAX_NAME_LENGTH,
+  OPERATION_NAME,
+  platformApiUrl,
+  requiredExecutionRef,
+  type Submitter,
+} from './durable-callback.ts';
+import { postToPlatform } from './durable-platform-request.ts';
 import type { ApprovalDecider, ApprovalDecision } from './durable-types.ts';
+import type { components } from './generated/openapi';
 
-type Submitter = (callbackId: string) => Promise<void>;
+type ApprovalRequest = components['schemas']['RequestDurableApprovalRequest'];
 type RequestFields = Omit<ApprovalRequest, 'execution_ref' | 'callback_id'>;
 
-export interface CallbackContext {
-  waitForCallback?: (
-    name: string,
-    submitter: Submitter,
-    config: Record<string, unknown>,
-  ) => Promise<unknown>;
-}
-
-// The name is also the runtime's operation name, which allows 256 printable
-// ASCII characters. The runtimes add suffixes of up to 19 characters to it, and
-// every SDK holds names to the same limit.
-const MAX_NAME_LENGTH = 237;
-const OPERATION_NAME = /^[\u0020-\u007E]+$/;
+const OPERATION = 'ctx.waitForApproval()';
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_REQUEST_BYTES = 64 * 1024;
@@ -41,19 +42,22 @@ export async function waitForApproval(
   }
   const fields = requestFields(name, options);
   const config = callbackConfig(options['timeout']);
-  const apiUrl = platformApiUrl();
-  const execution = requiredExecutionRef(executionRef);
+  const apiUrl = platformApiUrl(OPERATION, 'request approvals');
+  const execution = requiredExecutionRef(OPERATION, executionRef);
   withinRequestLimit({ execution_ref: execution, callback_id: LONGEST_CALLBACK_ID, ...fields });
-  const waitForCallback = context.waitForCallback;
-  if (typeof waitForCallback !== 'function') {
-    throw new TypeError(
-      'The durable runtime does not support approvals; redeploy the function so Volcano installs a current one',
-    );
-  }
-  const submit: Submitter = (callbackId) =>
-    requestApproval(apiUrl, { execution_ref: execution, callback_id: callbackId, ...fields });
+  const waitForCallback = callbacks(context, 'approvals');
+  const submit: Submitter = async (callbackId) => {
+    await postToPlatform(apiUrl, {
+      path: '/durable-approvals',
+      body: { execution_ref: execution, callback_id: callbackId, ...fields },
+      action: 'request the approval',
+      subject: 'the approval request',
+      notReadyCode: 'approval_not_ready',
+      closedCode: 'approval_closed',
+    });
+  };
   try {
-    return decision(await Reflect.apply(waitForCallback, context, [fields.name, submit, config]));
+    return decision(await waitForCallback(fields.name, submit, config));
   } catch (error) {
     if (isCallbackTimeout(error)) {
       return expired();
@@ -156,37 +160,8 @@ function withinRequestLimit(request: ApprovalRequest): void {
   }
 }
 
-// The submitter retries what is worth retrying. Left unset, the engine would
-// also retry a refusal that cannot succeed.
-function callbackConfig(timeout: unknown): Record<string, unknown> {
-  const config: Record<string, unknown> = { retryStrategy: () => ({ shouldRetry: false }) };
-  if (timeout !== undefined) {
-    config['timeout'] = waitDuration(timeout, 'timeout');
-  }
-  return config;
-}
-
-function platformApiUrl(): string {
-  const url = process.env['VOLCANO_PLATFORM_API_URL']?.trim() ?? '';
-  if (url === '') {
-    throw new Error(
-      'ctx.waitForApproval() needs VOLCANO_PLATFORM_API_URL, which Volcano sets on durable functions. Deploy this function as durable to request approvals.',
-    );
-  }
-  return url;
-}
-
-function requiredExecutionRef(executionRef: string | undefined): string {
-  if (executionRef === undefined) {
-    throw new Error(
-      'ctx.waitForApproval() cannot tell which execution is running: the durable runtime did not report it',
-    );
-  }
-  return executionRef;
-}
-
 function decision(result: unknown): ApprovalDecision {
-  const value = typeof result === 'string' ? parseJson(result) : result;
+  const value = callbackResult(result, unreadableDecision);
   if (!isRecord(value)) {
     throw unreadableDecision();
   }
@@ -235,15 +210,6 @@ function unreadableDecision(options?: ErrorOptions): TypeError {
   );
 }
 
-function parseJson(text: string): unknown {
-  try {
-    const value: unknown = JSON.parse(text);
-    return value;
-  } catch (cause) {
-    throw unreadableDecision({ cause });
-  }
-}
-
 function isDecisionStatus(value: unknown): value is 'approved' | 'denied' {
   return value === 'approved' || value === 'denied';
 }
@@ -255,16 +221,6 @@ function decider(value: unknown): ApprovalDecider | null {
   return { id: value['id'], email: value['email'] };
 }
 
-// The runtime rebuilds its errors from their recorded type on replay, so the
-// type name is what identifies a timeout both live and replayed.
-function isCallbackTimeout(error: unknown): boolean {
-  return isRecord(error) && error['errorType'] === 'CallbackTimeoutError';
-}
-
 function expired(): ApprovalDecision {
   return { approved: false, status: 'expired', comment: '', decidedBy: null, decidedAt: null };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

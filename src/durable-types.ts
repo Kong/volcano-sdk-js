@@ -184,6 +184,38 @@ export interface ApprovalDecision {
   decidedAt: string | null;
 }
 
+export interface WaitForMessageOptions {
+  /**
+   * How long to wait. Unset, the wait lasts as long as the execution. When it
+   * runs out the wait resolves with `null`.
+   */
+  timeout?: DurableDuration;
+}
+
+export interface MessageSender {
+  /** The credential it was sent with: `service_key`, `user`, `anon`, or `project`. */
+  type: string;
+  /** The user who sent it, when `type` is `user`. */
+  userId: string | null;
+}
+
+/** A message sent to the execution, as `ctx.waitForMessage` receives it. */
+export interface ReceivedMessage {
+  id: string;
+  name: string;
+  /** The JSON value sent, or `null`. */
+  data: unknown;
+  sender: MessageSender;
+  /** When it was sent, as an ISO 8601 timestamp. */
+  sentAt: string;
+}
+
+export interface PublishedMessage {
+  id: string;
+  /** Orders the execution's messages. Read the ones after it with `after`. */
+  seq: number;
+}
+
 /** A branch of `ctx.parallel`, named for the execution history. */
 export interface ParallelBranch<TResult> {
   name?: string;
@@ -243,6 +275,20 @@ export interface DurableContext {
    * running, and not billed, while it waits.
    */
   waitForApproval(name: string, options: WaitForApprovalOptions): Promise<ApprovalDecision>;
+
+  /**
+   * Suspends until a message with this name is sent to the execution, and
+   * resolves with it, or with `null` once the timeout passes. Messages sent
+   * before anything waits are kept, and each wait takes the oldest one. A
+   * message never decides an approval.
+   */
+  waitForMessage(name: string, options?: WaitForMessageOptions): Promise<ReceivedMessage | null>;
+
+  /**
+   * Records a message that applications list, or receive live by subscribing
+   * to the execution. Checkpointed, so a replay never publishes it twice.
+   */
+  publish(name: string, data?: unknown): Promise<PublishedMessage>;
 
   /** Runs the same work over every item, each in its own child context. */
   map<TItem, TResult>(

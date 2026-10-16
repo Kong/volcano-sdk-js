@@ -6,6 +6,7 @@ import {
   type CreateUploadSessionResponse,
   type Durable,
   type DurableExecution,
+  type DurableMessage,
   type MutationBuilder,
   type OpenAPIComponents,
   type OpenAPIOperations,
@@ -19,6 +20,7 @@ import type {
   PresenceInfo,
   PresenceState,
   RealtimeChannel,
+  VolcanoRealtime,
 } from '../../src/realtime.ts';
 import type { Exact as Equal } from '../fixtures/public-api-compatibility.d.ts';
 
@@ -206,6 +208,43 @@ async function followDurableExecution(): Promise<unknown> {
   return { result, executions, more, status: stopped.status };
 }
 
+type _DurableMessageComesOffTheWire = Assert<
+  Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>
+>;
+
+declare const realtime: VolcanoRealtime;
+
+// Messages answer the same envelope, a page reads on from the last `seq`, and
+// a subscription needs a realtime client to deliver on.
+async function exchangeDurableMessages(): Promise<unknown> {
+  const target = { functionName: 'checkout', executionId: 'exec-1', clientToken: 'ct-1' };
+  const sent = await durable.messages.send(
+    target,
+    'address-confirmed',
+    { address_id: 'addr_19' },
+    { idempotencyKey: 'confirm-addr_19' },
+  );
+  const delivered: boolean = sent.data?.status === 'delivered';
+
+  const listed = await durable.messages.list(
+    { ...target, projectId: 'proj-1' },
+    { direction: 'out', after: 3 },
+  );
+  const seqs: number[] = listed.data?.data.map((message) => message.seq) ?? [];
+
+  const { data: subscription } = await durable.messages.subscribe(
+    target,
+    (message: DurableMessage) => {
+      seqs.push(message.seq);
+    },
+    { realtime },
+  );
+  await subscription?.unsubscribe();
+  // @ts-expect-error a subscription needs a realtime client
+  void durable.messages.subscribe(target, (message) => message.seq, {});
+  return { delivered, seqs };
+}
+
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 interface LogSearchEventShape {
   id: string;
@@ -346,6 +385,7 @@ export type OpenApiContractChecks = [
   _OAuthResponseUsesHostingEnvelope,
   _DurableStartHandleMatchesHosting,
   _DurableExecutionComesOffTheWire,
+  _DurableMessageComesOffTheWire,
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
   _CustomDomainTLSMatchesHosting,
@@ -518,6 +558,7 @@ export const contractOperations = {
   adoptCurrentSession,
   startDurableExecution,
   followDurableExecution,
+  exchangeDurableMessages,
   uploadResponseEnvelopes,
   rejectFlattenedUploadResponses,
   storageErrorMetadata,

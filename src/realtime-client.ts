@@ -13,6 +13,7 @@ import type {
   ActiveFetchConfig,
   ChannelType,
   ClientHandlers,
+  InternalChannelType,
   RecoveryIdentity,
   TransportClient,
 } from './realtime-internal-types.ts';
@@ -344,8 +345,33 @@ class VolcanoRealtime {
    * the authenticated connection. Clients never need to know about project IDs.
    */
   /** @internal */
-  _formatChannelName(name: string, type: ChannelType): string {
+  _formatChannelName(name: string, type: InternalChannelType): string {
     return `${type}:${name}`;
+  }
+
+  /**
+   * Open the channel a durable execution publishes on, or return null when
+   * this client already has it open.
+   */
+  /** @internal */
+  _durableChannel(executionId: string, clientToken: string | null): RealtimeChannel | null {
+    const fullName = this._formatChannelName(executionId, 'durable');
+    if (this._channels.has(fullName)) {
+      return null;
+    }
+    const channel = new RealtimeChannel(this, fullName, 'durable', {});
+    channel._subscribeData = clientToken === null ? null : { client_token: clientToken };
+    this._channels.set(fullName, channel);
+    return channel;
+  }
+
+  /** @internal */
+  _removeDurableChannel(channel: RealtimeChannel): void {
+    if (this._channels.get(channel._name) !== channel) {
+      return;
+    }
+    channel._dispose();
+    this._channels.delete(channel._name);
   }
 
   /**

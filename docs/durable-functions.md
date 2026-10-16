@@ -5,7 +5,7 @@ description: 'Write functions that checkpoint their progress and resume where th
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to a year, far longer than a single invocation is allowed.
 
-`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — and deciding the [approvals](#ctxwaitforapprovalname-options) it asks for are owner-scoped, so they belong on your backend, the [CLI](/cli/durable-functions), or the dashboard.
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — and deciding the [approvals](#ctxwaitforapprovalname-options) it asks for are owner-scoped, so they belong on your backend, the [CLI](/cli/durable-functions), or the dashboard. [Messages](#sending-and-reading-messages) are the exception: an app sends them to an execution, and reads what it publishes, with the credential it already holds.
 
 ```javascript
 const { durable } = require('@volcano.dev/sdk/durable');
@@ -264,12 +264,13 @@ Every check is a metered operation, and the 200 above is 200 of them, so buy the
 wait with a longer `interval` rather than with more checks where you can. See
 [Limits](#limits-and-what-an-operation-costs).
 
-This is how a durable function waits on the outside world: a third-party job, a
-file that has to land, a row another system writes. Whatever signals it — a
-webhook, an endpoint of yours, another function — writes somewhere the check can
-read. To wait on a person's sign-off, use
-[`ctx.waitForApproval`](#ctxwaitforapprovalname-options) instead: it costs no
-checks while it waits, and Volcano stores the request and the decision for you.
+This is how a durable function waits on state it has to go and read: a
+third-party job, a file that has to land, a row another system writes. When
+whatever finishes the work can tell the execution — a webhook, an endpoint of
+yours, another function — use
+[`ctx.waitForMessage`](#ctxwaitformessagename-options) instead, and to wait on a
+person's sign-off, [`ctx.waitForApproval`](#ctxwaitforapprovalname-options).
+Neither costs checks while it waits.
 
 ## `ctx.waitForApproval(name, options)`
 
@@ -360,6 +361,103 @@ try {
   throw error;
 }
 ```
+
+## `ctx.waitForMessage(name, options?)`
+
+Suspends until a message with that name is sent to the execution, and resumes
+holding it. Anyone the function's
+[visibility](/platform/functions/durable-messages#who-can-send-and-read) admits
+can send one — a webhook receiver, a backend, a browser, another function — so
+use it for any answer that does not need a person's decision.
+
+```javascript
+const payment = await ctx.waitForMessage('payment-confirmed', { timeout: '30m' });
+
+if (payment === null) {
+  return { status: 'abandoned' }; // the timeout passed first
+}
+
+await ctx.step('fulfil', () => fulfil(input.order_id, payment.data.charge_id));
+```
+
+| Option    | Type     | Description                                                                                  |
+| --------- | -------- | -------------------------------------------------------------------------------------------- |
+| `timeout` | duration | How long to wait, from 1 second to 366 days. Unset, the wait lasts as long as the execution. |
+
+The name is what a sender addresses the message by, and what the wait is
+recorded under in the execution history. It is up to 237 printable ASCII
+characters.
+
+It resolves with the message, or with `null` once the timeout passes. A timeout
+is an outcome, not an error.
+
+| Field           | Type               | Description                                         |
+| --------------- | ------------------ | --------------------------------------------------- |
+| `id`            | `string`           | The message's id.                                   |
+| `name`          | `string`           | The name it was sent with.                          |
+| `data`          | any                | The JSON value sent, or `null`.                     |
+| `sender.type`   | `string`           | `service_key`, `user`, `anon`, or `project`.        |
+| `sender.userId` | `string` \| `null` | The user who sent it, when `sender.type` is `user`. |
+| `sentAt`        | `string`           | When it was sent, as an ISO 8601 timestamp.         |
+
+Each wait takes one message. A message sent before anything waits for its name
+is kept, and each wait takes the oldest one with its name, so a loop consumes a
+burst of sends first in, first out:
+
+```javascript
+const items = [];
+for (;;) {
+  const item = await ctx.waitForMessage('item', { timeout: '10m' });
+  if (item === null || item.data.last) break;
+  items.push(item.data);
+}
+```
+
+The message is recorded like any operation's result: a resumed execution gets
+the same one back. Waits inside `ctx.parallel`, `ctx.map`, or `ctx.child` work
+the same way, so one execution can wait for several names at once.
+
+A message never decides an approval, whatever it carries. Where an answer from
+code would defeat the point, keep `ctx.waitForApproval`.
+
+The call throws, failing the execution unless you catch it, on an invalid name
+or timeout, or when Volcano refuses the wait — for example when the execution
+already has 100 waits open. Like an approval, the request goes to
+`VOLCANO_PLATFORM_API_URL`, is retried for up to 30 seconds while Volcano is not
+ready for it, and reaches the handler as the runtime's `CallbackSubmitterError`
+with the status and code in its message:
+
+```javascript
+// "Volcano refused the message wait (409 too_many_message_waits): ..."
+```
+
+## `ctx.publish(name, data?)`
+
+Records a message from the execution. Apps [list](#sending-and-reading-messages)
+what it published or subscribe to receive it live, which is how a long-running
+execution reports progress to the browser that started it.
+
+```javascript
+const published = await ctx.publish('progress', { stage: 'rendering', pct: 40 });
+console.log(published.id, published.seq);
+```
+
+`data` is any JSON value up to 64 KiB; leave it out to publish `null`. The name
+follows the same rules as a wait's. It resolves with the message's `id` and
+`seq`, the position it is listed at.
+
+Each `publish` is checkpointed as a `child` named after the message, so a replay
+never publishes twice, and a `publish` that runs again after a crash returns the
+message it already published. The first
+`publish` in an execution — and in each `ctx.child`, `ctx.parallel` branch, or
+`ctx.map` item that publishes — first opens a messages session, a credential
+only this execution can publish with. It shows up in the history as a `child`
+named `volcano:messages-session`. If the session cannot be opened, that
+`publish` throws, and so does every later `publish` in the same context.
+
+`publish` throws on an invalid name, data that cannot be serialized as JSON, is
+over 64 KiB, or holds a NUL character in a string or key, and refusals such as an execution that has already published
+1,000 messages: `Volcano refused the message (409 too_many_published_messages): ...`.
 
 ## `ctx.map(name?, items, fn, options?)`
 
@@ -559,6 +657,7 @@ if (error || !data) {
   throw error ?? new Error('Durable start returned no execution');
 }
 console.log(data.id, data.status); // 'running'
+console.log(data.client_token); // lets a browser reach this execution's messages
 ```
 
 The execution name is the idempotency key: starting again under the same name
@@ -579,8 +678,9 @@ for a project with too many executions in flight for its plan or out of either
 durable allowance, and `503` where durable execution is unavailable. `409` is
 the one to expect right after a deploy: retry once the function is `active`.
 
-Starting is the only durable operation an application credential can perform.
-Reading an execution, listing them and stopping one are owner-scoped. Use a
+Besides [sending and reading messages](#sending-and-reading-messages), starting
+is the only durable operation an application credential can perform. Reading an
+execution, listing them and stopping one are owner-scoped. Use a
 separate backend client with the project owner's platform user token. Auth-user
 sessions, anon keys, service keys, and project access tokens are not accepted.
 
@@ -697,11 +797,111 @@ approval that expired or was cancelled, is `409`, and `error.code` says which:
 `approval_decided`, `approval_expired`, or `approval_cancelled`. An approval this
 project does not have is `404`.
 
-A function that has to report back to an app holding only an anon key writes
-what it produced where the app can read it — a table, a bucket — rather than
-having the browser poll the execution. See
-[Durable functions](/platform/functions/durable-functions) for the full API and
-[the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
+See [Durable functions](/platform/functions/durable-functions) for the full API
+and [the CLI reference](/cli/durable-functions) for `volcano cloud durable`.
+
+### Sending and reading messages
+
+`volcano.durable.messages` sends the messages
+[`ctx.waitForMessage`](#ctxwaitformessagename-options) waits for, and lists or
+subscribes to what [`ctx.publish`](#ctxpublishname-data) records. It uses the
+client's credential, so it works from a browser as well as a backend. Name the
+execution by its durable function and id:
+
+```javascript
+const target = {
+  functionName: 'checkout',
+  executionId: execution.id,
+  clientToken: execution.client_token,
+};
+
+const { data: message, error } = await volcano.durable.messages.send(
+  target,
+  'address-confirmed',
+  { address_id: 'addr_19' },
+  { idempotencyKey: 'confirm-addr_19' },
+);
+console.log(message?.status); // 'delivered', 'delivering' while the handover is confirmed, or 'queued'
+
+const { data: page } = await volcano.durable.messages.list(target, { direction: 'out' });
+for (const published of page?.data ?? []) {
+  console.log(published.seq, published.name, published.data);
+}
+```
+
+| Method                                | Description                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `send(target, name, data?, options?)` | Send a message. `options.idempotencyKey`, up to 255 characters, makes a retry safe. |
+| `list(target, options?)`              | Messages in both directions, oldest first by `seq`.                                 |
+| `subscribe(target, handler, options)` | Receive what the execution publishes, live. `options.realtime` is required.         |
+
+`list` takes `direction` (`in` or `out`), `name`, `after` (only messages with a
+greater `seq`), and `limit` (1 to 500). Pass the last `seq` you read as `after`
+while `has_more` is true.
+
+Who may send and read follows the function's visibility. A service key reaches
+any execution of the project, and a signed-in user the executions they started.
+Anyone else — an anon key, or a user who did not start it — needs the
+execution's `clientToken`, which `start` returns once, when it creates the
+execution. A backend that starts executions with the service key hands that
+token to the browser that should talk to the execution. An execution the
+caller may not reach answers `404`, like one that does not exist.
+
+Add `projectId` to the target to use the owner-scoped route instead, with the
+owner's platform user token or a project access token; a `read_only` access
+token can list but not send.
+
+`subscribe` delivers the execution's published messages on a connected
+[`VolcanoRealtime`](./realtime.md) client, in `seq` order and once each. It reads
+the list before resolving, again after each reconnect, and whenever a live
+message shows that an earlier one was lost. Until that read succeeds it holds
+the live messages after the gap and retries, backing off to every 30 seconds and
+logging each failed read with `console.error`, so no published message is
+missed:
+
+```javascript
+import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
+
+const realtime = new VolcanoRealtime({ apiUrl, anonKey, accessToken: volcano.accessToken });
+await realtime.connect();
+
+const { data: subscription, error } = await volcano.durable.messages.subscribe(
+  target,
+  (message) => {
+    if (message.name === 'progress') showProgress(message.data);
+  },
+  { realtime },
+);
+
+// When the view is finished:
+await subscription?.unsubscribe();
+```
+
+A realtime client holds one subscription per execution; subscribing again
+before `unsubscribe` resolves with an error. `disconnect()`,
+`removeAllChannels()`, and a change of signed-in user on the realtime client
+end the subscription too, and a read still in flight delivers nothing; call
+`unsubscribe` before subscribing to the execution again. Ended while it is
+still catching up, `subscribe` resolves with an error. When the realtime server
+refuses the subscription, `error.cause` holds its `code` and `message`. Once
+`subscribe` has resolved, the realtime server can still end the subscription,
+for example by refusing it on resubscribing after a reconnect. The SDK then
+logs the end with `console.error` and delivers nothing more; subscribe to the
+execution again to resume. A
+handler that throws while `subscribe` is still catching up ends the
+subscription, which delivers nothing more and resolves with that error; once it
+has resolved, the subscription carries on past a handler that throws, including
+during a later read-back, and logs the error with `console.error`. A handler
+may return a promise, but delivery does not wait for it: the next message can
+arrive before it settles, and a rejection is logged with `console.error`, even
+while `subscribe` is catching up. Catch errors in the handler to handle them
+yourself.
+
+All three answer `{ data, status, error }`. `status` is `409` with
+`error.code` `execution_not_running` for a send to an execution that has ended,
+and `too_many_queued_messages` when it already holds 100 messages nothing has
+taken. See [Durable messages](/platform/functions/durable-messages) for the
+limits and every error.
 
 ## Limits and what an operation costs
 
@@ -720,8 +920,10 @@ allowance a standard invocation spends. Every context operation is one
 operation: the execution itself, each `step` attempt — a retry is another
 attempt — each `wait`, each `waitUntil` check, each `child` context, and each
 `map` item or `parallel` branch. An approval is three: its own context, the
-wait for its decision, and the step that registers it. Time is not charged, so
-a suspended execution costs nothing while it waits.
+wait for its decision, and the step that registers it. A `waitForMessage` is
+three the same way, a `publish` one, and the messages session each context
+opens before its first `publish` three more. Time is not charged, so a
+suspended execution costs nothing while it waits.
 
 That makes the shape of a handler its cost. `ctx.map` over ten thousand items is
 ten thousand operations and will fail on the per-execution ceiling; batch the
@@ -743,6 +945,7 @@ volcano durable deploy --all
 volcano durable start order-pipeline --input '{"order_id":4417}' --name order-4417
 volcano durable executions get order-pipeline <execution-id>
 volcano durable approvals approve <approval-id>
+volcano durable messages send order-pipeline <execution-id> payment-confirmed --data '{"charge_id":"ch_1"}'
 ```
 
 Local waits resolve immediately by default while preserving checkpoint and replay
@@ -752,8 +955,6 @@ real time. Local executions persist across `volcano stop` and `volcano start`.
 
 ## Not available yet
 
-- **Other external signals.** Approvals are the only outside completion Volcano
-  offers. For anything else, wait on your own state with `ctx.waitUntil`.
 - **Durable invoke.** Call another function from inside a step —
   `ctx.step('sync', () => volcano.functions.invoke('sync', payload))` — rather
   than chaining durable executions.

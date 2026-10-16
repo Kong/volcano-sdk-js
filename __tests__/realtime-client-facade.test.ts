@@ -350,6 +350,35 @@ describe('realtime client facade', () => {
     expect(contexts).toEqual([{ client: 'active' }, { reason: 'closed' }, { message: 'failed' }]);
   });
 
+  test('opens one durable channel per execution and removes only the one it opened', () => {
+    const realtime = client();
+    const channel = realtime._durableChannel('exec-1', 'token');
+    if (channel === null) {
+      throw new Error('durable channel was not opened');
+    }
+    expect(channel.name).toBe('durable:exec-1');
+    expect(channel._type).toBe('durable');
+    expect(channel._subscribeData).toEqual({ client_token: 'token' });
+    expect(realtime._durableChannel('exec-1', null)).toBeNull();
+    expect(realtime._durableChannel('exec-2', null)?._subscribeData).toBeNull();
+    const received: unknown[] = [];
+    channel.on('*', (data) => {
+      received.push(data);
+    });
+    realtime._handleServerPublication({ channel: 'project:durable:exec-1', data: { seq: 1 } });
+    expect(received).toEqual([{ seq: 1 }]);
+
+    const dispose = jest.spyOn(channel, '_dispose');
+    realtime._removeDurableChannel(channel);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(realtime._channels.has('durable:exec-1')).toBe(false);
+    expect(realtime._channels.has('durable:exec-2')).toBe(true);
+    const reopened = realtime._durableChannel('exec-1', null);
+    realtime._removeDurableChannel(channel);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(realtime._channels.get('durable:exec-1')).toBe(reopened);
+  });
+
   test('removes channels by name and isolates cleanup failures', async () => {
     jest.spyOn(centrifuge, 'loadCentrifuge').mockResolvedValue(MockTransport);
     const realtime = client();
