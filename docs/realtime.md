@@ -85,6 +85,52 @@ await realtime.connect();
 console.log('Connected to realtime server');
 ```
 
+In the JavaScript SDK, `connect()` rejects immediately when the transport enters
+its terminal disconnected state before connecting. The rejection is a
+`RealtimeConnectionError` whose `message` contains the disconnect reason (for
+example, `permission denied`) and whose optional, read-only `code` contains the
+numeric transport code. Its properties are non-enumerable, so JSON serialization
+retains the native `Error` shape (`{}`). Import the error from the realtime
+entrypoint and narrow an unknown rejection without casting:
+
+```typescript
+import { RealtimeConnectionError } from '@volcano.dev/sdk/realtime';
+
+try {
+  await realtime.connect();
+} catch (error: unknown) {
+  if (RealtimeConnectionError.is(error)) {
+    console.warn(error.message, error.code); // code: number | undefined
+  } else {
+    throw error;
+  }
+}
+```
+
+The type guard works across multiple copies of the SDK; `instanceof
+RealtimeConnectionError` also narrows errors created by the same SDK copy.
+If no reason is available, the message is `Connection disconnected`. The
+`onDisconnect` callback still receives the disconnect context.
+
+An auth-only public key cannot connect to realtime. Include `realtime.connect`
+on the key, plus `realtime.subscribe` for channel subscriptions. Retryable
+transport interruptions and temporary token-refresh errors reach `onError`
+without immediately rejecting `connect()`. The attempt continues reconnecting
+until it succeeds or reaches its ten-second deadline. At that deadline,
+`connect()` rejects with the generic `Connection timeout`, which does not include
+the underlying transport or token-refresh error. Earlier SDK versions rejected
+`connect()` on the first error event with that error's message.
+
+Rejected or timed-out attempts release their transport and handlers and stop
+background reconnection. Call `connect()` again to retry; a failed attempt will
+no longer recover later through `onConnect` without a new connection attempt.
+Automatic cleanup of a failed attempt resets channel subscriptions, preserving
+their application listeners. After reconnecting, call `subscribe()` again on the
+same channel to create a subscription on the new transport.
+Once the transport has started, calling `disconnect()` while `connect()` is
+pending also rejects that attempt promptly with the transport's disconnect reason,
+rather than timing out.
+
 ### Connection Events
 
 Monitor the connection status:

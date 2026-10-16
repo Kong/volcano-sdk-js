@@ -6,6 +6,20 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ### Changed
 
+- Realtime `connect()` rejects promptly on terminal disconnections, including
+  cancellation through `disconnect()`, instead of waiting for a timeout.
+  `RealtimeConnectionError` exposes the reason and an optional non-enumerable
+  numeric `code`; use its `is()` guard to narrow unknown errors in TypeScript.
+  Retryable startup errors no longer reject `connect()` immediately with the
+  transport or token-refresh error. They reach `onError` while the attempt waits
+  for automatic recovery, up to its ten-second deadline. If startup never
+  succeeds, `connect()` rejects with the generic `Connection timeout`, which
+  omits the underlying error. Rejected or timed-out attempts release their
+  transport and handlers, stopping background reconnection; call `connect()`
+  again to retry. Automatic failure cleanup resets channel subscriptions while
+  retaining application listeners, so the same channel can subscribe on the next
+  connection.
+
 - Generate public declarations from the TypeScript implementation. Nine response
   types now represent optional or nullable values already returned at runtime;
   strict consumers may need additional presence checks. See
