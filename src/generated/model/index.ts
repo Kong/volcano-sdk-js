@@ -8,6 +8,8 @@
  * OpenAPI spec version: 3.0.0
  */
 
+export * from './authProxyAuthorizationParameter';
+export * from './authProxyClientIPParameter';
 export * from './authSigninBody';
 export * from './authSigninBodySessionMode';
 export * from './authTokenResponse';

@@ -716,7 +716,8 @@ export interface paths {
          * @description Returns a fast control-plane health snapshot for the project and its
          *     deployed resources. The endpoint does not run live provider probes.
          *     A successful request returns 200 even when the project status is
-         *     `unhealthy`; transport and authorization failures use HTTP errors.
+         *     `degraded` or `critical`; transport and authorization failures use HTTP
+         *     errors.
          */
         get: operations["getProjectHealth"];
         put?: never;
@@ -1331,6 +1332,12 @@ export interface paths {
          *     - Function must have `visibility: public`
          *     - Function receives payload only (no `__volcano_auth`)
          *
+         *     **Reserved payload keys:** the top-level `__volcano_auth` and
+         *     `__volcano_http` keys are reserved. Volcano removes caller-supplied
+         *     values for both before the function runs; only an auth user token adds
+         *     a server-built `__volcano_auth`, and only HTTP-mode ingress sets
+         *     `__volcano_http: true`.
+         *
          *     **Transport and CORS:**
          *     - This operation is the authenticated direct RPC endpoint and always uses the
          *       POST `{payload: ...}` contract, including for functions whose DNS ingress is
@@ -1405,6 +1412,56 @@ export interface paths {
          *     operations allowance when it finishes.
          */
         post: operations["startDurableExecutionFromApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages from an application
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next; that is how a client catches up after a live subscription
+         *     reconnects.
+         *
+         *     Access follows the same rules as sending.
+         */
+        get: operations["listDurableMessagesFromApplication"];
+        put?: never;
+        /**
+         * Send a message to a durable execution from an application
+         * @description Sends a named message to a running execution. The workflow receives it
+         *     from `ctx.waitForMessage` with the same name. A message sent before
+         *     anything waits for its name is kept, and each wait takes the oldest
+         *     one, so messages arrive in the order they were sent.
+         *
+         *     Messages never decide an approval: a workflow waiting in
+         *     `ctx.waitForApproval` is not resumed by one.
+         *
+         *     **With a service key:** any execution in the project.
+         *
+         *     **With an auth user token:** an execution the user started, or one
+         *     whose `X-Volcano-Client-Token` the request carries, of a durable
+         *     function whose `visibility` is `authenticated` or `public`.
+         *
+         *     **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+         *     request carries, of a function with `visibility: public`.
+         *
+         *     Any other execution answers `404`, as a missing one does.
+         *
+         *     Send `Idempotency-Key` to make a retry safe: a repeat with a key the
+         *     same sender has used on the execution returns the first message with
+         *     `200` and sends nothing.
+         */
+        post: operations["sendDurableMessageFromApplication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1919,6 +1976,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's messages
+         * @description Lists the messages sent to and published by an execution, oldest
+         *     first. Pass the last `seq` you read as `after` to read only what came
+         *     next.
+         *
+         *     Project access tokens can list messages, including read-only ones.
+         */
+        get: operations["listDurableMessages"];
+        put?: never;
+        /**
+         * Send a message to a durable execution
+         * @description Sends a named message to a running execution, as
+         *     `POST /durable-functions/{functionId}/executions/{executionId}/messages`
+         *     does for an application. The workflow receives it from
+         *     `ctx.waitForMessage` with the same name; until then it is kept, and
+         *     waits take messages oldest first.
+         *
+         *     Project access tokens can send messages, but read-only ones cannot.
+         *     A message never decides an approval.
+         */
+        post: operations["sendDurableMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/durable-functions/{functionId}/executions/{executionId}/message-waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a durable execution's open message waits
+         * @description Lists the waits an execution has open in `ctx.waitForMessage`, oldest
+         *     first, so you can see which message names it is waiting for.
+         *
+         *     Project access tokens can list waits, including read-only ones.
+         */
+        get: operations["listDurableMessageWaits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/waits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wait for a message from inside a workflow
+         * @description Registers a wait for a named message. The Volcano SDK calls this from
+         *     `ctx.waitForMessage`; applications do not call it directly.
+         *
+         *     `execution_ref` and `callback_id` are opaque values the SDK reads from
+         *     the running workflow. Together they are the request's credential, so
+         *     the operation takes no other authentication. When a message for the
+         *     name is already queued, the wait takes the oldest one at once.
+         *
+         *     Retrying is safe: a request for a wait that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["registerDurableMessageWait"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a messages session from inside a workflow
+         * @description Opens the session a workflow publishes messages with. The Volcano SDK
+         *     calls this once per workflow context, on its first `ctx.publish`;
+         *     applications do not call it directly.
+         *
+         *     As for a wait, `execution_ref` and `callback_id` are the credential.
+         *     The session's token is delivered to the workflow itself and never
+         *     appears in a response.
+         *
+         *     Retrying is safe: a request for a session that is already registered
+         *     returns it with `200`.
+         */
+        post: operations["openDurableMessageSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-messages/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a message from inside a workflow
+         * @description Publishes a named message from a running workflow. The Volcano SDK
+         *     calls this from `ctx.publish`; applications do not call it directly.
+         *
+         *     The message is stored, listed with the execution's messages, and
+         *     delivered live to clients subscribed to the execution. Live delivery
+         *     counts against the project's Realtime messages.
+         *
+         *     The SDK sends an `Idempotency-Key` that a rerun of the publishing step
+         *     repeats, so a step that runs again returns the first message with
+         *     `200` and stores nothing new. That message is delivered live again,
+         *     and counts again, because the first run may have stopped before
+         *     subscribers got it. The SDKs deliver it to a subscriber once.
+         */
+        post: operations["publishDurableMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/durable-approvals": {
         parameters: {
             query?: never;
@@ -2085,6 +2289,85 @@ export interface paths {
          *     Project access tokens are refused.
          */
         delete: operations["deleteAutofixAPIKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/issues/{issueId}/autofix-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Diagnose an issue
+         * @description Queues a run that diagnoses the issue with AI. The run reads the
+         *     issue's runtime logs and, when a push to the project's connected
+         *     repository built the deployment that was live when the issue was
+         *     last seen, its source at that commit. Poll the run until its status is
+         *     `succeeded`, `failed`, or `canceled`.
+         *
+         *     Autofix must be on for the project. An issue has at most one queued or
+         *     running run, a project runs one at a time, and a project starts at most
+         *     25 runs, manual and automatic, in any 24 hours.
+         *
+         *     Project access tokens are refused. A run spends model tokens on the
+         *     project's provider, so a person starts it with a platform token or in
+         *     the dashboard.
+         */
+        post: operations["startAutofixRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/autofix-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List autofix runs
+         * @description Lists the project's autofix runs, newest first. Runs stay readable after
+         *     autofix is turned off, and where autofix is not available.
+         *
+         *     Project access tokens can list runs, including read-only ones.
+         */
+        get: operations["listAutofixRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/autofix-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an autofix run
+         * @description Returns one run: its status, the diagnosis once it succeeds, why it
+         *     failed or was canceled, and the model tokens it used. Runs stay readable
+         *     where autofix is not available.
+         *
+         *     Project access tokens can read runs, including read-only ones.
+         */
+        get: operations["getAutofixRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2257,7 +2540,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.27 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.4.0 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.28 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.4.2 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -8338,6 +8621,12 @@ export interface components {
              * @description Present once the execution has reached a terminal status.
              */
             completed_at?: string;
+            /**
+             * @description Lets a browser read and send the execution's messages. Returned only
+             *     by the start whose input the execution runs, never by a repeat under
+             *     the same name or by a read. Send it as `X-Volcano-Client-Token`.
+             */
+            client_token?: string;
         };
         /**
          * @description Lifecycle state of an execution. `pending` covers the window between the
@@ -8569,6 +8858,9 @@ export interface components {
              *       }
              *     }
              *     ```
+             *
+             *     The top-level `__volcano_auth` and `__volcano_http` keys are reserved;
+             *     Volcano removes caller-supplied values for both.
              */
             payload?: {
                 [key: string]: unknown;
@@ -9141,6 +9433,110 @@ export interface components {
             /** @description Whether there are more pages available */
             has_more: boolean;
         };
+        /**
+         * @description The name a workflow waits on or publishes under: up to 237 printable
+         *     ASCII characters.
+         */
+        DurableMessageName: string;
+        /**
+         * @description `in` is a message sent to the execution. `out` is one the execution
+         *     published.
+         * @enum {string}
+         */
+        DurableMessageDirection: "in" | "out";
+        /** @description A message sent to, or published by, a durable execution. */
+        DurableMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            execution_id: string;
+            direction: components["schemas"]["DurableMessageDirection"];
+            /**
+             * Format: int64
+             * @description Orders the execution's messages in both directions. It increases
+             *     with every message but can skip numbers. Pass the last one you read
+             *     as `after` to read what came next.
+             */
+            seq: number;
+            name: string;
+            /** @description The JSON value sent or published, or null. */
+            data: unknown;
+            sender: components["schemas"]["DurableMessageSender"];
+            status: components["schemas"]["DurableMessageStatus"];
+            /**
+             * Format: date-time
+             * @description When the execution received the message. Null until then, and for `out` messages.
+             */
+            delivered_at: string | null;
+            /** Format: date-time */
+            sent_at: string;
+        };
+        DurableMessageList: {
+            /** @description Messages after `after`, oldest first. */
+            data: components["schemas"]["DurableMessage"][];
+            /**
+             * @description Whether more messages follow. Read them with `after` set to the
+             *     last message's `seq`.
+             */
+            has_more: boolean;
+        };
+        /** @description A wait an execution has open for a message. */
+        DurableMessageWait: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /**
+             * Format: date-time
+             * @description When the wait times out. Null when the workflow set no timeout.
+             */
+            expires_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DurableMessageWaitList: {
+            /** @description Open waits, oldest first. */
+            data: components["schemas"]["DurableMessageWait"][];
+        };
+        SendDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
+        };
+        RegisterDurableMessageWaitRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque wait reference, supplied by the SDK. */
+            callback_id: string;
+            name: components["schemas"]["DurableMessageName"];
+        };
+        /** @description The registered wait, as the waiting workflow sees it. */
+        DurableMessageWaitRegistration: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["DurableMessageWaitStatus"];
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        OpenDurableMessageSessionRequest: {
+            /** @description Opaque reference to the running execution, supplied by the SDK. */
+            execution_ref: string;
+            /** @description Opaque session reference, supplied by the SDK. */
+            callback_id: string;
+        };
+        /**
+         * @description The registered session. Its token reaches the workflow through the
+         *     workflow itself, never in this response.
+         */
+        DurableMessageSessionRegistration: {
+            /** Format: uuid */
+            id: string;
+        };
+        PublishDurableMessageRequest: {
+            name: components["schemas"]["DurableMessageName"];
+            /** @description Any JSON value, up to 64 KiB. Omitted means null. */
+            data?: unknown;
+        };
         /** @description Runtime errors from one function or frontend, grouped by error type and stack. */
         Issue: {
             /** Format: uuid */
@@ -9260,6 +9656,124 @@ export interface components {
              * @description Your own API key for `provider`, such as an Anthropic key for `anthropic`. Omit it to keep the stored key. Encrypted at rest and never returned.
              */
             api_key?: string;
+        };
+        /**
+         * @description Where a run is. `canceled` means the project's settings or plan stopped allowing the run before it finished; `failure_code` says which.
+         * @enum {string}
+         */
+        AutofixRunStatus: "queued" | "running" | "succeeded" | "failed" | "canceled";
+        /**
+         * @description What started the run. `manual` is a request; `new_issue` and `regression` are automatic runs for an issue that appeared or reopened.
+         * @enum {string}
+         */
+        AutofixRunTrigger: "manual" | "new_issue" | "regression";
+        AutofixEvidence: {
+            /** @enum {string} */
+            kind: "log" | "code" | "other";
+            detail: string;
+            /** @description A file and line, or a log timestamp. Absent when the evidence has none. */
+            location?: string;
+        };
+        AutofixDiagnosis: {
+            /** @description One or two sentences on what goes wrong. */
+            summary: string;
+            root_cause: string;
+            evidence: components["schemas"]["AutofixEvidence"][];
+            suggested_fix: string;
+            /** @enum {string} */
+            confidence: "low" | "medium" | "high";
+            /** @description Whether a change to the project's code would fix the issue. */
+            fixable: boolean;
+            /** @description Repository paths a fix would change. */
+            files: string[];
+        };
+        /** @description Model tokens the run used across every attempt. */
+        AutofixRunUsage: {
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            cache_read_input_tokens: number;
+            /** Format: int64 */
+            cache_creation_input_tokens: number;
+        };
+        /** @description One exact text replacement. An empty `old_text` creates the file. */
+        AutofixEdit: {
+            path: string;
+            old_text: string;
+            new_text: string;
+        };
+        /** @description The fix the model proposed, applied to the deployed commit. Present whenever the run opened a pull request, and when a valid fix could not be published. */
+        AutofixPatch: {
+            title: string;
+            edits: components["schemas"]["AutofixEdit"][];
+        };
+        /** @enum {string} */
+        AutofixPullRequestState: "open" | "merged" | "closed";
+        /** @description The draft pull request the run opened on the connected repository. */
+        AutofixPullRequest: {
+            /** Format: int64 */
+            number: number;
+            /** Format: uri */
+            url: string;
+            /** @description The branch the fix is on, `volcano/autofix/<run id>`. */
+            branch: string;
+            state: components["schemas"]["AutofixPullRequestState"];
+            /**
+             * Format: date-time
+             * @description When the pull request was merged or closed.
+             */
+            closed_at?: string;
+            /**
+             * Format: date-time
+             * @description When a deployment that includes the merged fix went live. The issue resolves then, unless it occurred again since. When more than 20 deployments went live after the merge before Volcano checked, it is the merge time instead.
+             */
+            deployed_at?: string;
+        };
+        /**
+         * @description Why a run whose `max_stage` is `pull_request` opened no pull request. The diagnosis stands either way.
+         * @enum {string}
+         */
+        AutofixPullRequestSkipped: "source_unavailable" | "pull_request_open" | "not_fixable" | "low_confidence" | "no_patch" | "permission_missing" | "repository_changed" | "publish_failed";
+        AutofixRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            issue_id: string;
+            trigger: components["schemas"]["AutofixRunTrigger"];
+            status: components["schemas"]["AutofixRunStatus"];
+            max_stage: components["schemas"]["AutofixStage"];
+            stage_reached?: components["schemas"]["AutofixStage"];
+            provider: components["schemas"]["AutofixProvider"];
+            model: components["schemas"]["AutofixModel"];
+            diagnosis?: components["schemas"]["AutofixDiagnosis"];
+            patch?: components["schemas"]["AutofixPatch"];
+            pull_request?: components["schemas"]["AutofixPullRequest"];
+            pull_request_skipped?: components["schemas"]["AutofixPullRequestSkipped"];
+            /** @description The commit the diagnosis read, when a push to the connected repository deployed the resource. Absent when the run read logs only. */
+            commit_sha?: string;
+            /** @description Why the run failed or was canceled, or why its last attempt will be retried. One of `api_key_rejected`, `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `autofix_disabled`, `plan_required`, `managed_models_unavailable`, `settings_changed`, `issue_not_found`, or `internal_error`. */
+            failure_code?: string;
+            failure_message?: string;
+            usage: components["schemas"]["AutofixRunUsage"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            completed_at?: string;
+        };
+        PaginatedAutofixRuns: {
+            data: components["schemas"]["AutofixRun"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page (present if has_more is true) */
+            next_cursor?: string;
         };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
@@ -9893,7 +10407,7 @@ export interface components {
         };
         ProjectHealthResource: {
             /** @enum {string} */
-            type: "project" | "function" | "frontend" | "database";
+            type: "project" | "function" | "frontend" | "database" | "database_branch";
             /** Format: uuid */
             id: string;
             name: string;
@@ -9933,8 +10447,11 @@ export interface components {
             /** @description Top findings ordered by severity, then stable check ID. */
             findings: components["schemas"]["ProjectHealthCheck"][];
         };
-        /** @enum {string} */
-        ProjectHealthStatus: "healthy" | "degraded" | "critical" | "unknown";
+        /**
+         * @description empty means no functions, frontends, databases, storage, Volcano Auth users, or Sandbox resources are listed. needs_attention means an operation needs review without confirmed service impairment, or a serving frontend whose edge recovery gave up needs a redeploy. degraded means a resource is only partly available or is unavailable for an expected, temporary reason, such as a frontend whose edge synchronization did not complete or a database being restored; critical means use is blocked. A failed workflow or deployment record alone does not establish an outage. Findings remain available for empty projects.
+         * @enum {string}
+         */
+        ProjectHealthStatus: "empty" | "healthy" | "needs_attention" | "degraded" | "critical" | "unknown";
         /** @enum {string} */
         ProjectHealthDataStatus: "complete" | "partial" | "no_data" | "stale";
         /** @enum {string} */
@@ -10918,6 +11435,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description Who sent the message. */
+        DurableMessageSender: {
+            /**
+             * @description The credential the message was sent with. `project` is the
+             *     project's owner or one of its access tokens, and `execution` is the
+             *     execution itself publishing.
+             * @enum {string}
+             */
+            type: "service_key" | "user" | "anon" | "project" | "execution";
+            /** @description The auth user who sent it. Null unless `type` is `user`. */
+            user_id: string | null;
+        };
+        /**
+         * @description An `in` message is `queued` until a wait for its name takes it,
+         *     `delivering` while it is handed over, and `delivered` once the
+         *     execution has it. It is `dropped` if the execution ended before any
+         *     wait took it. Every `out` message is `published`.
+         * @enum {string}
+         */
+        DurableMessageStatus: "queued" | "delivering" | "delivered" | "dropped" | "published";
         /** @description Deployment log selector for deployable resources. */
         LogDeploymentRequestSelector: {
             /** @description Optional deployment identifiers. Omit or send an empty array to include every deployment for the selected resources. */
@@ -10992,6 +11529,14 @@ export interface components {
              */
             stage?: "compile" | "publish";
         };
+        /**
+         * @description `waiting` until a message for its name arrives, `matched` while that
+         *     message is handed over, then `delivered`. `expired` means the wait's
+         *     timeout passed first, and `cancelled` that the execution stopped
+         *     waiting.
+         * @enum {string}
+         */
+        DurableMessageWaitStatus: "waiting" | "matched" | "delivered" | "expired" | "cancelled";
         /**
          * @description The durable function that requested the approval. `id` is null once the
          *     function has been deleted; `name` is kept.
@@ -11230,6 +11775,24 @@ export interface components {
     };
     parameters: {
         /**
+         * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+         *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+         *     key must belong to the anon key's project and hold this operation's scope:
+         *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+         *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+         *     logout, and `auth.password_reset` for forgot-password and reset-password.
+         *     The password policy accepts any service key for the project. Never expose
+         *     a service key to browser code.
+         */
+        AuthProxyAuthorization: string;
+        /**
+         * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+         *     auth proxy. The proxy must derive this value from its platform-verified
+         *     request metadata, never from a browser-supplied header. Requires a valid
+         *     `X-Volcano-Proxy-Authorization` header.
+         */
+        AuthProxyClientIP: string;
+        /**
          * @description Backup name, unique within the database, exactly as returned by the list
          *     endpoint.
          *
@@ -11282,12 +11845,34 @@ export interface components {
          *     keep the same filters while paging.
          */
         IssueCursor: string;
+        /** @description Autofix run ID */
+        AutofixRunId: string;
         /**
          * @description Only approvals requested by this durable function, given by id or by
          *     name. A name also matches approvals from a deleted function of that
          *     name.
          */
         DurableApprovalFunctionFilter: string;
+        /**
+         * @description Makes a send safe to retry. A repeat with a key the same sender has
+         *     used on the execution returns the first message and sends nothing.
+         *     Keys of different senders never collide. Up to 255 printable ASCII
+         *     characters.
+         */
+        DurableMessageIdempotencyKey: string;
+        /**
+         * @description The `client_token` the execution's start returned. Lets an anon key,
+         *     or a user who did not start the execution, reach it.
+         */
+        DurableClientToken: string;
+        /** @description Return only messages travelling this way. */
+        DurableMessageDirectionFilter: components["schemas"]["DurableMessageDirection"];
+        /** @description Return only messages with this name. */
+        DurableMessageNameFilter: components["schemas"]["DurableMessageName"];
+        /** @description Return only messages whose `seq` is greater than this. */
+        DurableMessageAfter: number;
+        /** @description Most messages to return. */
+        DurableMessageLimit: number;
         /** @description Number of items per page (max 100) */
         Limit: number;
         /** @description Project-local lock name. */
@@ -16120,7 +16705,9 @@ export interface operations {
             /**
              * @description Function is not deployed yet, or has no deployed region. Also
              *     returned when two starts under the same execution name raced and
-             *     both released it, which is retryable as it stands.
+             *     both released it, which is retryable as it stands, and with `code`
+             *     `execution_name_held` when an unfinished start this caller may not
+             *     resume holds the execution name, which needs a name of its own.
              */
             409: {
                 headers: {
@@ -16162,6 +16749,258 @@ export interface operations {
              *     capability is paused or this deployment cannot serve it, so it is
              *     not one to retry in a loop; the second is transient.
              */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableMessagesFromApplication: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: {
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function's or the project's function rate limit, which lists
+             *     share with invocations and starts, or the project is over its
+             *     bandwidth cap.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessageFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 printable ASCII
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /**
+             * @description Message sent. `status` is `delivered` when a wait took it at once,
+             *     `delivering` when a wait took it and the handover is still being
+             *     confirmed, and `queued` when it is kept for the next wait.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution. A `private` function answers every credential
+             *     but a service key this way.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` says why:
+             *
+             *     - `execution_not_running`: the execution has finished.
+             *     - `too_many_queued_messages`: the execution already holds the
+             *       maximum number of messages nothing has taken.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Too many messages sent to this execution, the function's or the
+             *     project's function rate limit, which sends share with invocations
+             *     and starts, or the project is over its bandwidth cap.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan terms for the request could not be read. Retry with backoff. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -17759,6 +18598,482 @@ export interface operations {
             };
         };
     };
+    listDurableMessages: {
+        parameters: {
+            query?: {
+                /** @description Return only messages travelling this way. */
+                direction?: components["parameters"]["DurableMessageDirectionFilter"];
+                /** @description Return only messages with this name. */
+                name?: components["parameters"]["DurableMessageNameFilter"];
+                /** @description Return only messages whose `seq` is greater than this. */
+                after?: components["parameters"]["DurableMessageAfter"];
+                /** @description Most messages to return. */
+                limit?: components["parameters"]["DurableMessageLimit"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageList"];
+                };
+            };
+            /** @description A filter is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDurableMessage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 printable ASCII
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already sent; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /**
+             * @description Message sent. `status` is `delivered`, `delivering`, or `queued`,
+             *     as on the application route.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be sent. `code` is `execution_not_running` or
+             *     `too_many_queued_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many messages sent to this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDurableMessageWaits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitList"];
+                };
+            };
+            /** @description Durable function or execution not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    registerDurableMessageWait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterDurableMessageWaitRequest"];
+            };
+        };
+        responses: {
+            /** @description The wait was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description Wait registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageWaitRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait cannot be registered now. `code` says why:
+             *
+             *     - `callback_not_ready`: the workflow has not finished opening the
+             *       wait yet. Retry with a short backoff; the SDK does.
+             *     - `callback_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as an
+             *       approval or a messages session.
+             *     - `execution_ended`: the execution has finished.
+             *     - `too_many_message_waits`: the execution already has the maximum
+             *       number of open waits.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The wait could not be confirmed with the workflow right now. Retry
+             *     with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    openDurableMessageSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenDurableMessageSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The session was already registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description Session opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessageSessionRegistration"];
+                };
+            };
+            /** @description The request body is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No running durable execution matches `execution_ref` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session cannot be opened now. `code` is `callback_not_ready`,
+             *     `callback_closed`, `callback_taken` (the callback is already
+             *     registered as an approval or a message wait), `execution_ended`,
+             *     or `too_many_message_sessions`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 8 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests from this execution */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The session could not be confirmed with the workflow right now.
+             *     Retry with backoff.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishDurableMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The session token the workflow received when its session opened. */
+                "X-Volcano-Durable-Session": string;
+                /**
+                 * @description Makes a send safe to retry. A repeat with a key the same sender has
+                 *     used on the execution returns the first message and sends nothing.
+                 *     Keys of different senders never collide. Up to 255 printable ASCII
+                 *     characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishDurableMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description A message with this `Idempotency-Key` was already published; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description Message published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableMessage"];
+                };
+            };
+            /** @description The session token header is missing, or the name, data or idempotency key is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The session token is not valid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The message cannot be published. `code` is
+             *     `execution_not_running` or `too_many_published_messages`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 72 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     requestDurableApproval: {
         parameters: {
             query?: never;
@@ -17814,6 +19129,8 @@ export interface operations {
              *     - `approval_not_ready`: the workflow has not finished opening the
              *       approval yet. Retry with a short backoff; the SDK does.
              *     - `approval_closed`: the workflow is no longer waiting on it.
+             *     - `callback_taken`: the callback is already registered as a
+             *       message wait or a messages session.
              *     - `execution_ended`: the execution has finished.
              *     - `too_many_pending_approvals`: the execution already has the
              *       maximum number of pending approvals.
@@ -18145,6 +19462,199 @@ export interface operations {
                 };
             };
             /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startAutofixRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Issue ID */
+                issueId: components["parameters"]["IssueId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRun"];
+                };
+            };
+            /** @description Code `feature_unavailable` means the project's provider is `volcano` and Volcano-managed models are not available in this environment. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owner's plan does not include autofix, or the request used a project access token. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or issue not found. Code `feature_unavailable` means autofix is not available in this environment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is off for the project, or the issue already has a queued or running run. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project started its limit of runs in the last 24 hours. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owner's plan could not be resolved. Retry later. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAutofixRuns: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward;
+                 *     keep the same filters while paging.
+                 */
+                cursor?: components["parameters"]["IssueCursor"];
+                /** @description Return only runs for this issue. */
+                issue_id?: string;
+                /** @description Return only runs in this status. */
+                status?: components["schemas"]["AutofixRunStatus"];
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAutofixRuns"];
+                };
+            };
+            /** @description A filter or the cursor is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Autofix is not available in local mode. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAutofixRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Autofix run ID */
+                runId: components["parameters"]["AutofixRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRun"];
+                };
+            };
+            /** @description Project or run not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -22545,7 +24055,26 @@ export interface operations {
     authGetPasswordPolicy: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22560,7 +24089,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthPasswordPolicy"];
                 };
             };
-            /** @description Invalid, missing, or revoked anon key */
+            /** @description Invalid, missing, or revoked anon key; or invalid auth proxy metadata */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -22583,7 +24112,26 @@ export interface operations {
     authSignup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22623,7 +24171,11 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Unauthorized - Invalid, tampered, revoked, or wrong-project anon key */
+            /**
+             * @description Unauthorized - Invalid, tampered, revoked, or wrong-project anon key.
+             *     Also returned for invalid, repeated, or under-scoped auth proxy metadata
+             *     (`invalid auth proxy metadata`).
+             */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -22663,7 +24215,26 @@ export interface operations {
     authSignin: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22696,7 +24267,7 @@ export interface operations {
             };
             /**
              * @description Unauthorized - Invalid credentials, invalid/tampered/revoked anon key,
-             *     or account banned/deleted
+             *     or account banned/deleted; or invalid auth proxy metadata
              */
             401: {
                 headers: {
@@ -22729,7 +24300,26 @@ export interface operations {
     authRefresh: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22752,7 +24342,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthTokenResponse"];
                 };
             };
-            /** @description Invalid or expired refresh token */
+            /** @description Invalid or expired refresh token; or invalid auth proxy metadata */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -22788,7 +24378,26 @@ export interface operations {
     authLogout: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22809,12 +24418,40 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Missing, invalid, or revoked anon key; or invalid, repeated, or under-scoped auth proxy metadata */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     authForgotPassword: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22837,6 +24474,15 @@ export interface operations {
                         /** @example If the email exists, a password reset link has been sent */
                         message?: string;
                     };
+                };
+            };
+            /** @description Missing, invalid, or revoked anon key; or invalid, repeated, or under-scoped auth proxy metadata */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Password reset is disabled for this project */
@@ -22862,7 +24508,26 @@ export interface operations {
     authResetPassword: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -22898,7 +24563,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid or expired token */
+            /** @description Invalid or expired token; or invalid auth proxy metadata */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -23001,7 +24666,26 @@ export interface operations {
     authSignupAnonymous: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -23030,6 +24714,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthTokenResponse"];
+                };
+            };
+            /** @description Missing, invalid, or revoked anon key; or invalid, repeated, or under-scoped auth proxy metadata */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Anonymous signins disabled */
@@ -25653,7 +27346,26 @@ export interface operations {
     authOAuthExchange: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Trusted server-side auth proxy credential in `Bearer SERVICE_KEY`
+                 *     form. When supplied, `X-Volcano-Client-IP` is also required. The service
+                 *     key must belong to the anon key's project and hold this operation's scope:
+                 *     `auth.signup` for signup and anonymous signup, `auth.signin` for signin
+                 *     and OAuth code exchange, `auth.refresh` for refresh, `auth.logout` for
+                 *     logout, and `auth.password_reset` for forgot-password and reset-password.
+                 *     The password policy accepts any service key for the project. Never expose
+                 *     a service key to browser code.
+                 */
+                "X-Volcano-Proxy-Authorization"?: components["parameters"]["AuthProxyAuthorization"];
+                /**
+                 * @description Original browser IPv4 or IPv6 address supplied by a trusted server-side
+                 *     auth proxy. The proxy must derive this value from its platform-verified
+                 *     request metadata, never from a browser-supplied header. Requires a valid
+                 *     `X-Volcano-Proxy-Authorization` header.
+                 */
+                "X-Volcano-Client-IP"?: components["parameters"]["AuthProxyClientIP"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -25683,7 +27395,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing or invalid project anon key */
+            /** @description Missing or invalid project anon key; or invalid auth proxy metadata */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -26999,7 +28711,9 @@ export interface operations {
                      *     for backward compatibility. Provide an explicit list (e.g.
                      *     ["functions.invoke", "locks.manage"]) to restrict the key; "*"
                      *     grants everything. Scope enforcement applies to function invocation,
-                     *     storage object operations, and project locks.
+                     *     storage object operations, project locks, and server-side auth proxy
+                     *     metadata (auth.signin, auth.signup, auth.refresh, auth.logout,
+                     *     auth.password_reset).
                      * @example [
                      *       "functions.invoke",
                      *       "locks.manage"
@@ -27355,6 +29069,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Project, bucket, or policy not found. Also returned when the policy ID is malformed or belongs to another bucket. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };

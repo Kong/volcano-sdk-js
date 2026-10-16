@@ -45,4 +45,10 @@ export interface DurableExecution {
   created_at: string;
   /** Present once the execution has reached a terminal status. */
   completed_at?: string;
+  /**
+     * Lets a browser read and send the execution's messages. Returned only
+     * by the start whose input the execution runs, never by a repeat under
+     * the same name or by a read. Send it as `X-Volcano-Client-Token`.
+     */
+  client_token?: string;
 }
