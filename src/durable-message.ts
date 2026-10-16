@@ -15,11 +15,7 @@ import { postToPlatform } from './durable-platform-request.ts';
 import type { MessageSender, PublishedMessage, ReceivedMessage } from './durable-types.ts';
 
 export interface PublishContext extends CallbackContext {
-  step<Result>(
-    name: string | undefined,
-    run: () => Promise<Result>,
-    config: Record<string, unknown>,
-  ): Promise<Result>;
+  runInChildContext<Result>(name: string | undefined, run: () => Promise<Result>): Promise<Result>;
 }
 
 export type Publish = (name: unknown, data?: unknown) => Promise<PublishedMessage>;
@@ -92,14 +88,20 @@ export function messagePublisher(
     // Kept when it fails. Whether a later publish found the open still pending
     // depends on timing a replay does not reproduce, so reopening could give
     // the replay a session callback the run never made.
-    session ??= openSession(context, apiUrl, execution);
-    const token = await session;
-    const key = publishKey(token, position);
-    return context.step(
-      message.name,
-      async () => publishedMessage(await publish(apiUrl, token, key, message)),
-      { retryStrategy: () => ({ shouldRetry: false }) },
-    );
+    if (session === undefined) {
+      session = openSession(context, apiUrl, execution);
+      session.catch(() => {
+        // A publish replayed from its checkpoint never reads the session.
+      });
+    }
+    const opened = session;
+    // Started now, so it takes its place among the context's operations when
+    // called. A step started once the session opened could take another's on
+    // replay, where the session is answered sooner.
+    return context.runInChildContext(message.name, async () => {
+      const token = await opened;
+      return publishedMessage(await publish(apiUrl, token, publishKey(token, position), message));
+    });
   };
 }
 
@@ -119,7 +121,7 @@ function openSession(context: CallbackContext, apiUrl: string, execution: string
 }
 
 // Unique within the execution, because every context has its own session,
-// and the same when a step runs again. Hashed, so Volcano never stores the
+// and the same when a publish runs again. Hashed, so Volcano never stores the
 // token itself.
 function publishKey(token: string, position: number): string {
   return `${createHash('sha256').update(token).digest('hex')}:${String(position)}`;

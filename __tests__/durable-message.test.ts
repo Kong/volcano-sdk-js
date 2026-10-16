@@ -14,11 +14,6 @@ interface CallbackCall {
   config: Record<string, unknown>;
 }
 
-interface StepCall {
-  name: unknown;
-  config: unknown;
-}
-
 type Submitter = (callbackId: string) => Promise<void>;
 type Run = (context: FakeContext) => Promise<unknown>;
 
@@ -56,7 +51,7 @@ const SESSION_TOKEN = 'vdms_session';
 const SESSION_HASH = 'a2c7a36f61b2054a8a5dad91d7c330cf16b57dd4b6cd79de1c4d285ed825353f';
 
 const callbackCalls: CallbackCall[] = [];
-const stepCalls: StepCall[] = [];
+const childCalls: unknown[] = [];
 let callbackOutcome: (name: unknown) => Promise<unknown>;
 let sessionTokens: string[];
 let mockContextTransform: ((context: FakeContext) => FakeContext) | undefined;
@@ -104,12 +99,12 @@ function mockContext(executionContext?: FakeContext['executionContext']): FakeCo
   return {
     logger,
     configureLogger: jest.fn(),
-    step(name, fn, config) {
-      stepCalls.push({ name, config });
-      return fn({ logger, attempt: 1 });
-    },
+    step: (_name, fn) => fn({ logger, attempt: 1 }),
     wait: () => Promise.resolve(),
-    runInChildContext: (_name, fn) => fn(mockContext()),
+    runInChildContext(name, fn) {
+      childCalls.push(name);
+      return fn(mockContext());
+    },
     waitForCondition: () => Promise.resolve(),
     map: async (_name, items, fn) =>
       batch(await Promise.all(items.map((item, index) => fn(mockContext(), item, index)))),
@@ -263,7 +258,7 @@ const callWith =
 
 beforeEach(() => {
   callbackCalls.length = 0;
-  stepCalls.length = 0;
+  childCalls.length = 0;
   sessionTokens = [SESSION_TOKEN];
   callbackOutcome = (name) => {
     if (name !== SESSION) {
@@ -558,7 +553,7 @@ describe('ctx.waitForMessage()', () => {
 });
 
 describe('ctx.publish()', () => {
-  it('opens a session, then publishes in a step that carries its token and key', async () => {
+  it('opens a session, then publishes in a child context that carries its token and key', async () => {
     let result: unknown;
     await run(async (_input, ctx) => {
       result = await ctx.publish('progress', { percent: 50 });
@@ -575,8 +570,7 @@ describe('ctx.publish()', () => {
     });
     expect(bodyAt(0)).toStrictEqual({ execution_ref: EXECUTION_ARN, callback_id: 'cb-1' });
 
-    expect(stepCalls).toEqual([expect.objectContaining({ name: 'progress' })]);
-    noRetry(stepCalls[0]?.config);
+    expect(childCalls).toEqual(['progress']);
     expect(requestAt(1)).toEqual({
       url: 'https://api.test.com/durable-messages/publish',
       init: expect.objectContaining({
@@ -612,7 +606,7 @@ describe('ctx.publish()', () => {
         body: { name: 'done', data: null },
       }),
     ]);
-    expect(stepCalls.map((call) => call.name)).toEqual(['progress', 'progress', 'done']);
+    expect(childCalls).toEqual(['progress', 'progress', 'done']);
   });
 
   it('opens one session for concurrent first publishes', async () => {
@@ -799,7 +793,7 @@ describe('ctx.publish()', () => {
     expect(failure).toMatchObject({
       message: 'Volcano opened the messages session with a token this SDK cannot read',
     });
-    expect(stepCalls).toHaveLength(0);
+    expect(publishRequests()).toHaveLength(0);
   });
 
   it('keeps the parse error behind a session token that is not JSON', async () => {

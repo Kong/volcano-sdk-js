@@ -446,8 +446,9 @@ console.log(published.id, published.seq);
 follows the same rules as a wait's. It resolves with the message's `id` and
 `seq`, the position it is listed at.
 
-Publishing runs in a step, so a replay never publishes twice, and a step that
-runs again after a crash returns the message it already published. The first
+Each `publish` is checkpointed as a `child` named after the message, so a replay
+never publishes twice, and a `publish` that runs again after a crash returns the
+message it already published. The first
 `publish` in an execution — and in each `ctx.child`, `ctx.parallel` branch, or
 `ctx.map` item that publishes — first opens a messages session, a credential
 only this execution can publish with. It shows up in the history as a `child`

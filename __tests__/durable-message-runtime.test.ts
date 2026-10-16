@@ -186,7 +186,7 @@ describe('durable messages on the durable runtime', () => {
     expect(requests('/durable-messages/waits')).toHaveLength(1);
   });
 
-  it('fails the publishing step on a refusal, without retrying it', async () => {
+  it('fails the publish on a refusal, without retrying it', async () => {
     fetchMock().mockImplementation((url) =>
       Promise.resolve(
         url === `${API_URL}/durable-messages/publish`
@@ -212,6 +212,58 @@ describe('durable messages on the durable runtime', () => {
     expect(result.getResult()).toBe(
       'Volcano refused the message (409 execution_not_running): execution is not running',
     );
+    expect(requests('/durable-messages/publish')).toHaveLength(1);
+  });
+
+  it('replays a publish that failed to open the session without reading it again', async () => {
+    fetchMock().mockImplementation((url) =>
+      Promise.resolve(
+        url === `${API_URL}/durable-messages/sessions`
+          ? Response.json(
+              { error: 'execution is not running', code: 'execution_not_running' },
+              { status: 409 },
+            )
+          : answer(url),
+      ),
+    );
+    const runner = runnerFor(async (_input, ctx) => {
+      const failure = await ctx.publish('started').then(
+        () => 'published',
+        (error: unknown) => (error instanceof Error ? error.message : error),
+      );
+      await ctx.wait('1s');
+      return failure;
+    });
+
+    const result = await runner.run({ payload: {} });
+
+    expect(result.getResult()).toEqual(expect.stringContaining('execution_not_running'));
+    expect(invocations).toBeGreaterThan(1);
+    expect(requests('/durable-messages/sessions')).toHaveLength(1);
+    expect(requests('/durable-messages/publish')).toHaveLength(0);
+  });
+
+  // Live, `second` starts while the session waits for Volcano. On replay the
+  // session is already answered, so it resolves before `second` starts.
+  it('keeps a publish in its place among steps that start while its session opens', async () => {
+    const runner = runnerFor(async (_input, ctx) => {
+      const published = ctx.publish('started');
+      const steps = ctx
+        .step('first', () => Promise.resolve(1))
+        .then(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await Promise.resolve();
+          }
+          return ctx.step('second', () => Promise.resolve(2));
+        });
+      return { published: await published, second: await steps };
+    });
+
+    const execution = runner.run({ payload: {} });
+    await complete(runner, SESSION, { token: 'vdms_session' });
+    const result = await execution;
+
+    expect(result.getResult()).toEqual({ published: { id: 'msg-1', seq: 1 }, second: 2 });
     expect(requests('/durable-messages/publish')).toHaveLength(1);
   });
 });
