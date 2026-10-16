@@ -890,8 +890,11 @@ execution again to resume. A
 handler that throws while `subscribe` is still catching up ends the
 subscription, which delivers nothing more and resolves with that error; once it
 has resolved, the subscription carries on past a handler that throws, including
-during a later read-back, and logs the error with `console.error`. Catch errors
-in the handler to handle them yourself.
+during a later read-back, and logs the error with `console.error`. A handler
+may return a promise, but delivery does not wait for it: the next message can
+arrive before it settles, and a rejection is logged with `console.error`, even
+while `subscribe` is catching up. Catch errors in the handler to handle them
+yourself.
 
 All three answer `{ data, status, error }`. `status` is `409` with
 `error.code` `execution_not_running` for a send to an execution that has ended,

@@ -412,7 +412,7 @@ export interface DurableMessages {
   }>;
   subscribe(
     target: DurableMessageTarget,
-    handler: (message: DurableMessage) => void,
+    handler: (message: DurableMessage) => unknown,
     options: DurableMessageSubscribeOptions,
   ): Promise<{
     data: DurableMessageSubscription | null;

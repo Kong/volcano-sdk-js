@@ -632,6 +632,8 @@ export interface DurableMessages {
    * retrying a read that fails, so no published message is missed. One
    * subscription per execution per realtime client;
    * `disconnect()` and `removeAllChannels()` on it end the subscription.
+   * Delivery does not wait for a handler's promise; a rejection is logged
+   * with `console.error`.
    *
    * @example
    * ```typescript
@@ -645,7 +647,7 @@ export interface DurableMessages {
    */
   subscribe(
     target: DurableMessageTarget,
-    handler: (message: DurableMessage) => void,
+    handler: (message: DurableMessage) => unknown,
     options: DurableMessageSubscribeOptions,
   ): Promise<{
     data: DurableMessageSubscription | null;

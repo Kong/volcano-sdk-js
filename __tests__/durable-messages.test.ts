@@ -1297,6 +1297,65 @@ describe('durable.messages.subscribe', () => {
     realtime.disconnect();
   });
 
+  test('reports an async handler that rejects on a live message and delivers the next one', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    const thrown = new Error('handler failed');
+    await volcano.durable.messages.subscribe(
+      target,
+      async (delivered) => {
+        received.push(delivered.seq);
+        await settled();
+        if (delivered.seq === 1) {
+          throw thrown;
+        }
+      },
+      { realtime },
+    );
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    latestTransport().publication(message(1));
+    latestTransport().publication(message(2));
+    expect(received).toEqual([1, 2]);
+    await until(() => reported.mock.calls.length > 0);
+
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
+    realtime.disconnect();
+  });
+
+  test('reports an async handler that rejects while subscribe catches up, without ending it', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1), message(2)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    const thrown = new Error('handler failed');
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+
+    const result = await volcano.durable.messages.subscribe(
+      target,
+      async (delivered) => {
+        received.push(delivered.seq);
+        await settled();
+        if (delivered.seq === 1) {
+          throw thrown;
+        }
+      },
+      { realtime },
+    );
+    await until(() => reported.mock.calls.length > 0);
+
+    expect(result.error).toBeNull();
+    expect(received).toEqual([1, 2]);
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(reported).toHaveBeenCalledWith('[Realtime] Error in durable message handler:', thrown);
+    realtime.disconnect();
+  });
+
   test('stops at an empty page even if it claims more', async () => {
     const realtime = await connectedRealtime();
     // Answers once, so a read that goes on fails instead of spinning.

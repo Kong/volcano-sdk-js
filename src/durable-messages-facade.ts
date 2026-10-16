@@ -93,7 +93,7 @@ interface Target {
 }
 
 interface Subscriber {
-  deliver(message: DurableMessage): void;
+  deliver(message: DurableMessage): unknown;
   realtime: DurableRealtime;
 }
 
@@ -170,9 +170,7 @@ export class DurableMessagesFacade {
   ): Promise<DurableResult<DurableMessageSubscription>> {
     const { realtime } = subscriber;
     const stream = new DurableMessageStream(
-      (message) => {
-        subscriber.deliver(message);
-      },
+      (message) => subscriber.deliver(message),
       (after) => this.listTarget(target, { direction: 'out', after }),
     );
     const subscription = {
@@ -406,7 +404,8 @@ function subscriberOf(handler: unknown, realtime: unknown): Subscriber | Error {
   }
   return {
     deliver(message) {
-      Reflect.apply(handler, undefined, [message]);
+      const result: unknown = Reflect.apply(handler, undefined, [message]);
+      return result;
     },
     realtime,
   };

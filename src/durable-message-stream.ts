@@ -41,7 +41,7 @@ export class DurableMessageStream {
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
-    private readonly handler: (message: DurableMessage) => void,
+    private readonly handler: (message: DurableMessage) => unknown,
     private readonly listAfter: ListAfter,
   ) {}
 
@@ -228,11 +228,11 @@ export class DurableMessageStream {
     }
     this.lastSeq = message.seq;
     if (!report) {
-      this.handler(message);
+      reportRejection(this.handler(message));
       return;
     }
     try {
-      this.handler(message);
+      reportRejection(this.handler(message));
     } catch (error) {
       reportHandlerError(error);
     }
@@ -263,4 +263,12 @@ function reportFailedRead(page: DurableResult<DurableMessageList>): void {
 
 function reportHandlerError(error: unknown): void {
   console.error('[Realtime] Error in durable message handler:', error);
+}
+
+// Delivery does not wait for a handler's promise, so nothing else would hear
+// it reject.
+function reportRejection(result: unknown): void {
+  if (result instanceof Promise) {
+    result.catch(reportHandlerError);
+  }
 }
