@@ -706,6 +706,14 @@ function soon<T>(promise: Promise<T>): Promise<T> {
 const listed = (data: DurableMessageList) => Promise.resolve({ data, status: 200 });
 
 describe('durable.messages.subscribe', () => {
+  // A retry a mutant leaves running would otherwise fire during a later test
+  // in the same worker; fake timers end with the test that set them.
+  beforeEach(() => {
+    jest.useFakeTimers({
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'queueMicrotask'],
+    });
+  });
+
   afterEach(() => {
     // A test that fails before disconnecting would leave its retries running
     // into the next suite.
