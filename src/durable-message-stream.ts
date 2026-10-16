@@ -113,7 +113,20 @@ export class DurableMessageStream {
   // A closed stream keeps nothing it can no longer deliver.
   private published(data: unknown): Held | null {
     const live = liveMessage(data);
-    return live?.message.direction === 'out' && !this.closed ? live : null;
+    if (live === null) {
+      this.unreadable();
+      return null;
+    }
+    return live.message.direction === 'out' && !this.closed ? live : null;
+  }
+
+  // A publication that does not read as a message is still one the execution
+  // published, so the list is read for it. The catch-up that follows
+  // subscribing, or one still waiting its turn, lists it already.
+  private unreadable(): void {
+    if (!this.holding && this.catchUps < 2) {
+      this.catchUpInBackground();
+    }
   }
 
   private behind(): boolean {

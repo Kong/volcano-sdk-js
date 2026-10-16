@@ -767,7 +767,6 @@ describe('durable.messages.subscribe', () => {
     live.publication(message(5));
     live.publication(message(4));
     live.publication(message(6, { direction: 'in' }));
-    live.publication({ seq: 7 });
     live.publication(message(8), 'proj-1:durable:exec-2');
     live.publication(message(9));
     expect(received).toEqual([1, 2, 3, 5, 9]);
@@ -777,6 +776,80 @@ describe('durable.messages.subscribe', () => {
     live.publication(message(10));
     expect(received).toEqual([1, 2, 3, 5, 9]);
     expect(realtime._channels.has('durable:exec-1')).toBe(false);
+    realtime.disconnect();
+  });
+
+  test.each([
+    ['null', null],
+    ['a seq alone', { seq: 2 }],
+    ['an incomplete message', { direction: 'out', seq: 2, prev_seq: 1 }],
+  ])('reads back a publication that does not read as a message: %s', async (_name, data) => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => listed(page([message(2)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+
+    latestTransport().publication(data);
+    await until(() => received.length === 2);
+
+    expect(received).toEqual([1, 2]);
+    expect(list.mock.calls[1]?.[2]).toEqual({ direction: 'out', after: 1 });
+    realtime.disconnect();
+  });
+
+  test('leaves a publication that does not read as a message to the catch-up after resubscribing', async () => {
+    const realtime = await connectedRealtime();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => listed(page([message(1)])))
+      .mockImplementationOnce(() => listed(page([message(2)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+    await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
+
+    latestSubscription().move('subscribing');
+    latestTransport().publication({ seq: 2 });
+    latestSubscription().move('subscribed');
+    await until(() => received.length === 2);
+
+    expect(received).toEqual([1, 2]);
+    expect(list).toHaveBeenCalledTimes(2);
+    realtime.disconnect();
+  });
+
+  test('reads back publications that do not read as messages during a catch-up once', async () => {
+    const realtime = await connectedRealtime();
+    const first = deferred<{ data: unknown; status: number }>();
+    const list = jest
+      .fn<TransportOperation>()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => listed(page([message(2), message(3)])));
+    const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
+    const received: number[] = [];
+
+    const pending = volcano.durable.messages.subscribe(
+      target,
+      (delivered) => received.push(delivered.seq),
+      { realtime },
+    );
+    await until(() => list.mock.calls.length > 0);
+    latestTransport().publication({ seq: 2 });
+    latestTransport().publication({ seq: 3 });
+    first.resolve({ data: page([message(1)]), status: 200 });
+    await pending;
+    await until(() => received.length === 3);
+
+    expect(received).toEqual([1, 2, 3]);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list.mock.calls[1]?.[2]).toEqual({ direction: 'out', after: 1 });
     realtime.disconnect();
   });
 
@@ -1282,11 +1355,9 @@ describe('durable.messages.subscribe', () => {
     expect(list.mock.calls[1]?.[2]).toEqual({ direction: 'out', after: 1 });
 
     live.publication({ ...message(2), prev_seq: 1 });
-    live.publication(null);
     live.publication({ ...message(4), prev_seq: 3 });
     live.publication({ ...message(5), prev_seq: '9' });
     live.publication(message(6));
-    live.publication({ direction: 'out', seq: 7, prev_seq: 6 });
 
     expect(received.map((delivered) => delivered.seq)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(received[3]).toStrictEqual(message(4));
