@@ -937,27 +937,22 @@ describe('ctx.publish()', () => {
     });
   });
 
-  it('opens the session again for the next publish after it failed to open', async () => {
+  it('fails every later publish in the context once the session failed to open', async () => {
     fetchMock().mockResolvedValueOnce(
       Response.json({ error: 'malformed request' }, { status: 400 }),
     );
 
-    let second: unknown;
     await run(async (_input, ctx) => {
       await expect(ctx.publish('first')).rejects.toThrow(
         'Volcano refused the messages session (400): malformed request',
       );
-      second = await ctx.publish('second');
+      await expect(ctx.publish('second')).rejects.toThrow(
+        'Volcano refused the messages session (400): malformed request',
+      );
     });
 
-    expect(second).toEqual({ id: 'msg-2', seq: 4 });
-    expect(callbackCalls.map((call) => call.name)).toEqual([SESSION, SESSION]);
-    expect(publishRequests()).toEqual([
-      {
-        headers: expect.objectContaining({ 'Idempotency-Key': `${SESSION_HASH}:2` }),
-        body: { name: 'second', data: null },
-      },
-    ]);
+    expect(callbackCalls.map((call) => call.name)).toEqual([SESSION]);
+    expect(publishRequests()).toEqual([]);
   });
 
   it('names the message when Volcano cannot be reached', async () => {

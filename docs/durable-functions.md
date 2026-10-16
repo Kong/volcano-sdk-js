@@ -451,7 +451,8 @@ runs again after a crash returns the message it already published. The first
 `publish` in an execution — and in each `ctx.child`, `ctx.parallel` branch, or
 `ctx.map` item that publishes — first opens a messages session, a credential
 only this execution can publish with. It shows up in the history as a `child`
-named `volcano:messages-session`.
+named `volcano:messages-session`. If the session cannot be opened, that
+`publish` throws, and so does every later `publish` in the same context.
 
 `publish` throws on an invalid name, data that cannot be serialized as JSON, is
 over 64 KiB, or holds a NUL character in a string or key, and refusals such as an execution that has already published

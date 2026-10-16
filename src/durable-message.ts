@@ -72,7 +72,8 @@ export async function waitForMessage(
 /**
  * `ctx.publish` for one durable context. The context's first publish opens a
  * messages session, a callback Volcano completes with the token the
- * publishes carry; the runtime checkpoints it, so a replay reuses it.
+ * publishes carry; the runtime checkpoints it, so a replay reuses it. A
+ * session that fails to open fails every later publish in the context.
  */
 export function messagePublisher(
   context: PublishContext,
@@ -88,12 +89,10 @@ export function messagePublisher(
     // gives every publish the position it had before.
     published += 1;
     const position = published;
-    // Forget a session that failed to open, so the next publish opens another.
-    // A replay takes the same path, because the failed callback is checkpointed.
-    session ??= openSession(context, apiUrl, execution).catch((error: unknown) => {
-      session = undefined;
-      throw error;
-    });
+    // Kept when it fails. Whether a later publish found the open still pending
+    // depends on timing a replay does not reproduce, so reopening could give
+    // the replay a session callback the run never made.
+    session ??= openSession(context, apiUrl, execution);
     const token = await session;
     const key = publishKey(token, position);
     return context.step(
