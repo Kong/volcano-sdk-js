@@ -28,7 +28,7 @@ A nonzero command exit is returned as `data.exitCode`; it is not a platform erro
 
 ## Reuse a session
 
-Creation returns the current state, which may be `starting`. Poll `refresh()` until it becomes `running`; fail on `unknown` or `terminated` and keep polling bounded. Commands require a running session.
+Creation returns the current state, which may be `starting`. Poll `refresh()` until it becomes `running`; fail on `unknown` or `terminated` and keep polling bounded. Commands require a running session. `session.expiresAt` is the time the session ends, or `null` when it has no lifetime limit (a local-mode session), so check for `null` before using it as a time.
 
 ```javascript
 const created = await client.sandboxes.create(projectId, {

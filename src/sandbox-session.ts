@@ -28,6 +28,7 @@ import {
   commandResult,
   decodeBytes,
   encodeBytes,
+  nullableText,
   record,
   sessionState,
   text,
@@ -38,7 +39,7 @@ export class SandboxSessionHandle implements SandboxSession {
   readonly projectId: string;
   readonly region: string;
   state: SandboxState;
-  expiresAt: string;
+  expiresAt: string | null;
   readonly files;
   constructor(
     private readonly client: SandboxClient,
@@ -49,7 +50,7 @@ export class SandboxSessionHandle implements SandboxSession {
     this.projectId = text(data['project_id']);
     this.region = text(data['region']);
     this.state = sessionState(data['state']);
-    this.expiresAt = text(data['expires_at']);
+    this.expiresAt = nullableText(data['expires_at']);
     this.files = { read: this.read.bind(this), write: this.write.bind(this) };
   }
   private update(value: unknown): this {
@@ -58,7 +59,7 @@ export class SandboxSessionHandle implements SandboxSession {
       throw new TypeError('Sandbox session identity changed');
     }
     this.state = sessionState(data['state']);
-    this.expiresAt = text(data['expires_at']);
+    this.expiresAt = nullableText(data['expires_at']);
     return this;
   }
   refresh(options: SandboxRequestOptions = {}): ReturnType<SandboxSession['refresh']> {
