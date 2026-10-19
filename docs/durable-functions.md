@@ -268,9 +268,11 @@ This is how a durable function waits on state it has to go and read: a
 third-party job, a file that has to land, a row another system writes. When
 whatever finishes the work can tell the execution — a webhook, an endpoint of
 yours, another function — use
-[`ctx.waitForMessage`](#ctxwaitformessagename-options) instead, and to wait on a
-person's sign-off, [`ctx.waitForApproval`](#ctxwaitforapprovalname-options).
-Neither costs checks while it waits.
+[`ctx.waitForMessage`](#ctxwaitformessagename-options) instead; when it can
+only call back with a token you hand it,
+[`ctx.waitForCallback`](#ctxwaitforcallbackname-submitter-options); and to wait
+on a person's sign-off, [`ctx.waitForApproval`](#ctxwaitforapprovalname-options).
+None of them costs checks while it waits.
 
 ## `ctx.waitForApproval(name, options)`
 
@@ -430,6 +432,86 @@ with the status and code in its message:
 ```javascript
 // "Volcano refused the message wait (409 too_many_message_waits): ..."
 ```
+
+## `ctx.waitForCallback(name, submitter, options?)`
+
+Hands a token to another system and suspends until that system answers with
+it. Use it when the work happens somewhere you do not run code — a payment
+provider, a job queue, a partner's API — and that system can call back once it
+is done.
+
+```javascript
+const { CallbackFailedError, durable } = require('@volcano.dev/sdk/durable');
+
+exports.handler = durable(async (input, ctx) => {
+  let payment;
+  try {
+    payment = await ctx.waitForCallback(
+      'payment',
+      (token) => payments.start({ orderId: input.order_id, callbackToken: token }),
+      { timeout: '1h', heartbeatTimeout: '10m' },
+    );
+  } catch (error) {
+    if (error instanceof CallbackFailedError) {
+      return { status: 'declined', reason: error.type, message: error.message };
+    }
+    throw error;
+  }
+
+  if (payment === null) {
+    return { status: 'abandoned' }; // the timeout passed first
+  }
+  return ctx.step('fulfil', () => fulfil(input.order_id, payment.charge_id));
+});
+```
+
+The submitter receives a `vcb_` token and passes it to whatever does the work.
+That system answers with the token alone; it needs no Volcano credential:
+
+```bash
+curl -X POST "https://api.volcano.dev/durable-callbacks/succeed" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"vcb_...","result":{"charge_id":"ch_1"}}'
+
+curl -X POST "https://api.volcano.dev/durable-callbacks/fail" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"vcb_...","error":{"type":"CardDeclined","message":"Insufficient funds"}}'
+
+curl -X POST "https://api.volcano.dev/durable-callbacks/heartbeat" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"vcb_..."}'
+```
+
+| Option             | Type     | Description                                                                                         |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------- |
+| `timeout`          | duration | How long to wait for an answer. Unset, the wait lasts as long as the execution.                     |
+| `heartbeatTimeout` | duration | How long the wait may go without a heartbeat. Each heartbeat restarts it. Unset, none are required. |
+
+The name is what the wait is recorded under in the execution history. It is up
+to 237 printable ASCII characters.
+
+It resolves with the `result` the token was succeeded with, or with `null` once
+`timeout` or `heartbeatTimeout` passes, as `waitForMessage` does. A result is
+never `null`, so the two cannot be confused. A failure throws
+`CallbackFailedError`, exported from `@volcano.dev/sdk/durable`, with the `type`
+and `message` it was failed with; catch it to branch on `type`.
+
+A token takes one answer. Once it has succeeded or failed, a second request
+gets `409 callback_completed`, and after the wait times out or the execution
+ends, `410`. It stops working when the wait does, and works only for this wait.
+Treat it as a secret: anyone holding it can answer the wait.
+
+The submitter runs inside a checkpointed step, so a replay does not run it
+again. An attempt interrupted before the step is recorded can run it twice, and
+it receives the same token both times, so make the hand-off idempotent. It is
+not retried when it throws: the call throws the runtime's
+`CallbackSubmitterError`, failing the execution unless you catch it.
+
+The token comes from `VOLCANO_PLATFORM_API_URL`, like an approval, and the
+request is retried for up to 30 seconds while Volcano is not ready for it. An
+invalid name, submitter, or option throws a `TypeError` before anything is
+registered. See [Durable callbacks](/platform/functions/durable-callbacks) for
+every request, response, and limit.
 
 ## `ctx.publish(name, data?)`
 
@@ -921,8 +1003,8 @@ allowance a standard invocation spends. Every context operation is one
 operation: the execution itself, each `step` attempt — a retry is another
 attempt — each `wait`, each `waitUntil` check, each `child` context, and each
 `map` item or `parallel` branch. An approval is three: its own context, the
-wait for its decision, and the step that registers it. A `waitForMessage` is
-three the same way, a `publish` one, and the messages session each context
+wait for its decision, and the step that registers it. A `waitForMessage` or a
+`waitForCallback` is three the same way, a `publish` one, and the messages session each context
 opens before its first `publish` three more. Time is not charged, so a
 suspended execution costs nothing while it waits.
 
@@ -951,8 +1033,10 @@ volcano durable messages send order-pipeline <execution-id> payment-confirmed --
 
 Local waits resolve immediately by default while preserving checkpoint and replay
 behavior. Set `LOCAL_DURABLE_REAL_TIME=true` before `volcano start` when wait
-timing must match the deployed function. An approval's `timeout` always runs in
-real time. Local executions persist across `volcano stop` and `volcano start`.
+timing must match the deployed function. An approval's `timeout`, and a
+callback's `timeout` and `heartbeatTimeout`, always run in real time. Answer a
+callback with the same requests against the local API URL. Local executions
+persist across `volcano stop` and `volcano start`.
 
 ## Not available yet
 

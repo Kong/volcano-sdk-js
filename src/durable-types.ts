@@ -192,6 +192,25 @@ export interface WaitForMessageOptions {
   timeout?: DurableDuration;
 }
 
+/**
+ * Hands the callback's token to the system that will complete it. It runs as
+ * a step, so it may run again after a crash; the token is the same each time.
+ */
+export type CallbackSubmitter = (token: string) => Promise<void> | void;
+
+export interface WaitForCallbackOptions {
+  /**
+   * How long to wait for the callback to complete. Unset, the wait lasts as
+   * long as the execution. When it runs out the wait resolves with `null`.
+   */
+  timeout?: DurableDuration;
+  /**
+   * How long the wait may go without a heartbeat from the token's holder.
+   * When it runs out the wait resolves with `null`, as a timeout does.
+   */
+  heartbeatTimeout?: DurableDuration;
+}
+
 export interface MessageSender {
   /** The credential it was sent with: `service_key`, `user`, `anon`, or `project`. */
   type: string;
@@ -283,6 +302,19 @@ export interface DurableContext {
    * message never decides an approval.
    */
   waitForMessage(name: string, options?: WaitForMessageOptions): Promise<ReceivedMessage | null>;
+
+  /**
+   * Registers a callback, hands its token to `submitter`, and suspends until
+   * whoever holds the token succeeds or fails it. Resolves with the JSON
+   * result it succeeded with, or with `null` once the timeout or heartbeat
+   * timeout passes. A failure throws `CallbackFailedError` with its type and
+   * message.
+   */
+  waitForCallback(
+    name: string,
+    submitter: CallbackSubmitter,
+    options?: WaitForCallbackOptions,
+  ): Promise<unknown>;
 
   /**
    * Records a message that applications list, or receive live by subscribing
