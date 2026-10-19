@@ -6589,7 +6589,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Too many callback requests for the token's project. Retry later.
+          description: Too many callback requests for the token or its project. Retry later.
           content:
             application/json:
               schema:
@@ -6664,7 +6664,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Too many callback requests for the token's project. Retry later.
+          description: Too many callback requests for the token or its project. Retry later.
           content:
             application/json:
               schema:
@@ -6729,7 +6729,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Too many callback requests for the token's project. Retry later.
+          description: Too many callback requests for the token or its project. Retry later.
           content:
             application/json:
               schema:

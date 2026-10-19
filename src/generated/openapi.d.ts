@@ -19426,7 +19426,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many callback requests for the token's project. Retry later. */
+            /** @description Too many callback requests for the token or its project. Retry later. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -19519,7 +19519,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many callback requests for the token's project. Retry later. */
+            /** @description Too many callback requests for the token or its project. Retry later. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -19600,7 +19600,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Too many callback requests for the token's project. Retry later. */
+            /** @description Too many callback requests for the token or its project. Retry later. */
             429: {
                 headers: {
                     [name: string]: unknown;
