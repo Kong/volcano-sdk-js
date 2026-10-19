@@ -11,6 +11,7 @@
 /**
  * Makes a send safe to retry. A repeat with a key the same sender has
  * used on the execution returns the first message and sends nothing.
- * Keys of different senders never collide. Up to 255 characters.
+ * Keys of different senders never collide. Up to 255 printable ASCII
+ * characters.
  */
 export type DurableMessageIdempotencyKeyParameter = string;
