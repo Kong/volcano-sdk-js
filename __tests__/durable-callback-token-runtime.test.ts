@@ -11,6 +11,7 @@ import {
 } from '@jest/globals';
 import { CallbackFailedError, durable } from '../src/durable.ts';
 import type { CallbackSubmitter, DurableHandler } from '../src/durable-types.ts';
+import { settledRun } from './support/settled-run.ts';
 
 // durable-callback-token.test.ts stands a double in for the runtime. These run
 // the same calls through the runtime Volcano installs and its local
@@ -81,8 +82,14 @@ function runnerFor(handler: DurableHandler): Runner {
   });
 }
 
-async function submittedPayment(runner: Runner): Promise<Operation> {
-  return runner.getOperation('payment').waitForData('SUBMITTED');
+async function settlePayment(
+  runner: Runner,
+  settle: (operation: Operation) => Promise<unknown>,
+): Promise<{ getResult(): unknown }> {
+  return settledRun(
+    runner.run({ payload: {} }),
+    runner.getOperation('payment').waitForData('SUBMITTED').then(settle),
+  );
 }
 
 const fetchMock = () => jest.mocked(globalThis.fetch);
@@ -131,10 +138,9 @@ describe('durable callbacks on the durable runtime', () => {
   it('registers once and resolves with the result, however often the execution replays', async () => {
     const runner = runnerFor(awaitPayment);
 
-    const execution = runner.run({ payload: {} });
-    const operation = await submittedPayment(runner);
-    await operation.sendCallbackSuccess(JSON.stringify({ charge: 'ch_1042' }));
-    const result = await execution;
+    const result = await settlePayment(runner, (operation) =>
+      operation.sendCallbackSuccess(JSON.stringify({ charge: 'ch_1042' })),
+    );
 
     expect(result.getResult()).toEqual({ charge: 'ch_1042' });
     expect(invocations).toBeGreaterThan(1);
@@ -157,14 +163,13 @@ describe('durable callbacks on the durable runtime', () => {
       return failure;
     });
 
-    const execution = runner.run({ payload: {} });
-    const operation = await submittedPayment(runner);
-    await operation.sendCallbackFailure({
-      ErrorType: 'CardDeclined',
-      ErrorMessage: 'insufficient funds',
-      ErrorData: JSON.stringify({ type: 'CardDeclined', message: 'insufficient funds' }),
-    });
-    const result = await execution;
+    const result = await settlePayment(runner, (operation) =>
+      operation.sendCallbackFailure({
+        ErrorType: 'CardDeclined',
+        ErrorMessage: 'insufficient funds',
+        ErrorData: JSON.stringify({ type: 'CardDeclined', message: 'insufficient funds' }),
+      }),
+    );
 
     expect(result.getResult()).toEqual({ type: 'CardDeclined', message: 'insufficient funds' });
     expect(invocations).toBeGreaterThan(1);
@@ -175,11 +180,10 @@ describe('durable callbacks on the durable runtime', () => {
       ctx.waitForCallback('payment', record, { heartbeatTimeout: '1m' }),
     );
 
-    const execution = runner.run({ payload: {} });
-    const operation = await submittedPayment(runner);
-    await operation.sendCallbackHeartbeat();
-    await operation.sendCallbackSuccess('"settled"');
-    const result = await execution;
+    const result = await settlePayment(runner, async (operation) => {
+      await operation.sendCallbackHeartbeat();
+      await operation.sendCallbackSuccess('"settled"');
+    });
 
     expect(result.getResult()).toBe('settled');
   });

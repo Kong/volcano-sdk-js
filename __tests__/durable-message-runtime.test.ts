@@ -11,6 +11,7 @@ import {
 } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
+import { settledRun } from './support/settled-run.ts';
 
 // durable-message.test.ts stands a double in for the runtime. These run the
 // same calls through the runtime Volcano installs and its local checkpoint
@@ -128,16 +129,18 @@ describe('durable messages on the durable runtime', () => {
       return { started, go, done };
     });
 
-    const execution = runner.run({ payload: {} });
-    await complete(runner, SESSION, { token: 'vdms_session' });
-    await complete(runner, 'go', {
-      id: 'msg-in',
-      name: 'go',
-      data: { approved: true },
-      sender: { type: 'service_key', user_id: null },
-      sent_at: '2026-10-12T09:30:00Z',
-    });
-    const result = await execution;
+    const result = await settledRun(
+      runner.run({ payload: {} }),
+      complete(runner, SESSION, { token: 'vdms_session' }).then(() =>
+        complete(runner, 'go', {
+          id: 'msg-in',
+          name: 'go',
+          data: { approved: true },
+          sender: { type: 'service_key', user_id: null },
+          sent_at: '2026-10-12T09:30:00Z',
+        }),
+      ),
+    );
 
     expect(result.getResult()).toEqual({
       started: { id: 'msg-1', seq: 1 },
@@ -205,9 +208,10 @@ describe('durable messages on the durable runtime', () => {
       }
     });
 
-    const execution = runner.run({ payload: {} });
-    await complete(runner, SESSION, { token: 'vdms_session' });
-    const result = await execution;
+    const result = await settledRun(
+      runner.run({ payload: {} }),
+      complete(runner, SESSION, { token: 'vdms_session' }),
+    );
 
     expect(result.getResult()).toBe(
       'Volcano refused the message (409 execution_not_running): execution is not running',
@@ -259,9 +263,10 @@ describe('durable messages on the durable runtime', () => {
       return { published: await published, second: await steps };
     });
 
-    const execution = runner.run({ payload: {} });
-    await complete(runner, SESSION, { token: 'vdms_session' });
-    const result = await execution;
+    const result = await settledRun(
+      runner.run({ payload: {} }),
+      complete(runner, SESSION, { token: 'vdms_session' }),
+    );
 
     expect(result.getResult()).toEqual({ published: { id: 'msg-1', seq: 1 }, second: 2 });
     expect(requests('/durable-messages/publish')).toHaveLength(1);
