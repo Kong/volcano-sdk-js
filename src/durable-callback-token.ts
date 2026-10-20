@@ -3,10 +3,9 @@ import {
   type CallbackContext,
   callbackResult,
   callbacks,
+  checkedName,
   isCallbackTimeout,
   isRecord,
-  MAX_NAME_LENGTH,
-  OPERATION_NAME,
   platformApiUrl,
   requiredExecutionRef,
   type Submitter,
@@ -32,7 +31,7 @@ export async function waitForCallback(
   submitter: unknown,
   options: unknown = {},
 ): Promise<unknown> {
-  const callbackName = checkedName(name);
+  const callbackName = checkedName(OPERATION, name);
   if (!isSubmitter(submitter)) {
     throw new TypeError(`${OPERATION} requires a submitter function that receives the token`);
   }
@@ -84,19 +83,6 @@ function registering(
 
 function isSubmitter(value: unknown): value is CallbackSubmitter {
   return typeof value === 'function';
-}
-
-function checkedName(value: unknown): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new TypeError(`${OPERATION} requires a non-empty name`);
-  }
-  if (value.length > MAX_NAME_LENGTH) {
-    throw new TypeError(`${OPERATION} name must be at most ${String(MAX_NAME_LENGTH)} characters`);
-  }
-  if (!OPERATION_NAME.test(value)) {
-    throw new TypeError(`${OPERATION} name must be printable ASCII`);
-  }
-  return value;
 }
 
 function waitConfig(options: unknown): Record<string, unknown> {

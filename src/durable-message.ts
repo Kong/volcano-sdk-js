@@ -4,10 +4,9 @@ import {
   type CallbackContext,
   callbackResult,
   callbacks,
+  checkedName,
   isCallbackTimeout,
   isRecord,
-  MAX_NAME_LENGTH,
-  OPERATION_NAME,
   platformApiUrl,
   requiredExecutionRef,
 } from './durable-callback.ts';
@@ -141,19 +140,6 @@ function publish(
     subject: 'the message',
     readsAnswer: true,
   });
-}
-
-function checkedName(operation: string, value: unknown): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new TypeError(`${operation} requires a non-empty name`);
-  }
-  if (value.length > MAX_NAME_LENGTH) {
-    throw new TypeError(`${operation} name must be at most ${String(MAX_NAME_LENGTH)} characters`);
-  }
-  if (!OPERATION_NAME.test(value)) {
-    throw new TypeError(`${operation} name must be printable ASCII`);
-  }
-  return value;
 }
 
 // Send a snapshot, so data that changes later, or serializes differently a
