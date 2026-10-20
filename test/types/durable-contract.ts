@@ -53,6 +53,12 @@ async function awaitPayment(ctx: DurableContext) {
     await ctx.waitForCallback('payment', (token) => {
       tokens.push(token);
     });
+    // A submitter's result is ignored, so one that returns what it started fits.
+    await ctx.waitForCallback('payment', (token) => tokens.push(token));
+    await ctx.waitForCallback('payment', async (token): Promise<Charge> => {
+      await Promise.resolve(token);
+      return { id: token, amount: 1 };
+    });
     // @ts-expect-error a callback needs a submitter
     void ctx.waitForCallback('payment');
     return result ?? `timed out after ${String(tokens.length)} hand-offs`;

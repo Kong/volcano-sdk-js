@@ -210,6 +210,18 @@ describe('ctx.waitForCallback()', () => {
     expect(order).toEqual(['submitted', 'waiting']);
   });
 
+  it('ignores what the submitter returns', async () => {
+    const result = await run(
+      awaitPayment(async (token) => {
+        await Promise.resolve();
+        return { queued: submitted.push(token) };
+      }),
+    );
+
+    expect(result).toEqual({ charge: 'ch_1042' });
+    expect(submitted).toEqual([TOKEN]);
+  });
+
   it('passes the timeout and heartbeat timeout to the callback', async () => {
     await run(awaitPayment(record, { timeout: { hours: 2 }, heartbeatTimeout: { minutes: 5 } }));
 

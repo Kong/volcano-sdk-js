@@ -195,8 +195,10 @@ export interface WaitForMessageOptions {
 /**
  * Hands the callback's token to the system that will complete it. It runs as
  * a step, so it may run again after a crash; the token is the same each time.
+ * A returned promise is awaited; whatever it or the submitter returns is
+ * ignored.
  */
-export type CallbackSubmitter = (token: string) => Promise<void> | void;
+export type CallbackSubmitter = (token: string) => unknown;
 
 export interface WaitForCallbackOptions {
   /**

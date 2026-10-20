@@ -503,8 +503,10 @@ Treat it as a secret: anyone holding it can answer the wait.
 
 The submitter runs inside a checkpointed step, so a replay does not run it
 again. An attempt interrupted before the step is recorded can run it twice, and
-it receives the same token both times, so make the hand-off idempotent. It is
-not retried when it throws: the call throws the runtime's
+it receives the same token both times, so make the hand-off idempotent. If the
+token was answered, or the wait timed out, in between, it is not run again. A
+promise it returns is awaited, and its value is ignored. It is not retried when
+it throws: the call throws the runtime's
 `CallbackSubmitterError`, failing the execution unless you catch it.
 
 The token comes from `VOLCANO_PLATFORM_API_URL`, like an approval, and the

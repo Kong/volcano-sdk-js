@@ -74,7 +74,8 @@ function registering(
         readsAnswer: true,
       }),
     );
-    // A closed callback already timed out, and resolves the wait with null.
+    // A closed callback already timed out or was answered, and the wait
+    // resolves as it did.
     if (token !== undefined) {
       await submitter(token);
     }
