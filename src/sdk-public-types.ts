@@ -477,8 +477,8 @@ export interface Durable {
    * how you find out how a started execution went.
    *
    * Owner-scoped: it takes the project id and needs the project owner's
-   * platform user token. Auth-user sessions, anon keys, service keys, and
-   * project access tokens are rejected. Poll it from your backend, not a browser.
+   * platform user token or a project access token. Auth-user sessions, anon
+   * keys, and service keys are rejected. Poll it from your backend, not a browser.
    *
    * @example
    * ```typescript

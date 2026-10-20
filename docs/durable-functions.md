@@ -681,8 +681,9 @@ the one to expect right after a deploy: retry once the function is `active`.
 Besides [sending and reading messages](#sending-and-reading-messages), starting
 is the only durable operation an application credential can perform. Reading an
 execution, listing them and stopping one are owner-scoped. Use a
-separate backend client with the project owner's platform user token. Auth-user
-sessions, anon keys, service keys, and project access tokens are not accepted.
+separate backend client with the project owner's platform user token or a
+project access token; a `read_only` token can read and list but not stop.
+Auth-user sessions, anon keys, and service keys are not accepted.
 
 ```javascript
 import { VolcanoClient } from '@volcano.dev/sdk';
