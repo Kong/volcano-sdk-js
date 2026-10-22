@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   callbackConfig,
   type CallbackContext,
@@ -39,7 +40,13 @@ export async function waitForCallback(
   const apiUrl = platformApiUrl(OPERATION, 'wait for callbacks');
   const execution = requiredExecutionRef(OPERATION, executionRef);
   const waitForCallback = callbacks(context, 'callbacks');
-  const submit = registering(apiUrl, execution, callbackName, submitter);
+  const submit = registering(
+    apiUrl,
+    execution,
+    callbackName,
+    submitter,
+    replayedOperation(context),
+  );
   try {
     return callbackResult(await waitForCallback(callbackName, submit, config), unreadableResult);
   } catch (error) {
@@ -55,18 +62,49 @@ function timedOut(error: unknown): null {
   throw failedCallback(error) ?? error;
 }
 
+/**
+ * The operation an earlier invocation opened this wait's callback under, or
+ * undefined when this invocation opens it. Volcano then reads back to the
+ * callback rather than only through recent history. Call it just before the
+ * runtime's `waitForCallback`: the wait runs in a child context named by the
+ * step about to be taken, and opens the callback as that context's first step.
+ * Neither the step cursor nor the checkpoint is public, so a runtime without
+ * them names no operation and the registration reads as a first run's does.
+ */
+function replayedOperation(context: CallbackContext): string | undefined {
+  const peekStepId: unknown = Reflect.get(context, 'peekStepId');
+  const execution: unknown = Reflect.get(context, '_executionContext');
+  const getStepData = isRecord(execution) ? execution['getStepData'] : undefined;
+  if (typeof peekStepId !== 'function' || typeof getStepData !== 'function') {
+    return undefined;
+  }
+  const stepId = `${String(Reflect.apply(peekStepId, context, []))}-1`;
+  if (Reflect.apply(getStepData, execution, [stepId]) === undefined) {
+    return undefined;
+  }
+  return callbackOperationId(stepId);
+}
+
+/** The id the runtime checkpoints the step stepId under. */
+export function callbackOperationId(stepId: string): string {
+  return createHash('md5').update(stepId).digest('hex').slice(0, 16);
+}
+
 // The runtime's submitter: registers the callback, then hands its token on.
 function registering(
   apiUrl: string,
   execution: string,
   name: string,
   submitter: CallbackSubmitter,
+  operationId: string | undefined,
 ): Submitter {
+  // JSON leaves out an undefined operation, as a first run sends.
+  const body = { name, execution_ref: execution, operation_id: operationId };
   return async (callbackId) => {
     const token = registeredToken(
       await postToPlatform(apiUrl, {
         path: '/durable-callbacks',
-        body: { execution_ref: execution, callback_id: callbackId, name },
+        body: { ...body, callback_id: callbackId },
         action: 'register the callback',
         subject: 'the callback',
         notReadyCode: 'callback_not_ready',

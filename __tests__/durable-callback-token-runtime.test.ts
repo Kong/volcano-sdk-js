@@ -10,6 +10,7 @@ import {
   jest,
 } from '@jest/globals';
 import { CallbackFailedError, durable } from '../src/durable.ts';
+import { callbackOperationId } from '../src/durable-callback-token.ts';
 import type { CallbackSubmitter, DurableHandler } from '../src/durable-types.ts';
 import { settledRun } from './support/settled-run.ts';
 
@@ -37,6 +38,7 @@ interface Operation {
 interface Runner {
   run(request: { payload: unknown }): Promise<{ getResult(): unknown }>;
   getOperation(name: string): Operation;
+  getOperationById(id: string): { getType(): string | undefined };
 }
 
 interface RunnerClass {
@@ -65,7 +67,32 @@ function localRunner(): RunnerClass {
   return runner;
 }
 
+type WithDurableExecution = (
+  handler: (input: unknown, context: unknown) => Promise<unknown>,
+) => LambdaHandler;
+
+function isWithDurableExecution(value: unknown): value is WithDurableExecution {
+  return typeof value === 'function';
+}
+
+// The runtime itself, for a handler that inspects the context Volcano wraps.
+function withDurableExecution(): WithDurableExecution {
+  const runtime = jest.requireActual(require.resolve('@aws/durable-execution-sdk-js'));
+  const wrap: unknown =
+    typeof runtime === 'object' && runtime !== null
+      ? Reflect.get(runtime, 'withDurableExecution')
+      : undefined;
+  if (!isWithDurableExecution(wrap)) {
+    throw new TypeError('The durable runtime does not expose withDurableExecution');
+  }
+  return wrap;
+}
+
 const LocalDurableTestRunner = localRunner();
+
+function field(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined;
+}
 const API_URL = 'https://api.test.com';
 const TOKEN = 'vcb_Zm9yIHRoZSBwYXltZW50IHdvcmtmbG93IHRvIGNvbXBsZXRl';
 
@@ -148,6 +175,27 @@ describe('durable callbacks on the durable runtime', () => {
       { execution_ref: expect.any(String), callback_id: expect.any(String), name: 'payment' },
     ]);
     expect(submitted).toEqual([TOKEN]);
+    expect(runner.getOperationById(callbackOperationId('1-1')).getType()).toBe('CALLBACK');
+  });
+
+  // A replayed registration names its callback's operation from these. They are
+  // private to the runtime, so an upgrade that drops them shows up here rather
+  // than as replays that read only recent history.
+  it('exposes the step cursor and checkpoint a replayed registration reads', async () => {
+    let members: string[] = [];
+    const runner = new LocalDurableTestRunner({
+      handlerFunction: withDurableExecution()((_input, context) => {
+        members = [
+          typeof field(context, 'peekStepId'),
+          typeof field(field(context, '_executionContext'), 'getStepData'),
+        ];
+        return Promise.resolve(null);
+      }),
+    });
+
+    await runner.run({ payload: {} });
+
+    expect(members).toEqual(['function', 'function']);
   });
 
   it('raises the failure with its type, and raises it again on replay', async () => {

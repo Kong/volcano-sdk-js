@@ -1,4 +1,5 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { CallbackFailedError, durable } from '../src/durable.ts';
 import type {
@@ -36,6 +37,15 @@ interface FakeContext {
     config: Record<string, unknown>,
   ) => Promise<unknown>;
   executionContext?: { durableExecutionArn?: unknown };
+  peekStepId?: () => string;
+  _executionContext?: { getStepData(stepId: string): unknown };
+}
+
+// The runtime's private step cursor and checkpoint, which a replayed
+// registration reads to name the callback's operation.
+interface RuntimeSteps {
+  next?: string;
+  checkpointed?: string[];
 }
 
 const EXECUTION_ARN =
@@ -47,10 +57,28 @@ const callbackCalls: CallbackCall[] = [];
 const submitted: string[] = [];
 let callbackOutcome: () => Promise<unknown>;
 let runtimeHasCallbacks: boolean;
+let runtimeSteps: RuntimeSteps | undefined;
 
 const record: CallbackSubmitter = (token) => {
   submitted.push(token);
 };
+
+function runtimeInternals({ next, checkpointed }: RuntimeSteps): Partial<FakeContext> {
+  return {
+    // The runtime's takes no arguments.
+    ...(next === undefined
+      ? {}
+      : { peekStepId: (...args: unknown[]) => (args.length === 0 ? next : 'unexpected') }),
+    ...(checkpointed === undefined
+      ? {}
+      : {
+          _executionContext: {
+            getStepData: (stepId: string) =>
+              checkpointed.includes(stepId) ? { Id: stepId } : undefined,
+          },
+        }),
+  };
+}
 
 function mockContext(executionContext?: FakeContext['executionContext']): FakeContext {
   const logger: DurableLog = {
@@ -69,6 +97,7 @@ function mockContext(executionContext?: FakeContext['executionContext']): FakeCo
     map: () => Promise.resolve(),
     parallel: () => Promise.resolve(),
     ...(executionContext === undefined ? {} : { executionContext }),
+    ...runtimeInternals(runtimeSteps ?? {}),
   };
   if (runtimeHasCallbacks) {
     context.waitForCallback = async (name, submitter, config) => {
@@ -160,6 +189,7 @@ beforeEach(() => {
   callbackCalls.length = 0;
   submitted.length = 0;
   runtimeHasCallbacks = true;
+  runtimeSteps = undefined;
   callbackOutcome = () => Promise.resolve(JSON.stringify({ charge: 'ch_1042' }));
   process.env['VOLCANO_PLATFORM_API_URL'] = API_URL;
   fetchMock().mockImplementation(() =>
@@ -186,6 +216,37 @@ describe('ctx.waitForCallback()', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
     expect(fetchMock().mock.calls[0]?.[0]).toBe('https://api.test.com/durable-callbacks');
     expect(fetchMock().mock.calls[0]?.[1]?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(bodyAt(0)).toStrictEqual({
+      execution_ref: EXECUTION_ARN,
+      callback_id: 'cb-1',
+      name: 'payment',
+    });
+  });
+
+  // A submitter interrupted before its registration landed registers for the
+  // first time on a replay, when its callback may be far back in the history.
+  it('names the operation an earlier invocation opened the callback under', async () => {
+    runtimeSteps = { next: '3', checkpointed: ['3-1'] };
+
+    await run(awaitPayment(record));
+
+    expect(bodyAt(0)).toStrictEqual({
+      execution_ref: EXECUTION_ARN,
+      callback_id: 'cb-1',
+      name: 'payment',
+      operation_id: createHash('md5').update('3-1').digest('hex').slice(0, 16),
+    });
+  });
+
+  it.each<[string, RuntimeSteps]>([
+    ['this invocation opens the callback', { next: '3', checkpointed: ['2-1'] }],
+    ['the runtime keeps no step cursor', { checkpointed: ['3-1'] }],
+    ['the runtime keeps no checkpoint', { next: '3' }],
+  ])('names no operation when %s', async (_case, steps) => {
+    runtimeSteps = steps;
+
+    await run(awaitPayment(record));
+
     expect(bodyAt(0)).toStrictEqual({
       execution_ref: EXECUTION_ARN,
       callback_id: 'cb-1',
