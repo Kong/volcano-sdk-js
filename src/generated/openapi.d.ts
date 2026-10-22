@@ -9648,6 +9648,13 @@ export interface components {
             callback_id: string;
             /** @description The waiting step's name, up to 237 printable ASCII characters. */
             name: string;
+            /**
+             * @description The operation an earlier run of the workflow opened the waiting step
+             *     under, supplied by the SDK when a replay registers it. Volcano then
+             *     looks for the step further back in the execution's history than a
+             *     first registration reads.
+             */
+            operation_id?: string;
         };
         /** @description The token for the waiting step, as the workflow receives it. */
         DurableCallbackRegistration: {

@@ -23190,6 +23190,16 @@ components:
           maxLength: 237
           pattern: ^[ -~]+$
           description: The waiting step's name, up to 237 printable ASCII characters.
+        operation_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[0-9a-f]+$
+          description: |
+            The operation an earlier run of the workflow opened the waiting step
+            under, supplied by the SDK when a replay registers it. Volcano then
+            looks for the step further back in the execution's history than a
+            first registration reads.
       required:
         - execution_ref
         - callback_id
