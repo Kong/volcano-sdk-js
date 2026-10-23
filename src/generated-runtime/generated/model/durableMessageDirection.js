@@ -8,6 +8,6 @@
  * OpenAPI spec version: 3.0.0
  */
 export const DurableMessageDirection = {
-    in: 'in',
-    out: 'out',
+    DurableMessageDirectionIn: 'in',
+    DurableMessageDirectionOut: 'out',
 };

@@ -1,6 +1,7 @@
 import { waitForApproval } from './durable-approval.ts';
 import { batchResult, type EngineBatch } from './durable-batch-result.ts';
 import type { CallbackContext } from './durable-callback.ts';
+import { waitForCallback } from './durable-callback-token.ts';
 import { batchConfig, conditionConfig, stepConfig } from './durable-config.ts';
 import { waitDuration } from './durable-duration.ts';
 import { loadEngine } from './durable-engine.ts';
@@ -8,6 +9,7 @@ import { messagePublisher, waitForMessage } from './durable-message.ts';
 import { parallelBranches } from './durable-parallel-branches.ts';
 import type {
   BatchOptions,
+  CallbackSubmitter,
   DurableContext,
   DurableDuration,
   DurableHandler,
@@ -17,6 +19,7 @@ import type {
   ParallelBranch,
   StepOptions,
   WaitForApprovalOptions,
+  WaitForCallbackOptions,
   WaitForMessageOptions,
   WaitUntilOptions,
 } from './durable-types.ts';
@@ -236,6 +239,10 @@ function durableContext(
       return waitForMessage(context, ref, name, options);
     },
 
+    waitForCallback(name: string, submitter: CallbackSubmitter, options?: WaitForCallbackOptions) {
+      return waitForCallback(context, ref, name, submitter, options);
+    },
+
     publish(name: string, data?: unknown) {
       return publisher(name, data);
     },
@@ -301,6 +308,7 @@ function stepScope(scope: EngineScope): DurableStepScope {
   return { log: scope.logger, attempt: scope.attempt };
 }
 
+export { CallbackFailedError } from './durable-callback-error.ts';
 export { DurableRuntimeMissingError } from './durable-runtime-error.ts';
 export type {
   ApprovalDecider,
@@ -310,6 +318,7 @@ export type {
   BatchItem,
   BatchOptions,
   BatchResult,
+  CallbackSubmitter,
   DurableContext,
   DurableDuration,
   DurableHandler,
@@ -325,6 +334,7 @@ export type {
   RetryOptions,
   StepOptions,
   WaitForApprovalOptions,
+  WaitForCallbackOptions,
   WaitForMessageOptions,
   WaitUntilOptions,
 } from './durable-types.ts';

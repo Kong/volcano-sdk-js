@@ -17,6 +17,20 @@ export interface CallbackContext {
 export const MAX_NAME_LENGTH = 237;
 export const OPERATION_NAME = /^[\u0020-\u007E]+$/;
 
+/** Requires value to be a name operation can open a callback with. */
+export function checkedName(operation: string, value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError(`${operation} requires a non-empty name`);
+  }
+  if (value.length > MAX_NAME_LENGTH) {
+    throw new TypeError(`${operation} name must be at most ${String(MAX_NAME_LENGTH)} characters`);
+  }
+  if (!OPERATION_NAME.test(value)) {
+    throw new TypeError(`${operation} name must be printable ASCII`);
+  }
+  return value;
+}
+
 /**
  * The runtime's `waitForCallback`, bound to its context. Runtimes installed
  * before callbacks were available lack it.

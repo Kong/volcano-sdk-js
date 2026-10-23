@@ -1,12 +1,15 @@
 import {
   type ApprovalDecision,
   type BatchResult,
+  CallbackFailedError,
+  type CallbackSubmitter,
   durable,
   type DurableContext,
   type DurableStepScope,
   type PublishedMessage,
   type ReceivedMessage,
   type WaitForApprovalOptions,
+  type WaitForCallbackOptions,
   type WaitForMessageOptions,
 } from '../../src/durable.js';
 
@@ -34,6 +37,38 @@ async function exchangeMessages(ctx: DurableContext) {
   const confirmedBy: string | null = confirmation.sender.userId;
   const confirmedData: unknown = confirmation.data;
   return { published: progress.seq, confirmedBy, confirmedData };
+}
+
+const tokens: string[] = [];
+
+const submit: CallbackSubmitter = async (token: string) => {
+  tokens.push(token);
+  await Promise.resolve();
+};
+
+async function awaitPayment(ctx: DurableContext) {
+  const waitFor: WaitForCallbackOptions = { timeout: '1h', heartbeatTimeout: { minutes: 5 } };
+  try {
+    const result: unknown = await ctx.waitForCallback('payment', submit, waitFor);
+    await ctx.waitForCallback('payment', (token) => {
+      tokens.push(token);
+    });
+    // A submitter's result is ignored, so one that returns what it started fits.
+    await ctx.waitForCallback('payment', (token) => tokens.push(token));
+    await ctx.waitForCallback('payment', async (token): Promise<Charge> => {
+      await Promise.resolve(token);
+      return { id: token, amount: 1 };
+    });
+    // @ts-expect-error a callback needs a submitter
+    void ctx.waitForCallback('payment');
+    return result ?? `timed out after ${String(tokens.length)} hand-offs`;
+  } catch (error) {
+    if (error instanceof CallbackFailedError) {
+      const failure: { type: string; message: string } = error;
+      return failure.type;
+    }
+    throw error;
+  }
 }
 
 export const handler = durable<OrderInput, { charge: string; shipped: number }>(
@@ -69,6 +104,7 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
     // @ts-expect-error a title is required
     void ctx.waitForApproval('untitled', {});
     const confirmation = await exchangeMessages(ctx);
+    const payment = await awaitPayment(ctx);
 
     const shipped: BatchResult<string> = await ctx.map(
       'ship',
@@ -105,6 +141,7 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       reviewed,
       grouped,
       confirmation,
+      payment,
     };
   },
   { logger: console },

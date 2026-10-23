@@ -11,6 +11,7 @@ import {
 } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
+import { settledRun } from './support/settled-run.ts';
 
 // durable-approval.test.ts stands a double in for the runtime. These run the
 // same calls through the runtime Volcano installs and its local checkpoint
@@ -77,10 +78,13 @@ function runnerFor(handler: DurableHandler): Runner {
 }
 
 async function decideWith(runner: Runner, decision: Record<string, unknown>): Promise<unknown> {
-  const execution = runner.run({ payload: {} });
-  const approval = await runner.getOperation('ship-order').waitForData('SUBMITTED');
-  await approval.sendCallbackSuccess(JSON.stringify(decision));
-  const result = await execution;
+  const result = await settledRun(
+    runner.run({ payload: {} }),
+    runner
+      .getOperation('ship-order')
+      .waitForData('SUBMITTED')
+      .then((approval) => approval.sendCallbackSuccess(JSON.stringify(decision))),
+  );
   return result.getResult();
 }
 
