@@ -16,6 +16,6 @@ export type DurableMessageDirection = typeof DurableMessageDirection[keyof typeo
 
 
 export const DurableMessageDirection = {
-  in: 'in',
-  out: 'out',
+  DurableMessageDirectionIn: 'in',
+  DurableMessageDirectionOut: 'out',
 } as const;
