@@ -121,7 +121,7 @@ try {
     join(directory, 'realtime-imports.mjs'),
     `import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import RealtimeDefault, { VolcanoRealtime, RealtimeChannel } from '@volcano.dev/sdk/realtime';
+import RealtimeDefault, { VolcanoRealtime, RealtimeChannel, RealtimeConnectionError } from '@volcano.dev/sdk/realtime';
 
 assert.equal(typeof VolcanoRealtime, 'function');
 assert.equal(typeof RealtimeChannel, 'function');
@@ -130,6 +130,13 @@ const commonjs = createRequire(import.meta.url)('@volcano.dev/sdk/realtime');
 assert.equal(typeof commonjs.VolcanoRealtime, 'function');
 assert.equal(typeof commonjs.RealtimeChannel, 'function');
 assert.equal(commonjs.default, commonjs.VolcanoRealtime);
+const failure = new RealtimeConnectionError('permission denied', 3507);
+assert.equal(failure.code, 3507);
+assert.equal(JSON.stringify(failure), '{}');
+assert.ok(commonjs.RealtimeConnectionError.is(failure));
+const cjsFailure = new commonjs.RealtimeConnectionError('permission denied', 3507);
+assert.ok(RealtimeConnectionError.is(cjsFailure));
+assert.equal(JSON.stringify(cjsFailure), '{}');
 `,
   );
   await run(process.execPath, ['realtime-imports.mjs'], {

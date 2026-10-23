@@ -1,3 +1,5 @@
+import { RealtimeConnectionError } from './realtime-connection-error.ts';
+
 export interface RealtimeConnectionClient {
   connect(): void;
   on(event: string, listener: (context: unknown) => void): void;
@@ -73,13 +75,13 @@ function objectProperty(value: unknown, property: string): unknown {
   return Reflect.get(value, property);
 }
 
-function errorMessage(context: unknown): string | undefined {
-  const message = objectProperty(objectProperty(context, 'error'), 'message');
-  return typeof message === 'string' && message !== '' ? message : undefined;
-}
-
-function connectionError(context: unknown): Error {
-  return new Error(errorMessage(context) ?? 'Connection failed');
+function disconnectError(context: unknown): Error {
+  const reason = objectProperty(context, 'reason');
+  const code = objectProperty(context, 'code');
+  return new RealtimeConnectionError(
+    typeof reason === 'string' && reason !== '' ? reason : 'Connection disconnected',
+    typeof code === 'number' ? code : undefined,
+  );
 }
 
 export function waitForConnection(client: RealtimeConnectionClient): Promise<void> {
@@ -92,7 +94,7 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
     function cleanup(): void {
       clearTimeout(timeout);
       client.off('connected', connected);
-      client.off('error', error);
+      client.off('disconnected', disconnected);
     }
 
     function connected(): void {
@@ -100,13 +102,17 @@ export function waitForConnection(client: RealtimeConnectionClient): Promise<voi
       resolve();
     }
 
-    function error(context: unknown): void {
+    function disconnected(context: unknown): void {
+      // Centrifuge emits `connecting` while retrying and `disconnected` when
+      // it stops. Surface that terminal failure instead of waiting for timeout.
       cleanup();
-      reject(connectionError(context));
+      reject(disconnectError(context));
     }
 
     client.on('connected', connected);
-    client.on('error', error);
+    // Retryable errors are reported by the persistent facade handler. Keep
+    // waiting so Centrifuge can reconnect and refresh tokens before the deadline.
+    client.on('disconnected', disconnected);
     let started = false;
     try {
       client.connect();
