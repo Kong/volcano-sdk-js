@@ -51,6 +51,16 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [2.2.0](https://github.com/Kong/volcano-sdk-js/compare/v2.1.0...v2.2.0) (2026-10-23)
+
+### Features
+
+- **durable:** wait for callbacks with ctx.waitForCallback ([#332](https://github.com/Kong/volcano-sdk-js/issues/332)) ([e63879e](https://github.com/Kong/volcano-sdk-js/commit/e63879efcf461660e4898eead7cf466d527281e6))
+
+### Bug Fixes
+
+- **deps:** bump next to 16.4.2 in the Next.js example ([#335](https://github.com/Kong/volcano-sdk-js/issues/335)) ([e9dc770](https://github.com/Kong/volcano-sdk-js/commit/e9dc770098754469aa0ba2530d80045441a74111))
+
 ## [2.1.0](https://github.com/Kong/volcano-sdk-js/compare/v2.0.1...v2.1.0) (2026-10-16)
 
 ### Features
