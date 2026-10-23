@@ -9,6 +9,11 @@ export const sessionOptions: SandboxCreateOptions = {
   preset: 'python3.12',
   region: 'aws-us-east-1',
   maxDurationSeconds: 300,
+};
+export const removedIdleTimeout: SandboxCreateOptions = {
+  preset: 'python3.12',
+  region: 'aws-us-east-1',
+  // @ts-expect-error The API no longer accepts an idle timeout.
   idleTimeoutSeconds: 60,
 };
 export const executionOptions: SandboxExecOptions = {
@@ -28,6 +33,9 @@ export const invalidExecutionIdle: SandboxExecOptions = {
 };
 declare const session: SandboxSession;
 export const disposable: AsyncDisposable = session;
+export const unlimitedLifetime: string | null = session.expiresAt;
+// @ts-expect-error A session with an unlimited lifetime has no expiry time.
+export const mustBeText: string = session.expiresAt;
 
 declare const sandboxes: Sandboxes;
 const requestId = '33333333-3333-4333-8333-333333333333';

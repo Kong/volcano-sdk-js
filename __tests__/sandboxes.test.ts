@@ -124,7 +124,7 @@ describe('Sandboxes facade', () => {
   });
 });
 
-test('passes session lifetime controls and terminates on async disposal', async () => {
+test('passes the session lifetime and terminates on async disposal', async () => {
   const fetchMock = jest
     .fn<typeof fetch>()
     .mockResolvedValueOnce(Response.json(snapshot))
@@ -134,12 +134,9 @@ test('passes session lifetime controls and terminates on async disposal', async 
     preset: 'python3.12',
     region: 'aws-us-east-1',
     maxDurationSeconds: 300,
-    idleTimeoutSeconds: 60,
   });
-  expect(bodyJson(fetchMock.mock.calls[0])).toMatchObject({
-    max_duration_seconds: 300,
-    idle_timeout_seconds: 60,
-  });
+  expect(bodyJson(fetchMock.mock.calls[0])).toMatchObject({ max_duration_seconds: 300 });
+  expect(bodyJson(fetchMock.mock.calls[0])).not.toHaveProperty('idle_timeout_seconds');
   if (result.data === null) {
     throw result.error;
   }
@@ -147,6 +144,56 @@ test('passes session lifetime controls and terminates on async disposal', async 
   const disposal = requestCall(fetchMock.mock.calls, 1);
   expect(disposal[0]).toBe(`https://api.test.com/sandbox-sessions/${sessionId}`);
   expect(disposal[1]?.method).toBe('DELETE');
+});
+
+describe('a session with an unlimited lifetime', () => {
+  // Local mode has no expiry, so the API returns expires_at: null. Cloud always returns a time.
+  const unlimited = { ...snapshot, expires_at: null };
+
+  test('is created with a null expiry', async () => {
+    globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValueOnce(Response.json(unlimited));
+    const result = await client().sandboxes.create(projectId, {
+      preset: 'python3.12',
+      region: 'aws-us-east-1',
+    });
+    expect(result.error).toBeNull();
+    expect(result.data?.expiresAt).toBeNull();
+  });
+
+  test('is read with a null expiry', async () => {
+    globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValueOnce(Response.json(unlimited));
+    const result = await client().sandboxes.get(sessionId);
+    expect(result.error).toBeNull();
+    expect(result.data?.expiresAt).toBeNull();
+  });
+
+  test('refreshes between a time and null in both directions', async () => {
+    globalThis.fetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(snapshot))
+      .mockResolvedValueOnce(Response.json(unlimited))
+      .mockResolvedValueOnce(Response.json(snapshot));
+    const result = await client().sandboxes.get(sessionId);
+    if (result.data === null) {
+      throw result.error;
+    }
+    expect(result.data.expiresAt).toBe('2026-09-24T01:00:00Z');
+    const toUnlimited = await result.data.refresh();
+    expect(toUnlimited.error).toBeNull();
+    expect(result.data.expiresAt).toBeNull();
+    const toTimed = await result.data.refresh();
+    expect(toTimed.error).toBeNull();
+    expect(result.data.expiresAt).toBe('2026-09-24T01:00:00Z');
+  });
+
+  test('still rejects an expiry that is neither a time nor null', async () => {
+    globalThis.fetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ ...snapshot, expires_at: 3600 }));
+    const result = await client().sandboxes.get(sessionId);
+    expect(result.data).toBeNull();
+    expect(result.error).not.toBeNull();
+  });
 });
 
 test('preserves binary files and returns a scoped HTTP credential', async () => {
