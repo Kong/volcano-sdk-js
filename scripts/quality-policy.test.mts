@@ -10,9 +10,9 @@ const scripts = record(manifest['scripts']);
 const requiredTasks = {
   build: 'pnpm build:tooling && rollup -c rollup.config.mjs && node .quality-tools/copy-types.mjs',
   'generate:openapi':
-    'pnpm build:tooling && node .quality-tools/clean-openapi.mjs && orval --config orval.config.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && prettier src/generated/openapi.d.ts --write && tsc -p tsconfig.generated.json',
+    'pnpm build:tooling && node .quality-tools/clean-openapi.mjs && orval --config orval.config.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && tsc -p tsconfig.generated.json',
   'check:openapi': 'pnpm generate:openapi && node .quality-tools/check-openapi.mjs',
-  'format:check': 'prettier . --config prettier.config.cjs --check',
+  'format:check': 'oxfmt --check',
   'check:unused':
     'knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries',
   lint: 'pnpm build && eslint . --max-warnings=0 && pnpm format:check',

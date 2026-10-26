@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "printWidth": 120,
+  "ignorePatterns": [
+    "openapi/",
+    "src/generated/",
+    "src/generated-runtime/",
+    "examples/nextjs-notes-app/.next/",
+    "*.tgz",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "CLAUDE.md"
+  ]
+}
