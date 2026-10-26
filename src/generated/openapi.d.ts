@@ -670,7 +670,9 @@ export interface paths {
         /**
          * Create a new project
          * @description Creates a project for the authenticated user.
-         *     Each user can create up to 1,000 projects. Requests over this cap return 403.
+         *     Projects have no plan limit; usage allowances apply across all of a user's projects.
+         *     Accounts on an older paid pricing revision keep the project cap that revision set, and
+         *     requests over it return 403.
          */
         post: operations["createProject"];
         delete?: never;
@@ -994,6 +996,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/git-connection/root-directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the directory a project builds from
+         * @description Changes only the root directory, leaving the repository and production
+         *     branch alone. Unlike PUT /projects/{id}/git-connection, this accepts a
+         *     project access token, so CI or an agent can move a project within its
+         *     repository without being able to change the repository.
+         *
+         *     The directory is a path relative to the repository root. An empty
+         *     string, `.` or `/` means the repository root. The response carries it in
+         *     the form a deploy reads it: `./apps/web/` comes back as `apps/web`.
+         */
+        put: operations["setProjectGitRootDirectory"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/git-connection": {
         parameters: {
             query?: never;
@@ -1013,6 +1042,13 @@ export interface paths {
          *     accessible through installation_id via connection_id's stored GitHub
          *     user token, then persists repository metadata only from that validated
          *     GitHub response.
+         *
+         *     Project access tokens are refused. Which repository a project deploys
+         *     from is a person's decision, made with a platform token or in the
+         *     dashboard. A project access token can still change the root directory
+         *     and production branch through PUT
+         *     /projects/{id}/git-connection/root-directory and PUT
+         *     /projects/{id}/git-connection/production-branch.
          */
         put: operations["connectProjectGit"];
         post?: never;
@@ -1659,6 +1695,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get notification settings
+         * @description Returns where the project's alerts go and when a failing scheduler is
+         *     announced. A project that never saved settings returns the defaults:
+         *     email to the project owner, no webhook, and an alert after 3 failed
+         *     runs in a row, followed by one when the scheduler recovers.
+         *
+         *     The webhook signing secret is never returned here; `secret_configured`
+         *     shows whether one is set. A read-only project access token is refused
+         *     with `403`, because the webhook URL can carry the receiver's token.
+         */
+        get: operations["getNotificationSettings"];
+        /**
+         * Update notification settings
+         * @description Changes the project's notification settings. Omitted fields keep their
+         *     current values, so `{"email": {"enabled": false}}` only turns email off.
+         *
+         *     Alert emails go only to the project owner's verified account email
+         *     address. `email.recipients` may be empty or name that address; any
+         *     other list is refused with `400`, and so is any non-empty list while
+         *     the owner has no verified address. `email.status` in the response
+         *     says whether alerts are being emailed.
+         *
+         *     Setting `webhook.url` on a project without a webhook generates its
+         *     signing secret, returned in `webhook.secret` in this response only.
+         *     Changing the URL keeps the secret. An empty `webhook.url` removes the
+         *     webhook and its secret.
+         *
+         *     Outside local mode the webhook must be reachable on the public
+         *     internet; a URL naming a private or loopback address is refused, and
+         *     so is a delivery to a host name that resolves to one.
+         */
+        put: operations["updateNotificationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/notifications/webhook-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the webhook signing secret
+         * @description Replaces the webhook signing secret and returns the settings with the
+         *     new one in `webhook.secret`, this once. Every delivery from now on is
+         *     signed with the new secret, including retries of earlier alerts.
+         */
+        post: operations["rotateNotificationWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/notifications/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test notification
+         * @description Sends a `notification.test` event on every channel that delivers
+         *     right away and reports how each delivery went. A webhook delivery is
+         *     signed like an alert. Enabled email is reported undelivered, without
+         *     sending, while the project owner has no verified account email
+         *     address. One test per project per minute.
+         */
+        post: operations["sendTestNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/functions/{functionId}/schedulers": {
         parameters: {
             query?: never;
@@ -2144,7 +2273,9 @@ export interface paths {
          *     the step's own timeout, and only for that step.
          *
          *     Retrying is safe: a request for a step that is already registered
-         *     returns the same token with `200`.
+         *     returns the same token with `200` while the step still waits. Once
+         *     the token is answered, or the step times out or ends, a retry answers
+         *     `409` with `callback_closed`.
          */
         post: operations["registerDurableCallback"];
         delete?: never;
@@ -2322,77 +2453,38 @@ export interface paths {
         };
         /**
          * Get autofix settings
-         * @description Returns whether Volcano diagnoses the project's issues with AI, how far
-         *     a run may go, and which model it uses. A project that never saved
-         *     settings returns the defaults, with autofix off.
-         *
-         *     Your API key is never returned. `api_key_configured`,
-         *     `api_key_provider`, and `api_key_last4` show whether one is set and
-         *     which provider it belongs to.
+         * @description Returns whether Volcano diagnoses the project's issues with AI and how
+         *     far a run may go. A project that never saved settings returns the
+         *     defaults, with autofix off.
          *
          *     Where autofix is not available, saved settings stay readable. A project
          *     that never saved any answers `404` with code `feature_unavailable`.
          */
         get: operations["getAutofixSettings"];
         /**
-         * Replace autofix settings
-         * @description Replaces the project's autofix settings. Omitted fields take their
-         *     defaults, except three: an omitted `provider` or `model` keeps its saved
-         *     value, and an omitted `api_key` keeps the stored key. So
-         *     `{"enabled": false}` turns autofix off and keeps the key.
+         * Save autofix settings
+         * @description Saves the project's autofix settings. An omitted `max_stage` or
+         *     `auto_trigger` keeps its saved value, or takes its default when the
+         *     project has no saved settings, so `{"enabled": true}` on a new project
+         *     diagnoses every new or regressed issue and opens a draft pull request
+         *     with each fix. Set `max_stage` and `auto_trigger` to stop at a diagnosis
+         *     or to start runs only on request. Volcano picks the models a run uses.
          *
          *     Project access tokens are refused. Autofix opens pull requests in the
-         *     project's repository, so a person turns it on with a platform token or
-         *     in the dashboard.
+         *     project's repository, so a person turns it on with a platform token.
          *
-         *     Turning autofix on needs a plan that includes it. Settings that are
-         *     already on stay stored after a downgrade, and saving them again is not
-         *     refused, but no run starts until the plan includes autofix again. Other
-         *     saves need no plan.
-         *
-         *     Provider `anthropic` runs on your own API key. A key belongs to the
-         *     provider it was saved with, and turning autofix on with a provider that
-         *     runs on your own key needs one for it. Turning autofix off or switching
-         *     providers keeps the stored key; only
-         *     `DELETE /projects/{id}/autofix/api-key` removes it. Turning autofix on
-         *     with provider `volcano` needs the `autofix.managed_models` capability;
-         *     without it the request answers `400` with code `feature_unavailable`.
+         *     During the preview, turning autofix on needs the SUPERAGENT plan, and
+         *     nothing is charged yet. Settings that are already on stay stored after
+         *     a downgrade, and saving them again is not refused, but no run starts
+         *     until the plan allows autofix again. Other saves need no plan.
          *
          *     Where autofix is not available, a project with saved settings can
-         *     still change them with `enabled: false`. Turning autofix on answers
-         *     `404` with code `feature_unavailable`.
+         *     still change them with `enabled: false`. Saving `enabled: true`
+         *     answers `404` with code `feature_unavailable`.
          */
         put: operations["updateAutofixSettings"];
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/autofix/api-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete the API key
-         * @description Deletes the project's stored API key and returns the settings. Autofix
-         *     on the key's provider runs on that key, so it turns off; on another
-         *     provider it stays as it is. Deleting when no key is stored succeeds.
-         *
-         *     Turning autofix off or switching providers never deletes the key, and
-         *     neither does applying a project configuration. This works where
-         *     autofix is not available, for a project that saved settings.
-         *
-         *     Project access tokens are refused.
-         */
-        delete: operations["deleteAutofixAPIKey"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2419,9 +2511,9 @@ export interface paths {
          *     running run, a project runs one at a time, and a project starts at most
          *     25 runs, manual and automatic, in any 24 hours.
          *
-         *     Project access tokens are refused. A run spends model tokens on the
-         *     project's provider, so a person starts it with a platform token or in
-         *     the dashboard.
+         *     Project access tokens are refused. A run can open a pull request in
+         *     the project's repository, so a person starts it with a platform token
+         *     or in the dashboard.
          */
         post: operations["startAutofixRun"];
         delete?: never;
@@ -2462,9 +2554,9 @@ export interface paths {
         };
         /**
          * Get an autofix run
-         * @description Returns one run: its status, the diagnosis once it succeeds, why it
-         *     failed or was canceled, and the model tokens it used. Runs stay readable
-         *     where autofix is not available.
+         * @description Returns one run: its status, the diagnosis once it succeeds, and why it
+         *     failed or was canceled. Runs stay readable where autofix is not
+         *     available.
          *
          *     Project access tokens can read runs, including read-only ones.
          */
@@ -2648,7 +2740,7 @@ export interface paths {
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
-         *     This operation is limited by plan-based frontend deployment quotas (`FREE_FRONTEND_DEPLOYMENTS`, `PRO_FRONTEND_DEPLOYMENTS`).
+         *     Plans do not limit how many frontends a project has; usage allowances apply across all of a user's frontends.
          *     Each project can contain up to 10,000 frontends regardless of plan.
          */
         post: operations["createFrontend"];
@@ -2715,12 +2807,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get frontend custom domain status */
+        /**
+         * Get frontend custom domain status
+         * @deprecated
+         * @description Deprecated: use `GET /projects/{id}/frontends/{frontendId}/domains`.
+         *     Returns the frontend's oldest domain that serves it rather than redirecting.
+         */
         get: operations["getFrontendCustomDomain"];
         put?: never;
         /**
          * Configure frontend custom domain
-         * @description Configures one custom domain for a frontend.
+         * @deprecated
+         * @description Deprecated: use `POST /projects/{id}/frontends/{frontendId}/domains`, which adds a domain beside the frontend's others.
+         *     Configures one custom domain for a frontend. When the frontend already has a domain, a request for another hostname returns `409`.
          *     The default Volcano-generated frontend URL remains active.
          *     Wildcard Volcano frontend TLS remains valid and isolated from custom-domain certificate changes.
          *     The account must own the hostname: it must have verified the hostname or a domain above it (see `POST /user/domains`). A certificate does not prove ownership.
@@ -2731,11 +2830,96 @@ export interface paths {
          *     An unverified reservation does not block an account that proves ownership. When another account holds one, a request gets `409` with `code: ownership_verification_required` and the caller's own `required_record`; after publishing it, the same request takes over the reservation. When another account verified the domain, the same `409` names the record that moves the domain to the caller once the other account's record is no longer published. A hostname below a domain another account owns otherwise returns `409` without `code`.
          */
         post: operations["createFrontendCustomDomain"];
-        /** Delete frontend custom domain */
+        /**
+         * Delete frontend custom domain
+         * @deprecated
+         * @description Deprecated: use `DELETE /projects/{id}/frontends/{frontendId}/domains/{domain}`.
+         *     Deletes the frontend's custom domain. A frontend with several domains
+         *     returns `409`; name the one to delete on the collection route.
+         */
         delete: operations["deleteFrontendCustomDomain"];
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a frontend's custom domains
+         * @description Lists the frontend's custom domains, oldest first. Each domain either
+         *     serves the frontend or, with `redirect` set, redirects every request to
+         *     another domain of the frontend.
+         */
+        get: operations["listFrontendDomains"];
+        put?: never;
+        /**
+         * Add a custom domain to a frontend
+         * @description Adds a custom domain beside the frontend's others, up to the plan's
+         *     custom domains per frontend. The domain serves the frontend, or, with
+         *     `redirect`, redirects every request to `redirect.to`, another active
+         *     domain of the same frontend that serves it, keeping the path and query
+         *     string.
+         *     A redirecting domain still needs TLS, so it takes `tls` like any other.
+         *
+         *     Ownership, verification records, TLS mode switches, and the `409` codes
+         *     work as on `POST /projects/{id}/frontends/{frontendId}/domain`. A
+         *     request for a hostname the frontend already has returns it with `200`,
+         *     or switches its TLS mode in place. When the request's redirect differs
+         *     from the domain's, it returns `409`; change a redirect with `PATCH`.
+         */
+        post: operations["createFrontendDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/domains/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description The custom domain's hostname, such as `www.example.com` */
+                domain: components["parameters"]["FrontendCustomDomainHostname"];
+            };
+            cookie?: never;
+        };
+        /** Get a frontend custom domain */
+        get: operations["getFrontendDomain"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a custom domain from a frontend
+         * @description Detaches the domain. A domain other domains redirect to cannot be
+         *     removed until those redirects are removed or retargeted.
+         */
+        delete: operations["deleteFrontendDomain"];
+        options?: never;
+        head?: never;
+        /**
+         * Set or clear a custom domain's redirect
+         * @description `{"redirect": {"to": "www.example.com", "status": 308}}` makes the
+         *     domain redirect to another active domain of the frontend that serves it.
+         *     `{"redirect": null}` makes it serve the frontend again. A domain other
+         *     domains redirect to cannot become a redirect itself. `status` defaults
+         *     to `308`. Proxies apply the change within seconds.
+         */
+        patch: operations["updateFrontendDomain"];
         trace?: never;
     };
     "/projects/{id}/frontends/{frontendId}/deployments": {
@@ -2748,7 +2932,26 @@ export interface paths {
         /** List frontend deployments */
         get: operations["listFrontendDeployments"];
         put?: never;
-        post?: never;
+        /**
+         * Deploy an existing build to a frontend
+         * @description Deploys the build of another frontend's deployment in the same project to this frontend, without
+         *     compiling it again. Use it to serve one build from several frontends, such as one per region or
+         *     brand. This frontend gets its own copy of the source archive and the build, so later changes to the
+         *     source frontend do not reach it, and a later redeploy of this frontend compiles that copied source.
+         *
+         *     The build-time variables this frontend would build with must equal those the source build read,
+         *     compared by name and value. Volcano records a keyed digest of each value, unique to the build, and
+         *     never stores the values. A mismatch returns `409` with `code: build_variables_differ` and the differing
+         *     names in `error`. The source deployment must be `active` or `degraded`, and both frontends must use
+         *     the same framework and app root.
+         *
+         *     Admission is the redeploy's: the deployment starts with `status: provisioning`, or, while another
+         *     deployment is in progress, is exposed through `pending_deployment_id` and supersedes any older
+         *     queued deployment. Nothing is compiled: the deployment's build minutes cover publishing the build
+         *     alone. The checks run again when a queued deployment starts. A refusal then fails the deployment
+         *     without a retry, its `error_message` starting with the refusal's code.
+         */
+        post: operations["createFrontendDeployment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2837,6 +3040,68 @@ export interface paths {
         post?: never;
         /** Delete a Frontend Function route */
         delete: operations["deleteFrontendFunctionRoute"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/frontend-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        /** List a Frontend's Frontend routes */
+        get: operations["listFrontendRoutes"];
+        put?: never;
+        /**
+         * Mount another Frontend at a path
+         * @description Serves `path_prefix` and everything under it on this Frontend's hostnames from another
+         *     Frontend in the same Project. The path is forwarded unchanged, so the mounted Frontend must
+         *     serve its pages under the prefix (page directories or a matching `basePath`). Its root
+         *     `/_next/static` files and `/_next/image` requests are sent to it too. A Frontend may be
+         *     mounted at several prefixes. Function and Frontend routes share one path namespace and the
+         *     64-route limit; the most specific prefix wins. A mounted Frontend's own routes do not apply
+         *     to requests it receives through a route. The route applies to every hostname that resolves
+         *     to this Frontend, including generated, custom-domain, and local hostnames. While the mounted
+         *     Frontend has no active deployment, its paths answer 502, as its own hostname does.
+         */
+        post: operations["createFrontendRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/frontend-routes/{routeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend route ID */
+                routeId: components["parameters"]["FrontendRouteId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a Frontend route
+         * @description Replaces the route's mounted Frontend and path. The new values must meet the same rules as on create.
+         */
+        put: operations["updateFrontendRoute"];
+        post?: never;
+        /** Delete a Frontend route */
+        delete: operations["deleteFrontendRoute"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4580,6 +4845,9 @@ export interface paths {
          *     subject or a blank message. Also rejects with 400 if
          *     `email_enabled=false`, `smtp_host` is empty, or the saved
          *     `smtp_password` can't be read and must be set again.
+         *     Sender values with interior line breaks return 400 before SMTP delivery.
+         *     Rendered override subjects containing a line break have outer whitespace
+         *     trimmed; any remaining interior line break returns 400 before delivery.
          */
         post: operations["testEmailConfig"];
         delete?: never;
@@ -5960,7 +6228,8 @@ export interface paths {
          *     | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
          *     | `issues` | The Issues API: listing, reading, and updating grouped runtime errors |
          *     | `autofix` | The Autofix API: a project's AI diagnosis and fix settings |
-         *     | `autofix.managed_models` | Turning autofix on with Volcano-managed models instead of your own API key |
+         *     | `functions.response_streaming` | Streaming an HTTP-mode function's response on its own URL as the function writes it |
+         *     | `frontend_routes` | Creating and changing Frontend routes; listing, deleting, and serving existing ones work either way |
          *
          *     A capability missing from the list is unavailable, and a capability under
          *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
@@ -5969,6 +6238,11 @@ export interface paths {
          *     that code. Reading, deleting, and terminating what already exists keep
          *     working unless the whole feature is absent from the environment. Every caller
          *     in an environment gets the same answer.
+         *
+         *     `functions.response_streaming` refuses nothing: while it is unavailable, a
+         *     function's own URL still answers and sends a streamed response whole, once
+         *     the function finishes, up to 6 MiB with headers; a larger one fails the
+         *     invocation. Frontend Function routes stream either way.
          */
         get: operations["listCapabilities"];
         put?: never;
@@ -6500,7 +6774,9 @@ export interface components {
              * @default false
              */
             email_enabled?: boolean;
+            /** @description Sender email address. New or changed values containing carriage returns or newlines return 400. Unchanged stored or exported values are preserved. Leading and trailing whitespace in previously saved settings is trimmed in responses and exports, and ignored when sending. */
             email_from_address?: string;
+            /** @description Sender display name; supports punctuation and Unicode. New or changed values containing carriage returns or newlines return 400. Unchanged stored or exported values are preserved. Leading and trailing whitespace in previously saved settings is trimmed in responses and exports, and ignored when sending. */
             email_from_name?: string;
             smtp_host?: string;
             /** @default 587 */
@@ -7010,7 +7286,7 @@ export interface components {
              */
             template_type: "welcome" | "confirmation" | "password_reset" | "password_changed";
             /**
-             * @description Email subject line
+             * @description Subject template. After Go template whitespace trimming, literal interior carriage returns or newlines return 400. Outer whitespace and trailing block-scalar newlines are allowed.
              * @example Confirm your email
              */
             subject: string;
@@ -7031,6 +7307,15 @@ export interface components {
              */
             domain: string;
             tls: components["schemas"]["FrontendCustomDomainTLSConfig"];
+        };
+        CreateFrontendDomainRequest: {
+            /**
+             * @description Fully-qualified domain name (hostname only, no scheme/path). Managed TLS (`tls.mode: managed`) accepts at most 219 characters; BYOC accepts 253.
+             * @example www.example.com
+             */
+            domain: string;
+            tls: components["schemas"]["FrontendCustomDomainTLSConfig"];
+            redirect?: components["schemas"]["FrontendCustomDomainRedirectRequest"];
         };
         CreateFunctionSchedulerRequest: {
             name: string;
@@ -7759,6 +8044,16 @@ export interface components {
             expires_in: number;
             interval: number;
         };
+        /** @description Built-in email template used when no custom template applies. */
+        DefaultEmailTemplate: {
+            /** @enum {string} */
+            type: "welcome" | "confirmation" | "password_reset" | "password_changed";
+            subject: string;
+            /** @description HTML template with placeholders */
+            html_body: string;
+            /** @description Plain text template with placeholders */
+            text_body: string;
+        };
         /** @description Custom email template */
         EmailTemplate: {
             /** Format: uuid */
@@ -7780,7 +8075,7 @@ export interface components {
         };
         Error: {
             error: string;
-            /** @description Stable machine-readable error code when a specific recovery path is available. */
+            /** @description Stable machine-readable error code when a specific recovery path is available. `plan_required` (403) means the project owner's plan does not include the requested feature or option; upgrading the plan unlocks it. A 403 without a code leaves the reason unspecified: it can be an access refusal, a reached limit, or a plan check that could not read the owner's plan. Match on the code, not the message text. */
             code?: string;
         };
         /**
@@ -7997,7 +8292,10 @@ export interface components {
             root_directory: string;
             /** @description The branch a push must land on to deploy. Follows the repository's GitHub default branch unless the project set its own, which a default-branch rename on GitHub then leaves alone. */
             production_branch: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the connection last changed: its repository, root directory or production branch. Naming the branch it already uses, and other changes to the project, leave it alone. A connection that has not changed since Volcano began tracking this reports the project's last change before then.
+             */
             updated_at: string;
         };
         /** @description A project's GitHub auto-deploy settings: what a push to the connected repo's production branch deploys. All settings are default-off. */
@@ -8010,7 +8308,10 @@ export interface components {
             frontend_name?: string;
             /** @description App root (subdirectory) the frontend builds from. Omitted for the repo root. */
             frontend_app_root?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the settings were last saved, or last changed by connecting a repository. Other changes to the project leave it alone. Settings a connection turned on before Volcano began tracking this report the project's last change before then; settings never saved or changed report when the project was created.
+             */
             updated_at: string;
         };
         /** @description Full replace of a project's Git auto-deploy settings. */
@@ -8118,6 +8419,10 @@ export interface components {
             /** @description The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. */
             production_branch: string;
         };
+        SetProjectGitRootDirectoryRequest: {
+            /** @description Monorepo subdirectory the project builds from, relative to the repository root. An empty string means the repository root. */
+            root_directory: string;
+        };
         ConnectProjectGitRequest: {
             /**
              * Format: uuid
@@ -8200,6 +8505,12 @@ export interface components {
              */
             function_routes: components["schemas"]["FrontendFunctionRoute"][];
             /**
+             * @description Paths on this frontend served by another frontend in the project,
+             *     ordered from most to least specific. Function and Frontend routes
+             *     share one path namespace and the 64-route limit.
+             */
+            frontend_routes: components["schemas"]["FrontendRoute"][];
+            /**
              * Format: date-time
              * @description Recorded completion time of the most recent deploy or redeploy with status active. Omitted when no such deployment has a recorded completion time. Site traffic, pending deployments, degraded deployments, failed deployments, and deletion do not change this value.
              */
@@ -8236,6 +8547,51 @@ export interface components {
             path_prefix: string;
             /** @default false */
             strip_prefix?: boolean;
+        };
+        /**
+         * @description A path prefix on this Frontend's hostnames served by another Frontend in the Project, the
+         *     mounted Frontend. Paths are forwarded unchanged, so the mounted Frontend serves its prefix
+         *     as real pages (page directories or a matching `basePath`).
+         */
+        FrontendRoute: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description The Frontend whose hostnames serve the route
+             */
+            frontend_id: string;
+            /**
+             * Format: uuid
+             * @description The mounted Frontend
+             */
+            target_frontend_id: string;
+            path_prefix: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        FrontendRouteList: {
+            data: components["schemas"]["FrontendRoute"][];
+        };
+        CreateFrontendRouteRequest: {
+            /**
+             * Format: uuid
+             * @description The Frontend to mount. It must be another Frontend in the Project.
+             */
+            target_frontend_id: string;
+            path_prefix: string;
+        };
+        /** @description Deploys the build of an existing deployment instead of compiling the frontend's source. */
+        CreateFrontendDeploymentRequest: {
+            /**
+             * Format: uuid
+             * @description An `active` or `degraded` deployment of another frontend in the same project. Its build is copied to this frontend and published without compiling it again.
+             */
+            source_deployment_id: string;
         };
         /** @description TLS for a new custom domain. With `mode: managed`, Volcano issues and renews the certificate; omit every PEM field. With `mode: byoc`, send both `certificate_pem` and `private_key_pem`, plus an optional `certificate_chain_pem`. */
         FrontendCustomDomainTLSConfig: {
@@ -8280,10 +8636,39 @@ export interface components {
             /** @description DNS routing target hostname for this frontend. The DNS record type depends on whether the custom domain is a zone apex. */
             routing_target_hostname?: string;
             effective_urls: string[];
+            /** @description Where the domain redirects every request, or null when it serves the frontend. */
+            redirect: components["schemas"]["FrontendCustomDomainRedirect"] | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        FrontendCustomDomainList: {
+            data: components["schemas"]["FrontendCustomDomainResponse"][];
+        };
+        FrontendCustomDomainRedirect: {
+            /** @description Hostname the domain redirects to. */
+            to: string;
+            /** @enum {integer} */
+            status: 301 | 302 | 307 | 308;
+        };
+        /** @description Redirects every request for the domain to `to`, another active domain of the same frontend that serves it, keeping the path and query string. */
+        FrontendCustomDomainRedirectRequest: {
+            /**
+             * @description Hostname of an active domain of the same frontend that serves it.
+             * @example www.example.com
+             */
+            to: string;
+            /**
+             * @description Redirect status. 301 and 308 are permanent, 302 and 307 temporary; 307 and 308 keep the request method and body.
+             * @default 308
+             * @enum {integer}
+             */
+            status?: 301 | 302 | 307 | 308;
+        };
+        UpdateFrontendCustomDomainRequest: {
+            /** @description The redirect to set, or null to make the domain serve the frontend. */
+            redirect: components["schemas"]["FrontendCustomDomainRedirectRequest"] | null;
         };
         FrontendDeployment: {
             /** Format: uuid */
@@ -8308,6 +8693,11 @@ export interface components {
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
             /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
             initiated_by?: string;
+            /**
+             * Format: uuid
+             * @description The deployment whose build this deployment published instead of compiling its own source. Absent when the deployment compiled.
+             */
+            source_deployment_id?: string;
             site_url?: string;
             /**
              * Format: int64
@@ -9168,6 +9558,31 @@ export interface components {
              * @description Total number of times this scheduler has executed. 0 for a scheduler that has never run.
              */
             run_count?: number;
+            /**
+             * @description `failing` while `consecutive_failures` is above 0; `healthy` otherwise, including before its first run in the region the scheduler runs in now. A run from a region it moved away from does not count. For a durable function a run finishes when its execution does, so a run that starts but then fails counts as failed.
+             * @enum {string}
+             */
+            health?: "healthy" | "failing";
+            /**
+             * Format: int64
+             * @description How many runs in a row have failed in the region the scheduler runs in now. Resets to 0 when a run succeeds, and starts at 0 in a region it moves to.
+             */
+            consecutive_failures?: number;
+            /**
+             * @description Outcome of the most recent finished run. Absent before the first.
+             * @enum {string}
+             */
+            last_run_status?: "succeeded" | "failed";
+            /**
+             * Format: date-time
+             * @description When the most recent successful run finished.
+             */
+            last_success_at?: string;
+            /**
+             * Format: date-time
+             * @description When the most recent failed run finished.
+             */
+            last_failure_at?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -9754,22 +10169,36 @@ export interface components {
         UpdateIssueRequest: {
             status: components["schemas"]["IssueStatus"];
         };
+        NotificationSettings: {
+            /** Format: uuid */
+            project_id: string;
+            email: components["schemas"]["NotificationEmailSettings"];
+            webhook: components["schemas"]["NotificationWebhookSettings"];
+            scheduler_failures: components["schemas"]["SchedulerFailureAlertPolicy"];
+            /**
+             * Format: date-time
+             * @description When the settings were last saved. Absent until the first save.
+             */
+            updated_at?: string;
+        };
+        /** @description Omitted fields keep their current values. */
+        UpdateNotificationSettingsRequest: {
+            email?: components["schemas"]["UpdateNotificationEmail"];
+            webhook?: components["schemas"]["UpdateNotificationWebhook"];
+            scheduler_failures?: components["schemas"]["UpdateSchedulerFailureAlertPolicy"];
+        };
+        NotificationTestResult: {
+            deliveries: components["schemas"]["NotificationTestDelivery"][];
+        };
         AutofixSettings: {
             /** Format: uuid */
             project_id: string;
             /** @description Whether Volcano diagnoses the project's issues with AI. */
             enabled: boolean;
+            /** @description How far a run goes. Defaults to `pull_request`. */
             max_stage: components["schemas"]["AutofixStage"];
-            /** @description Whether a new or reopened issue starts a run on its own. When false, runs start only on request. */
+            /** @description Whether a new or regressed issue starts a run on its own. Defaults to true. When false, runs start only on request. */
             auto_trigger: boolean;
-            provider: components["schemas"]["AutofixProvider"];
-            model: components["schemas"]["AutofixModel"];
-            /** @description Whether your own API key is stored. The key itself is never returned. */
-            api_key_configured: boolean;
-            /** @description The provider the stored key belongs to, present when one is stored. */
-            api_key_provider?: components["schemas"]["AutofixProvider"];
-            /** @description The stored key's last four characters, present when one is stored. */
-            api_key_last4?: string;
             /** @description Whether the owner's plan includes autofix. When false, saved settings stay stored and no run starts. Absent when a save that needed no plan succeeded but the plan could not be resolved. */
             plan_includes_autofix?: boolean;
             /**
@@ -9783,28 +10212,12 @@ export interface components {
          * @enum {string}
          */
         AutofixStage: "diagnose" | "pull_request";
-        /**
-         * @description Who serves the model. `volcano` runs on Volcano's models. `anthropic` runs on your own Anthropic API key.
-         * @enum {string}
-         */
-        AutofixProvider: "volcano" | "anthropic";
-        /**
-         * @description The Claude model a run uses. `claude-opus-5-5` is the default.
-         * @enum {string}
-         */
-        AutofixModel: "claude-fable-5-1" | "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5" | "claude-opus-5" | "claude-sonnet-5" | "claude-haiku-4-5";
         UpdateAutofixSettingsRequest: {
             enabled: boolean;
+            /** @description How far a run goes. Omitted, it keeps the saved value, or is `pull_request` when the project has no saved settings. */
             max_stage?: components["schemas"]["AutofixStage"];
-            /** @default false */
+            /** @description Whether a new or regressed issue starts a run on its own. Omitted, it keeps the saved value, or is `true` when the project has no saved settings. */
             auto_trigger?: boolean;
-            provider?: components["schemas"]["AutofixProvider"];
-            model?: components["schemas"]["AutofixModel"];
-            /**
-             * Format: password
-             * @description Your own API key for `provider`, such as an Anthropic key for `anthropic`. Omit it to keep the stored key. Encrypted at rest and never returned.
-             */
-            api_key?: string;
         };
         /**
          * @description Where a run is. `canceled` means the project's settings or plan stopped allowing the run before it finished; `failure_code` says which.
@@ -9835,17 +10248,6 @@ export interface components {
             fixable: boolean;
             /** @description Repository paths a fix would change. */
             files: string[];
-        };
-        /** @description Model tokens the run used across every attempt. */
-        AutofixRunUsage: {
-            /** Format: int64 */
-            input_tokens: number;
-            /** Format: int64 */
-            output_tokens: number;
-            /** Format: int64 */
-            cache_read_input_tokens: number;
-            /** Format: int64 */
-            cache_creation_input_tokens: number;
         };
         /** @description One exact text replacement. An empty `old_text` creates the file. */
         AutofixEdit: {
@@ -9896,18 +10298,15 @@ export interface components {
             status: components["schemas"]["AutofixRunStatus"];
             max_stage: components["schemas"]["AutofixStage"];
             stage_reached?: components["schemas"]["AutofixStage"];
-            provider: components["schemas"]["AutofixProvider"];
-            model: components["schemas"]["AutofixModel"];
             diagnosis?: components["schemas"]["AutofixDiagnosis"];
             patch?: components["schemas"]["AutofixPatch"];
             pull_request?: components["schemas"]["AutofixPullRequest"];
             pull_request_skipped?: components["schemas"]["AutofixPullRequestSkipped"];
             /** @description The commit the diagnosis read, when a push to the connected repository deployed the resource. Absent when the run read logs only. */
             commit_sha?: string;
-            /** @description Why the run failed or was canceled, or why its last attempt will be retried. One of `api_key_rejected`, `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `autofix_disabled`, `plan_required`, `managed_models_unavailable`, `settings_changed`, `issue_not_found`, or `internal_error`. */
+            /** @description Why the run failed or was canceled, or why its last attempt will be retried. A queued run paused while Autofix is unavailable reports `feature_unavailable`; it resumes without spending an attempt when Autofix returns. Other values are `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `autofix_disabled`, `plan_required`, `issue_not_found`, or `internal_error`. Runs that ended before Volcano picked the models for every run may also report `api_key_rejected`, `settings_changed`, or `managed_models_unavailable`; no new run reports them. */
             failure_code?: string;
             failure_message?: string;
-            usage: components["schemas"]["AutofixRunUsage"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -10118,6 +10517,7 @@ export interface components {
             buckets?: components["schemas"]["ProjectConfigBucket"][];
             realtime?: components["schemas"]["ProjectConfigRealtime"];
             autofix?: components["schemas"]["ProjectConfigAutofix"];
+            notifications?: components["schemas"]["ProjectConfigNotifications"];
             auth?: components["schemas"]["ProjectConfigAuth"];
             functions?: components["schemas"]["ProjectConfigFunction"][];
             frontends?: components["schemas"]["ProjectConfigFrontend"][];
@@ -10191,7 +10591,9 @@ export interface components {
             templates?: components["schemas"]["ProjectConfigEmailTemplates"];
         };
         ProjectConfigAuthEmailFrom: {
+            /** @description Sender email address. New or changed values containing carriage returns or newlines return 422. Unchanged exported values are preserved. */
             address?: string;
+            /** @description Sender display name; supports punctuation and Unicode. New or changed values containing carriage returns or newlines return 422. Unchanged exported values are preserved. */
             name?: string;
         };
         ProjectConfigAuthEmailPasswordProvider: {
@@ -10339,6 +10741,26 @@ export interface components {
             tls?: components["schemas"]["ProjectConfigFrontendCustomDomainTLSConfig"];
         };
         /**
+         * @description One of the frontend's custom domains. `domain` and `tls` behave as in
+         *     `custom_domain`. With `redirect`, the domain redirects every request to
+         *     another listed domain that serves the frontend.
+         */
+        ProjectConfigFrontendCustomDomain: {
+            /** @description Fully-qualified domain name (hostname only, no scheme/path). Managed TLS (`tls.mode: managed`) accepts at most 219 characters; BYOC accepts 253. */
+            domain: string;
+            tls?: components["schemas"]["ProjectConfigFrontendCustomDomainTLSConfig"];
+            redirect?: components["schemas"]["ProjectConfigCustomDomainRedirect"];
+        };
+        ProjectConfigCustomDomainRedirect: {
+            /** @description Another domain in the same `custom_domains` list, without `redirect`. */
+            to: string;
+            /**
+             * @default 308
+             * @enum {integer}
+             */
+            status?: 301 | 302 | 307 | 308;
+        };
+        /**
          * @description Assertion-only entry for an existing database. No database property is
          *     mutable through the manifest; declared values are compared against the
          *     deployed database and any mismatch fails validation. Databases are
@@ -10363,6 +10785,7 @@ export interface components {
             database_type?: "volcano-db-xs" | "volcano-db-s" | "volcano-db-m" | "volcano-db-l" | "volcano-db-xl" | "volcano-db-2xl";
         };
         ProjectConfigEmailTemplate: {
+            /** @description Subject template. For new or changed values, literal interior carriage returns or newlines after Go template whitespace trimming return 422. Outer whitespace and trailing block-scalar newlines are allowed. Unchanged stored subjects are preserved. */
             subject?: string;
             /** @description HTML body. Max 256 KiB. SUPERAGENT plan required for custom bodies. */
             html_body?: string;
@@ -10383,8 +10806,7 @@ export interface components {
         };
         /**
          * @description Configuration for an existing (deployed) frontend. Frontends are never
-         *     created or deleted through the manifest. A declared frontend entry
-         *     without `custom_domain` deletes an existing custom domain.
+         *     created or deleted through the manifest.
          */
         ProjectConfigFrontend: {
             /**
@@ -10395,9 +10817,28 @@ export interface components {
             /** @description Names selected when variable_scope is scoped. Missing declared values reject deployment. Omission preserves the stored list; an empty list clears it. */
             variables?: string[];
             name: string;
-            custom_domain?: components["schemas"]["ProjectConfigCustomDomain"];
+            /**
+             * @description The frontend's custom domain. Omission leaves an existing domain
+             *     untouched; null deletes it. For a frontend with more than one
+             *     domain, or a redirect, use `custom_domains`; an entry may not set
+             *     both.
+             */
+            custom_domain?: components["schemas"]["ProjectConfigCustomDomain"] | null;
+            /**
+             * @description Complete set of the frontend's custom domains when declared.
+             *     Domains not listed are deleted; an empty list deletes all of them.
+             *     Omission leaves existing domains untouched. More than one domain
+             *     needs a plan that allows it.
+             */
+            custom_domains?: components["schemas"]["ProjectConfigFrontendCustomDomain"][];
             /** @description Complete set of same-origin Function path mappings when declared. Omission preserves existing mappings; an empty list deletes all mappings. */
             function_routes?: components["schemas"]["ProjectConfigFrontendFunctionRoute"][];
+            /**
+             * @description Complete set of paths this frontend serves from another frontend in the project when
+             *     declared. Omission preserves existing routes; an empty list deletes all of them.
+             *     Function and Frontend routes share one path namespace and the 64-route limit.
+             */
+            frontend_routes?: components["schemas"]["ProjectConfigFrontendRoute"][];
         };
         /**
          * @description Configuration for an existing (deployed) function. Functions are never
@@ -10512,13 +10953,11 @@ export interface components {
             presence_enabled?: boolean;
             postgres_changes_enabled?: boolean;
         };
-        /** @description AI diagnosis and fix settings. Omitted fields keep their current value. Your API key is never part of the manifest, and an apply never sets or deletes it: set it with `PUT /projects/{id}/autofix` before turning on a provider that runs on your own key. */
+        /** @description AI diagnosis and fix settings. Omitted fields keep their current value; a project that never saved settings starts from `max_stage: pull_request` and `auto_trigger: true`. */
         ProjectConfigAutofix: {
             enabled?: boolean;
             max_stage?: components["schemas"]["AutofixStage"];
             auto_trigger?: boolean;
-            provider?: components["schemas"]["AutofixProvider"];
-            model?: components["schemas"]["AutofixModel"];
         };
         ProjectConfigScheduler: {
             name: string;
@@ -11186,7 +11625,9 @@ export interface components {
             auto_link_verified_oauth?: boolean;
             /** @description Enable transactional email sending. Cannot be false while require_email_confirmation is true. */
             email_enabled?: boolean;
+            /** @description Sender email address. New or changed values containing carriage returns or newlines return 400. Unchanged stored or exported values are preserved. Leading and trailing whitespace in previously saved settings is ignored when sending. */
             email_from_address?: string;
+            /** @description Sender display name; supports punctuation and Unicode. New or changed values containing carriage returns or newlines return 400. Unchanged stored or exported values are preserved. Leading and trailing whitespace in previously saved settings is ignored when sending. */
             email_from_name?: string;
             smtp_host?: string;
             smtp_port?: number;
@@ -11197,8 +11638,11 @@ export interface components {
              */
             smtp_password?: string;
             smtp_use_tls?: boolean;
+            /** @description Subject template. For new or changed values, literal interior carriage returns or newlines after Go template whitespace trimming return 400. Outer whitespace and trailing block-scalar newlines are allowed. Unchanged stored subjects are preserved. */
             email_confirmation_subject?: string;
+            /** @description Subject template. For new or changed values, literal interior carriage returns or newlines after Go template whitespace trimming return 400. Outer whitespace and trailing block-scalar newlines are allowed. Unchanged stored subjects are preserved. */
             email_password_reset_subject?: string;
+            /** @description Subject template. For new or changed values, literal interior carriage returns or newlines after Go template whitespace trimming return 400. Outer whitespace and trailing block-scalar newlines are allowed. Unchanged stored subjects are preserved. */
             email_password_changed_subject?: string;
             /** @description Enable or disable managed auth hosted pages for the project. */
             managed_auth_enabled?: boolean;
@@ -11238,6 +11682,7 @@ export interface components {
             database_type: "volcano-db-xs" | "volcano-db-s" | "volcano-db-m" | "volcano-db-l" | "volcano-db-xl" | "volcano-db-2xl";
         };
         UpdateEmailTemplateRequest: {
+            /** @description Subject template. For new or changed values, literal interior carriage returns or newlines after Go template whitespace trimming return 400. Outer whitespace and trailing block-scalar newlines are allowed. Unchanged stored subjects are preserved. */
             subject?: string;
             html_body?: string;
             text_body?: string;
@@ -11452,7 +11897,10 @@ export interface components {
             repo_full_name: string;
             root_directory: string;
             production_branch: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the connection last changed: its repository, root directory or production branch. Naming the branch it already uses, and other changes to the project, leave it alone. A connection that has not changed since Volcano began tracking this reports the project's last change before then.
+             */
             updated_at: string;
         };
         ProjectHealthSummary: {
@@ -11468,6 +11916,31 @@ export interface components {
          * @enum {string}
          */
         FunctionKind: "standard" | "durable";
+        UpdateNotificationEmail: {
+            enabled?: boolean;
+            /** @description Only the project owner's verified account email address is supported. An empty list, or one naming only that address, emails the owner and is saved as an empty list. Any other list is refused as invalid. */
+            recipients?: string[];
+        };
+        UpdateNotificationWebhook: {
+            /** @description An `http` or `https` URL. Surrounding whitespace is trimmed. An empty string removes the webhook and its secret. */
+            url?: string;
+        };
+        /**
+         * @description When a failing scheduler is announced: on its first failed run, or once `threshold` runs in a row have failed. Either way a streak is announced once, and a scheduler is announced failing at most once an hour.
+         * @enum {string}
+         */
+        SchedulerFailureNotifyOn: "first_failure" | "consecutive_failures";
+        UpdateSchedulerFailureAlertPolicy: {
+            notify_on?: components["schemas"]["SchedulerFailureNotifyOn"];
+            threshold?: number;
+            notify_on_recovery?: boolean;
+        };
+        /** @description Where the project's alerts go and when a failing scheduler is announced. Omitted fields keep their current value. The webhook signing secret is never part of the manifest: setting `webhook.url` on a project without a webhook generates one that is never shown. Rotate it with `POST /projects/{id}/notifications/webhook-secret` to get a secret you can use. */
+        ProjectConfigNotifications: {
+            email?: components["schemas"]["UpdateNotificationEmail"];
+            webhook?: components["schemas"]["UpdateNotificationWebhook"];
+            scheduler_failures?: components["schemas"]["UpdateSchedulerFailureAlertPolicy"];
+        };
         AuthPageThemeColors: {
             background: string;
             surface: string;
@@ -11514,6 +11987,11 @@ export interface components {
             path_prefix: string;
             /** @default false */
             strip_prefix?: boolean;
+        };
+        ProjectConfigFrontendRoute: {
+            /** @description Name of another existing frontend in the project to mount. Paths are forwarded unchanged. */
+            frontend: string;
+            path_prefix: string;
         };
         ProjectConfigSandbox: {
             /** @description Name of an existing sandbox template or matching Git source directory. */
@@ -11679,6 +12157,42 @@ export interface components {
             stage?: "compile" | "publish";
         };
         /**
+         * @description Whether alerts are being emailed. `owner_email_unverified` means email is enabled but the project owner has no active account with a verified email address, so no alert is emailed, and email does not count as a channel when deciding whether to announce a failing scheduler, until the owner verifies it. Changing the account email address needs a new verification.
+         * @enum {string}
+         */
+        NotificationEmailStatus: "delivering" | "disabled" | "owner_email_unverified";
+        NotificationEmailSettings: {
+            /** @description Whether alerts are emailed. */
+            enabled: boolean;
+            /** @description Empty. Alerts are emailed to the project owner's verified account email address, the only recipient supported. */
+            recipients: string[];
+            status: components["schemas"]["NotificationEmailStatus"];
+        };
+        NotificationWebhookSettings: {
+            /** @description Where alerts are posted. Absent when no webhook is configured. */
+            url?: string;
+            /** @description Whether a signing secret is set. The secret itself is returned only once. */
+            secret_configured: boolean;
+            /** @description The signing secret, starting with `whsec_`. Present only in the response that generated it: the update that first set `url`, or a rotation. Store it then; it cannot be read again. */
+            secret?: string;
+        };
+        SchedulerFailureAlertPolicy: {
+            notify_on: components["schemas"]["SchedulerFailureNotifyOn"];
+            /** @description How many runs in a row have to fail before a `consecutive_failures` alert. Ignored for `first_failure`. */
+            threshold: number;
+            /** @description Whether a successful run after an alerted failure streak sends a `scheduler.recovered` alert. */
+            notify_on_recovery: boolean;
+        };
+        NotificationTestDelivery: {
+            /** @enum {string} */
+            channel: "email" | "webhook";
+            delivered: boolean;
+            /** @description The webhook's response status. Absent for email, and when no response arrived. */
+            status_code?: number;
+            /** @description Why the delivery failed. Absent when it arrived. */
+            error?: string;
+        };
+        /**
          * @description `waiting` until a message for its name arrives, `matched` while that
          *     message is handed over, then `delivered`. `expired` means the wait's
          *     timeout passed first, and `cancelled` that the execution stopped
@@ -11706,7 +12220,12 @@ export interface components {
              *     256 characters, without control characters.
              */
             type: string;
-            /** @description A human-readable explanation, up to 32 KiB. */
+            /**
+             * @description A human-readable explanation of up to 32,768 bytes of UTF-8, with
+             *     tab and newline as its only control characters. A character
+             *     outside ASCII takes more than one byte, so such text reaches the
+             *     limit before `maxLength`.
+             */
             message?: string;
         };
         /**
@@ -11865,6 +12384,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description The requested byte range does not overlap the file content. */
+        StorageRangeNotSatisfiable: {
+            headers: {
+                /** @description Current file size as `bytes *\/size`, when available. */
+                "Content-Range"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /**
          * @description Too many requests for the specification from one address. The document
          *     carries an `ETag`; revalidate with `If-None-Match` rather than
@@ -12002,6 +12532,10 @@ export interface components {
         FrontendId: string;
         /** @description Frontend Function route ID */
         FrontendFunctionRouteId: string;
+        /** @description Frontend route ID */
+        FrontendRouteId: string;
+        /** @description The custom domain's hostname, such as `www.example.com` */
+        FrontendCustomDomainHostname: string;
         /** @description Function ID */
         FunctionId: string;
         /** @description Durable function ID, or its name within the project */
@@ -14290,7 +14824,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Project limit exceeded for the user */
+            /** @description Forbidden. The user reached a project cap (only on older paid pricing revisions that set one), the plan does not allow the requested region subset, or a template's frontend limit was reached */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15050,7 +15584,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectConfigApplyResult"];
                 };
             };
-            /** @description Malformed request body */
+            /** @description Malformed request body, or, with code `feature_unavailable`, the manifest creates or changes something whose capability is unavailable in this environment, such as `frontends[].frontend_routes` while `frontend_routes` is unavailable in `GET /capabilities`. Nothing was applied. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -15463,6 +15997,97 @@ export interface operations {
             };
         };
     };
+    setProjectGitRootDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProjectGitRootDirectoryRequest"];
+            };
+        };
+        responses: {
+            /** @description The project's repo connection, with the new root directory */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGitConnection"];
+                };
+            };
+            /**
+             * @description Malformed request body, or a root_directory that is absolute or
+             *     leaves the repository
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project not found, or it has no repository connected. The root
+             *     directory is part of the connection, so there is nothing to set it
+             *     on until one exists.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A Git source transition is pending or complete, so the recorded
+             *     root cannot be changed
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to set the root directory */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getProjectGitConnection: {
         parameters: {
             query?: never;
@@ -15573,8 +16198,12 @@ export interface operations {
                 };
             };
             /**
-             * @description Project not owned by the caller, or the selected repository is not
-             *     accessible through installation_id
+             * @description Project not owned by the caller, the selected repository is not
+             *     accessible through installation_id, or the request used a project
+             *     access token. A full-scope token gets `project access tokens cannot
+             *     change a project's repository; a person changes it in the dashboard
+             *     or with a platform token`, and a read-only token gets `project
+             *     access token is read-only`.
              */
             403: {
                 headers: {
@@ -17636,6 +18265,210 @@ export interface operations {
             };
         };
     };
+    getNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description The request body is invalid, for example a recipient other than the project owner's verified account email address. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rotateNotificationWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rotated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No webhook is configured. Set `webhook.url` first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendTestNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test was attempted. Each delivery reports whether it arrived; a failed one is not retried. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResult"];
+                };
+            };
+            /** @description The request used a `read_only` project access token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No webhook is configured, and email is disabled or the project owner has no verified account email address, so there is nowhere to send. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A test was sent less than a minute ago. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listFunctionSchedulers: {
         parameters: {
             query?: never;
@@ -19517,7 +20350,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The request body is larger than 72 KiB */
+            /** @description The request body is larger than 200 KiB */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -19937,7 +20770,7 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixSettings"];
                 };
             };
-            /** @description The request body is invalid, the key does not fit the provider, or turning autofix on with a provider that runs on your own key has no key for it. Code `feature_unavailable` means Volcano-managed models are not available in this environment. */
+            /** @description The request body is invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -19946,7 +20779,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The owner's plan does not include autofix, or the request used a project access token. Only a person changes autofix settings. */
+            /** @description The owner's plan does not allow autofix (during the preview it needs the SUPERAGENT plan), or the request used a project access token. Only a person changes autofix settings. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -19984,56 +20817,6 @@ export interface operations {
             };
         };
     };
-    deleteAutofixAPIKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutofixSettings"];
-                };
-            };
-            /** @description The request used a project access token. Only a person deletes the key. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     startAutofixRun: {
         parameters: {
             query?: never;
@@ -20057,7 +20840,7 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixRun"];
                 };
             };
-            /** @description Code `feature_unavailable` means the project's provider is `volcano` and Volcano-managed models are not available in this environment. */
+            /** @description The request is invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -20702,7 +21485,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Frontend deployment limit exceeded for the current plan or project hard cap */
+            /** @description Project frontend hard cap exceeded */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -20869,6 +21652,15 @@ export interface operations {
             };
             /** @description Frontend not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Another Frontend's route mounts this Frontend. Remove those routes first; the error names the mounting Frontends. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21111,7 +21903,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Forbidden - the plan does not include custom domains, or a managed TLS request would exceed the account's managed TLS certificate limit */
+            /** @description Forbidden - the plan does not include custom domains, the frontend has as many custom domains as the plan allows, or a managed TLS request would exceed the account's managed TLS certificate limit */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -21217,7 +22009,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The custom domain switched TLS mode while the request ran. Send it again. */
+            /** @description The custom domain switched TLS mode while the request ran, so send it again, another domain of the frontend redirects to it, or the frontend has several domains. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -21227,6 +22019,388 @@ export interface operations {
                 };
             };
             /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listFrontendDomains: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The frontend's custom domains */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list custom domains */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFrontendDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description The frontend already has this hostname, or its TLS mode was switched in place */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainResponse"];
+                };
+            };
+            /** @description Custom domain provisioning started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainResponse"];
+                };
+            };
+            /** @description Invalid domain, TLS, or redirect, such as a redirect to a hostname the frontend does not serve or that is not active yet */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The plan does not include custom domains, the frontend has as many as the plan allows, or a managed TLS request would exceed the managed TLS certificate limit */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Ownership not verified, the hostname is owned, reserved, or used elsewhere, the frontend already has the hostname with a different redirect, or a removed domain is still releasing it (`code: custom_domain_releasing` with `Retry-After`). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before sending the same request again. Sent only with code `custom_domain_releasing`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainConflictError"];
+                };
+            };
+            /** @description Failed to add the custom domain */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Custom domain provisioning is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getFrontendDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description The custom domain's hostname, such as `www.example.com` */
+                domain: components["parameters"]["FrontendCustomDomainHostname"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or custom domain not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the custom domain */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteFrontendDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description The custom domain's hostname, such as `www.example.com` */
+                domain: components["parameters"]["FrontendCustomDomainHostname"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Custom domain detach scheduled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or custom domain not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Other domains of the frontend redirect to this one, and the message names them, or the domain switched TLS mode while the request ran */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to remove the custom domain */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateFrontendDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description The custom domain's hostname, such as `www.example.com` */
+                domain: components["parameters"]["FrontendCustomDomainHostname"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFrontendCustomDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCustomDomainResponse"];
+                };
+            };
+            /** @description Invalid redirect: the target is this domain, is not an active domain of the frontend, or redirects itself */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or custom domain not found, or the domain is being removed (`domain_status: detaching`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Other domains of the frontend redirect to this one; the message names them */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to update the custom domain */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -21309,6 +22483,116 @@ export interface operations {
             };
             /** @description Internal server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFrontendDeployment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendDeploymentRequest"];
+            };
+        };
+        responses: {
+            /** @description Deployment started or queued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Frontend"];
+                };
+            };
+            /** @description Bad request - invalid identifier or body, or `code: source_deployment_same_frontend` when the source deployment belongs to this frontend; redeploy the frontend instead. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found, or `code: source_deployment_not_found` when the source deployment is not in this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict. `code: build_variables_differ` names the build-time variables whose values differ. `code: source_deployment_not_active` refuses a deployment that is not `active` or `degraded`. `code: source_build_unavailable` refuses a deployment made before Volcano kept builds, or whose build is no longer kept; redeploy the source frontend once and deploy from that deployment. `code: frontend_incompatible` refuses a different framework or app root. Without a code, the frontend's deletion is queued or running, or the project's source is managed by Git, where deploys come from a push to the production branch. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Monthly build-minutes allowance exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `code: build_reuse_unavailable` - this server cannot deploy an existing build. Local mode answers this; deploy the frontend from source instead. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service unavailable - frontend workflow configuration missing, or the build-minutes check is temporarily unavailable; retry later. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21662,6 +22946,287 @@ export interface operations {
                 };
             };
             /** @description Failed to delete Function route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listFrontendRoutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Frontend routes ordered from most to least specific */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendRouteList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list Frontend routes */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFrontendRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendRouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Frontend route created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendRoute"];
+                };
+            };
+            /** @description Invalid path, or the Frontend would mount itself */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or mounted Frontend not found in the Project, or, with code `feature_unavailable`, Frontend routes are not available in this environment (see `GET /capabilities`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Path is already routed, the Frontend has reached its 64-route limit, or this Frontend or the mounted Frontend is being deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create Frontend route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateFrontendRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend route ID */
+                routeId: components["parameters"]["FrontendRouteId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFrontendRouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Frontend route replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendRoute"];
+                };
+            };
+            /** @description Invalid path, or the Frontend would mount itself */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend route, Frontend, or mounted Frontend not found, or, with code `feature_unavailable`, Frontend routes are not available in this environment (see `GET /capabilities`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Path is already routed, or this Frontend or the mounted Frontend is being deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to replace Frontend route */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteFrontendRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend route ID */
+                routeId: components["parameters"]["FrontendRouteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Frontend route deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend route not found on the Frontend */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete Frontend route */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -23286,8 +24851,12 @@ export interface operations {
                 };
             };
             /**
-             * @description The owner's plan does not include backups or point-in-time restore.
-             *     Both are available only on SUPERAGENT.
+             * @description The owner's plan does not include backups or point-in-time restore
+             *     (code `plan_required`). Both are available only on SUPERAGENT. Also
+             *     answers 403 without a code, with `restore history is not available
+             *     yet for the requested time`, when the plan includes restore history
+             *     but the database has not built any up yet; waiting fixes it, not
+             *     upgrading.
              */
             403: {
                 headers: {
@@ -23494,20 +25063,51 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Access denied or the requested size exceeds the plan allowance (code plan_required) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Database not found */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /**
              * @description The database is not active — being provisioned, deleted, or
              *     restored. Compute can only be changed while it is active.
              */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -26468,7 +28068,7 @@ export interface operations {
                     "application/json": components["schemas"]["EmailTemplate"];
                 };
             };
-            /** @description Invalid template type */
+            /** @description Invalid template type or subject containing a literal interior carriage return or newline */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -26554,6 +28154,15 @@ export interface operations {
                     "application/json": components["schemas"]["EmailTemplate"];
                 };
             };
+            /** @description Subject contains a literal interior carriage return or newline */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Custom email templates require the SUPERAGENT plan */
             403: {
                 headers: {
@@ -26626,7 +28235,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data?: components["schemas"]["EmailTemplate"][];
+                        data?: components["schemas"]["DefaultEmailTemplate"][];
                     };
                 };
             };
@@ -26649,7 +28258,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmailTemplate"];
+                    "application/json": components["schemas"]["DefaultEmailTemplate"];
                 };
             };
             /** @description Template type not found */
@@ -26657,7 +28266,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -26709,6 +28320,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthConfig"];
                 };
             };
+            /** @description Invalid auth configuration, including a subject with a literal interior carriage return or newline */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /**
              * @description The update would turn on, widen, or otherwise edit the email domain
              *     allowlist (`allowed_email_domains`, `allowed_email_domains_mode`)
@@ -26752,7 +28372,7 @@ export interface operations {
                     "application/json": components["schemas"]["TestEmailResponse"];
                 };
             };
-            /** @description Invalid request or email delivery not configured */
+            /** @description Invalid request, unsafe email headers, or email delivery not configured */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -30435,6 +32055,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            416: components["responses"]["StorageRangeNotSatisfiable"];
             429: components["responses"]["BandwidthCapExceeded"];
         };
     };
@@ -30707,6 +32328,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            416: components["responses"]["StorageRangeNotSatisfiable"];
             429: components["responses"]["BandwidthCapExceeded"];
         };
     };
@@ -30769,8 +32391,12 @@ export interface operations {
                      *           "status": "available"
                      *         },
                      *         {
-                     *           "id": "autofix.managed_models",
-                     *           "status": "unavailable"
+                     *           "id": "functions.response_streaming",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "frontend_routes",
+                     *           "status": "available"
                      *         }
                      *       ]
                      *     }

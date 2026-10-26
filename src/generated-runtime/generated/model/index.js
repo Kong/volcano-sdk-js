@@ -112,6 +112,7 @@ export * from './sandboxTemplateStatus';
 export * from './sendDurableMessageRequest';
 export * from './storageObject';
 export * from './storageObjectMetadata';
+export * from './storageRangeNotSatisfiableResponse';
 export * from './uploadSessionPart';
 export * from './uploadSessionStatusResponse';
 export * from './uploadSessionStatusResponseStatus';

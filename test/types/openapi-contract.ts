@@ -178,6 +178,20 @@ async function followDurableExecution(): Promise<unknown> {
 
 type _DurableMessageComesOffTheWire = Assert<Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>>;
 
+// ctx.waitForCallback() registers its step with POST /durable-callbacks, which
+// hosting#1966 adds. A sync from a hosting main without that route fails here
+// instead of dropping it.
+type RegisterDurableCallback = OpenAPIOperations['registerDurableCallback'];
+type _WaitForCallbackSendsTheRegistration = Assert<
+  Equal<
+    keyof RegisterDurableCallback['requestBody']['content']['application/json'],
+    'name' | 'execution_ref' | 'callback_id' | 'operation_id'
+  >
+>;
+type _WaitForCallbackReadsItsToken = Assert<
+  Equal<keyof RegisterDurableCallback['responses'][201]['content']['application/json'], 'token' | 'expires_at'>
+>;
+
 declare const realtime: VolcanoRealtime;
 
 // Messages answer the same envelope, a page reads on from the last `seq`, and
@@ -249,6 +263,10 @@ interface CustomDomainVerificationRecordShape {
   type: string;
   value: string;
 }
+interface CustomDomainRedirectShape {
+  to: string;
+  status: 301 | 302 | 307 | 308;
+}
 interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
@@ -260,6 +278,7 @@ interface CustomDomainResponseShape {
   required_routing_record?: { record_type: 'CNAME'; name: string; value: string };
   routing_target_hostname?: string;
   effective_urls: string[];
+  redirect: CustomDomainRedirectShape | null;
   created_at: string;
   updated_at: string;
 }
@@ -334,6 +353,8 @@ export type OpenApiContractChecks = [
   _DurableStartHandleMatchesHosting,
   _DurableExecutionComesOffTheWire,
   _DurableMessageComesOffTheWire,
+  _WaitForCallbackSendsTheRegistration,
+  _WaitForCallbackReadsItsToken,
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
   _CustomDomainTLSMatchesHosting,
