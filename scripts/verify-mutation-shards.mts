@@ -1,33 +1,9 @@
-import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { mutantCount } from './mutant-inventory.mts';
 import { mutationPatterns, mutationShardCount, shardMutationPatterns } from './mutation-scope.mts';
 
 function git(...args: readonly string[]): string {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
-}
-
-function dryRunArguments(patterns: readonly string[]): string[] {
-  return patterns.length > 0 ? ['run', '--dryRunOnly', '--mutate', patterns.join(',')] : ['run', '--dryRunOnly'];
-}
-
-function reportDryRunFailure(run: SpawnSyncReturns<string | null | undefined>): never {
-  process.stderr.write(run.stdout ?? '');
-  process.stderr.write(run.stderr ?? '');
-  throw new Error('Stryker mutation inventory failed');
-}
-
-function mutantCount(patterns: readonly string[]): number {
-  const run = spawnSync('./node_modules/.bin/stryker', dryRunArguments(patterns), {
-    encoding: 'utf8',
-    maxBuffer: 20 * 1024 * 1024,
-  });
-  if (run.status !== 0) {
-    reportDryRunFailure(run);
-  }
-  const count = /Instrumented \d+ source file\(s\) with (\d+) mutant\(s\)/.exec(run.stdout);
-  if (count === null) {
-    throw new Error('Stryker did not report an instrumented mutant count');
-  }
-  return Number(count[1]);
 }
 
 const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src').split('\n').filter(Boolean);

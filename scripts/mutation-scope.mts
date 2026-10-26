@@ -194,16 +194,52 @@ function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCou
   return shards;
 }
 
-export function shardMutationPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
-  validateShardSelection(shardIndex, shardCount);
+function mutationShards(patterns: readonly string[], shardCount: number): string[][] {
   const groups = new Map<string, SourceGroup>();
   for (const pattern of patterns) {
     addPatternGroup(groups, pattern);
   }
-  const shards = distributeShardItems(groups, shardCount);
-  const selected = shards[shardIndex];
-  if (selected === undefined || selected.patterns.length === 0) {
+  return distributeShardItems(groups, shardCount).map((shard) => shard.patterns);
+}
+
+export function shardMutationPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
+  validateShardSelection(shardIndex, shardCount);
+  const selected = mutationShards(patterns, shardCount)[shardIndex];
+  if (selected === undefined || selected.length === 0) {
     throw new Error(`Mutation shard ${String(shardIndex)}/${String(shardCount)} selected no source`);
   }
-  return selected.patterns;
+  return selected;
+}
+
+// A change that touches a few files leaves most shards empty; those pass without Stryker.
+export function changedShardPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
+  validateShardSelection(shardIndex, shardCount);
+  return mutationShards(patterns, shardCount)[shardIndex] ?? [];
+}
+
+function lines(output: string): string[] {
+  return output.split('\n').filter(Boolean);
+}
+
+interface ShardSelection {
+  index: number;
+  count: number;
+}
+
+// With a base commit, mutate only the runtime files changed since it;
+// otherwise, the complete target.
+export function selectMutationPatterns(
+  base: string | undefined,
+  git: (...args: string[]) => string,
+  shard?: ShardSelection,
+): string[] {
+  const listed =
+    base === undefined ? git('ls-files', '--cached', '--', 'src') : git('diff', '--name-only', base, '--', 'src');
+  const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src');
+  const scope = mutationPatterns([...lines(listed), ...lines(untracked)]);
+  if (shard === undefined) {
+    return scope;
+  }
+  const select = base === undefined ? shardMutationPatterns : changedShardPatterns;
+  return select(scope, shard.index, shard.count);
 }
