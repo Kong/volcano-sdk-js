@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { mutationPatterns, mutationShardCount, shardMutationPatterns } from './mutation-scope.mts';
+import {
+  changedShardPatterns,
+  mutationPatterns,
+  mutationShardCount,
+  shardMutationPatterns,
+} from './mutation-scope.mts';
 import { record, stringValue } from './values.mts';
 
-await test('CI starts every required mutation shard', () => {
+await test('CI runs the quality gate as one check job and every required mutation shard', () => {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const scripts = record(record(JSON.parse(readFileSync('package.json', 'utf8')))['scripts']);
   const matrix = /mutation-shard:\s*\[([\d,\s]+)\]/.exec(workflow);
   const environment = /MUTATION_SHARD_COUNT: '(\d+)'/.exec(workflow);
   assert.ok(matrix !== null);
@@ -15,8 +21,14 @@ await test('CI starts every required mutation shard', () => {
   assert.equal(readFileSync('.node-version', 'utf8').trim(), '22.23.3');
   assert.match(workflow, /node-version-file: '\.node-version'/);
   assert.doesNotMatch(workflow, /node-version: '/);
-  assert.match(workflow, /run: pnpm quality\n/);
-  assert.match(workflow, /needs: \[sdk\]\n/);
+  assert.equal(scripts['quality'], 'pnpm quality:policy && pnpm quality:checks && pnpm mutation:full');
+  assert.match(workflow, /run: pnpm quality:policy && pnpm quality:checks\n/);
+  assert.match(workflow, /run: pnpm mutation:full\n/);
+  assert.match(
+    workflow,
+    /MUTATION_BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}\n/,
+  );
+  assert.match(workflow, /needs: \[checks, mutation\]\n/);
   assert.doesNotMatch(workflow, /node-version: \['20', '22'\]/);
   assert.deepEqual(
     [...stringValue(matrix[1]).matchAll(/\d+/g)].map((match) => Number(match[0])),
@@ -93,6 +105,11 @@ await test('mutation shards keep every file and its overlapping ranges together'
     assertShardOwnership(patterns, paths.length);
     assert.throws(() => shardMutationPatterns(patterns, 4, 4), /Invalid mutation shard/);
     assert.throws(() => shardMutationPatterns([firstPath], 3, 4), /selected no source/);
+    assert.deepEqual(changedShardPatterns([firstPath], 0, 4), [firstPath]);
+    assert.deepEqual(changedShardPatterns([firstPath], 3, 4), []);
+    assert.deepEqual(changedShardPatterns([], 0, 4), []);
+    assert.deepEqual(changedShardPatterns(patterns, 1, 4), shardMutationPatterns(patterns, 1, 4));
+    assert.throws(() => changedShardPatterns(patterns, 4, 4), /Invalid mutation shard/);
   } finally {
     for (const path of paths) {
       unlinkSync(path);
