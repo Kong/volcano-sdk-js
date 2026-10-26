@@ -64,10 +64,7 @@ class Client implements ChannelClient {
   presenceCalls: string[] = [];
   failRemove = false;
 
-  newSubscription(
-    name: string,
-    options: { joinLeave: boolean; data?: Record<string, string> },
-  ): ChannelSubscription {
+  newSubscription(name: string, options: { joinLeave: boolean; data?: Record<string, string> }): ChannelSubscription {
     this.created.push({ name, ...options });
     return this.subscription;
   }
@@ -195,12 +192,7 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
   expect(client.subscription.readyTimeouts).toEqual([10_000]);
   await client.subscription.emit('publication', { data: { text: 'default' } });
   await client.subscription.emit('publication', { data: { event: 'custom' } });
-  expect(received).toEqual([
-    { text: 'default' },
-    { text: 'default' },
-    { event: 'custom' },
-    { event: 'custom' },
-  ]);
+  expect(received).toEqual([{ text: 'default' }, { text: 'default' }, { event: 'custom' }, { event: 'custom' }]);
   await client.subscription.emit('publication', { data: { event: 'unhandled' } });
   expect(received.at(-1)).toEqual({ event: 'unhandled' });
   state.unsubscribe();
@@ -233,9 +225,7 @@ test('subscribes with the channel data and reports each state of the current sub
   const states: string[] = [];
   state._onSubscriptionState = (newState) => states.push(newState);
   await subscribeChannel(state);
-  expect(client.created).toEqual([
-    { name: 'durable:execution', joinLeave: false, data: { client_token: 'token' } },
-  ]);
+  expect(client.created).toEqual([{ name: 'durable:execution', joinLeave: false, data: { client_token: 'token' } }]);
   expect(Object.keys(client.created[0] ?? {})).toEqual(['name', 'joinLeave', 'data']);
   await client.subscription.emit('state', { newState: 'subscribing' });
   await client.subscription.emit('state', { newState: 'subscribed' });
@@ -357,10 +347,7 @@ test('unsubscribe cancels timers and pending fetches while retaining the subscri
     expect(state._lifecycleVersion).toBe(1);
     expect(state._presenceTimeoutId).toBeNull();
     expect(state._pendingFetches.size).toBe(0);
-    expect(rejected.map((error) => error.message)).toEqual([
-      'Channel unsubscribed',
-      'Channel unsubscribed',
-    ]);
+    expect(rejected.map((error) => error.message)).toEqual(['Channel unsubscribed', 'Channel unsubscribed']);
     expect(state._subscription).toBe(client.subscription);
     expect(state._presenceState).toEqual({});
     expect(client.subscription.unsubscribes).toBe(1);

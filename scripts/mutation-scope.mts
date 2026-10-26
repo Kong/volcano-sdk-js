@@ -33,8 +33,8 @@ function handwrittenRuntime(path: string): boolean {
 }
 
 export function mutationPatterns(paths: readonly string[]): string[] {
-  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].sort(
-    (left, right) => left.localeCompare(right),
+  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].sort((left, right) =>
+    left.localeCompare(right),
   );
 }
 
@@ -73,12 +73,7 @@ function safeChunks(path: string, source: string, lineCount: number): LineRange[
   return chunks;
 }
 
-function selectedRanges(
-  path: string,
-  lines: ReadonlySet<number>,
-  start: number,
-  end: number,
-): MutationShard {
+function selectedRanges(path: string, lines: ReadonlySet<number>, start: number, end: number): MutationShard {
   const selected = [...lines].filter((line) => line >= start && line <= end).sort((a, b) => a - b);
   const ranges: string[] = [];
   let current: LineRange | undefined;
@@ -132,19 +127,14 @@ function parsePattern(pattern: string): {
   return { path, first: match?.[2], last: match?.[3] };
 }
 
-function patternBounds(
-  first: string | undefined,
-  last: string | undefined,
-  lineCount: number,
-): LineRange {
+function patternBounds(first: string | undefined, last: string | undefined, lineCount: number): LineRange {
   return { start: Number(first ?? 1), end: Number(last ?? lineCount) };
 }
 
 function addPatternGroup(groups: Map<string, SourceGroup>, pattern: string): void {
   const { path, first, last } = parsePattern(pattern);
   const source = readFileSync(path, 'utf8');
-  const lineCount =
-    source.split('\n').length - Number(source.endsWith('\n')) - Number(source.length === 0);
+  const lineCount = source.split('\n').length - Number(source.endsWith('\n')) - Number(source.length === 0);
   const { start, end } = patternBounds(first, last, lineCount);
   const invalidRange = [start < 1, end < start, end > lineCount];
   if (invalidRange.includes(true)) {
@@ -185,10 +175,7 @@ function lightestShard(shards: readonly MutationShard[]): MutationShard {
   return target;
 }
 
-function distributeShardItems(
-  groups: ReadonlyMap<string, SourceGroup>,
-  shardCount: number,
-): MutationShard[] {
+function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCount: number): MutationShard[] {
   const shards: MutationShard[] = Array.from({ length: shardCount }, () => ({
     patterns: [],
     weight: 0,
@@ -197,9 +184,7 @@ function distributeShardItems(
     .flatMap((group) => shardItems(group))
     .sort((left, right) => {
       const weightOrder = right.weight - left.weight;
-      return weightOrder !== 0
-        ? weightOrder
-        : firstPattern(left).localeCompare(firstPattern(right));
+      return weightOrder !== 0 ? weightOrder : firstPattern(left).localeCompare(firstPattern(right));
     });
   for (const item of ordered) {
     const target = lightestShard(shards);
@@ -209,11 +194,7 @@ function distributeShardItems(
   return shards;
 }
 
-export function shardMutationPatterns(
-  patterns: readonly string[],
-  shardIndex: number,
-  shardCount: number,
-): string[] {
+export function shardMutationPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
   validateShardSelection(shardIndex, shardCount);
   const groups = new Map<string, SourceGroup>();
   for (const pattern of patterns) {
@@ -222,9 +203,7 @@ export function shardMutationPatterns(
   const shards = distributeShardItems(groups, shardCount);
   const selected = shards[shardIndex];
   if (selected === undefined || selected.patterns.length === 0) {
-    throw new Error(
-      `Mutation shard ${String(shardIndex)}/${String(shardCount)} selected no source`,
-    );
+    throw new Error(`Mutation shard ${String(shardIndex)}/${String(shardCount)} selected no source`);
   }
   return selected.patterns;
 }

@@ -9,12 +9,7 @@ interface PublicUrlResult {
 }
 
 /** Build the legacy public URL only after validating its segments and anon-key claim. */
-export function storagePublicUrl(
-  apiUrl: string,
-  bucketName: string,
-  anonKey: string,
-  path: string,
-): PublicUrlResult {
+export function storagePublicUrl(apiUrl: string, bucketName: string, anonKey: string, path: string): PublicUrlResult {
   const targetError = storageTargetError(bucketName, [path]);
   if (targetError !== null) {
     return errorResult(targetError);

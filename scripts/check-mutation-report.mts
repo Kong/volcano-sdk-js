@@ -42,13 +42,8 @@ function fileFindings(filename: string, file: unknown): FileFindings {
   return {
     integrity: [],
     outcomes: mutants
-      .filter(
-        (mutant) =>
-          field(mutant, 'status') !== 'Killed' && field(mutant, 'status') !== 'CompileError',
-      )
-      .map(
-        (mutant) => `${filename}:${String(field(mutant, 'id'))} ${String(field(mutant, 'status'))}`,
-      ),
+      .filter((mutant) => field(mutant, 'status') !== 'Killed' && field(mutant, 'status') !== 'CompileError')
+      .map((mutant) => `${filename}:${String(field(mutant, 'id'))} ${String(field(mutant, 'status'))}`),
     count: mutants.length,
   };
 }

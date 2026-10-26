@@ -9,8 +9,7 @@
  * Whole seconds only. There is no millisecond unit, and a fraction is refused
  * rather than rounded: the platform holds a wait between invocations.
  */
-export type DurableDuration =
-  string | number | { days?: number; hours?: number; minutes?: number; seconds?: number };
+export type DurableDuration = string | number | { days?: number; hours?: number; minutes?: number; seconds?: number };
 
 /** What a retry strategy decides after an attempt fails. */
 export type RetryDecision =
@@ -260,10 +259,7 @@ export interface DurableContext {
     fn: (scope: DurableStepScope) => Promise<TResult>,
     options?: StepOptions,
   ): Promise<TResult>;
-  step<TResult>(
-    fn: (scope: DurableStepScope) => Promise<TResult>,
-    options?: StepOptions,
-  ): Promise<TResult>;
+  step<TResult>(fn: (scope: DurableStepScope) => Promise<TResult>, options?: StepOptions): Promise<TResult>;
 
   /**
    * Suspends the execution for a duration. The execution is not running, and
@@ -312,11 +308,7 @@ export interface DurableContext {
    * timeout passes. A failure throws `CallbackFailedError` with its type and
    * message.
    */
-  waitForCallback(
-    name: string,
-    submitter: CallbackSubmitter,
-    options?: WaitForCallbackOptions,
-  ): Promise<unknown>;
+  waitForCallback(name: string, submitter: CallbackSubmitter, options?: WaitForCallbackOptions): Promise<unknown>;
 
   /**
    * Records a message that applications list, or receive live by subscribing

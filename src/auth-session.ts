@@ -47,9 +47,7 @@ export class AuthSessionOperations<RefreshResult, SignOutResult> {
     return this.refreshing;
   }
 
-  signOut(
-    operation: (refreshing: Promise<RefreshResult> | null) => Promise<SignOutResult>,
-  ): Promise<SignOutResult> {
+  signOut(operation: (refreshing: Promise<RefreshResult> | null) => Promise<SignOutResult>): Promise<SignOutResult> {
     if (this.signingOut === null) {
       const refreshing = this.refreshing;
       this.signingOut = Promise.resolve()

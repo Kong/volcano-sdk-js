@@ -1,11 +1,6 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "mutate": [
-    "src/**/*.{js,ts}",
-    "!src/**/*.d.ts",
-    "!src/generated/**",
-    "!src/generated-runtime/**"
-  ],
+  "mutate": ["src/**/*.{js,ts}", "!src/**/*.d.ts", "!src/generated/**", "!src/generated-runtime/**"],
   "testRunner": "jest",
   "plugins": ["@stryker-mutator/jest-runner"],
   "jest": {

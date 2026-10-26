@@ -1,14 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
-import {
-  deferred,
-  fetchCall,
-  jsonField,
-  reply,
-  signal,
-  within,
-} from './auth-concurrency-fixtures.ts';
+import { deferred, fetchCall, jsonField, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 function createTestJwtToken(projectId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -85,15 +78,11 @@ describe('VolcanoAuth OAuth provider operations', () => {
     it('should redirect to OAuth provider with anon_key and separate client state', () => {
       const url = volcano.auth.signInWithOAuth('google');
       const parsed = new URL(url);
-      expect(parsed.origin + parsed.pathname).toBe(
-        'https://api.test.com/auth/oauth/google/authorize',
-      );
+      expect(parsed.origin + parsed.pathname).toBe('https://api.test.com/auth/oauth/google/authorize');
       expect(parsed.searchParams.get('anon_key')).toBe('ak-test-anon-key');
       const redirectUrl = parsed.searchParams.get('redirect_url');
       expect(redirectUrl).toBeTruthy();
-      expect(new URL(redirectUrl ?? '').searchParams.get('vh_state')).toBe(
-        parsed.searchParams.get('client_state'),
-      );
+      expect(new URL(redirectUrl ?? '').searchParams.get('vh_state')).toBe(parsed.searchParams.get('client_state'));
     });
 
     it('should have convenience methods for all providers', () => {
@@ -106,9 +95,7 @@ describe('VolcanoAuth OAuth provider operations', () => {
     it('should get linked providers', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
-      fetchMock.mockResolvedValueOnce(
-        reply(200, { providers: [{ provider: 'google' }, { provider: 'github' }] }),
-      );
+      fetchMock.mockResolvedValueOnce(reply(200, { providers: [{ provider: 'google' }, { provider: 'github' }] }));
 
       const { providers, error } = await volcano.auth.getLinkedOAuthProviders();
 
@@ -199,9 +186,7 @@ describe('VolcanoAuth OAuth provider operations', () => {
     it('should link OAuth provider', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
 
-      fetchMock.mockResolvedValueOnce(
-        reply(200, { message: 'Provider linked', authorization_url: 'https://...' }),
-      );
+      fetchMock.mockResolvedValueOnce(reply(200, { message: 'Provider linked', authorization_url: 'https://...' }));
 
       const { data, error } = await volcano.auth.linkOAuthProvider('github');
 
@@ -671,9 +656,7 @@ describe('VolcanoAuth OAuth provider operations', () => {
 
     it('should throw error for invalid provider format in signInWithOAuth', () => {
       // Empty string should fail
-      expect(() => providerMethod('signInWithOAuth', '')).toThrow(
-        'Provider must be a non-empty string',
-      );
+      expect(() => providerMethod('signInWithOAuth', '')).toThrow('Provider must be a non-empty string');
       // Uppercase should fail (sanitization)
       expect(() => providerMethod('signInWithOAuth', 'Google')).toThrow(
         'Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens',
@@ -695,9 +678,7 @@ describe('VolcanoAuth OAuth provider operations', () => {
     it('should throw error for invalid format in linkOAuthProvider', async () => {
       volcano.accessToken = TEST_ACCESS_TOKEN;
       // Empty or invalid format fails
-      await expect(asyncProviderMethod('linkOAuthProvider', '')).rejects.toThrow(
-        'Provider must be a non-empty string',
-      );
+      await expect(asyncProviderMethod('linkOAuthProvider', '')).rejects.toThrow('Provider must be a non-empty string');
       await expect(asyncProviderMethod('linkOAuthProvider', 'My_Provider')).rejects.toThrow(
         'Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens',
       );
@@ -715,9 +696,7 @@ describe('VolcanoAuth OAuth provider operations', () => {
       'should throw error for invalid format in %s',
       async (method) => {
         volcano.accessToken = TEST_ACCESS_TOKEN;
-        await expect(asyncProviderMethod(method, '')).rejects.toThrow(
-          'Provider must be a non-empty string',
-        );
+        await expect(asyncProviderMethod(method, '')).rejects.toThrow('Provider must be a non-empty string');
       },
     );
 

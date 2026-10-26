@@ -36,11 +36,7 @@ interface SendBody {
 
 export interface DurableMessagesClient extends Pick<
   DurableClient,
-  | 'accessToken'
-  | '_oauthExchangeError'
-  | '_completeOAuthExchange'
-  | '_captureAuthContext'
-  | '_generatedOptions'
+  'accessToken' | '_oauthExchangeError' | '_completeOAuthExchange' | '_captureAuthContext' | '_generatedOptions'
 > {
   readonly _transport: {
     sendDurableMessage(
@@ -123,10 +119,7 @@ export class DurableMessagesFacade {
     );
   }
 
-  async list(
-    target: unknown,
-    options: DurableMessageListOptions = {},
-  ): Promise<DurableResult<DurableMessageList>> {
+  async list(target: unknown, options: DurableMessageListOptions = {}): Promise<DurableResult<DurableMessageList>> {
     const addressed = targetOf(target);
     if (addressed instanceof Error) {
       return failure(addressed);
@@ -151,14 +144,9 @@ export class DurableMessagesFacade {
     if (subscriber instanceof Error) {
       return failure(subscriber);
     }
-    const channel = subscriber.realtime._durableChannel(
-      addressed.executionId,
-      addressed.clientToken,
-    );
+    const channel = subscriber.realtime._durableChannel(addressed.executionId, addressed.clientToken);
     if (channel === null) {
-      return failure(
-        new Error('This realtime client already subscribes to the execution; unsubscribe first'),
-      );
+      return failure(new Error('This realtime client already subscribes to the execution; unsubscribe first'));
     }
     return this.follow(addressed, subscriber, channel);
   }
@@ -225,25 +213,11 @@ export class DurableMessagesFacade {
   private sendTo(target: Target, body: SendBody, options: unknown): Promise<unknown> {
     const { functionName, executionId } = target;
     return target.projectId === null
-      ? this.client._transport.sendDurableMessageFromApplication(
-          functionName,
-          executionId,
-          body,
-          options,
-        )
-      : this.client._transport.sendDurableMessage(
-          target.projectId,
-          functionName,
-          executionId,
-          body,
-          options,
-        );
+      ? this.client._transport.sendDurableMessageFromApplication(functionName, executionId, body, options)
+      : this.client._transport.sendDurableMessage(target.projectId, functionName, executionId, body, options);
   }
 
-  private async listTarget(
-    target: Target,
-    params: Query,
-  ): Promise<DurableResult<DurableMessageList>> {
+  private async listTarget(target: Target, params: Query): Promise<DurableResult<DurableMessageList>> {
     const credential = await this.credential(target, {});
     if (credential.error !== undefined) {
       return failure(credential.error);
@@ -278,8 +252,7 @@ export class DurableMessagesFacade {
     }
     await this.client._completeOAuthExchange();
     const mode = credentialMode(this.client._captureAuthContext().accessToken);
-    const token =
-      target.clientToken === null ? {} : { 'X-Volcano-Client-Token': target.clientToken };
+    const token = target.clientToken === null ? {} : { 'X-Volcano-Client-Token': target.clientToken };
     return { options: this.client._generatedOptions(mode, { ...headers, ...token }) };
   }
 }
@@ -340,9 +313,7 @@ function headerValueError(value: string, field: string, limit: number): Error | 
   if (!HEADER_VALUE.test(value)) {
     return new Error(`${field} must be printable ASCII`);
   }
-  return value.length > limit
-    ? new Error(`${field} must be at most ${String(limit)} characters`)
-    : null;
+  return value.length > limit ? new Error(`${field} must be at most ${String(limit)} characters`) : null;
 }
 
 function sendRequest(
@@ -374,9 +345,7 @@ function messageName(name: unknown): Checked<string> {
   }
   if (name.length > MAX_NAME_LENGTH || !OPERATION_NAME.test(name)) {
     return {
-      error: new Error(
-        `name must be at most ${String(MAX_NAME_LENGTH)} printable ASCII characters`,
-      ),
+      error: new Error(`name must be at most ${String(MAX_NAME_LENGTH)} printable ASCII characters`),
     };
   }
   return { value: name };
@@ -389,9 +358,7 @@ function leaveIfServerEnded(channel: DurableChannel, realtime: DurableRealtime):
   if (channel._paused) {
     return;
   }
-  console.error(
-    '[Realtime] The server ended the durable message subscription; subscribe again to resume',
-  );
+  console.error('[Realtime] The server ended the durable message subscription; subscribe again to resume');
   realtime._removeDurableChannel(channel);
 }
 
@@ -424,13 +391,10 @@ function isIntegerBetween(value: unknown, min: number, max: number): boolean {
 }
 
 const LIST_FILTER_ERRORS: Record<(typeof LIST_PARAMS)[number], (value: unknown) => Error | null> = {
-  direction: (value) =>
-    value === 'in' || value === 'out' ? null : new Error("direction must be 'in' or 'out'"),
+  direction: (value) => (value === 'in' || value === 'out' ? null : new Error("direction must be 'in' or 'out'")),
   name: (value) => messageName(value).error ?? null,
   after: (value) =>
-    isIntegerBetween(value, 0, Number.MAX_SAFE_INTEGER)
-      ? null
-      : new Error('after must be a non-negative integer'),
+    isIntegerBetween(value, 0, Number.MAX_SAFE_INTEGER) ? null : new Error('after must be a non-negative integer'),
   limit: (value) =>
     isIntegerBetween(value, 1, MAX_LIST_LIMIT)
       ? null

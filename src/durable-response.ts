@@ -1,15 +1,7 @@
 import type { DurableExecution, PaginatedDurableExecutions } from './sdk-public-types.ts';
 
 function isDurableStatus(value: unknown): boolean {
-  return new Set<unknown>([
-    'pending',
-    'running',
-    'succeeded',
-    'failed',
-    'timed_out',
-    'stopped',
-    'unknown',
-  ]).has(value);
+  return new Set<unknown>(['pending', 'running', 'succeeded', 'failed', 'timed_out', 'stopped', 'unknown']).has(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,9 +58,6 @@ export function isPageMetadata(value: Record<string, unknown>): boolean {
 
 export function isDurablePage(value: unknown): value is PaginatedDurableExecutions {
   return (
-    isRecord(value) &&
-    Array.isArray(value['data']) &&
-    value['data'].every(isDurableExecution) &&
-    isPageMetadata(value)
+    isRecord(value) && Array.isArray(value['data']) && value['data'].every(isDurableExecution) && isPageMetadata(value)
   );
 }

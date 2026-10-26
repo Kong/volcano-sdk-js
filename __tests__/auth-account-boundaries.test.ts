@@ -81,9 +81,7 @@ function fixture(): AuthAccountHost {
 
 test('signup with required confirmation never signs in and preserves absent message', async () => {
   const host = fixture();
-  const signInSpy = jest.fn<AuthAccountHost['signIn']>(() =>
-    Promise.resolve({ user, session: null, error: null }),
-  );
+  const signInSpy = jest.fn<AuthAccountHost['signIn']>(() => Promise.resolve({ user, session: null, error: null }));
   host.signIn = signInSpy;
   host._anonFetch = () =>
     Promise.resolve({
@@ -159,10 +157,7 @@ test('sign-in preserves an omitted cookie refresh token without inventing creden
     session: { access_token: 'cookie-access', refresh_token: undefined, expires_in: 3600 },
     error: null,
   });
-  expect(adopt).toHaveBeenCalledWith(
-    expect.objectContaining({ access_token: 'cookie-access', user }),
-    0,
-  );
+  expect(adopt).toHaveBeenCalledWith(expect.objectContaining({ access_token: 'cookie-access', user }), 0);
 });
 
 test('sign-in rejects a token response without an integer lifetime before adopting it', async () => {
@@ -187,14 +182,8 @@ test('sign-in rejects a token response without an integer lifetime before adopti
 });
 
 test.each([
-  [
-    { access_token: 'access', expires_in: 3600, user },
-    'Session refresh_token must be a non-empty string',
-  ],
-  [
-    { access_token: 'access', refresh_token: 'refresh', expires_in: 1.5, user },
-    'Auth expires_in must be an integer',
-  ],
+  [{ access_token: 'access', expires_in: 3600, user }, 'Session refresh_token must be a non-empty string'],
+  [{ access_token: 'access', refresh_token: 'refresh', expires_in: 1.5, user }, 'Auth expires_in must be an integer'],
 ])('anonymous sign-in rejects an incomplete session before adopting it', async (data, message) => {
   const host = fixture();
   const adopt = jest.fn<AuthAccountHost['_setSession']>(() => true);
@@ -207,10 +196,7 @@ test.each([
 
 test.each([
   ['updateUser', (host: AuthAccountHost) => updateUser(host, { metadata: { plan: 'pro' } })],
-  [
-    'convertAnonymous',
-    (host: AuthAccountHost) => convertAnonymous(host, { ...credentials, metadata: {} }),
-  ],
+  ['convertAnonymous', (host: AuthAccountHost) => convertAnonymous(host, { ...credentials, metadata: {} })],
 ])('%s rejects an incomplete wire user without adopting it', async (_name, action) => {
   const host = fixture();
   host._authFetchWithContext = () =>
@@ -239,10 +225,7 @@ test('getUser rejects a malformed successful response before adopting a user', a
 
 test.each([
   [{ id: 'user-1' }, 'Auth user email must be a string'],
-  [
-    { id: 'user-1', email: 'user@example.com', status: null },
-    'Auth user status must be active, banned, or deleted',
-  ],
+  [{ id: 'user-1', email: 'user@example.com', status: null }, 'Auth user status must be active, banned, or deleted'],
 ])('getUser rejects incomplete wire users without mutating state', async (candidate, message) => {
   const host = fixture();
   const notify = jest.fn<AuthAccountHost['_notifyAuthCallbacks']>();
@@ -261,9 +244,7 @@ test.each([
 test('signup sends account metadata and signs in only when confirmation is unnecessary', async () => {
   const host = fixture();
   const calls: { path: string; options: RequestInit }[] = [];
-  const signInSpy = jest.fn<AuthAccountHost['signIn']>(() =>
-    Promise.resolve({ user, session: null, error: null }),
-  );
+  const signInSpy = jest.fn<AuthAccountHost['signIn']>(() => Promise.resolve({ user, session: null, error: null }));
   host.signIn = signInSpy;
   host._anonFetch = (path, options) => {
     calls.push({ path, options });
@@ -321,9 +302,7 @@ test('signup refuses a malformed acknowledgement instead of coercing confirmatio
       error: null,
     });
 
-  await expect(signUp(host, credentials)).rejects.toThrow(
-    'Auth response confirmation_required must be a boolean',
-  );
+  await expect(signUp(host, credentials)).rejects.toThrow('Auth response confirmation_required must be a boolean');
 });
 
 test('sign-in sends exact credentials and adopts the returned session generation', async () => {
@@ -392,18 +371,13 @@ test('setSession adopts only a validated clone', async () => {
 
 test.each([
   [{ id: 'user-1' }, 'Auth user email must be a string'],
-  [
-    { id: 'user-1', email: 'user@example.com', status: null },
-    'Auth user status must be active, banned, or deleted',
-  ],
+  [{ id: 'user-1', email: 'user@example.com', status: null }, 'Auth user status must be active, banned, or deleted'],
 ])('setSession rejects an incomplete user before adoption', async (candidate, message) => {
   const host = fixture();
   const adopt = jest.fn<AuthAccountHost['_adoptSessionInMemory']>();
   host._adoptSessionInMemory = adopt;
 
-  expect(
-    await setSession(host, { access_token: 'access', refresh_token: 'refresh', user: candidate }),
-  ).toEqual({
+  expect(await setSession(host, { access_token: 'access', refresh_token: 'refresh', user: candidate })).toEqual({
     data: { session: null },
     error: new TypeError(message),
   });
@@ -502,12 +476,9 @@ test('anonymous and email actions send exact public auth requests', async () => 
 
 test('message endpoints reject non-string acknowledgements', async () => {
   const host = fixture();
-  host._anonFetch = () =>
-    Promise.resolve({ ok: true, status: 200, data: { message: 123 }, error: null });
+  host._anonFetch = () => Promise.resolve({ ok: true, status: 200, data: { message: 123 }, error: null });
 
-  await expect(confirmEmail(host, 'confirmation')).rejects.toThrow(
-    'Auth response message must be a string',
-  );
+  await expect(confirmEmail(host, 'confirmation')).rejects.toThrow('Auth response message must be a string');
 });
 
 test('user and email-change actions send exact authenticated requests', async () => {
@@ -528,9 +499,7 @@ test('user and email-change actions send exact authenticated requests', async ()
   };
 
   expect(await getUser(host)).toEqual({ user, error: null });
-  expect(
-    await updateUser(host, { password: 'new-password', metadata: { team: 'volcano' } }),
-  ).toEqual({
+  expect(await updateUser(host, { password: 'new-password', metadata: { team: 'volcano' } })).toEqual({
     user,
     error: null,
   });

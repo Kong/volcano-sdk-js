@@ -84,10 +84,7 @@ test('concurrent refreshes share an operation and allow a later refresh', async 
 test('a rejected refresh is cleared so the caller can retry', async () => {
   const operations = new AuthSessionOperations<string, string>();
   const failure = new Error('refresh failed');
-  const refresh = jest
-    .fn<() => Promise<string>>()
-    .mockRejectedValueOnce(failure)
-    .mockResolvedValue('retry');
+  const refresh = jest.fn<() => Promise<string>>().mockRejectedValueOnce(failure).mockResolvedValue('retry');
   await expect(operations.refresh(refresh)).rejects.toBe(failure);
   await expect(operations.refresh(refresh)).resolves.toBe('retry');
 });
@@ -118,9 +115,7 @@ test('sign-out captures the pending refresh and blocks subsequent refreshes', as
 test('a rejected sign-out still settles and remains idempotent', async () => {
   const operations = new AuthSessionOperations<string, string>(pair);
   const failure = new Error('sign-out failed');
-  const signOut = jest
-    .fn<(pending: Promise<string> | null) => Promise<string>>()
-    .mockRejectedValue(failure);
+  const signOut = jest.fn<(pending: Promise<string> | null) => Promise<string>>().mockRejectedValue(failure);
   const first = operations.signOut(signOut);
   await expect(first).rejects.toBe(failure);
   expect(signOut).toHaveBeenCalledTimes(1);

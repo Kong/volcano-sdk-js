@@ -6,9 +6,7 @@ function git(...args: readonly string[]): string {
 }
 
 function dryRunArguments(patterns: readonly string[]): string[] {
-  return patterns.length > 0
-    ? ['run', '--dryRunOnly', '--mutate', patterns.join(',')]
-    : ['run', '--dryRunOnly'];
+  return patterns.length > 0 ? ['run', '--dryRunOnly', '--mutate', patterns.join(',')] : ['run', '--dryRunOnly'];
 }
 
 function reportDryRunFailure(run: SpawnSyncReturns<string | null | undefined>): never {
@@ -32,9 +30,7 @@ function mutantCount(patterns: readonly string[]): number {
   return Number(count[1]);
 }
 
-const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src')
-  .split('\n')
-  .filter(Boolean);
+const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src').split('\n').filter(Boolean);
 const patterns = mutationPatterns(paths);
 const expected = mutantCount([]);
 const counts = Array.from({ length: mutationShardCount }, (_, index) =>
@@ -44,9 +40,7 @@ let actual = 0;
 for (const count of counts) {
   actual += count;
 }
-process.stdout.write(
-  `Stryker mutant inventory: full=${String(expected)}; shards=${counts.join(',')}\n`,
-);
+process.stdout.write(`Stryker mutant inventory: full=${String(expected)}; shards=${counts.join(',')}\n`);
 if (expected === 0 || counts.includes(0) || actual !== expected) {
   throw new Error(`Mutation shards cover ${String(actual)} of ${String(expected)} Stryker mutants`);
 }

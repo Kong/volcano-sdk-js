@@ -48,19 +48,13 @@ function connectionEvents(): readonly ConnectionEvent[] {
   return ['connected', 'disconnected', 'error', 'publication', 'join', 'leave', 'subscribed'];
 }
 
-export function attachConnectionHandlers(
-  client: RealtimeConnectionClient,
-  handlers: ConnectionEvents,
-): void {
+export function attachConnectionHandlers(client: RealtimeConnectionClient, handlers: ConnectionEvents): void {
   for (const event of connectionEvents()) {
     client.on(event, handlers[event]);
   }
 }
 
-export function detachConnectionHandlers(
-  client: RealtimeConnectionClient,
-  handlers: ConnectionEvents,
-): void {
+export function detachConnectionHandlers(client: RealtimeConnectionClient, handlers: ConnectionEvents): void {
   for (const event of connectionEvents()) {
     client.off(event, handlers[event]);
   }

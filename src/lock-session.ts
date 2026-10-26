@@ -162,10 +162,7 @@ export class LockSession {
     if (!Number.isFinite(remaining)) {
       return 0;
     }
-    const latestDelay = Math.max(
-      0,
-      remaining - RENEWAL_SAFETY_MARGIN_MS - RENEWAL_REQUEST_BUDGET_MS,
-    );
+    const latestDelay = Math.max(0, remaining - RENEWAL_SAFETY_MARGIN_MS - RENEWAL_REQUEST_BUDGET_MS);
     const jitter = baseDelay * 0.1 * (this.random() * 2 - 1);
     return Math.min(Math.max(0, baseDelay + jitter), latestDelay);
   }

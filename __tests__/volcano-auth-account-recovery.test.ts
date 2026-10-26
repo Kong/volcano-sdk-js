@@ -1,24 +1,14 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
-import {
-  deferred,
-  fetchBody,
-  fetchCall,
-  reply,
-  signal,
-  within,
-} from './auth-concurrency-fixtures.ts';
+import { deferred, fetchBody, fetchCall, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const config = { apiUrl: 'https://api.test.com', anonKey: 'ak-test-anon-key' };
 let volcano: VolcanoAuth;
 
-function legacyAuthCall(
-  name: 'signUpAnonymous' | 'forgotPassword',
-  ...args: unknown[]
-): Promise<unknown> {
+function legacyAuthCall(name: 'signUpAnonymous' | 'forgotPassword', ...args: unknown[]): Promise<unknown> {
   const method: unknown = Reflect.get(volcano.auth, name);
   if (typeof method !== 'function') {
     throw new TypeError(`Missing legacy auth method ${name}`);
@@ -468,9 +458,7 @@ describe('VolcanoAuth account recovery', () => {
         refresh_token: 'replacement-refresh',
         user: { id: 'replacement-user', email: 'replacement@example.com', status: 'active' },
       });
-      response.resolve(
-        reply(200, { user: { id: 'original-user', email: 'new@example.com', status: 'active' } }),
-      );
+      response.resolve(reply(200, { user: { id: 'original-user', email: 'new@example.com', status: 'active' } }));
 
       const result = await within(request, 'stale email change confirmation');
 

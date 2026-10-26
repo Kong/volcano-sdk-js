@@ -653,13 +653,7 @@ export interface User {
 
 ```typescript
 function isPost(data: unknown): data is Post {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'id' in data &&
-    'title' in data &&
-    'content' in data
-  );
+  return typeof data === 'object' && data !== null && 'id' in data && 'title' in data && 'content' in data;
 }
 
 const { data } = await volcano.from('posts').select('*');

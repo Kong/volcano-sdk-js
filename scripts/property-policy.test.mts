@@ -14,9 +14,7 @@ const require = createRequire(import.meta.url);
 const jest = require.resolve('jest/bin/jest');
 const fastCheck = require.resolve('fast-check');
 const reporter = fileURLToPath(new URL('jest-completeness.cjs', import.meta.url));
-const optionsFile = fileURLToPath(
-  new URL('../__tests__/support/property-options.ts', import.meta.url),
-);
+const optionsFile = fileURLToPath(new URL('../__tests__/support/property-options.ts', import.meta.url));
 const configFile = fileURLToPath(new URL('../babel.config.js', import.meta.url));
 const prepareReports = fileURLToPath(new URL('prepare-test-reports.mjs', import.meta.url));
 

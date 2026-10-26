@@ -55,7 +55,7 @@ jobs:
             while read -r head; do
               changelog="$(gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$head")"
               jq -r '.content' <<< "$changelog" | base64 --decode > CHANGELOG.md
-              pnpm exec prettier --write CHANGELOG.md
+              pnpm exec oxfmt CHANGELOG.md
               blob="$(jq -r '.sha' <<< "$changelog")"
               if [ "$blob" != "$(git hash-object CHANGELOG.md)" ]; then
                 gh api --method PUT "repos/$GH_REPO/contents/CHANGELOG.md" \

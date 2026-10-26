@@ -1,15 +1,7 @@
 /** @jest-environment ./__tests__/browser-environment.cjs */
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
-import {
-  deferred,
-  fetchBody,
-  fetchCall,
-  jsonField,
-  reply,
-  signal,
-  within,
-} from './auth-concurrency-fixtures.ts';
+import { deferred, fetchBody, fetchCall, jsonField, reply, signal, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
 import { sessionToken } from './session-fixtures.ts';
 
@@ -40,9 +32,7 @@ describe('VolcanoAuth', () => {
     it.each(['', 42])('uses stored credentials when an explicit token is %p', (accessToken) => {
       window.localStorage.setItem('volcano_access_token', 'stored-access');
       window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
-      const sdk: unknown = Reflect.construct(VolcanoAuth, [
-        { anonKey: 'ak-test-key', accessToken },
-      ]);
+      const sdk: unknown = Reflect.construct(VolcanoAuth, [{ anonKey: 'ak-test-key', accessToken }]);
       if (!(sdk instanceof VolcanoAuth)) {
         throw new TypeError('Expected a VolcanoAuth instance');
       }
@@ -137,9 +127,7 @@ describe('VolcanoAuth', () => {
       callback.mockClear();
 
       fetchMock.mockImplementation(() =>
-        Promise.resolve(
-          reply(200, { user: { id: 'user-ctor', email: 'c@example.com', status: 'active' } }),
-        ),
+        Promise.resolve(reply(200, { user: { id: 'user-ctor', email: 'c@example.com', status: 'active' } })),
       );
 
       // First getUser() announces the SIGNED_IN transition for the adoption that
@@ -619,12 +607,8 @@ describe('VolcanoAuth', () => {
       const apiResult = await v.auth.getUser();
       const initializeResult = await v.initialize();
 
-      expect(apiResult.error).toEqual(
-        expect.objectContaining({ message: 'invalid authorization code' }),
-      );
-      expect(initializeResult.error).toEqual(
-        expect.objectContaining({ message: 'invalid authorization code' }),
-      );
+      expect(apiResult.error).toEqual(expect.objectContaining({ message: 'invalid authorization code' }));
+      expect(initializeResult.error).toEqual(expect.objectContaining({ message: 'invalid authorization code' }));
       expect(v._oauthExchangeError).toBeNull();
     });
 
@@ -681,22 +665,18 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      fetchMock
-        .mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }))
-        .mockResolvedValueOnce(
-          reply(200, {
-            access_token: 'signed-in-access',
-            refresh_token: 'signed-in-refresh',
-            user: { id: 'signed-in-user', email: 'signed-in@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-        );
+      fetchMock.mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' })).mockResolvedValueOnce(
+        reply(200, {
+          access_token: 'signed-in-access',
+          refresh_token: 'signed-in-refresh',
+          user: { id: 'signed-in-user', email: 'signed-in@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const failed = await v.initialize();
-      expect(failed.error).toEqual(
-        expect.objectContaining({ message: 'invalid authorization code' }),
-      );
+      expect(failed.error).toEqual(expect.objectContaining({ message: 'invalid authorization code' }));
 
       const signedIn = await v.auth.signIn({
         email: 'signed-in@example.com',
@@ -713,21 +693,17 @@ describe('VolcanoAuth', () => {
       window.sessionStorage.setItem('volcano_auth_state', 'oauth-nonce');
       window.sessionStorage.setItem('volcano_auth_redirect_url', callbackRedirectURL());
       window.history.replaceState(null, '', '/auth/callback?code=rejected&state=oauth-nonce');
-      fetchMock
-        .mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' }))
-        .mockResolvedValueOnce(
-          reply(200, {
-            user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
-          }),
-        );
+      fetchMock.mockResolvedValueOnce(reply(400, { error: 'invalid authorization code' })).mockResolvedValueOnce(
+        reply(200, {
+          user: { id: 'stored-user', email: 'stored@example.com', status: 'active' },
+        }),
+      );
 
       const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
       const failed = await v.initialize();
 
       expect(failed.user).toBeNull();
-      expect(failed.error).toEqual(
-        expect.objectContaining({ message: 'invalid authorization code' }),
-      );
+      expect(failed.error).toEqual(expect.objectContaining({ message: 'invalid authorization code' }));
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
       const recovered = await v.initialize();
@@ -910,9 +886,7 @@ describe('VolcanoAuth', () => {
       const initialization = await v.initialize();
 
       expect(result).toEqual(expect.objectContaining({ data: { submitted: true }, error: null }));
-      expect(initialization.error).toEqual(
-        expect.objectContaining({ message: 'invalid authorization code' }),
-      );
+      expect(initialization.error).toEqual(expect.objectContaining({ message: 'invalid authorization code' }));
       expect(fetchMock).toHaveBeenCalledTimes(3);
     });
   });

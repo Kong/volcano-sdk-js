@@ -17,12 +17,7 @@ export interface ResumableStorageHost {
     path: string,
     options: { totalSize: number; contentType: string; partSize: number },
   ): Promise<StorageResult>;
-  uploadPart(
-    path: string,
-    sessionId: string,
-    partNumber: number,
-    partData: Blob,
-  ): Promise<StorageResult>;
+  uploadPart(path: string, sessionId: string, partNumber: number, partData: Blob): Promise<StorageResult>;
   abortUploadSession(path: string, sessionId: string): Promise<{ error: Error | null }>;
   completeUploadSession(path: string, sessionId: string): Promise<StorageResult>;
 }

@@ -2,24 +2,15 @@
 import { expect, test } from '@jest/globals';
 import { validateLease, validateLockKey, validateLockOptions } from '../src/lock-validation.ts';
 
-test.each([
-  undefined,
-  null,
-  false,
-  1,
-  {},
-  '',
-  '-key',
-  '_key',
-  'two/keys',
-  ' spaced',
-  'a'.repeat(129),
-])('rejects an invalid lock key: %p', (key) => {
-  expect(() => {
-    validateLockKey(key);
-  }).toThrow(TypeError);
-  expect(() => validateLockOptions(key, { ttl: 5 })).toThrow(TypeError);
-});
+test.each([undefined, null, false, 1, {}, '', '-key', '_key', 'two/keys', ' spaced', 'a'.repeat(129)])(
+  'rejects an invalid lock key: %p',
+  (key) => {
+    expect(() => {
+      validateLockKey(key);
+    }).toThrow(TypeError);
+    expect(() => validateLockOptions(key, { ttl: 5 })).toThrow(TypeError);
+  },
+);
 
 test.each(['A', '0', 'project.build:worker-1_2', 'a'.repeat(128)])(
   'accepts a lock key without rewriting it: %s',
@@ -45,9 +36,7 @@ test.each([
   { ttl: Infinity },
   { ttl: 7_776_001 },
 ])('rejects invalid TTL options: %p', (options) => {
-  expect(() => validateLockOptions('key', options)).toThrow(
-    'ttl must be an integer between 5 seconds and 90 days',
-  );
+  expect(() => validateLockOptions('key', options)).toThrow('ttl must be an integer between 5 seconds and 90 days');
 });
 
 test.each([5, 30, 7_776_000])('accepts an integer TTL inside the bounds: %d', (ttl) => {

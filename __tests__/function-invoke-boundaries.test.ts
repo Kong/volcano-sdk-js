@@ -2,16 +2,8 @@
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from '../src/errors.ts';
-import {
-  type FunctionInvocationHost,
-  type FunctionInvocationResult,
-  invokeFunction,
-} from '../src/function-invoke.ts';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from '../src/errors.ts';
+import { type FunctionInvocationHost, type FunctionInvocationResult, invokeFunction } from '../src/function-invoke.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 interface HostFixture {
@@ -20,10 +12,7 @@ interface HostFixture {
   setToken(token: string | null): void;
 }
 
-function hostFixture(
-  oauthExchangePromise: Promise<unknown> | null = null,
-  anonKey = 'anon-token',
-): HostFixture {
+function hostFixture(oauthExchangePromise: Promise<unknown> | null = null, anonKey = 'anon-token'): HostFixture {
   const operations = new AuthSessionOperations<RefreshResult, SignOutResult>();
   let token: string | null = 'user-token';
   const context: AuthContext = {
@@ -79,9 +68,7 @@ function rejectedRefreshResult(
   let current = context;
   const host: FunctionInvocationHost = {
     ...fixture.host,
-    _sessionOperations: sameOperations
-      ? context.operations
-      : new AuthSessionOperations<RefreshResult, SignOutResult>(),
+    _sessionOperations: sameOperations ? context.operations : new AuthSessionOperations<RefreshResult, SignOutResult>(),
     _sessionGeneration: generation,
     _captureAuthContext: () => current,
     _isAuthContextCurrent: (captured) => captured === current,
@@ -207,9 +194,7 @@ test('sign-out starting during resolution blocks the outbound request', async ()
 
 test('a rejected platform 401 retries at most once', async () => {
   const { host } = hostFixture();
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   const refresh = jest.spyOn(host, '_refreshSessionForContext');
 
   const result = await invokeFunction(host, 'orders');
@@ -221,9 +206,7 @@ test('a rejected platform 401 retries at most once', async () => {
 
 test('a refreshed credential must still be available before the second request', async () => {
   const fixture = hostFixture();
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   fixture.host._refreshSessionForContext = () => {
     fixture.setToken(null);
     return Promise.resolve({ error: null });
@@ -236,9 +219,7 @@ test('a refreshed credential must still be available before the second request',
 
 test('sign-out beginning during refresh blocks the second request', async () => {
   const { host, context } = hostFixture();
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   host._refreshSessionForContext = () => {
     context.operations.signingOut = Promise.resolve({ error: null });
     return Promise.resolve({ error: null });
@@ -270,14 +251,8 @@ test('a rejected refresh preserves the platform response only for its own cleare
     { name: 'other generation', cleared: true, owner: true, generation: 3, preserve: false },
   ];
   for (const scenario of cases) {
-    const result = await rejectedRefreshResult(
-      scenario.cleared,
-      scenario.owner,
-      scenario.generation,
-    );
-    expect(result.error).toBeInstanceOf(
-      scenario.preserve ? VolcanoSystemError : AuthSessionChangedError,
-    );
+    const result = await rejectedRefreshResult(scenario.cleared, scenario.owner, scenario.generation);
+    expect(result.error).toBeInstanceOf(scenario.preserve ? VolcanoSystemError : AuthSessionChangedError);
     expect(result.status).toBe(scenario.preserve ? 401 : 409);
   }
 });
@@ -329,10 +304,7 @@ test('a payload that throws while serializing fails before any request', async (
   const { host } = hostFixture();
   const fetch = jest.spyOn(globalThis, 'fetch');
 
-  for (const reason of [
-    new Error('broken payload'),
-    foreignError('foreign serialization failure'),
-  ]) {
+  for (const reason of [new Error('broken payload'), foreignError('foreign serialization failure')]) {
     const payload = {
       toJSON(): never {
         throw reason;
@@ -341,9 +313,7 @@ test('a payload that throws while serializing fails before any request', async (
     const result = await invokeFunction(host, 'orders', payload);
     expect(result.data).toBeNull();
     expect(result.error).toBeInstanceOf(VolcanoSystemError);
-    expect(result.error?.message).toBe(
-      reason instanceof Error ? reason.message : 'Invalid function payload',
-    );
+    expect(result.error?.message).toBe(reason instanceof Error ? reason.message : 'Invalid function payload');
     expect(result.error?.cause).toBe(reason);
   }
   expect(fetch).not.toHaveBeenCalled();
@@ -406,9 +376,7 @@ test('a credential cleared after resolution never dispatches the function', asyn
 
 test('a session replaced after a successful refresh discards the retry', async () => {
   const { host } = hostFixture();
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   let current = true;
   host._isAuthContextCurrent = () => current;
   host._refreshSessionForContext = () => {
@@ -424,10 +392,7 @@ test('a session replaced after a successful refresh discards the retry', async (
 test('transport failures retain system errors and wrap foreign rejection values', async () => {
   const { host } = hostFixture();
   const systemError = new VolcanoSystemError('gateway unavailable');
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockRejectedValueOnce(systemError)
-    .mockRejectedValueOnce('offline');
+  const fetch = jest.spyOn(globalThis, 'fetch').mockRejectedValueOnce(systemError).mockRejectedValueOnce('offline');
 
   const first = await invokeFunction(host, 'orders');
   expect(first.error).toBe(systemError);

@@ -39,11 +39,7 @@ interface RandomSource {
 }
 
 function hasRandomValues(value: unknown): value is RandomSource {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof Reflect.get(value, 'getRandomValues') === 'function'
-  );
+  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'getRandomValues') === 'function';
 }
 
 export function storeAuthState(nonce: string, redirectUrl = ''): void {
@@ -155,10 +151,7 @@ export function removeOAuthResponseParams(callbackUrl: URL, clearHash = true): v
 export function stripOAuthQueryFromUrl(callbackUrl: URL): void {
   try {
     removeOAuthResponseParams(callbackUrl, false);
-    const cleanUrl =
-      (callbackUrl.pathname === '' ? '/' : callbackUrl.pathname) +
-      callbackUrl.search +
-      callbackUrl.hash;
+    const cleanUrl = (callbackUrl.pathname === '' ? '/' : callbackUrl.pathname) + callbackUrl.search + callbackUrl.hash;
     window.history.replaceState(window.history.state, '', cleanUrl);
   } catch {
     // Leaving a one-time code in place is non-fatal when history is unavailable.
@@ -196,9 +189,7 @@ function presentParam(params: URLSearchParams, name: string): boolean {
 }
 
 function hasOAuthResponse(params: URLSearchParams): boolean {
-  return (
-    presentParam(params, 'state') && (presentParam(params, 'code') || presentParam(params, 'error'))
-  );
+  return presentParam(params, 'state') && (presentParam(params, 'code') || presentParam(params, 'error'));
 }
 
 function matchingOAuthCallback(storedRedirectUrl: string | null): boolean {
@@ -216,10 +207,7 @@ function matchingOAuthCallback(storedRedirectUrl: string | null): boolean {
   }
 }
 
-export function hasOAuthCallbackInUrl(
-  storedRedirectUrl: string | null,
-  hasState: boolean,
-): boolean {
+export function hasOAuthCallbackInUrl(storedRedirectUrl: string | null, hasState: boolean): boolean {
   if (!isBrowser() || !hasState) {
     return false;
   }

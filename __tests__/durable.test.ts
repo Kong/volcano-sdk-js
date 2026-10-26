@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { EngineBatch } from '../src/durable-batch-result.ts';
-import type {
-  DurableContext,
-  DurableHandler,
-  DurableLog,
-  DurableStepScope,
-} from '../src/durable-types.ts';
+import type { DurableContext, DurableHandler, DurableLog, DurableStepScope } from '../src/durable-types.ts';
 // The durable runtime is an optional peer dependency, so these tests stand a
 // recording double in its place and assert on what the facade hands it. That is the contract worth pinning here: the
 // translation from the Volcano authoring surface to the engine's own — argument
@@ -43,16 +38,9 @@ type EngineBranch =
 interface RecordingContext {
   logger: DurableLog;
   configureLogger: ReturnType<typeof jest.fn<(config: unknown) => void>>;
-  step(
-    name: unknown,
-    fn: (scope: EngineScope) => Promise<unknown>,
-    config: Record<string, unknown>,
-  ): Promise<unknown>;
+  step(name: unknown, fn: (scope: EngineScope) => Promise<unknown>, config: Record<string, unknown>): Promise<unknown>;
   wait(name: unknown, duration?: unknown): Promise<void>;
-  runInChildContext(
-    name: unknown,
-    fn: (context: RecordingContext) => Promise<unknown>,
-  ): Promise<unknown>;
+  runInChildContext(name: unknown, fn: (context: RecordingContext) => Promise<unknown>): Promise<unknown>;
   waitForCondition(
     name: unknown,
     checkFn: (state: unknown, scope: EngineScope) => Promise<unknown>,
@@ -61,19 +49,10 @@ interface RecordingContext {
   map(
     name: unknown,
     items: unknown[],
-    mapFn: (
-      context: RecordingContext,
-      item: unknown,
-      index: number,
-      items: unknown[],
-    ) => Promise<unknown>,
+    mapFn: (context: RecordingContext, item: unknown, index: number, items: unknown[]) => Promise<unknown>,
     config: Record<string, unknown>,
   ): Promise<EngineBatch<unknown>>;
-  parallel(
-    name: unknown,
-    branches: EngineBranch[],
-    config: Record<string, unknown>,
-  ): Promise<EngineBatch<unknown>>;
+  parallel(name: unknown, branches: EngineBranch[], config: Record<string, unknown>): Promise<EngineBatch<unknown>>;
 }
 
 const engineCalls: EngineCall[] = [];
@@ -153,17 +132,15 @@ const fakeContext = (): RecordingContext => {
       if (staged !== null) {
         return Promise.resolve(staged);
       }
-      return Promise.allSettled(
-        items.map((item, index) => mapFn(context, item, index, items)),
-      ).then((settled) => fakeBatch(settled.map((item, index) => fakeBatchItem(item, index))));
+      return Promise.allSettled(items.map((item, index) => mapFn(context, item, index, items))).then((settled) =>
+        fakeBatch(settled.map((item, index) => fakeBatchItem(item, index))),
+      );
     },
 
     parallel(name, branches, config) {
       engineCalls.push({ op: 'parallel', name, branches, config });
       return Promise.allSettled(
-        branches.map((branch) =>
-          typeof branch === 'function' ? branch(context) : branch.func(context),
-        ),
+        branches.map((branch) => (typeof branch === 'function' ? branch(context) : branch.func(context))),
       ).then((settled) => fakeBatch(settled.map((item, index) => fakeBatchItem(item, index))));
     },
   };
@@ -176,10 +153,7 @@ const fakeContext = (): RecordingContext => {
 // back to it — and an absent delay is then read for a unit it does not have,
 // which throws on the first failure. The double holds the facade to that: a
 // config carrying a key the caller never set fails here.
-const engineStrategyConfig = (
-  op: string,
-  config: Record<string, unknown>,
-): Record<string, unknown> => {
+const engineStrategyConfig = (op: string, config: Record<string, unknown>): Record<string, unknown> => {
   const unset = Object.keys(config).filter((key) => config[key] === undefined);
   if (unset.length > 0) {
     throw new TypeError(`${op} was given undefined ${unset.join(', ')}, which clobbers a default`);
@@ -194,8 +168,7 @@ jest.mock(
   '@aws/durable-execution-sdk-js',
   () => ({
     withDurableExecution:
-      (handler: (input: unknown, context: unknown) => Promise<unknown>) =>
-      (event: { input: unknown }) => {
+      (handler: (input: unknown, context: unknown) => Promise<unknown>) => (event: { input: unknown }) => {
         const context = fakeContext();
         return handler(event.input, mockContextTransform?.(context) ?? context);
       },
@@ -271,9 +244,7 @@ const retryOnce = (): { shouldRetry: true; delay: { seconds: 1 } } => ({
 
 const shipped = (batch: EngineBatch<unknown>) => {
   stageBatch(batch);
-  return run((_input, ctx) =>
-    ctx.map('ship', ['a', 'b', 'c'], (item) => Promise.resolve(item), { minSucceeded: 2 }),
-  );
+  return run((_input, ctx) => ctx.map('ship', ['a', 'b', 'c'], (item) => Promise.resolve(item), { minSucceeded: 2 }));
 };
 
 beforeEach(() => {
@@ -393,25 +364,19 @@ describe('ctx.step', () => {
   });
 
   it('passes a retry function through untouched', async () => {
-    await run((_input, ctx) =>
-      ctx.step('charge', () => Promise.resolve('ok'), { retry: retryOnce }),
-    );
+    await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('ok'), { retry: retryOnce }));
 
     expect(configOf('step')['retryStrategy']).toBe(retryOnce);
   });
 
   it('maps atMostOnce onto the engine semantics', async () => {
-    await run((_input, ctx) =>
-      ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: true }),
-    );
+    await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: true }));
 
     expect(configOf('step')['semantics']).toBe(fakeStepSemantics.AtMostOncePerRetry);
   });
 
   it('leaves the semantics alone for atMostOnce: false', async () => {
-    await run((_input, ctx) =>
-      ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: false }),
-    );
+    await run((_input, ctx) => ctx.step('charge', () => Promise.resolve('ok'), { atMostOnce: false }));
 
     expect(configOf('step')).toStrictEqual({});
   });
@@ -491,9 +456,7 @@ describe('ctx.wait', () => {
   });
 
   it('refuses a negative duration', async () => {
-    await expect(run((_input, ctx) => ctx.wait('pause', -1))).rejects.toThrow(
-      /non-negative whole number of seconds/,
-    );
+    await expect(run((_input, ctx) => ctx.wait('pause', -1))).rejects.toThrow(/non-negative whole number of seconds/);
   });
 
   // The duration the engine takes carries whole seconds, so a sub-second value
@@ -510,9 +473,7 @@ describe('ctx.wait', () => {
   );
 
   it('refuses a fraction of a second', async () => {
-    await expect(run((_input, ctx) => ctx.wait('pause', 0.4))).rejects.toThrow(
-      /non-negative whole number of seconds/,
-    );
+    await expect(run((_input, ctx) => ctx.wait('pause', 0.4))).rejects.toThrow(/non-negative whole number of seconds/);
   });
 
   // The object form went to the engine unread, so a plausible-looking key was a
@@ -520,10 +481,7 @@ describe('ctx.wait', () => {
   it('refuses a duration object it does not understand', async () => {
     await expect(
       run((_input, ctx) => {
-        const result: unknown = Reflect.apply(ctx.wait.bind(ctx), undefined, [
-          'pause',
-          { milliseconds: 500 },
-        ]);
+        const result: unknown = Reflect.apply(ctx.wait.bind(ctx), undefined, ['pause', { milliseconds: 500 }]);
         return Promise.resolve(result);
       }),
     ).rejects.toThrow(/takes days, hours, minutes, seconds \(got milliseconds\)/);
@@ -540,14 +498,11 @@ describe('ctx.wait bounds', () => {
   // A zero wait passes every shape check and is refused by the platform, which
   // means the execution fails partway through -- after earlier steps have run
   // and been charged -- rather than at the call that was wrong.
-  it.each([0, '0s', { seconds: 0 }, { minutes: 0, seconds: 0 }])(
-    'refuses a wait of nothing (%p)',
-    async (duration) => {
-      await expect(run((_input, ctx) => ctx.wait('cool-off', duration))).rejects.toThrow(
-        /wait must be at least 1 second/,
-      );
-    },
-  );
+  it.each([0, '0s', { seconds: 0 }, { minutes: 0, seconds: 0 }])('refuses a wait of nothing (%p)', async (duration) => {
+    await expect(run((_input, ctx) => ctx.wait('cool-off', duration))).rejects.toThrow(
+      /wait must be at least 1 second/,
+    );
+  });
 
   // The other end is the execution ceiling: a wait longer than an execution may
   // live cannot elapse.
@@ -782,9 +737,7 @@ describe('ctx.map', () => {
   });
 
   it('delegates throwIfFailed to the batch', async () => {
-    const result = await run((_input, ctx) =>
-      ctx.map('ship', [1], (item) => Promise.resolve(item)),
-    );
+    const result = await run((_input, ctx) => ctx.map('ship', [1], (item) => Promise.resolve(item)));
     result.throwIfFailed();
 
     expect(callsOf('throwIfError')).toHaveLength(1);
@@ -846,12 +799,8 @@ describe('ctx.map', () => {
       }
     }
 
-    stageBatch(
-      fakeBatch([{ index: 0, status: 'FAILED', error: new ChildContextError('cannot ship a') }]),
-    );
-    const result = await run((_input, ctx) =>
-      ctx.map('ship', ['a'], (item) => Promise.resolve(item)),
-    );
+    stageBatch(fakeBatch([{ index: 0, status: 'FAILED', error: new ChildContextError('cannot ship a') }]));
+    const result = await run((_input, ctx) => ctx.map('ship', ['a'], (item) => Promise.resolve(item)));
 
     const encoded = JSON.stringify(result);
     const serialized: unknown = JSON.parse(encoded);
@@ -869,9 +818,7 @@ describe('ctx.map', () => {
   // gets the engine's own error, stack and all.
   it('still throws the engine error from throwIfFailed', async () => {
     stageBatch(fakeBatch([{ index: 0, status: 'FAILED', error: new Error('cannot ship a') }]));
-    const result = await run((_input, ctx) =>
-      ctx.map('ship', ['a'], (item) => Promise.resolve(item)),
-    );
+    const result = await run((_input, ctx) => ctx.map('ship', ['a'], (item) => Promise.resolve(item)));
 
     result.throwIfFailed();
     expect(callsOf('throwIfError')).toHaveLength(1);
@@ -899,9 +846,7 @@ describe('ctx.parallel', () => {
     );
 
     const call = firstCall('parallel');
-    expect(call.branches).toEqual([
-      expect.objectContaining({ name: 'charge', func: expect.any(Function) }),
-    ]);
+    expect(call.branches).toEqual([expect.objectContaining({ name: 'charge', func: expect.any(Function) })]);
     expect(call.config).toEqual({ maxConcurrency: 2 });
   });
 
@@ -914,10 +859,7 @@ describe('ctx.parallel', () => {
   it('refuses a branch that is neither a function nor { name, run }', async () => {
     await expect(
       run((_input, ctx) => {
-        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, [
-          'fanout',
-          [{ name: 'charge' }],
-        ]);
+        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, ['fanout', [{ name: 'charge' }]]);
         return Promise.resolve(result);
       }),
     ).rejects.toThrow(/a parallel branch is a function, or \{ name, run \}/);
@@ -926,10 +868,7 @@ describe('ctx.parallel', () => {
   it('refuses branches that are not an array', async () => {
     await expect(
       run((_input, ctx) => {
-        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, [
-          'fanout',
-          'left',
-        ]);
+        const result: unknown = Reflect.apply(ctx.parallel.bind(ctx), undefined, ['fanout', 'left']);
         return Promise.resolve(result);
       }),
     ).rejects.toThrow(/requires an array of branches/);

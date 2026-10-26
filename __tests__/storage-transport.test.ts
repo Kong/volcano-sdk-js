@@ -11,9 +11,7 @@ function fetcher(response: Response) {
 test('parses JSON success and forwards the request options', async () => {
   const request = fetcher(Response.json({ objects: [{ name: 'one' }] }));
   const options = { method: 'GET', headers: { Authorization: 'Bearer token' } };
-  await expect(
-    storageRequest(request, 'https://api.volcano.dev/storage/bucket', options),
-  ).resolves.toEqual({
+  await expect(storageRequest(request, 'https://api.volcano.dev/storage/bucket', options)).resolves.toEqual({
     data: { objects: [{ name: 'one' }] },
     error: null,
   });
@@ -22,10 +20,7 @@ test('parses JSON success and forwards the request options', async () => {
 
 test('returns an HTTP error with server and retry metadata', async () => {
   const request = fetcher(
-    Response.json(
-      { error: 'Rate limited', code: 'rate_limited' },
-      { status: 429, headers: { 'Retry-After': '3' } },
-    ),
+    Response.json({ error: 'Rate limited', code: 'rate_limited' }, { status: 429, headers: { 'Retry-After': '3' } }),
   );
   const result = await storageRequest(request, 'https://api.volcano.dev/storage/bucket');
   expect(result.data).toBeNull();

@@ -83,8 +83,7 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
     },
   };
 
-  const { title, submitText, showPassword, showName, alternateLink, forgotPasswordLink } =
-    config[mode];
+  const { title, submitText, showPassword, showName, alternateLink, forgotPasswordLink } = config[mode];
 
   // ---------------------------------------------------------------------------
   // HANDLERS
@@ -140,10 +139,7 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
           {/* Forgot Password Link */}
           {forgotPasswordLink && (
             <div className="text-right">
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-volcano-600 hover:text-volcano-500"
-              >
+              <Link href="/auth/forgot-password" className="text-sm text-volcano-600 hover:text-volcano-500">
                 Forgot your password?
               </Link>
             </div>
@@ -157,10 +153,7 @@ export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }) 
         {/* Alternate Link */}
         <p className="text-center text-sm text-gray-600">
           {alternateLink.text}{' '}
-          <Link
-            href={alternateLink.href}
-            className="font-medium text-volcano-600 hover:text-volcano-500"
-          >
+          <Link href={alternateLink.href} className="font-medium text-volcano-600 hover:text-volcano-500">
             {alternateLink.linkText}
           </Link>
         </p>
@@ -189,17 +182,7 @@ function AuthFeedback({ error, success }) {
   );
 }
 
-function AuthFields({
-  showName,
-  name,
-  setName,
-  email,
-  setEmail,
-  showPassword,
-  password,
-  setPassword,
-  mode,
-}) {
+function AuthFields({ showName, name, setName, email, setEmail, showPassword, password, setPassword, mode }) {
   return (
     <div className="space-y-4">
       {/* Name Field (signup only) */}
@@ -273,19 +256,8 @@ function SubmitButton({ loading, submitText }) {
       >
         {loading ? (
           <span className="flex items-center">
-            <svg
-              className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path
                 className="opacity-75"
                 fill="currentColor"

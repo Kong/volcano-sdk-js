@@ -25,10 +25,7 @@ export function validateSessionContinuation(
 ): asserts data is CompleteSessionFields {
   assertCompleteSession(data);
   const expected = extractSessionIdFromToken(context.accessToken);
-  if (
-    expected !== null &&
-    !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))
-  ) {
+  if (expected !== null && !sessionIdsEqual(expected, extractSessionIdFromToken(data.access_token))) {
     throw new Error('Refreshed credentials belong to a different server session');
   }
   if (Boolean(userId) && data.user.id !== userId) {
@@ -37,9 +34,5 @@ export function validateSessionContinuation(
 }
 
 export function sessionIdsEqual(left: unknown, right: unknown): boolean {
-  return (
-    typeof left === 'string' &&
-    typeof right === 'string' &&
-    left.toLowerCase() === right.toLowerCase()
-  );
+  return typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase();
 }

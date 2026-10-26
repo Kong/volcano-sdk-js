@@ -42,10 +42,7 @@ function isLightweightNotification(value: unknown): value is LightweightNotifica
 }
 
 function validTags(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (record(value) && Object.values(value).every((tag) => typeof tag === 'string'))
-  );
+  return value === undefined || (record(value) && Object.values(value).every((tag) => typeof tag === 'string'));
 }
 
 function isPublicationContext(value: unknown): value is PublicationContext {
@@ -172,9 +169,7 @@ function matchesPostgresChange(
   if (!isPostgresChange(value)) {
     return false;
   }
-  return (
-    value.schema === schema && value.table === table && (event === '*' || value.type === event)
-  );
+  return value.schema === schema && value.table === table && (event === '*' || value.type === event);
 }
 
 export {

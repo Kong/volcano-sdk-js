@@ -154,9 +154,9 @@ describe('durable.approvals', () => {
   test('approves and denies with the comment, or an empty body without one', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    await expect(
-      volcano.durable.approvals.approve('proj-1', 'apr-1', { comment: 'Address checked' }),
-    ).resolves.toEqual({ data: approved, status: 200, error: null });
+    await expect(volcano.durable.approvals.approve('proj-1', 'apr-1', { comment: 'Address checked' })).resolves.toEqual(
+      { data: approved, status: 200, error: null },
+    );
     expect(transport.approveDurableApproval).toHaveBeenCalledWith(
       'proj-1',
       'apr-1',
@@ -179,20 +179,14 @@ describe('durable.approvals', () => {
   test('refuses a comment the platform would reject, before sending it', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    await expect(
-      volcano.durable.approvals.approve('proj-1', 'apr-1', { comment: 'x'.repeat(2001) }),
-    ).resolves.toEqual({
+    await expect(volcano.durable.approvals.approve('proj-1', 'apr-1', { comment: 'x'.repeat(2001) })).resolves.toEqual({
       data: null,
       status: null,
       error: new Error('comment must be at most 2000 characters'),
     });
     const notText: unknown = { comment: 42 };
     const { approvals } = volcano.durable;
-    const result: unknown = Reflect.apply(approvals.deny.bind(approvals), undefined, [
-      'proj-1',
-      'apr-1',
-      notText,
-    ]);
+    const result: unknown = Reflect.apply(approvals.deny.bind(approvals), undefined, ['proj-1', 'apr-1', notText]);
     await expect(result).resolves.toEqual({
       data: null,
       status: null,
@@ -333,9 +327,7 @@ describe('durable.approvals', () => {
     });
 
     const { error } = await volcano.durable.approvals.get('proj-1', 'apr-1');
-    expect(error).toEqual(
-      new TypeError('Invalid durable response: Failed to read durable approval'),
-    );
+    expect(error).toEqual(new TypeError('Invalid durable response: Failed to read durable approval'));
   });
 
   test.each([
@@ -375,9 +367,7 @@ describe('durable.approvals', () => {
     const { volcano } = clientWithTransport({ listDurableApprovals: resolving(body) });
 
     const { error } = await volcano.durable.approvals.list('proj-1');
-    expect(error).toEqual(
-      new TypeError('Invalid durable response: Failed to list durable approvals'),
-    );
+    expect(error).toEqual(new TypeError('Invalid durable response: Failed to list durable approvals'));
   });
 
   test('reports a transport failure that carries no status', async () => {
@@ -466,9 +456,7 @@ describe('durable.approvals over the wire', () => {
     expect(lastRequest().headers.get('content-type')).toBe('application/json');
     expect(lastRequest().headers.get('authorization')).toBe('Bearer owner-token');
 
-    jest
-      .mocked(globalThis.fetch)
-      .mockResolvedValueOnce(Response.json({ ...approved, status: 'denied' }));
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ ...approved, status: 'denied' }));
     await realClient().durable.approvals.deny('proj-1', 'apr-1');
     expect(lastRequest()).toMatchObject({
       url: 'https://api.test.com/projects/proj-1/durable-approvals/apr-1/deny',
@@ -489,9 +477,7 @@ describe('durable.approvals over the wire', () => {
     [409, 'approval_decided', 'approval was already denied'],
     [409, 'approval_expired', 'approval expired'],
   ])('surfaces a %d refusal with its status and code', async (status, code, message) => {
-    jest
-      .mocked(globalThis.fetch)
-      .mockResolvedValueOnce(Response.json({ error: message, code }, { status }));
+    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ error: message, code }, { status }));
 
     const result = await realClient().durable.approvals.approve('proj-1', 'apr-1');
 

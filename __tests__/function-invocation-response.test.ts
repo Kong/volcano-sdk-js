@@ -1,25 +1,15 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { VolcanoSystemError } from '../src/errors.ts';
-import {
-  functionInvokeResult,
-  functionWasDispatched,
-} from '../src/function-invocation-response.ts';
+import { functionInvokeResult, functionWasDispatched } from '../src/function-invocation-response.ts';
 
 test('uses the dispatch marker instead of the version header', () => {
-  expect(
-    functionWasDispatched(new Response(null, { headers: { 'X-Volcano-Version': 'v1' } })),
-  ).toBe(false);
-  expect(
-    functionWasDispatched(new Response(null, { headers: { 'X-Volcano-Function-Invoked': '1' } })),
-  ).toBe(true);
+  expect(functionWasDispatched(new Response(null, { headers: { 'X-Volcano-Version': 'v1' } }))).toBe(false);
+  expect(functionWasDispatched(new Response(null, { headers: { 'X-Volcano-Function-Invoked': '1' } }))).toBe(true);
 });
 
 test('preserves a successful function response and its version', async () => {
-  const response = Response.json(
-    { ok: true },
-    { headers: { 'X-Volcano-Version': 'dev-v1', 'X-Request-ID': 'abc' } },
-  );
+  const response = Response.json({ ok: true }, { headers: { 'X-Volcano-Version': 'dev-v1', 'X-Request-ID': 'abc' } });
   await expect(functionInvokeResult(response, true)).resolves.toMatchObject({
     data: { ok: true },
     status: 200,

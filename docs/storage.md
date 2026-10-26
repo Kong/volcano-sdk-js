@@ -120,11 +120,9 @@ console.log('Type:', data.mime_type);
 Specify content type:
 
 ```javascript
-const { data, error } = await volcano.storage
-  .from('documents')
-  .upload('reports/annual-2024.pdf', file, {
-    contentType: 'application/pdf',
-  });
+const { data, error } = await volcano.storage.from('documents').upload('reports/annual-2024.pdf', file, {
+  contentType: 'application/pdf',
+});
 ```
 
 ### Upload from Blob or ArrayBuffer
@@ -163,9 +161,7 @@ await storage.upload(`uploads/${date}/${file.name}`, file);
 ### Basic Download
 
 ```javascript
-const { data: blob, error } = await volcano.storage
-  .from('documents')
-  .download('reports/annual-2024.pdf');
+const { data: blob, error } = await volcano.storage.from('documents').download('reports/annual-2024.pdf');
 
 if (error) {
   console.error('Download failed:', error.message);
@@ -242,9 +238,7 @@ console.log(`Found ${files.length} files`);
 
 if (nextCursor) {
   // Fetch next page
-  const { data: moreFiles } = await volcano.storage
-    .from('uploads')
-    .list('', { limit: 100, cursor: nextCursor });
+  const { data: moreFiles } = await volcano.storage.from('uploads').list('', { limit: 100, cursor: nextCursor });
 }
 ```
 
@@ -298,9 +292,7 @@ if (data) {
 ### Move (Rename)
 
 ```javascript
-const { data, error } = await volcano.storage
-  .from('documents')
-  .move('drafts/report.pdf', 'published/report.pdf');
+const { data, error } = await volcano.storage.from('documents').move('drafts/report.pdf', 'published/report.pdf');
 
 if (data) {
   console.log('File moved to:', data.name);
@@ -310,9 +302,7 @@ if (data) {
 ### Copy
 
 ```javascript
-const { data, error } = await volcano.storage
-  .from('documents')
-  .copy('templates/invoice.pdf', 'invoices/2024-001.pdf');
+const { data, error } = await volcano.storage.from('documents').copy('templates/invoice.pdf', 'invoices/2024-001.pdf');
 
 if (data) {
   console.log('File copied to:', data.name);
@@ -328,9 +318,7 @@ Files are private by default. They require an authenticated user session to down
 ### Make File Public
 
 ```javascript
-const { data, error } = await volcano.storage
-  .from('avatars')
-  .updateVisibility('user-123/profile.jpg', true);
+const { data, error } = await volcano.storage.from('avatars').updateVisibility('user-123/profile.jpg', true);
 
 if (data) {
   console.log('File is now public');
@@ -341,9 +329,7 @@ if (data) {
 ### Make File Private
 
 ```javascript
-const { error } = await volcano.storage
-  .from('avatars')
-  .updateVisibility('user-123/profile.jpg', false);
+const { error } = await volcano.storage.from('avatars').updateVisibility('user-123/profile.jpg', false);
 
 if (!error) {
   console.log('File is now private');
@@ -399,14 +385,12 @@ For large files (over 100MB) or unreliable connections, use resumable uploads.
 The `uploadResumable` method handles everything automatically:
 
 ```javascript
-const { data, error } = await volcano.storage
-  .from('uploads')
-  .uploadResumable('large-video.mp4', file, {
-    onProgress: (uploaded, total) => {
-      const percent = Math.round((uploaded / total) * 100);
-      console.log(`Progress: ${percent}%`);
-    },
-  });
+const { data, error } = await volcano.storage.from('uploads').uploadResumable('large-video.mp4', file, {
+  onProgress: (uploaded, total) => {
+    const percent = Math.round((uploaded / total) * 100);
+    console.log(`Progress: ${percent}%`);
+  },
+});
 
 if (data) {
   console.log('Upload complete:', data.object.name);
@@ -419,13 +403,11 @@ For more control, manage the upload session yourself:
 
 ```javascript
 // 1. Create upload session
-const { data: session } = await volcano.storage
-  .from('uploads')
-  .createUploadSession('large-video.mp4', {
-    totalSize: file.size,
-    contentType: 'video/mp4',
-    partSize: 10 * 1024 * 1024, // 10MB parts
-  });
+const { data: session } = await volcano.storage.from('uploads').createUploadSession('large-video.mp4', {
+  totalSize: file.size,
+  contentType: 'video/mp4',
+  partSize: 10 * 1024 * 1024, // 10MB parts
+});
 
 console.log(`Session created: ${session.session_id}`);
 console.log(`Will upload in ${session.total_parts} parts`);
@@ -468,9 +450,7 @@ If an upload is interrupted, you can resume it later:
 
 ```javascript
 // Check session status
-const { data: status } = await volcano.storage
-  .from('uploads')
-  .getUploadSession('large-video.mp4', sessionId);
+const { data: status } = await volcano.storage.from('uploads').getUploadSession('large-video.mp4', sessionId);
 
 console.log(`${status.parts_uploaded}/${status.total_parts} parts uploaded`);
 console.log(`${status.bytes_uploaded}/${status.total_size} bytes`);
@@ -486,9 +466,7 @@ for (const partNumber of missingParts) {
   const end = Math.min(start + status.part_size, file.size);
   const partData = file.slice(start, end);
 
-  await volcano.storage
-    .from('uploads')
-    .uploadPart('large-video.mp4', sessionId, partNumber, partData);
+  await volcano.storage.from('uploads').uploadPart('large-video.mp4', sessionId, partNumber, partData);
 }
 
 // Complete when all parts are uploaded
@@ -501,9 +479,7 @@ Cancel an in-progress upload and discard its parts without publishing an object.
 Further session-status requests report not found:
 
 ```javascript
-const { error } = await volcano.storage
-  .from('uploads')
-  .abortUploadSession('large-video.mp4', sessionId);
+const { error } = await volcano.storage.from('uploads').abortUploadSession('large-video.mp4', sessionId);
 
 if (!error) {
   console.log('Upload cancelled');

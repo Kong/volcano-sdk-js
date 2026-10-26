@@ -10,10 +10,7 @@ export function decodeBase64Url(value: string): string {
   throw new Error('No base64 decoder available');
 }
 
-export function extractRequiredProjectIdFromToken(
-  token: unknown,
-  tokenName = 'accessToken',
-): string {
+export function extractRequiredProjectIdFromToken(token: unknown, tokenName = 'accessToken'): string {
   if (typeof token !== 'string' || token === '') {
     throw new Error('No active session');
   }
@@ -80,8 +77,7 @@ function requiredProjectId(payload: unknown, tokenName: string): string {
 
 function normalizedSessionId(payload: unknown): string | null {
   const sessionId = claim(payload, 'session_id');
-  return typeof sessionId === 'string' &&
-    /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(sessionId)
+  return typeof sessionId === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(sessionId)
     ? sessionId.toLowerCase()
     : null;
 }

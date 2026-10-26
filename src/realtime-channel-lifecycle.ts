@@ -9,10 +9,7 @@ export interface ChannelSubscription {
 }
 
 export interface ChannelClient {
-  newSubscription(
-    name: string,
-    options: { joinLeave: boolean; data?: Record<string, string> },
-  ): ChannelSubscription;
+  newSubscription(name: string, options: { joinLeave: boolean; data?: Record<string, string> }): ChannelSubscription;
   removeSubscription(subscription: ChannelSubscription): void;
   presence(name: string): Promise<unknown>;
 }
@@ -65,12 +62,7 @@ function subscribeEvent(
   subscription.on(event, handler);
 }
 
-function notifyCallbacks(
-  state: ChannelLifecycleState,
-  event: unknown,
-  data: unknown,
-  context: unknown,
-): void {
+function notifyCallbacks(state: ChannelLifecycleState, event: unknown, data: unknown, context: unknown): void {
   state._callbacks.get(event)?.forEach((callback) => {
     callback(data, context);
   });
@@ -129,11 +121,7 @@ function bindLeave(state: ChannelLifecycleState, subscription: ChannelSubscripti
   });
 }
 
-function applyPresenceSnapshot(
-  state: ChannelLifecycleState,
-  presence: unknown,
-  version: number,
-): void {
+function applyPresenceSnapshot(state: ChannelLifecycleState, presence: unknown, version: number): void {
   const clients = property(presence, 'clients');
   if (!record(clients) || version !== state._lifecycleVersion) {
     return;
@@ -173,10 +161,7 @@ function bindSubscribed(state: ChannelLifecycleState, subscription: ChannelSubsc
   });
 }
 
-function bindSubscriptionEvents(
-  state: ChannelLifecycleState,
-  subscription: ChannelSubscription,
-): void {
+function bindSubscriptionEvents(state: ChannelLifecycleState, subscription: ChannelSubscription): void {
   subscribeEvent(state, subscription, 'state', (context) => {
     if (state._subscription !== subscription) {
       return;
@@ -281,10 +266,7 @@ export function resetChannelForIdentityChange(state: ChannelLifecycleState): voi
   state._subscription = null;
 }
 
-function detachSubscriptionHandlers(
-  state: ChannelLifecycleState,
-  subscription: ChannelSubscription,
-): void {
+function detachSubscriptionHandlers(state: ChannelLifecycleState, subscription: ChannelSubscription): void {
   for (const [event, handler] of Object.entries(state._eventHandlers)) {
     try {
       subscription.off(event, handler);

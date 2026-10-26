@@ -6,11 +6,7 @@ import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts'
 import { sessionToken } from './session-fixtures.ts';
 
 function base64UrlEncode(value: string): string {
-  return Buffer.from(value)
-    .toString('base64')
-    .replaceAll('=', '')
-    .replaceAll('+', '-')
-    .replaceAll('/', '_');
+  return Buffer.from(value).toString('base64').replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
 }
 
 function createTestJwtToken(projectId: string, extraClaims: Record<string, unknown> = {}): string {
@@ -306,27 +302,24 @@ describe('VolcanoAuth', () => {
   });
 
   describe('Authentication - token-only bootstrap', () => {
-    it.each([204, 401, 503])(
-      'revokes a token-only session and clears locally after status %s',
-      async (status) => {
-        const token = createTestJwtToken('project-id', {
-          session_id: '00000000-0000-4000-8000-000000000011',
-        });
-        const client = new VolcanoAuth({ ...config, accessToken: token });
-        fetchMock.mockResolvedValueOnce(reply(status, { error: 'revocation failed' }));
-        const result = await client.auth.signOut();
-        expect(global.fetch).toHaveBeenCalledTimes(1);
-        expect(global.fetch).toHaveBeenCalledWith(
-          `${config.apiUrl}/auth/user/sessions/00000000-0000-4000-8000-000000000011`,
-          expect.objectContaining({
-            method: 'DELETE',
-            headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
-          }),
-        );
-        expect(Boolean(result.error)).toBe(status !== 204);
-        expect(client.accessToken).toBeNull();
-      },
-    );
+    it.each([204, 401, 503])('revokes a token-only session and clears locally after status %s', async (status) => {
+      const token = createTestJwtToken('project-id', {
+        session_id: '00000000-0000-4000-8000-000000000011',
+      });
+      const client = new VolcanoAuth({ ...config, accessToken: token });
+      fetchMock.mockResolvedValueOnce(reply(status, { error: 'revocation failed' }));
+      const result = await client.auth.signOut();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${config.apiUrl}/auth/user/sessions/00000000-0000-4000-8000-000000000011`,
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
+        }),
+      );
+      expect(Boolean(result.error)).toBe(status !== 204);
+      expect(client.accessToken).toBeNull();
+    });
 
     it('preserves a replacement made while token-only revocation is in flight', async () => {
       const token = createTestJwtToken('project-id', {
@@ -417,56 +410,51 @@ describe('VolcanoAuth', () => {
       },
     );
 
-    it.each(['getUser', 'updateUser'])(
-      'discards a stale %s profile when refresh wins first',
-      async (method) => {
-        const client = new VolcanoAuth({
-          ...config,
-          accessToken: createTestJwtToken('project-id', {
-            session_id: '00000000-0000-4000-8000-000000000012',
-          }),
-          refreshToken: 'refresh-b',
-        });
-        const pending = deferred<Response>();
-        const started = signal();
-        fetchMock.mockImplementationOnce(() => {
-          started.resolve();
-          return pending.promise;
-        });
-        const profile =
-          method === 'getUser'
-            ? client.auth.getUser()
-            : client.auth.updateUser({ metadata: { name: 'example' } });
-        await within(started.promise, 'profile request start');
-        fetchMock.mockResolvedValueOnce(
-          reply(200, {
-            access_token: createTestJwtToken('project-id', {
-              session_id: '00000000-0000-4000-8000-000000000012',
-              renewed: true,
-            }),
-            refresh_token: 'rotated-b',
-            user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
-            expires_in: 3600,
-          }),
-        );
-        const refreshed = await within(client.auth.refreshSession(), 'refresh completion');
-        expect(refreshed.error).toBeNull();
-        pending.resolve(
-          reply(200, {
-            user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
-          }),
-        );
-        const profileResult = await within(profile, 'stale profile completion');
-        expect(profileResult.error).toBeInstanceOf(AuthSessionChangedError);
-        expect(client.currentUser?.id).toBe('user-b');
-        expect(client.accessToken).toBe(
-          createTestJwtToken('project-id', {
+    it.each(['getUser', 'updateUser'])('discards a stale %s profile when refresh wins first', async (method) => {
+      const client = new VolcanoAuth({
+        ...config,
+        accessToken: createTestJwtToken('project-id', {
+          session_id: '00000000-0000-4000-8000-000000000012',
+        }),
+        refreshToken: 'refresh-b',
+      });
+      const pending = deferred<Response>();
+      const started = signal();
+      fetchMock.mockImplementationOnce(() => {
+        started.resolve();
+        return pending.promise;
+      });
+      const profile =
+        method === 'getUser' ? client.auth.getUser() : client.auth.updateUser({ metadata: { name: 'example' } });
+      await within(started.promise, 'profile request start');
+      fetchMock.mockResolvedValueOnce(
+        reply(200, {
+          access_token: createTestJwtToken('project-id', {
             session_id: '00000000-0000-4000-8000-000000000012',
             renewed: true,
           }),
-        );
-      },
-    );
+          refresh_token: 'rotated-b',
+          user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
+          expires_in: 3600,
+        }),
+      );
+      const refreshed = await within(client.auth.refreshSession(), 'refresh completion');
+      expect(refreshed.error).toBeNull();
+      pending.resolve(
+        reply(200, {
+          user: { id: 'user-a', email: 'fixture@example.com', status: 'active' },
+        }),
+      );
+      const profileResult = await within(profile, 'stale profile completion');
+      expect(profileResult.error).toBeInstanceOf(AuthSessionChangedError);
+      expect(client.currentUser?.id).toBe('user-b');
+      expect(client.accessToken).toBe(
+        createTestJwtToken('project-id', {
+          session_id: '00000000-0000-4000-8000-000000000012',
+          renewed: true,
+        }),
+      );
+    });
 
     it('revokes the access-token session when the supplied refresh token belongs elsewhere', async () => {
       const token = createTestJwtToken('project-id', {
@@ -651,11 +639,7 @@ describe('VolcanoAuth', () => {
       await volcano.auth.setSession(completeSession());
       const previous = await volcano.auth.getSession();
 
-      const adopted: unknown = Reflect.apply(
-        volcano.auth.setSession.bind(volcano.auth),
-        undefined,
-        [invalidSession()],
-      );
+      const adopted: unknown = Reflect.apply(volcano.auth.setSession.bind(volcano.auth), undefined, [invalidSession()]);
       await expect(adopted).resolves.toEqual({
         data: { session: null },
         error: expect.any(TypeError),

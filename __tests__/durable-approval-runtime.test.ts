@@ -1,14 +1,5 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
 import { settledRun } from './support/settled-run.ts';
@@ -51,9 +42,7 @@ function isRunnerClass(value: unknown): value is RunnerClass {
 function localRunner(): RunnerClass {
   const testing = jest.requireActual(require.resolve('@aws/durable-execution-sdk-js-testing'));
   const runner: unknown =
-    typeof testing === 'object' && testing !== null
-      ? Reflect.get(testing, 'LocalDurableTestRunner')
-      : undefined;
+    typeof testing === 'object' && testing !== null ? Reflect.get(testing, 'LocalDurableTestRunner') : undefined;
   if (!isRunnerClass(runner)) {
     throw new TypeError('The durable test runner does not expose LocalDurableTestRunner');
   }
@@ -68,9 +57,7 @@ function runnerFor(handler: DurableHandler): Runner {
   return new LocalDurableTestRunner({
     handlerFunction(event, context) {
       executionArns.push(
-        typeof event === 'object' && event !== null
-          ? Reflect.get(event, 'DurableExecutionArn')
-          : undefined,
+        typeof event === 'object' && event !== null ? Reflect.get(event, 'DurableExecutionArn') : undefined,
       );
       return invoke(event, context);
     },
@@ -107,9 +94,7 @@ beforeEach(() => {
   executionArns.length = 0;
   process.env['VOLCANO_PLATFORM_API_URL'] = 'https://api.test.com';
   fetchMock().mockImplementation(() =>
-    Promise.resolve(
-      Response.json({ id: 'apr-1', status: 'pending', expires_at: null }, { status: 201 }),
-    ),
+    Promise.resolve(Response.json({ id: 'apr-1', status: 'pending', expires_at: null }, { status: 201 })),
   );
 });
 
@@ -165,9 +150,7 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
   });
 
   it('registers the approval under the execution the runtime is running', async () => {
-    const runner = runnerFor((_input, ctx) =>
-      ctx.waitForApproval('ship-order', { title: 'Ship order 42?' }),
-    );
+    const runner = runnerFor((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship order 42?' }));
 
     await expect(decideWith(runner, { status: 'denied' })).resolves.toMatchObject({
       status: 'denied',
@@ -183,10 +166,7 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
   it('hands the handler a refusal it can recognize by message', async () => {
     fetchMock().mockImplementation(() =>
       Promise.resolve(
-        Response.json(
-          { error: 'too many pending approvals', code: 'too_many_pending_approvals' },
-          { status: 409 },
-        ),
+        Response.json({ error: 'too many pending approvals', code: 'too_many_pending_approvals' }, { status: 409 }),
       ),
     );
     const runner = runnerFor(async (_input, ctx) => {
@@ -201,8 +181,7 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
 
     expect(result.getResult()).toEqual({
       name: 'CallbackSubmitterError',
-      message:
-        'Volcano refused the approval request (409 too_many_pending_approvals): too many pending approvals',
+      message: 'Volcano refused the approval request (409 too_many_pending_approvals): too many pending approvals',
     });
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });

@@ -1,17 +1,7 @@
 import { isPageMetadata } from './durable-response.ts';
-import type {
-  DurableApproval,
-  DurableApprovalStats,
-  PaginatedDurableApprovals,
-} from './sdk-public-types.ts';
+import type { DurableApproval, DurableApprovalStats, PaginatedDurableApprovals } from './sdk-public-types.ts';
 
-const APPROVAL_STATUSES = new Set<unknown>([
-  'pending',
-  'approved',
-  'denied',
-  'expired',
-  'cancelled',
-]);
+const APPROVAL_STATUSES = new Set<unknown>(['pending', 'approved', 'denied', 'expired', 'cancelled']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,24 +31,14 @@ export function isDurableApproval(value: unknown): value is DurableApproval {
 
 export function isDurableApprovalPage(value: unknown): value is PaginatedDurableApprovals {
   return (
-    isRecord(value) &&
-    Array.isArray(value['data']) &&
-    value['data'].every(isDurableApproval) &&
-    isPageMetadata(value)
+    isRecord(value) && Array.isArray(value['data']) && value['data'].every(isDurableApproval) && isPageMetadata(value)
   );
 }
 
 function isBreakdown(value: Record<string, unknown>): boolean {
-  return (
-    isRecord(value['counts']) && Array.isArray(value['functions']) && Array.isArray(value['daily'])
-  );
+  return isRecord(value['counts']) && Array.isArray(value['functions']) && Array.isArray(value['daily']);
 }
 
 export function isDurableApprovalStats(value: unknown): value is DurableApprovalStats {
-  return (
-    isRecord(value) &&
-    typeof value['from'] === 'string' &&
-    typeof value['to'] === 'string' &&
-    isBreakdown(value)
-  );
+  return isRecord(value) && typeof value['from'] === 'string' && typeof value['to'] === 'string' && isBreakdown(value);
 }

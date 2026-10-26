@@ -31,29 +31,18 @@ describe('Sandbox wire validation', () => {
     expect(text('')).toBe('');
     expect(() => text(1)).toThrow('Invalid Sandbox text field');
   });
-  test.each([Number.NaN, Number.POSITIVE_INFINITY, '0'])(
-    'rejects invalid numeric fields %j',
-    (exit_code) => {
-      expect(() => commandResult({ ...command, exit_code })).toThrow(
-        'Invalid Sandbox numeric field',
-      );
-    },
-  );
+  test.each([Number.NaN, Number.POSITIVE_INFINITY, '0'])('rejects invalid numeric fields %j', (exit_code) => {
+    expect(() => commandResult({ ...command, exit_code })).toThrow('Invalid Sandbox numeric field');
+  });
   test('rejects non-boolean flags', () => {
     expect(() => commandResult({ ...command, timed_out: 'false' })).toThrow('Invalid Sandbox flag');
   });
-  test.each([
-    'starting',
-    'running',
-    'suspending',
-    'suspended',
-    'resuming',
-    'terminating',
-    'terminated',
-    'unknown',
-  ])('preserves session state %s', (state) => {
-    expect(sessionState(state)).toBe(state);
-  });
+  test.each(['starting', 'running', 'suspending', 'suspended', 'resuming', 'terminating', 'terminated', 'unknown'])(
+    'preserves session state %s',
+    (state) => {
+      expect(sessionState(state)).toBe(state);
+    },
+  );
   test('rejects unknown session state', () => {
     expect(() => sessionState('future')).toThrow('Invalid Sandbox state');
   });
@@ -67,38 +56,27 @@ describe('Sandbox wire validation', () => {
     'rejects malformed catalog %j',
     (value) => {
       const message =
-        'data' in value && Array.isArray(value.data)
-          ? 'Invalid Sandbox regions'
-          : 'Invalid Sandbox preset catalog';
+        'data' in value && Array.isArray(value.data) ? 'Invalid Sandbox regions' : 'Invalid Sandbox preset catalog';
       expect(() => presetsResult(value)).toThrow(message);
     },
   );
   test('accepts the file limit and rejects the next byte', () => {
     const limit = 8 * 1024 * 1024;
     expect(encodeBytes(new Uint8Array(limit))).toHaveLength(Math.ceil(limit / 3) * 4);
-    expect(() => encodeBytes(new Uint8Array(limit + 1))).toThrow(
-      'Sandbox files are limited to 8 MiB',
-    );
+    expect(() => encodeBytes(new Uint8Array(limit + 1))).toThrow('Sandbox files are limited to 8 MiB');
   });
 });
 
-test.each([
-  'prefix11111111-1111-4111-8111-111111111111',
-  '11111111-1111-4111-8111-111111111111suffix',
-])('rejects a UUID embedded in %s', (id) => {
-  expect(() => pathId(id)).toThrow('A Sandbox resource ID must be a UUID');
-});
+test.each(['prefix11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111suffix'])(
+  'rejects a UUID embedded in %s',
+  (id) => {
+    expect(() => pathId(id)).toThrow('A Sandbox resource ID must be a UUID');
+  },
+);
 
 test('forwards the caller abort signal and leaves absent signals untouched', () => {
   const generated = jest
-    .fn<
-      (
-        mode: 'session',
-        headers?: Record<string, string>,
-        responseType?: 'blob',
-        timeoutMs?: number,
-      ) => object
-    >()
+    .fn<(mode: 'session', headers?: Record<string, string>, responseType?: 'blob', timeoutMs?: number) => object>()
     .mockImplementation(() => ({}));
   const client = {
     timeout: 60_000,
@@ -115,9 +93,11 @@ test('omits absent optional wire properties', () => {
     preset: 'node22',
     region: 'aws-us-east-1',
   });
-  expect(
-    createRequest({ sandboxId: 'template', region: 'aws-us-east-1', memoryMB: 2048 }),
-  ).toStrictEqual({ sandbox_id: 'template', region: 'aws-us-east-1', memory_mb: 2048 });
+  expect(createRequest({ sandboxId: 'template', region: 'aws-us-east-1', memoryMB: 2048 })).toStrictEqual({
+    sandbox_id: 'template',
+    region: 'aws-us-east-1',
+    memory_mb: 2048,
+  });
   expect(commandRequest('true', {})).toStrictEqual({ command: 'true' });
   expect(commandRequest('true', { timeoutSeconds: 5, environment: { A: 'b' } })).toStrictEqual({
     command: 'true',
@@ -143,14 +123,11 @@ test('omits absent optional wire properties', () => {
   });
 });
 
-test.each([0, 1, 1023, 1025, 2047, 2049, Number.NaN])(
-  'rejects unsupported memory %s before transport',
-  (memoryMB) => {
-    expect(() => createRequest({ preset: 'node22', region: 'us-east-1', memoryMB })).toThrow(
-      'Sandbox memory must be 1024 or 2048 MB',
-    );
-  },
-);
+test.each([0, 1, 1023, 1025, 2047, 2049, Number.NaN])('rejects unsupported memory %s before transport', (memoryMB) => {
+  expect(() => createRequest({ preset: 'node22', region: 'us-east-1', memoryMB })).toThrow(
+    'Sandbox memory must be 1024 or 2048 MB',
+  );
+});
 test.each([1024, 2048])('accepts catalog memory %s', (memoryMB) => {
   expect(createRequest({ preset: 'catalog-preset', region: 'us-east-1', memoryMB })).toEqual({
     preset: 'catalog-preset',

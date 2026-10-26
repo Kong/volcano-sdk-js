@@ -1,14 +1,5 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
 import { settledRun } from './support/settled-run.ts';
@@ -48,9 +39,7 @@ function isRunnerClass(value: unknown): value is RunnerClass {
 function localRunner(): RunnerClass {
   const testing = jest.requireActual(require.resolve('@aws/durable-execution-sdk-js-testing'));
   const runner: unknown =
-    typeof testing === 'object' && testing !== null
-      ? Reflect.get(testing, 'LocalDurableTestRunner')
-      : undefined;
+    typeof testing === 'object' && testing !== null ? Reflect.get(testing, 'LocalDurableTestRunner') : undefined;
   if (!isRunnerClass(runner)) {
     throw new TypeError('The durable test runner does not expose LocalDurableTestRunner');
   }
@@ -193,10 +182,7 @@ describe('durable messages on the durable runtime', () => {
     fetchMock().mockImplementation((url) =>
       Promise.resolve(
         url === `${API_URL}/durable-messages/publish`
-          ? Response.json(
-              { error: 'execution is not running', code: 'execution_not_running' },
-              { status: 409 },
-            )
+          ? Response.json({ error: 'execution is not running', code: 'execution_not_running' }, { status: 409 })
           : answer(url),
       ),
     );
@@ -208,10 +194,7 @@ describe('durable messages on the durable runtime', () => {
       }
     });
 
-    const result = await settledRun(
-      runner.run({ payload: {} }),
-      complete(runner, SESSION, { token: 'vdms_session' }),
-    );
+    const result = await settledRun(runner.run({ payload: {} }), complete(runner, SESSION, { token: 'vdms_session' }));
 
     expect(result.getResult()).toBe(
       'Volcano refused the message (409 execution_not_running): execution is not running',
@@ -223,10 +206,7 @@ describe('durable messages on the durable runtime', () => {
     fetchMock().mockImplementation((url) =>
       Promise.resolve(
         url === `${API_URL}/durable-messages/sessions`
-          ? Response.json(
-              { error: 'execution is not running', code: 'execution_not_running' },
-              { status: 409 },
-            )
+          ? Response.json({ error: 'execution is not running', code: 'execution_not_running' }, { status: 409 })
           : answer(url),
       ),
     );
@@ -263,10 +243,7 @@ describe('durable messages on the durable runtime', () => {
       return { published: await published, second: await steps };
     });
 
-    const result = await settledRun(
-      runner.run({ payload: {} }),
-      complete(runner, SESSION, { token: 'vdms_session' }),
-    );
+    const result = await settledRun(runner.run({ payload: {} }), complete(runner, SESSION, { token: 'vdms_session' }));
 
     expect(result.getResult()).toEqual({ published: { id: 'msg-1', seq: 1 }, second: 2 });
     expect(requests('/durable-messages/publish')).toHaveLength(1);

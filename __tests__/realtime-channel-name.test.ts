@@ -8,19 +8,15 @@ describe('server-side realtime channel names', () => {
   });
 
   test('preserves colons in channel names', () => {
-    expect(sdkChannelFromParts(['project', 'broadcast', 'chat', 'thread'])).toBe(
-      'broadcast:chat:thread',
-    );
+    expect(sdkChannelFromParts(['project', 'broadcast', 'chat', 'thread'])).toBe('broadcast:chat:thread');
   });
 
   test('recognizes only five-part per-user postgres channels', () => {
-    expect(
-      postgresBaseChannelFromParts(['project', 'postgres', 'public', 'messages', 'user']),
-    ).toBe('postgres:public:messages');
+    expect(postgresBaseChannelFromParts(['project', 'postgres', 'public', 'messages', 'user'])).toBe(
+      'postgres:public:messages',
+    );
     expect(postgresBaseChannelFromParts(['project', 'postgres', 'public', 'messages'])).toBeNull();
-    expect(
-      postgresBaseChannelFromParts(['project', 'broadcast', 'public', 'messages', 'user']),
-    ).toBeNull();
+    expect(postgresBaseChannelFromParts(['project', 'broadcast', 'public', 'messages', 'user'])).toBeNull();
   });
 });
 

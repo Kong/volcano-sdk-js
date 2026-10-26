@@ -175,9 +175,7 @@ function sessionError(error: Error | string | null): Error {
   if (error instanceof Error) {
     return error;
   }
-  return new Error(
-    error !== null && error.length > 0 ? error : 'No active session. Please sign in first.',
-  );
+  return new Error(error !== null && error.length > 0 ? error : 'No active session. Please sign in first.');
 }
 
 function queryPayload(value: unknown): { rows: unknown[]; count: unknown } {

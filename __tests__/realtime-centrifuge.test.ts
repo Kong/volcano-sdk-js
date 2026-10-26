@@ -11,15 +11,12 @@ describe('Centrifuge dependency boundary', () => {
     expect(centrifugeFrom({ default: FakeCentrifuge })).toBe(FakeCentrifuge);
   });
 
-  test.each([
-    null,
-    'not a module',
-    {},
-    { Centrifuge: true, default: FakeCentrifuge },
-    { Centrifuge: () => 0 },
-  ])('rejects malformed dependency exports', (loaded: unknown) => {
-    expect(() => centrifugeFrom(loaded)).toThrow('client constructor');
-  });
+  test.each([null, 'not a module', {}, { Centrifuge: true, default: FakeCentrifuge }, { Centrifuge: () => 0 }])(
+    'rejects malformed dependency exports',
+    (loaded: unknown) => {
+      expect(() => centrifugeFrom(loaded)).toThrow('client constructor');
+    },
+  );
 
   test('lazily loads and reuses the installed client', async () => {
     const first = await loadCentrifuge();

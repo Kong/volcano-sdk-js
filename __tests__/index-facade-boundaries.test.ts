@@ -6,12 +6,7 @@ import {
   functionResolveCacheKey,
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  loadRealtime,
-  VolcanoAuth,
-} from '../src/index.ts';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, loadRealtime, VolcanoAuth } from '../src/index.ts';
 import type { User } from '../src/sdk-public-types.ts';
 import { deferred, signal, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
@@ -21,9 +16,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-function client(
-  options: { apiUrl?: string; timeout?: number; refreshToken?: string } = {},
-): VolcanoAuth {
+function client(options: { apiUrl?: string; timeout?: number; refreshToken?: string } = {}): VolcanoAuth {
   return new VolcanoAuth({ anonKey: 'ak-test', accessToken: 'access', ...options });
 }
 
@@ -90,9 +83,7 @@ describe('facade configuration boundaries', () => {
     sdk.auth.onAuthStateChange(onChange);
     jest
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        Response.json({ user: { id: 'user', email: 'u@example.test', status: 'active' } }),
-      );
+      .mockResolvedValueOnce(Response.json({ user: { id: 'user', email: 'u@example.test', status: 'active' } }));
 
     await expect(sdk.auth.getUser()).resolves.toMatchObject({ user: { id: 'user' }, error: null });
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -173,9 +164,7 @@ describe('facade log request boundary', () => {
       data: null,
       error,
     });
-    await expect(
-      sdk.getLogActivity('project', { resource: { type: 'function' } }),
-    ).resolves.toEqual({
+    await expect(sdk.getLogActivity('project', { resource: { type: 'function' } })).resolves.toEqual({
       data: null,
       error,
     });
@@ -371,10 +360,7 @@ describe('shared function resolution boundary', () => {
     });
 
     state.cache.set(key, { functionId: 'old', error: null, expiresAt: Date.now() - 1 });
-    state.inFlight.set(
-      key,
-      Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }),
-    );
+    state.inFlight.set(key, Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }));
     await expect(resolveWith(sdk, anonToken, true)).resolves.toMatchObject({
       functionId: 'fresh',
     });
@@ -444,10 +430,7 @@ describe('shared function resolution boundary', () => {
     jest.spyOn(Date, 'now').mockReturnValue(now);
     state.lastPruneAtMs = now;
     state.cache.set(key, { functionId: 'expired', error: null, expiresAt: now });
-    state.inFlight.set(
-      key,
-      Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }),
-    );
+    state.inFlight.set(key, Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }));
 
     await expect(resolveWith(sdk, anonToken, true)).resolves.toMatchObject({
       functionId: 'fresh',
@@ -461,10 +444,7 @@ describe('shared function resolution boundary', () => {
     const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
     state.lastPruneAtMs = Date.now();
     const deleteCache = jest.spyOn(state.cache, 'delete');
-    state.inFlight.set(
-      key,
-      Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }),
-    );
+    state.inFlight.set(key, Promise.resolve({ functionId: 'fresh', invokeUrl: null, error: null, status: 200 }));
 
     await expect(resolveWith(sdk, anonToken, true)).resolves.toMatchObject({
       functionId: 'fresh',
@@ -478,9 +458,7 @@ describe('shared function resolution boundary', () => {
     const key = functionResolveCacheKey(sdk.apiUrl, name, anonToken, true);
     const borrowed = Promise.resolve({ functionId: 42 });
     state.inFlight.set(key, borrowed);
-    await expect(resolveWith(sdk, anonToken, true)).rejects.toThrow(
-      'Invalid in-flight function resolution',
-    );
+    await expect(resolveWith(sdk, anonToken, true)).rejects.toThrow('Invalid in-flight function resolution');
     expect(state.inFlight.get(key)).toBe(borrowed);
   });
 
@@ -529,9 +507,7 @@ describe('shared function resolution boundary', () => {
         key,
         Promise.resolve({ functionId: null, error: new Error(message), status }),
       );
-      const refresh = jest
-        .spyOn(sdk, '_refreshSessionForContext')
-        .mockRejectedValue(new Error('unexpected refresh'));
+      const refresh = jest.spyOn(sdk, '_refreshSessionForContext').mockRejectedValue(new Error('unexpected refresh'));
 
       await expect(resolveWith(sdk, token, useAnonKey)).rejects.toThrow(message);
       expect(refresh).not.toHaveBeenCalled();
@@ -550,9 +526,7 @@ describe('shared function resolution boundary', () => {
       key,
       Promise.resolve({ functionId: null, error: new Error('still unauthorized'), status: 401 }),
     );
-    const refresh = jest
-      .spyOn(sdk, '_refreshSessionForContext')
-      .mockRejectedValue(new Error('unexpected refresh'));
+    const refresh = jest.spyOn(sdk, '_refreshSessionForContext').mockRejectedValue(new Error('unexpected refresh'));
 
     await expect(
       sdk._resolveFunctionIdByName(name, {
@@ -658,46 +632,38 @@ describe('shared function resolution boundary', () => {
     });
   });
 
-  test.each([null, ''])(
-    'does not refresh a 401 resolution with %p refresh credential',
-    async (refreshToken) => {
-      const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
-      const sdk = new VolcanoAuth({ anonKey: 'ak-test', accessToken: token });
-      // Browser storage can restore an empty refresh token even though constructor input normalizes it.
-      sdk.refreshToken = refreshToken;
-      const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
-      getSharedFunctionResolveState().inFlight.set(
-        key,
-        Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
-      );
-      const refresh = jest.spyOn(sdk, '_refreshSessionForContext');
+  test.each([null, ''])('does not refresh a 401 resolution with %p refresh credential', async (refreshToken) => {
+    const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
+    const sdk = new VolcanoAuth({ anonKey: 'ak-test', accessToken: token });
+    // Browser storage can restore an empty refresh token even though constructor input normalizes it.
+    sdk.refreshToken = refreshToken;
+    const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
+    getSharedFunctionResolveState().inFlight.set(
+      key,
+      Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
+    );
+    const refresh = jest.spyOn(sdk, '_refreshSessionForContext');
 
-      await expect(resolveWith(sdk, token, false)).rejects.toThrow('Session expired');
-      expect(refresh).not.toHaveBeenCalled();
-    },
-  );
+    await expect(resolveWith(sdk, token, false)).rejects.toThrow('Session expired');
+    expect(refresh).not.toHaveBeenCalled();
+  });
 
-  test.each(['discarded', 'changed'] as const)(
-    'does not overwrite the session after a %s refresh',
-    async (outcome) => {
-      const sdk = client({ refreshToken: 'refresh' });
-      const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
-      const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
-      getSharedFunctionResolveState().inFlight.set(
-        key,
-        Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
-      );
-      jest.spyOn(sdk, '_refreshSessionForContext').mockImplementation(() => {
-        if (outcome === 'changed') {
-          sdk.accessToken = 'other-session';
-          sdk._sessionGeneration += 1;
-          return Promise.resolve({ session: null, error: null });
-        }
-        return Promise.resolve({ session: null, error: new AuthRefreshDiscardedError() });
-      });
-      await expect(resolveWith(sdk, token, false)).rejects.toBeInstanceOf(
-        AuthRefreshDiscardedError,
-      );
-    },
-  );
+  test.each(['discarded', 'changed'] as const)('does not overwrite the session after a %s refresh', async (outcome) => {
+    const sdk = client({ refreshToken: 'refresh' });
+    const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
+    const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
+    getSharedFunctionResolveState().inFlight.set(
+      key,
+      Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
+    );
+    jest.spyOn(sdk, '_refreshSessionForContext').mockImplementation(() => {
+      if (outcome === 'changed') {
+        sdk.accessToken = 'other-session';
+        sdk._sessionGeneration += 1;
+        return Promise.resolve({ session: null, error: null });
+      }
+      return Promise.resolve({ session: null, error: new AuthRefreshDiscardedError() });
+    });
+    await expect(resolveWith(sdk, token, false)).rejects.toBeInstanceOf(AuthRefreshDiscardedError);
+  });
 });

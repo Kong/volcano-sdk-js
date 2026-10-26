@@ -18,9 +18,7 @@ function context(accessToken: string | null, verified = false): RefreshContext {
   return {
     accessToken,
     refreshToken: 'refresh',
-    operations: new AuthSessionOperations(
-      verified ? { access_token: accessToken, refresh_token: 'refresh' } : null,
-    ),
+    operations: new AuthSessionOperations(verified ? { access_token: accessToken, refresh_token: 'refresh' } : null),
   };
 }
 
@@ -80,28 +78,18 @@ describe('session continuation', () => {
     }).toThrow('Refreshed session belongs to a different user');
   });
 
-  test.each(['opaque', token(otherSessionId)])(
-    'rejects lost or changed session identity: %s',
-    (accessToken) => {
-      expect(() => {
-        validateSessionContinuation(
-          { ...session, access_token: accessToken },
-          context(token(sessionId)),
-          'user',
-        );
-      }).toThrow('Refreshed credentials belong to a different server session');
-    },
-  );
+  test.each(['opaque', token(otherSessionId)])('rejects lost or changed session identity: %s', (accessToken) => {
+    expect(() => {
+      validateSessionContinuation({ ...session, access_token: accessToken }, context(token(sessionId)), 'user');
+    }).toThrow('Refreshed credentials belong to a different server session');
+  });
 
   test.each([
     [null, 'Session must be an object'],
     [{}, 'Session access_token must be a non-empty string'],
     [{ access_token: 'access' }, 'Session refresh_token must be a non-empty string'],
     [{ ...session, user: null }, 'Session user must be an object'],
-    [
-      { ...session, user: { ...session.user, id: '' } },
-      'Session user ID must be a non-empty string',
-    ],
+    [{ ...session, user: { ...session.user, id: '' } }, 'Session user ID must be a non-empty string'],
   ])('validates complete credentials before continuity: %p', (data, message) => {
     expect(() => {
       validateSessionContinuation(data, context(token(otherSessionId)), 'other-user');

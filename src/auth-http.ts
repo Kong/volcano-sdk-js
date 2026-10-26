@@ -157,11 +157,7 @@ async function retryAfterUnauthorized(
   return resultFromResponse(second.response, second.data);
 }
 
-export async function authFetchUrl(
-  host: AuthHttpHost,
-  url: string,
-  options: RequestInit = {},
-): Promise<RequestResult> {
+export async function authFetchUrl(host: AuthHttpHost, url: string, options: RequestInit = {}): Promise<RequestResult> {
   const context = host._captureAuthContext();
   try {
     return await fetchWithRefresh(host, context, url, options);
@@ -170,11 +166,7 @@ export async function authFetchUrl(
   }
 }
 
-export async function anonFetch(
-  host: AuthHttpHost,
-  path: string,
-  options: RequestInit = {},
-): Promise<RequestResult> {
+export async function anonFetch(host: AuthHttpHost, path: string, options: RequestInit = {}): Promise<RequestResult> {
   try {
     const response = await fetchWithTimeout(
       `${host.apiUrl}${path}`,

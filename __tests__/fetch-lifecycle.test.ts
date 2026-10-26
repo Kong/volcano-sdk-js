@@ -66,9 +66,7 @@ test('awaits the typed response consumer before clearing the timeout', async () 
   const body = deferred<string>();
   const response = new Response('ok');
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(response);
-  const consume = jest
-    .fn<(value: Response, signal: AbortSignal) => Promise<string>>()
-    .mockReturnValue(body.promise);
+  const consume = jest.fn<(value: Response, signal: AbortSignal) => Promise<string>>().mockReturnValue(body.promise);
   const running: Promise<string> = fetchWithTimeout(endpoint, {}, 100, consume);
   await jest.advanceTimersByTimeAsync(0);
 
@@ -182,19 +180,13 @@ test('cleans up the captured signal when request options are later changed', asy
   expect(requestSignal(request).aborted).toBe(false);
 });
 
-test.each([
-  undefined,
-  null,
-  'failure',
-  5,
-  {},
-  { name: 'OtherError' },
-  new Error('network failed'),
-  () => 'failure',
-])('preserves non-timeout rejection values: %p', async (reason) => {
-  jest.spyOn(globalThis, 'fetch').mockRejectedValue(reason);
-  await expect(fetchWithTimeout(endpoint)).rejects.toBe(reason);
-});
+test.each([undefined, null, 'failure', 5, {}, { name: 'OtherError' }, new Error('network failed'), () => 'failure'])(
+  'preserves non-timeout rejection values: %p',
+  async (reason) => {
+    jest.spyOn(globalThis, 'fetch').mockRejectedValue(reason);
+    await expect(fetchWithTimeout(endpoint)).rejects.toBe(reason);
+  },
+);
 
 test('preserves an AbortError when the timer did not expire', async () => {
   const error = new DOMException('transport cancelled', 'AbortError');
@@ -231,14 +223,10 @@ test('cleans up when the response consumer throws', async () => {
   const remove = jest.spyOn(caller.signal, 'removeEventListener');
   const error = new Error('invalid response');
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'));
-  const consume = jest
-    .fn<(response: Response, signal: AbortSignal) => never>()
-    .mockImplementation(() => {
-      throw error;
-    });
+  const consume = jest.fn<(response: Response, signal: AbortSignal) => never>().mockImplementation(() => {
+    throw error;
+  });
 
-  await expect(fetchWithTimeout(endpoint, { signal: caller.signal }, 50, consume)).rejects.toBe(
-    error,
-  );
+  await expect(fetchWithTimeout(endpoint, { signal: caller.signal }, 50, consume)).rejects.toBe(error);
   expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
 });

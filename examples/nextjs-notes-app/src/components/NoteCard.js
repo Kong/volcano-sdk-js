@@ -133,10 +133,7 @@ export function NoteCard({ note, onEdit, onDelete }) {
           placeholder="Note content..."
         />
         <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-gray-100">
-          <button
-            onClick={handleCancel}
-            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-          >
+          <button onClick={handleCancel} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">
             Cancel
           </button>
           <button

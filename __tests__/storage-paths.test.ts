@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
-import {
-  bucketRelativePath,
-  buildStorageUrl,
-  encodeStoragePath,
-  storageTargetError,
-} from '../src/storage-paths.ts';
+import { bucketRelativePath, buildStorageUrl, encodeStoragePath, storageTargetError } from '../src/storage-paths.ts';
 
 const UNSAFE_PATH = 'Storage path cannot contain empty, ".", or ".." segments';
 const UNSAFE_BUCKET = 'Bucket name cannot contain "/" or be "." or ".."';
@@ -19,9 +14,7 @@ function bucketNameError(bucketName: unknown): string | null {
 }
 
 test('encodes each storage path segment without losing slash boundaries', () => {
-  expect(encodeStoragePath('space here/雪 & #/file.txt')).toBe(
-    'space%20here/%E9%9B%AA%20%26%20%23/file.txt',
-  );
+  expect(encodeStoragePath('space here/雪 & #/file.txt')).toBe('space%20here/%E9%9B%AA%20%26%20%23/file.txt');
   expect(encodeStoragePath('a//b/')).toBe('a//b/');
 });
 
@@ -118,9 +111,7 @@ test('reports the bucket before any path', () => {
 });
 
 test('reports the first invalid path in order', () => {
-  expect(storageTargetError('bucket', ['ok', '', '..'])).toBe(
-    'Storage path must be a non-empty string',
-  );
+  expect(storageTargetError('bucket', ['ok', '', '..'])).toBe('Storage path must be a non-empty string');
   expect(storageTargetError('bucket', ['ok', 'a/..', ''])).toBe(UNSAFE_PATH);
 });
 

@@ -9,16 +9,11 @@ const expected = [
   'src/sdk-public-types.ts:Functions.invoke<TPayload>',
   'src/sdk-public-types.ts:Durable.start<TInput>',
 ];
-const boundaryRules = [
-  '@typescript-eslint/consistent-type-assertions',
-  '@typescript-eslint/no-unsafe-type-assertion',
-];
+const boundaryRules = ['@typescript-eslint/consistent-type-assertions', '@typescript-eslint/no-unsafe-type-assertion'];
 const auditRule = 'pnpm audit';
 
 await test('legacy public generic exceptions are exact and remain in use', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
-    (value) => record(value),
-  );
+  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
   assert.deepEqual(
     exceptions.filter((item) => item['rule'] === rule).map((item) => item['scope']),
     expected,
@@ -38,9 +33,7 @@ await test('legacy public generic exceptions are exact and remain in use', async
 });
 
 await test('Orval boundary exceptions apply only to its generic response expression', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
-    (value) => record(value),
-  );
+  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
   assert.deepEqual(
     exceptions
       .filter((item) => item['rule'] !== rule && item['rule'] !== auditRule)
@@ -69,9 +62,7 @@ await test('Orval boundary exceptions apply only to its generic response express
 });
 
 await test('the dependency audit has no exceptions', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
-    (value) => record(value),
-  );
+  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
   assert.deepEqual(
     exceptions.filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
     [],

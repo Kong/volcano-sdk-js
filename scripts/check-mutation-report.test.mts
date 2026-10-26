@@ -26,9 +26,7 @@ for (const status of ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError', 'Igno
 
 await test('rejects missing or empty reports', () => {
   assert.deepEqual(mutationReportProblems({}), ['Missing mutation report files']);
-  assert.deepEqual(mutationReportProblems({ files: {} }), [
-    'Mutation report contains no source files',
-  ]);
+  assert.deepEqual(mutationReportProblems({ files: {} }), ['Mutation report contains no source files']);
   assert.deepEqual(mutationReportProblems({ files: { 'src/example.ts': { mutants: [] } } }), [
     'Mutation report contains no mutants',
   ]);

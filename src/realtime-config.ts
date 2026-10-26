@@ -34,10 +34,7 @@ export function globalFetchConfig(options?: FetchOptions): ActiveFetchConfig {
   };
 }
 
-export function channelFetchConfig(
-  parent: ActiveFetchConfig,
-  options: ChannelFetchOptions,
-): ActiveFetchConfig {
+export function channelFetchConfig(parent: ActiveFetchConfig, options: ChannelFetchOptions): ActiveFetchConfig {
   return {
     batchWindowMs: numberOrDefault(options.fetchBatchWindowMs, parent.batchWindowMs),
     maxBatchSize: numberOrDefault(options.fetchMaxBatchSize, parent.maxBatchSize),

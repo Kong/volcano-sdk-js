@@ -17,10 +17,7 @@ interface ResolveResponse {
 
 export interface ResolutionClient {
   readonly _functionResolveState: FunctionResolveState;
-  _anonFetch(
-    path: string,
-    options: { method: 'GET'; headers: Record<string, string> },
-  ): Promise<ResolveResponse>;
+  _anonFetch(path: string, options: { method: 'GET'; headers: Record<string, string> }): Promise<ResolveResponse>;
 }
 
 export interface ResolutionOutcome {
@@ -35,9 +32,7 @@ export function isResolutionOutcome(value: unknown): value is ResolutionOutcome 
     return false;
   }
   return (
-    validResolvedId(value['functionId']) &&
-    validResolvedError(value['error']) &&
-    validResolvedStatus(value['status'])
+    validResolvedId(value['functionId']) && validResolvedError(value['error']) && validResolvedStatus(value['status'])
   );
 }
 
@@ -70,11 +65,7 @@ export async function resolveFunctionByHttp(
   return successfulResolution(client._functionResolveState, cacheKey, result);
 }
 
-function failedResolution(
-  state: FunctionResolveState,
-  cacheKey: string,
-  result: ResolveResponse,
-): ResolutionOutcome {
+function failedResolution(state: FunctionResolveState, cacheKey: string, result: ResolveResponse): ResolutionOutcome {
   if (result.status === 404) {
     cacheNotFound(state, cacheKey, result);
   }
@@ -85,11 +76,7 @@ function failedResolution(
   };
 }
 
-function cacheNotFound(
-  state: FunctionResolveState,
-  cacheKey: string,
-  result: ResolveResponse,
-): void {
+function cacheNotFound(state: FunctionResolveState, cacheKey: string, result: ResolveResponse): void {
   state.cache.set(cacheKey, {
     functionId: null,
     // Older bundles share the V1 cache, where failures are strings.

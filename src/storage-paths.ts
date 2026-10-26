@@ -1,9 +1,4 @@
-import {
-  convertedPathSegment,
-  hasLoneSurrogate,
-  hasUnsafeSegment,
-  UNSAFE_SEGMENTS,
-} from './path-segments.ts';
+import { convertedPathSegment, hasLoneSurrogate, hasUnsafeSegment, UNSAFE_SEGMENTS } from './path-segments.ts';
 
 /** Hosting ignores one leading slash, so "/a.txt" and "a.txt" name the same object. */
 export function bucketRelativePath(path: string): string {

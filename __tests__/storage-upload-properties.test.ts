@@ -47,9 +47,7 @@ test('storage uploads preserve arbitrary bytes and the captured session credenti
         accessToken: 'upload-session',
       });
       const original = new Uint8Array(bytes);
-      const result = await client.storage
-        .from('bucket')
-        .upload('payload.bin', new Blob([original]));
+      const result = await client.storage.from('bucket').upload('payload.bin', new Blob([original]));
       expect(result.error).toBeNull();
       expect(result.data).toEqual(metadata);
       expect(original).toEqual(bytes);

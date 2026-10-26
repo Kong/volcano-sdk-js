@@ -35,21 +35,16 @@ test('accepts inherited duration fields without adding own properties', () => {
   expect(value).toEqual({});
 });
 
-test.each([null, false, true, Symbol('duration'), 1n])(
-  'rejects non-duration input: %p',
-  (value) => {
-    expect(() => waitDuration(value)).toThrow(
-      'wait must be a duration string, a number of seconds, or a duration object',
-    );
-  },
-);
+test.each([null, false, true, Symbol('duration'), 1n])('rejects non-duration input: %p', (value) => {
+  expect(() => waitDuration(value)).toThrow(
+    'wait must be a duration string, a number of seconds, or a duration object',
+  );
+});
 
 test.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
   'rejects non-whole or negative seconds: %p',
   (value) => {
-    expect(() => waitDuration(value)).toThrow(
-      'wait must be a non-negative whole number of seconds',
-    );
+    expect(() => waitDuration(value)).toThrow('wait must be a non-negative whole number of seconds');
   },
 );
 
@@ -60,21 +55,13 @@ test.each(['', ' ', 's', 'soon', '400ms', '1.5h', '-1s', '1', '1S', '1 s', '1s\t
   },
 );
 
-test.each([{}, [], { days: undefined }, new Date(0)])(
-  'rejects an empty duration object: %p',
-  (value) => {
-    expect(() => waitDuration(value)).toThrow(
-      'wait duration needs one of days, hours, minutes, seconds',
-    );
-  },
-);
+test.each([{}, [], { days: undefined }, new Date(0)])('rejects an empty duration object: %p', (value) => {
+  expect(() => waitDuration(value)).toThrow('wait duration needs one of days, hours, minutes, seconds');
+});
 
-test.each([{ milliseconds: 500 }, { seconds: 1, extra: 0 }, [1]])(
-  'rejects unknown duration fields: %p',
-  (value) => {
-    expect(() => waitDuration(value)).toThrow('wait duration takes days, hours, minutes, seconds');
-  },
-);
+test.each([{ milliseconds: 500 }, { seconds: 1, extra: 0 }, [1]])('rejects unknown duration fields: %p', (value) => {
+  expect(() => waitDuration(value)).toThrow('wait duration takes days, hours, minutes, seconds');
+});
 
 test('names every unknown duration field', () => {
   expect(() => waitDuration({ milliseconds: 500, weeks: 1 })).toThrow(
@@ -85,9 +72,7 @@ test('names every unknown duration field', () => {
 test.each([null, false, '1', 1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
   'rejects invalid duration parts: %p',
   (seconds) => {
-    expect(() => waitDuration({ seconds })).toThrow(
-      'wait duration seconds must be a non-negative whole number',
-    );
+    expect(() => waitDuration({ seconds })).toThrow('wait duration seconds must be a non-negative whole number');
   },
 );
 
@@ -105,9 +90,7 @@ test.each([31622401, '367d', { days: 367 }, { seconds: Number.MAX_VALUE }])(
 test('names the field a bounded wait was given for', () => {
   expect(() => waitDuration('soon', 'timeout')).toThrow('timeout must be a duration');
   expect(() => waitDuration(0, 'timeout')).toThrow('timeout must be at least 1 second');
-  expect(() => waitDuration('367d', 'timeout')).toThrow(
-    'timeout must be at most 31622400 seconds (366 days)',
-  );
+  expect(() => waitDuration('367d', 'timeout')).toThrow('timeout must be at most 31622400 seconds (366 days)');
   expect(waitDuration('2d', 'timeout')).toEqual(waitDuration('2d'));
 });
 
@@ -136,9 +119,7 @@ test('numeric and textual durations preserve the same whole seconds', () => {
 });
 
 test('rejects numeric overflow in duration text before constructing engine fields', () => {
-  expect(() => waitDuration(`${'9'.repeat(400)}s`)).toThrow(
-    'wait must be a duration in whole seconds',
-  );
+  expect(() => waitDuration(`${'9'.repeat(400)}s`)).toThrow('wait must be a duration in whole seconds');
   expect(() => optionalDuration(`${'9'.repeat(400)}d`, 'interval')).toThrow(
     'interval must be a duration in whole seconds',
   );

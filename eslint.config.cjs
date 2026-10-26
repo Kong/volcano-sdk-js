@@ -26,12 +26,7 @@ const jsFiles = ['**/*.{js,cjs,mjs}'];
 const declarationFiles = ['**/*.d.ts'];
 const testFiles = ['__tests__/**/*.{js,ts}'];
 const testSupportFiles = ['__tests__/**/*.cjs'];
-const typescriptFiles = [
-  'src/**/!(*.d).ts',
-  '__tests__/**/*.ts',
-  'test/types/**/*.ts',
-  'scripts/**/*.{mts,cts}',
-];
+const typescriptFiles = ['src/**/!(*.d).ts', '__tests__/**/*.ts', 'test/types/**/*.ts', 'scripts/**/*.{mts,cts}'];
 const sdkFiles = ['src/**/*.js'];
 const commonjsScriptFiles = ['scripts/**/*.cjs'];
 const moduleScriptFiles = ['scripts/**/*.mjs', '*.config.mjs'];

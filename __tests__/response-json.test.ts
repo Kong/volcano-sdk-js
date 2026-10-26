@@ -93,9 +93,7 @@ test.each([null, false, 0, '', Number.NaN])(
 test('preserves the default AbortController reason', async () => {
   const caller = new AbortController();
   caller.abort();
-  await expect(safeJsonParse(new Response('invalid'), caller.signal)).rejects.toBe(
-    caller.signal.reason,
-  );
+  await expect(safeJsonParse(new Response('invalid'), caller.signal)).rejects.toBe(caller.signal.reason);
 });
 
 test('accepts a successful body even when the supplied signal is already aborted', async () => {

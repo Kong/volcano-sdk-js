@@ -78,11 +78,7 @@ test('in-memory adoption replaces captured operations and clears redirect state'
   expect(host._sessionOperations).not.toBe(priorOperations);
   expect(host._oauthExchangeError).toBeNull();
   expect(host._pendingUrlAuthNotify).toBe(false);
-  expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual([
-    'new-access',
-    'new-refresh',
-    user,
-  ]);
+  expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual(['new-access', 'new-refresh', user]);
 });
 
 test('setSession rejects stale generations and persists only the accepted credentials', () => {
@@ -108,9 +104,7 @@ test('setSession rejects stale generations and persists only the accepted creden
   expect(host.refreshToken).toBeNull();
   expect(storage.has('volcano_refresh_token')).toBe(false);
 
-  expect(setSession(host, { access_token: 'blank-refresh', refresh_token: '', user }, 5)).toBe(
-    true,
-  );
+  expect(setSession(host, { access_token: 'blank-refresh', refresh_token: '', user }, 5)).toBe(true);
   expect(storage.has('volcano_refresh_token')).toBe(false);
 });
 
@@ -141,11 +135,7 @@ test('refresh adopts only the captured session and preserves its user identity',
   expect(notify).not.toHaveBeenCalled();
 
   expect(setRefreshedSession(host, nextSession, context)).toBe(true);
-  expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual([
-    'new-access',
-    'new-refresh',
-    user,
-  ]);
+  expect([host.accessToken, host.refreshToken, host.currentUser]).toEqual(['new-access', 'new-refresh', user]);
   expect(storage.get('volcano_access_token')).toBe('new-access');
   expect(storage.get('volcano_refresh_token')).toBe('new-refresh');
   expect(host._pendingUrlAuthNotify).toBe(false);

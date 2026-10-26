@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
-import {
-  anonFetch,
-  authFetchUrl,
-  authFetchWithContext,
-  type AuthHttpHost,
-} from '../src/auth-http.ts';
+import { anonFetch, authFetchUrl, authFetchWithContext, type AuthHttpHost } from '../src/auth-http.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
 import { AuthRefreshDiscardedError } from '../src/errors.ts';
@@ -38,9 +33,7 @@ afterEach(() => {
 });
 
 test('default authenticated options send the captured token and preserve the response', async () => {
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation(() => Promise.resolve(new Response('{"ok":true}')));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(new Response('{"ok":true}')));
   const host = fixture();
 
   const contextual = await authFetchWithContext(host, '/auth/user');
@@ -124,9 +117,7 @@ test('header overrides replace defaults case-insensitively without combining wir
 });
 
 test('refresh completion cannot retry after the captured session changes', async () => {
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response('{"error":"expired"}', { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"error":"expired"}', { status: 401 }));
 
   const result = await authFetchUrl(
     fixture(() => false),
@@ -154,9 +145,7 @@ test('missing access tokens refuse a request before evaluating deferred inputs',
 });
 
 test('an empty refresh token never retries a 401', async () => {
-  const fetch = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response('{"error":"expired"}', { status: 401 }));
+  const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"error":"expired"}', { status: 401 }));
   const host = fixture();
   host._captureAuthContext = () => ({ ...context, refreshToken: '' });
   const refresh = jest.fn<AuthHttpHost['_refreshSessionForContext']>();

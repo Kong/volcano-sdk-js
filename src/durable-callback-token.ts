@@ -40,13 +40,7 @@ export async function waitForCallback(
   const apiUrl = platformApiUrl(OPERATION, 'wait for callbacks');
   const execution = requiredExecutionRef(OPERATION, executionRef);
   const waitForCallback = callbacks(context, 'callbacks');
-  const submit = registering(
-    apiUrl,
-    execution,
-    callbackName,
-    submitter,
-    replayedOperation(context),
-  );
+  const submit = registering(apiUrl, execution, callbackName, submitter, replayedOperation(context));
   try {
     return callbackResult(await waitForCallback(callbackName, submit, config), unreadableResult);
   } catch (error) {

@@ -15,13 +15,9 @@ export function parallelBranches(
   return branches.map((branch: unknown): Branch | NamedBranch => adaptBranch(branch, contextFor));
 }
 
-function adaptBranch(
-  branch: unknown,
-  contextFor: (engineContext: unknown) => unknown,
-): Branch | NamedBranch {
+function adaptBranch(branch: unknown, contextFor: (engineContext: unknown) => unknown): Branch | NamedBranch {
   if (typeof branch === 'function') {
-    return (engineContext: unknown): unknown =>
-      Reflect.apply(branch, undefined, [contextFor(engineContext)]);
+    return (engineContext: unknown): unknown => Reflect.apply(branch, undefined, [contextFor(engineContext)]);
   }
   if (typeof branch !== 'object' || branch === null) {
     throw new TypeError('a parallel branch is a function, or { name, run }');
@@ -33,7 +29,6 @@ function adaptBranch(
   const name: unknown = Reflect.get(branch, 'name');
   return {
     name,
-    func: (engineContext: unknown): unknown =>
-      Reflect.apply(run, branch, [contextFor(engineContext)]),
+    func: (engineContext: unknown): unknown => Reflect.apply(run, branch, [contextFor(engineContext)]),
   };
 }

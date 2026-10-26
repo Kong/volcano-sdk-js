@@ -13,11 +13,7 @@ export function sanitizeFunctionIdentifierForHost(identifier: unknown): string |
   return trimmed;
 }
 
-export function functionInvokeUrl(
-  apiUrl: string,
-  identifier: unknown,
-  resolvedUrl: unknown,
-): string {
+export function functionInvokeUrl(apiUrl: string, identifier: unknown, resolvedUrl: unknown): string {
   const hostLabel = sanitizeFunctionIdentifierForHost(identifier);
   if (hostLabel === null) {
     throw new Error('functionId must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars');
@@ -25,10 +21,7 @@ export function functionInvokeUrl(
 
   // Only resolve can name a function's invocation domain. Local deployments
   // without one use the API route.
-  return (
-    validInvokeUrl(resolvedUrl, apiUrl) ??
-    `${apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`
-  );
+  return validInvokeUrl(resolvedUrl, apiUrl) ?? `${apiUrl}/functions/${encodeURIComponent(hostLabel)}/invoke`;
 }
 
 // The URL carries the caller's bearer token. Plaintext is accepted only when

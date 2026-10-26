@@ -41,12 +41,9 @@ test('accepts optional log fields omitted and all documented resource kinds', ()
   }
 });
 
-test.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
-  'accepts the documented %s log level',
-  (level) => {
-    expect(logSearchResult({ ...search, data: [{ ...event, level }] }).error).toBeNull();
-  },
-);
+test.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])('accepts the documented %s log level', (level) => {
+  expect(logSearchResult({ ...search, data: [{ ...event, level }] }).error).toBeNull();
+});
 
 test.each([
   null,

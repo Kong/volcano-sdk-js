@@ -17,14 +17,10 @@ function realClient(): VolcanoClient {
 }
 
 function mockExecutionResponse(): jest.SpiedFunction<typeof fetch> {
-  return jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(Response.json(execution, { status: 202 }));
+  return jest.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(execution, { status: 202 }));
 }
 
-function firstRequest(
-  fetchMock: jest.SpiedFunction<typeof fetch>,
-): [RequestInfo | URL, RequestInit] {
+function firstRequest(fetchMock: jest.SpiedFunction<typeof fetch>): [RequestInfo | URL, RequestInit] {
   const call = fetchMock.mock.calls[0];
   if (call === undefined) {
     throw new Error('Expected durable start request');
@@ -53,9 +49,7 @@ describe('durable.start over the wire', () => {
     expect(data).toEqual(execution);
 
     const [url, init] = firstRequest(fetchMock);
-    expect(requestUrl(url)).toBe(
-      'https://api.test.com/durable-functions/order-pipeline/executions',
-    );
+    expect(requestUrl(url)).toBe('https://api.test.com/durable-functions/order-pipeline/executions');
     expect(init.method).toBe('POST');
     if (typeof init.body !== 'string') {
       throw new TypeError('Expected JSON request body');

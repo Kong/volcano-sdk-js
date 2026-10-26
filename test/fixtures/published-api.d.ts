@@ -10,8 +10,7 @@ export type {
 import type { components as GeneratedComponents } from '../../dist/generated/openapi';
 export type DurableExecution = GeneratedComponents['schemas']['DurableExecution'];
 export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExecutionStatus'];
-export type PaginatedDurableExecutions =
-  GeneratedComponents['schemas']['PaginatedDurableExecutions'];
+export type PaginatedDurableExecutions = GeneratedComponents['schemas']['PaginatedDurableExecutions'];
 export type DurableApproval = GeneratedComponents['schemas']['DurableApproval'];
 export type DurableApprovalStatus = GeneratedComponents['schemas']['DurableApprovalStatus'];
 export type DurableApprovalStats = GeneratedComponents['schemas']['DurableApprovalStats'];
@@ -209,14 +208,8 @@ export interface Auth {
   requestEmailChange(newEmail: string): Promise<EmailChangeResponse>;
   confirmEmailChange(emailChangeToken: string): Promise<UserResponse>;
   cancelEmailChange(): Promise<MessageResponse>;
-  getHostedAuthUrl(options?: {
-    projectId?: string;
-    action?: 'login' | 'signup' | 'forgot-password';
-  }): string;
-  signInWithHostedAuth(options?: {
-    projectId?: string;
-    action?: 'login' | 'signup' | 'forgot-password';
-  }): string;
+  getHostedAuthUrl(options?: { projectId?: string; action?: 'login' | 'signup' | 'forgot-password' }): string;
+  signInWithHostedAuth(options?: { projectId?: string; action?: 'login' | 'signup' | 'forgot-password' }): string;
   signInWithOAuth(
     provider: OAuthProviderName,
     options?: {
@@ -420,11 +413,7 @@ export interface DurableMessages {
     error: Error | null;
   }>;
 }
-export {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from '../../dist/errors';
+export { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from '../../dist/errors';
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type LogResourceType = 'function' | 'frontend' | 'database';
 export interface LogDeploymentSelector {
@@ -509,10 +498,7 @@ export interface LogsResponse<T> {
 }
 export interface Logs {
   search(projectId: string, request: LogSearchRequest): Promise<LogsResponse<LogSearchResponse>>;
-  activity(
-    projectId: string,
-    request: LogActivityRequest,
-  ): Promise<LogsResponse<LogActivityResponse>>;
+  activity(projectId: string, request: LogActivityRequest): Promise<LogsResponse<LogActivityResponse>>;
 }
 export interface StorageObject {
   id: string;
@@ -648,10 +634,7 @@ export interface StorageFileApi {
     error: StorageError | null;
   };
   updateVisibility(path: string, isPublic: boolean): Promise<StorageVisibilityResponse>;
-  createUploadSession(
-    path: string,
-    options: CreateUploadSessionOptions,
-  ): Promise<CreateUploadSessionResponse>;
+  createUploadSession(path: string, options: CreateUploadSessionOptions): Promise<CreateUploadSessionResponse>;
   uploadPart(
     path: string,
     sessionId: string,
@@ -811,14 +794,8 @@ export class VolcanoAuth {
   sandboxes: Sandboxes;
   database(databaseName: string): VolcanoAuth;
   from<T = Record<string, JsonValue>>(table: string): QueryBuilder<T>;
-  insert<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): MutationBuilder<T>;
-  update<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): MutationBuilder<T>;
+  insert<T = Record<string, JsonValue>>(table: string, values: Record<string, JsonValue>): MutationBuilder<T>;
+  update<T = Record<string, JsonValue>>(table: string, values: Record<string, JsonValue>): MutationBuilder<T>;
   delete<T = Record<string, JsonValue>>(table: string): MutationBuilder<T>;
   initialize(): Promise<UserResponse>;
 }
@@ -830,10 +807,7 @@ export interface RealtimeModule {
   RealtimeChannel: typeof import('../../dist/realtime').RealtimeChannel;
 }
 export function loadRealtime(): Promise<RealtimeModule>;
-export {
-  databaseConnectionString,
-  type DatabaseConnectionStringOptions,
-} from '../../dist/database-connection-string';
+export { databaseConnectionString, type DatabaseConnectionStringOptions } from '../../dist/database-connection-string';
 
 export type SandboxResult<T> = { data: T; error: null } | { data: null; error: Error };
 export interface SandboxRequestOptions {
@@ -894,21 +868,14 @@ export interface SandboxSession extends AsyncDisposable {
   readonly state: SandboxState;
   readonly expiresAt: string;
   refresh(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
-  exec(
-    command: string,
-    options?: SandboxCommandOptions,
-  ): Promise<SandboxResult<SandboxCommandResult>>;
+  exec(command: string, options?: SandboxCommandOptions): Promise<SandboxResult<SandboxCommandResult>>;
   suspend(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   resume(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   terminate(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   access(port: number, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxAccess>>;
   files: {
     read(path: string, options?: SandboxRequestOptions): Promise<SandboxResult<Uint8Array>>;
-    write(
-      path: string,
-      data: Uint8Array,
-      options?: SandboxRequestOptions,
-    ): Promise<SandboxResult<void>>;
+    write(path: string, data: Uint8Array, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
   };
 }
 export interface SandboxPreset {
@@ -945,11 +912,7 @@ export interface SandboxBuildLogPage {
   nextCursor?: string;
 }
 export interface Sandboxes {
-  deleteTemplate(
-    projectId: string,
-    sandboxId: string,
-    options?: SandboxRequestOptions,
-  ): Promise<SandboxResult<void>>;
+  deleteTemplate(projectId: string, sandboxId: string, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
   logs(
     projectId: string,
     sandboxId: string,
@@ -980,11 +943,7 @@ export interface Sandboxes {
     options?: SandboxRequestOptions,
   ): Promise<SandboxResult<Uint8Array>>;
   presets(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxPreset[]>>;
-  exec(
-    projectId: string,
-    command: string,
-    options: SandboxExecOptions,
-  ): Promise<SandboxResult<SandboxExecutionResult>>;
+  exec(projectId: string, command: string, options: SandboxExecOptions): Promise<SandboxResult<SandboxExecutionResult>>;
   create(projectId: string, options: SandboxCreateOptions): Promise<SandboxResult<SandboxSession>>;
   get(sessionId: string, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   grant(
@@ -993,9 +952,5 @@ export interface Sandboxes {
     expiresAt: string,
     options?: SandboxRequestOptions,
   ): Promise<SandboxResult<void>>;
-  revoke(
-    sessionId: string,
-    authUserId: string,
-    options?: SandboxRequestOptions,
-  ): Promise<SandboxResult<void>>;
+  revoke(sessionId: string, authUserId: string, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
 }

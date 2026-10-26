@@ -33,11 +33,7 @@ function rejectedProfileFixture(mode: string): {
       calls: 1,
     };
   }
-  const first = reply(
-    401,
-    { error: 'Session revoked', code: 'SESSION_REVOKED' },
-    { 'Retry-After': '7' },
-  );
+  const first = reply(401, { error: 'Session revoked', code: 'SESSION_REVOKED' }, { 'Retry-After': '7' });
   return mode === 'rejected refresh'
     ? {
         first,
@@ -95,9 +91,7 @@ describe('VolcanoAuth profile continuity', () => {
         const [retryUrl, retryOptions] = fetchCall(2);
         expect(initialUrl).toBe(retryUrl);
         expect(initialOptions?.body).toBe(retryOptions?.body);
-        expect(new Headers(retryOptions?.headers).get('Authorization')).toBe(
-          `Bearer ${sessionToken(undefined, true)}`,
-        );
+        expect(new Headers(retryOptions?.headers).get('Authorization')).toBe(`Bearer ${sessionToken(undefined, true)}`);
       },
     );
   });
@@ -222,10 +216,7 @@ describe('VolcanoAuth profile continuity', () => {
         }),
       );
 
-      const [firstResult, secondResult] = await within(
-        Promise.all([first, second]),
-        'shared profile refresh',
-      );
+      const [firstResult, secondResult] = await within(Promise.all([first, second]), 'shared profile refresh');
 
       expect(refreshRequests).toBe(1);
       expect(firstResult).toEqual({
@@ -301,12 +292,10 @@ describe('VolcanoAuth profile continuity', () => {
         refresh_token: 'old-refresh',
         user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       });
-      fetchMock
-        .mockResolvedValueOnce(reply(401, { error: 'Token expired' }))
-        .mockImplementationOnce(() => {
-          refreshStarted.resolve();
-          return refreshResponse.promise;
-        });
+      fetchMock.mockResolvedValueOnce(reply(401, { error: 'Token expired' })).mockImplementationOnce(() => {
+        refreshStarted.resolve();
+        return refreshResponse.promise;
+      });
 
       const getUser = volcano.auth.getUser();
       await within(refreshStarted.promise, 'superseded refresh start');
@@ -422,11 +411,7 @@ describe('VolcanoAuth profile continuity', () => {
   describe('Authentication - current user writer guards', () => {
     it.each([
       ['getUser', (client: VolcanoAuth) => client.auth.getUser(), true],
-      [
-        'updateUser',
-        (client: VolcanoAuth) => client.auth.updateUser({ metadata: { name: 'stale' } }),
-        false,
-      ],
+      ['updateUser', (client: VolcanoAuth) => client.auth.updateUser({ metadata: { name: 'stale' } }), false],
       [
         'convertAnonymous',
         (client: VolcanoAuth) =>

@@ -340,7 +340,5 @@ test('notices expiry during cleanup even before an expiry timer has run', async 
   const { session } = setup();
   jest.advanceTimersByTime(6000);
   await session.cleanup();
-  expect(session.controller.signal.reason).toEqual(
-    new Error('lock lease expired before renewal completed'),
-  );
+  expect(session.controller.signal.reason).toEqual(new Error('lock lease expired before renewal completed'));
 });

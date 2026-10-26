@@ -20,12 +20,7 @@ import type {
   UploadPartResponse,
   UploadSessionStatusResponse,
 } from './index.js';
-import {
-  bucketRelativePath,
-  buildStorageUrl,
-  encodeStoragePath,
-  storageTargetError,
-} from './storage-paths.ts';
+import { bucketRelativePath, buildStorageUrl, encodeStoragePath, storageTargetError } from './storage-paths.ts';
 import { storagePublicUrl } from './storage-public-url.ts';
 import { uploadResumable as runResumableUpload } from './storage-resumable.ts';
 import {
@@ -37,11 +32,7 @@ import {
   isUploadSession,
   isUploadSessionStatus,
 } from './storage-shapes.ts';
-import {
-  storageRequest,
-  type StorageRequestOptions,
-  type StorageRequestResult,
-} from './storage-transport.ts';
+import { storageRequest, type StorageRequestOptions, type StorageRequestResult } from './storage-transport.ts';
 
 interface StorageResult<T> {
   data: T | null;
@@ -77,17 +68,9 @@ export interface StorageAuthHost extends AuthRetryClient<StorageAuthContext> {
       body: { file: File },
       options: unknown,
     ): Promise<{ data: unknown }>;
-    downloadStorageObject(
-      bucketName: string,
-      path: string,
-      options: unknown,
-    ): Promise<{ data: unknown }>;
+    downloadStorageObject(bucketName: string, path: string, options: unknown): Promise<{ data: unknown }>;
   };
-  _generatedOptions(
-    mode: 'session',
-    headers?: Record<string, string>,
-    responseType?: 'blob',
-  ): unknown;
+  _generatedOptions(mode: 'session', headers?: Record<string, string>, responseType?: 'blob'): unknown;
 }
 
 function legacyStringDefault(value: unknown, fallback: string): string {
@@ -104,17 +87,11 @@ function invalidTarget(bucketName: string, paths: readonly unknown[]): StorageRe
   return message === null ? null : errorResult(message);
 }
 
-async function preflightPaths(
-  host: StorageFileApi,
-  paths: readonly unknown[],
-): Promise<StorageResult<never> | null> {
+async function preflightPaths(host: StorageFileApi, paths: readonly unknown[]): Promise<StorageResult<never> | null> {
   return invalidTarget(host.bucketName, paths) ?? (await host._checkAuth());
 }
 
-function preflight(
-  host: StorageFileApi,
-  ...paths: unknown[]
-): Promise<StorageResult<never> | null> {
+function preflight(host: StorageFileApi, ...paths: unknown[]): Promise<StorageResult<never> | null> {
   return preflightPaths(host, paths);
 }
 
@@ -123,11 +100,7 @@ function fileName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
 
-function uploadFileBody(
-  path: string,
-  fileBody: unknown,
-  options: StorageUploadOptions,
-): File | null {
+function uploadFileBody(path: string, fileBody: unknown, options: StorageUploadOptions): File | null {
   if (fileBody instanceof File) {
     return fileBody;
   }
@@ -246,14 +219,9 @@ function uploadSessionBody(path: string, options: Partial<CreateUploadSessionOpt
   };
 }
 
-function removeError(
-  failures: { path: string; error: Error }[],
-  firstError: Error,
-): StorageRemoveError {
+function removeError(failures: { path: string; error: Error }[], firstError: Error): StorageRemoveError {
   const error = Object.assign(
-    new Error(
-      `Failed to delete ${String(failures.length)} file(s): ${failures.map((item) => item.path).join(', ')}`,
-    ),
+    new Error(`Failed to delete ${String(failures.length)} file(s): ${failures.map((item) => item.path).join(', ')}`),
     { failures },
   );
   for (const field of ['status', 'code', 'retryAfter']) {
@@ -311,13 +279,9 @@ export class StorageFileApi {
    * Make an authenticated storage request
    * @private
    */
-  async _storageRequest(
-    url: string,
-    options: StorageRequestOptions = {},
-  ): Promise<StorageRequestResult> {
+  async _storageRequest(url: string, options: StorageRequestOptions = {}): Promise<StorageRequestResult> {
     return storageRequest(
-      (requestUrl, requestOptions) =>
-        fetchWithAuthRetry(this.volcanoAuth, requestUrl, requestOptions),
+      (requestUrl, requestOptions) => fetchWithAuthRetry(this.volcanoAuth, requestUrl, requestOptions),
       url,
       options,
     );
@@ -326,11 +290,7 @@ export class StorageFileApi {
   /**
    * Upload a file to the bucket
    */
-  async upload(
-    path: string,
-    fileBody: unknown,
-    options: StorageUploadOptions = {},
-  ): Promise<StorageUploadResponse> {
+  async upload(path: string, fileBody: unknown, options: StorageUploadOptions = {}): Promise<StorageUploadResponse> {
     const rejected = await preflight(this, path);
     if (rejected !== null) {
       return rejected;
@@ -341,10 +301,7 @@ export class StorageFileApi {
   /**
    * Download a file from the bucket
    */
-  async download(
-    path: string,
-    options: StorageDownloadOptions = {},
-  ): Promise<StorageDownloadResponse> {
+  async download(path: string, options: StorageDownloadOptions = {}): Promise<StorageDownloadResponse> {
     const rejected = await preflight(this, path);
     if (rejected !== null) {
       return rejected;
@@ -413,14 +370,11 @@ export class StorageFileApi {
     }
 
     return validatedResult(
-      await this._storageRequest(
-        `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: transferBody(fromPath, toPath),
-        },
-      ),
+      await this._storageRequest(`${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: transferBody(fromPath, toPath),
+      }),
       isStorageObject,
       'storage move',
     );
@@ -436,14 +390,11 @@ export class StorageFileApi {
     }
 
     return validatedResult(
-      await this._storageRequest(
-        `${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: transferBody(fromPath, toPath),
-        },
-      ),
+      await this._storageRequest(`${this.volcanoAuth.apiUrl}/storage/${encodeURIComponent(this.bucketName)}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: transferBody(fromPath, toPath),
+      }),
       isStorageObject,
       'storage copy',
     );
@@ -453,12 +404,7 @@ export class StorageFileApi {
    * Get the public URL for a file (only works for files with is_public=true)
    */
   getPublicUrl(path: string): { data: { publicUrl: string } | null; error: Error | null } {
-    return storagePublicUrl(
-      this.volcanoAuth.apiUrl,
-      this.bucketName,
-      this.volcanoAuth.anonKey,
-      path,
-    );
+    return storagePublicUrl(this.volcanoAuth.apiUrl, this.bucketName, this.volcanoAuth.anonKey, path);
   }
 
   /**
@@ -535,10 +481,7 @@ export class StorageFileApi {
     );
   }
 
-  async completeUploadSession(
-    path: string,
-    sessionId: string,
-  ): Promise<CompleteUploadSessionResponse> {
+  async completeUploadSession(path: string, sessionId: string): Promise<CompleteUploadSessionResponse> {
     const rejected = await preflight(this, path);
     if (rejected !== null) {
       return rejected;
@@ -575,10 +518,7 @@ export class StorageFileApi {
     );
   }
 
-  async abortUploadSession(
-    path: string,
-    sessionId: string,
-  ): Promise<{ error: StorageError | null }> {
+  async abortUploadSession(path: string, sessionId: string): Promise<{ error: StorageError | null }> {
     const rejected = await preflight(this, path);
     if (rejected !== null) {
       return { error: rejected.error };

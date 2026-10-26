@@ -49,8 +49,7 @@ const activity = await client.logs.activity(projectId, {
 });
 if (activity.error) throw activity.error;
 console.log(activity.data.total);
-for (const bucket of activity.data.data)
-  console.log(bucket.start_time, bucket.counts, bucket.total);
+for (const bucket of activity.data.data) console.log(bucket.start_time, bucket.counts, bucket.total);
 ```
 
 Keep the same resource selector, query, and time bounds on every pagination request. Results are newest first. `body` preserves JSON values, including objects and arrays; it is not always a string. Events include a stable `id`, `timestamp`, and owning `resource`.

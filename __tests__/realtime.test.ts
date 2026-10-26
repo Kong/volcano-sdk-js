@@ -148,8 +148,7 @@ describe('VolcanoRealtime', () => {
       };
       // Server delivers RLS-scoped changes on projectId:postgres:schema:table:userID
       realtime._handleServerPublication({
-        channel:
-          '00000000-0000-0000-0000-000000000000:postgres:public:messages:11111111-1111-1111-1111-111111111111',
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:messages:11111111-1111-1111-1111-111111111111',
         data: { type: 'INSERT', schema: 'public', table: 'messages' },
       });
       expect(delivered).not.toBeNull();
@@ -177,8 +176,7 @@ describe('VolcanoRealtime', () => {
         delivered = ctx;
       };
       realtime._handleServerPublication({
-        channel:
-          '00000000-0000-0000-0000-000000000000:postgres:public:other:11111111-1111-1111-1111-111111111111',
+        channel: '00000000-0000-0000-0000-000000000000:postgres:public:other:11111111-1111-1111-1111-111111111111',
         data: {},
       });
       expect(delivered).toBeNull();
@@ -323,9 +321,7 @@ describe('RealtimeChannel', () => {
     test('throws error for non-broadcast channels', async () => {
       const channel = realtime.channel('lobby', { type: 'presence' });
 
-      await expect(channel.send({ text: 'hello' })).rejects.toThrow(
-        'only available for broadcast channels',
-      );
+      await expect(channel.send({ text: 'hello' })).rejects.toThrow('only available for broadcast channels');
     });
 
     test('throws error if not subscribed', async () => {
@@ -366,9 +362,7 @@ describe('RealtimeChannel', () => {
     test('track throws error for non-presence channels', async () => {
       const channel = realtime.channel('room-1');
 
-      await expect(channel.track({ status: 'online' })).rejects.toThrow(
-        'only available for presence channels',
-      );
+      await expect(channel.track({ status: 'online' })).rejects.toThrow('only available for presence channels');
     });
 
     test('getPresenceState returns empty object initially', () => {

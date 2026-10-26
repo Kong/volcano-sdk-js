@@ -15,9 +15,7 @@ const volcano = new VolcanoAuth({
   accessToken: process.env.SERVICE_ROLE_KEY,
 });
 
-const result = await volcano.locks.withLock('daily-rollup', { ttl: 30 }, async ({ signal }) =>
-  runRollup({ signal }),
-);
+const result = await volcano.locks.withLock('daily-rollup', { ttl: 30 }, async ({ signal }) => runRollup({ signal }));
 
 if (result.error) throw result.error;
 if (!result.acquired) console.log('another function is leader');
@@ -34,21 +32,15 @@ already the leader:
 
 ```javascript
 export const handler = async () => {
-  const result = await volcano.locks.withLock(
-    'scheduled-cleanup',
-    { ttl: 60 },
-    async ({ signal }) => {
-      const deleted = await deleteExpiredRecords({ signal });
-      return { deleted };
-    },
-  );
+  const result = await volcano.locks.withLock('scheduled-cleanup', { ttl: 60 }, async ({ signal }) => {
+    const deleted = await deleteExpiredRecords({ signal });
+    return { deleted };
+  });
 
   if (result.error) throw result.error;
   return {
     statusCode: 200,
-    body: JSON.stringify(
-      result.acquired ? { leader: true, ...result.data } : { leader: false, skipped: true },
-    ),
+    body: JSON.stringify(result.acquired ? { leader: true, ...result.data } : { leader: false, skipped: true }),
   };
 };
 ```

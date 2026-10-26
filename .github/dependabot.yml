@@ -56,9 +56,9 @@ updates:
     groups:
       # The generators behind `pnpm generate:openapi`. If a bump changes their
       # output, CI's `check:openapi` fails until `pnpm generate:openapi` is run
-      # and committed. Prettier and tsc also touch that output but stay in
-      # npm-development, so a formatting or type change can't hold these back;
-      # `check:openapi` catches drift from either.
+      # and committed. tsc also checks that output but stays in npm-development,
+      # so a type change can't hold these back; `check:openapi` catches drift
+      # from either.
       openapi-codegen:
         patterns:
           - 'orval'

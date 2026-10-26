@@ -18,8 +18,7 @@ import type { components as GeneratedComponents } from './generated/openapi';
 /** Handle a durable start answers with, straight off the wire contract. */
 export type DurableExecution = GeneratedComponents['schemas']['DurableExecution'];
 export type DurableExecutionStatus = GeneratedComponents['schemas']['DurableExecutionStatus'];
-export type PaginatedDurableExecutions =
-  GeneratedComponents['schemas']['PaginatedDurableExecutions'];
+export type PaginatedDurableExecutions = GeneratedComponents['schemas']['PaginatedDurableExecutions'];
 export type DurableApproval = GeneratedComponents['schemas']['DurableApproval'];
 export type DurableApprovalStatus = GeneratedComponents['schemas']['DurableApprovalStatus'];
 export type DurableApprovalStats = GeneratedComponents['schemas']['DurableApprovalStats'];
@@ -59,8 +58,7 @@ export interface VolcanoAuthConfig {
 }
 
 /** JSON-serializable value type */
-export type JsonValue =
-  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /** User metadata object */
 export type UserMetadata = Record<string, JsonValue>;
@@ -334,18 +332,12 @@ export interface Auth {
    * Throws when the project ID is "." or "..", contains "/", or has a lone
    * UTF-16 surrogate.
    */
-  getHostedAuthUrl(options?: {
-    projectId?: string;
-    action?: 'login' | 'signup' | 'forgot-password';
-  }): string;
+  getHostedAuthUrl(options?: { projectId?: string; action?: 'login' | 'signup' | 'forgot-password' }): string;
   /**
    * Redirect the browser to the managed hosted-auth pages (stores the nonce).
    * Throws, without navigating, for the project IDs `getHostedAuthUrl` refuses.
    */
-  signInWithHostedAuth(options?: {
-    projectId?: string;
-    action?: 'login' | 'signup' | 'forgot-password';
-  }): string;
+  signInWithHostedAuth(options?: { projectId?: string; action?: 'login' | 'signup' | 'forgot-password' }): string;
 
   // OAuth methods
   /**
@@ -865,10 +857,7 @@ export interface Logs {
   /** Search project logs. Time fields must be ISO 8601/RFC3339 date-time strings. */
   search(projectId: string, request: LogSearchRequest): Promise<LogsResponse<LogSearchResponse>>;
   /** Fetch bucketed project log activity. Time fields must be ISO 8601/RFC3339 date-time strings. */
-  activity(
-    projectId: string,
-    request: LogActivityRequest,
-  ): Promise<LogsResponse<LogActivityResponse>>;
+  activity(projectId: string, request: LogActivityRequest): Promise<LogsResponse<LogActivityResponse>>;
 }
 
 // ============================================================================
@@ -1084,10 +1073,7 @@ export interface StorageFileApi {
    * Create a resumable upload session for large files.
    * Use this for files over 100MB or when you need resume capability.
    */
-  createUploadSession(
-    path: string,
-    options: CreateUploadSessionOptions,
-  ): Promise<CreateUploadSessionResponse>;
+  createUploadSession(path: string, options: CreateUploadSessionOptions): Promise<CreateUploadSessionResponse>;
 
   /**
    * Upload a part of a resumable upload session.
@@ -1295,10 +1281,7 @@ export interface ProjectLocks {
     options?: ProjectLockRequestOptions,
   ): Promise<{ state: ProjectLockState | null; error: ProjectLockError | null }>;
   /** Drops the lease whatever token holds it. Safe only behind a fencing token. */
-  forceRelease(
-    key: string,
-    options?: ProjectLockRequestOptions,
-  ): Promise<{ error: ProjectLockError | null }>;
+  forceRelease(key: string, options?: ProjectLockRequestOptions): Promise<{ error: ProjectLockError | null }>;
   withLock<T>(
     key: string,
     options: ProjectLockAcquireOptions,
@@ -1370,21 +1353,14 @@ export interface SandboxSession extends AsyncDisposable {
   readonly state: SandboxState;
   readonly expiresAt: string;
   refresh(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
-  exec(
-    command: string,
-    options?: SandboxCommandOptions,
-  ): Promise<SandboxResult<SandboxCommandResult>>;
+  exec(command: string, options?: SandboxCommandOptions): Promise<SandboxResult<SandboxCommandResult>>;
   suspend(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   resume(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   terminate(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   access(port: number, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxAccess>>;
   files: {
     read(path: string, options?: SandboxRequestOptions): Promise<SandboxResult<Uint8Array>>;
-    write(
-      path: string,
-      data: Uint8Array,
-      options?: SandboxRequestOptions,
-    ): Promise<SandboxResult<void>>;
+    write(path: string, data: Uint8Array, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
   };
 }
 export interface SandboxPreset {
@@ -1421,11 +1397,7 @@ export interface SandboxBuildLogPage {
   nextCursor?: string;
 }
 export interface Sandboxes {
-  deleteTemplate(
-    projectId: string,
-    sandboxId: string,
-    options?: SandboxRequestOptions,
-  ): Promise<SandboxResult<void>>;
+  deleteTemplate(projectId: string, sandboxId: string, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
   logs(
     projectId: string,
     sandboxId: string,
@@ -1456,11 +1428,7 @@ export interface Sandboxes {
     options?: SandboxRequestOptions,
   ): Promise<SandboxResult<Uint8Array>>;
   presets(options?: SandboxRequestOptions): Promise<SandboxResult<SandboxPreset[]>>;
-  exec(
-    projectId: string,
-    command: string,
-    options: SandboxExecOptions,
-  ): Promise<SandboxResult<SandboxExecutionResult>>;
+  exec(projectId: string, command: string, options: SandboxExecOptions): Promise<SandboxResult<SandboxExecutionResult>>;
   create(projectId: string, options: SandboxCreateOptions): Promise<SandboxResult<SandboxSession>>;
   get(sessionId: string, options?: SandboxRequestOptions): Promise<SandboxResult<SandboxSession>>;
   grant(
@@ -1469,9 +1437,5 @@ export interface Sandboxes {
     expiresAt: string,
     options?: SandboxRequestOptions,
   ): Promise<SandboxResult<void>>;
-  revoke(
-    sessionId: string,
-    authUserId: string,
-    options?: SandboxRequestOptions,
-  ): Promise<SandboxResult<void>>;
+  revoke(sessionId: string, authUserId: string, options?: SandboxRequestOptions): Promise<SandboxResult<void>>;
 }

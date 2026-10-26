@@ -1,11 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, relative, resolve } from 'node:path';
 
-type DeclarationTransform = (
-  declaration: string,
-  source: string,
-  stems: ReadonlySet<string>,
-) => string;
+type DeclarationTransform = (declaration: string, source: string, stems: ReadonlySet<string>) => string;
 const declarationFiles: [string, string, DeclarationTransform?][] = [
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.d.ts'],
   ['src/generated/openapi.d.ts', 'dist/generated/openapi.esm.d.mts', toEsmDeclaration],
@@ -24,10 +20,7 @@ for (const source of emitted) {
 for (const [source, target, transform] of declarationFiles) {
   await mkdir(dirname(target), { recursive: true });
   const declaration = await readFile(source, 'utf8');
-  await writeFile(
-    target,
-    transform === undefined ? declaration : transform(declaration, source, emittedStems),
-  );
+  await writeFile(target, transform === undefined ? declaration : transform(declaration, source, emittedStems));
 }
 
 await rm('dist/typescript', { recursive: true, force: true });

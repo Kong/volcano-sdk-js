@@ -44,8 +44,7 @@ export default function HomePage() {
           {/* Headline */}
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Volcano Notes</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-            A simple notes app built with the{' '}
-            <span className="text-volcano-600 font-semibold">Volcano SDK</span>.
+            A simple notes app built with the <span className="text-volcano-600 font-semibold">Volcano SDK</span>.
             <br />
             Authentication, database, and more — all in one.
           </p>
@@ -58,12 +57,7 @@ export default function HomePage() {
             >
               Get Started
               <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
             <Link
@@ -78,20 +72,13 @@ export default function HomePage() {
 
       {/* Features Section */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">
-          Built with the Volcano SDK
-        </h2>
+        <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">Built with the Volcano SDK</h2>
 
         <div className="grid md:grid-cols-3 gap-8">
           {/* Feature 1 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="w-12 h-12 bg-volcano-100 rounded-lg flex items-center justify-center mb-4">
-              <svg
-                className="w-6 h-6 text-volcano-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-6 h-6 text-volcano-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -101,9 +88,7 @@ export default function HomePage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Authentication</h3>
-            <p className="text-gray-600">
-              Sign up, sign in, and password recovery. Anonymous login for quick access.
-            </p>
+            <p className="text-gray-600">Sign up, sign in, and password recovery. Anonymous login for quick access.</p>
             <pre className="mt-4 text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto">
               <code className="text-gray-700">
                 {`await volcano.auth.signIn({
@@ -116,30 +101,18 @@ export default function HomePage() {
           {/* Feature 2 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-              <svg
-                className="w-6 h-6 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
                   d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z"
                 />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 11h6m-6 4h6"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 11h6m-6 4h6" />
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Database Queries</h3>
-            <p className="text-gray-600">
-              Query PostgreSQL directly from the browser with a chainable API.
-            </p>
+            <p className="text-gray-600">Query PostgreSQL directly from the browser with a chainable API.</p>
             <pre className="mt-4 text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto">
               <code className="text-gray-700">
                 {`await volcano
@@ -153,12 +126,7 @@ export default function HomePage() {
           {/* Feature 3 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-              <svg
-                className="w-6 h-6 text-blue-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -168,9 +136,7 @@ export default function HomePage() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Row-Level Security</h3>
-            <p className="text-gray-600">
-              Automatic data isolation. Users only see their own notes.
-            </p>
+            <p className="text-gray-600">Automatic data isolation. Users only see their own notes.</p>
             <pre className="mt-4 text-xs bg-gray-50 rounded-lg p-3 overflow-x-auto">
               <code className="text-gray-700">
                 {`-- RLS Policy

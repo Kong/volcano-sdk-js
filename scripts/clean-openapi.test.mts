@@ -20,14 +20,10 @@ await test('regeneration exposes handwritten files added to generated directorie
 
     execFileSync(process.execPath, [cleaner], { cwd: directory });
 
-    const status = execFileSync(
-      '/usr/bin/git',
-      ['status', '--porcelain=v1', '--', 'src/generated'],
-      {
-        cwd: directory,
-        encoding: 'utf8',
-      },
-    );
+    const status = execFileSync('/usr/bin/git', ['status', '--porcelain=v1', '--', 'src/generated'], {
+      cwd: directory,
+      encoding: 'utf8',
+    });
     assert.equal(status, 'AD src/generated/handwritten.ts\n');
     const check = spawnSync(process.execPath, [checker], { cwd: directory, encoding: 'utf8' });
     assert.equal(check.status, 1);

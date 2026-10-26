@@ -31,10 +31,7 @@ export class LeaseClock {
     // Date.now catches suspension on platforms where performance.now pauses.
     // A forward clock correction may shorten a lease; failing closed is safer
     // than allowing guarded work to outlive its server-side ownership.
-    return Math.max(
-      0,
-      Math.min(this.monotonicDeadline - performance.now(), this.wallDeadline - Date.now()),
-    );
+    return Math.max(0, Math.min(this.monotonicDeadline - performance.now(), this.wallDeadline - Date.now()));
   }
 
   private deadlines(startedAt: LockRequestStart): [number, number] {

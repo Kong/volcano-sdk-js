@@ -139,9 +139,7 @@ async function userResponse(response: Response): Promise<GetUserResult> {
   );
 }
 
-function refreshPair(
-  payload: unknown,
-): Pick<RefreshTokenResult, 'accessToken' | 'refreshToken'> | null {
+function refreshPair(payload: unknown): Pick<RefreshTokenResult, 'accessToken' | 'refreshToken'> | null {
   if (!isRecord(payload)) {
     return null;
   }

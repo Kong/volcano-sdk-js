@@ -55,12 +55,7 @@ export default function DashboardPage() {
       {isAnonymous && (
         <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-start">
-            <svg
-              className="w-5 h-5 text-yellow-500 mt-0.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-yellow-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -69,9 +64,7 @@ export default function DashboardPage() {
               />
             </svg>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                You&apos;re using a guest account
-              </h3>
+              <h3 className="text-sm font-medium text-yellow-800">You&apos;re using a guest account</h3>
               <p className="mt-1 text-sm text-yellow-700">
                 Your notes are saved, but you&apos;ll lose access if you sign out.{' '}
                 <Link href="/auth/signup" className="font-medium underline hover:text-yellow-900">
@@ -113,12 +106,7 @@ export default function DashboardPage() {
       {/* SDK Code Reference */}
       <div className="mt-8 bg-gray-900 rounded-lg p-6 text-white">
         <h2 className="text-lg font-semibold mb-4 flex items-center">
-          <svg
-            className="w-5 h-5 mr-2 text-volcano-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-5 h-5 mr-2 text-volcano-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

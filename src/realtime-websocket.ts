@@ -12,9 +12,7 @@ function isModule(value: unknown): value is Record<string, unknown> {
 
 /** Accept ws's ESM default, named export, or CommonJS constructor. */
 export function webSocketFrom(loaded: unknown): WebSocketConstructor {
-  const candidate = isModule(loaded)
-    ? (loaded['default'] ?? loaded['WebSocket'] ?? loaded)
-    : loaded;
+  const candidate = isModule(loaded) ? (loaded['default'] ?? loaded['WebSocket'] ?? loaded) : loaded;
   if (!isConstructor(candidate)) {
     throw new TypeError('ws does not export a WebSocket constructor');
   }

@@ -1,10 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
-import {
-  decodeBase64Url,
-  extractRequiredProjectIdFromToken,
-  extractSessionIdFromToken,
-} from '../src/token-claims.ts';
+import { decodeBase64Url, extractRequiredProjectIdFromToken, extractSessionIdFromToken } from '../src/token-claims.ts';
 
 function token(payload: unknown): string {
   return `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.signature`;
@@ -42,9 +38,7 @@ test('rejects an otherwise valid claim set with an extra token segment', () => {
   ).toString('base64url');
   const malformed = `header.${payload}.signature.extra`;
   expect(extractSessionIdFromToken(malformed)).toBeNull();
-  expect(() => extractRequiredProjectIdFromToken(malformed)).toThrow(
-    'accessToken must be a JWT with project_id claim',
-  );
+  expect(() => extractRequiredProjectIdFromToken(malformed)).toThrow('accessToken must be a JWT with project_id claim');
 });
 
 test.each(['header.!.signature', 'header.eA.signature', 'header..signature'])(
@@ -60,9 +54,7 @@ test.each(['header.!.signature', 'header.eA.signature', 'header..signature'])(
 test.each([null, false, 12, 'value', [], {}, { project_id: 12 }, { project_id: ' ' }])(
   'requires a nonempty project claim: %p',
   (payload) => {
-    expect(() => extractRequiredProjectIdFromToken(token(payload))).toThrow(
-      'accessToken missing project_id claim',
-    );
+    expect(() => extractRequiredProjectIdFromToken(token(payload))).toThrow('accessToken missing project_id claim');
     expect(extractSessionIdFromToken(token(payload))).toBeNull();
   },
 );
@@ -75,9 +67,7 @@ test('trims project claims without interpreting header or signature', () => {
 test.each(['ABCDEF01-2345-6789-ABCD-EF0123456789', 'abcdef01-2345-6789-abcd-ef0123456789'])(
   'normalizes a session UUID: %s',
   (sessionId) => {
-    expect(extractSessionIdFromToken(token({ session_id: sessionId }))).toBe(
-      'abcdef01-2345-6789-abcd-ef0123456789',
-    );
+    expect(extractSessionIdFromToken(token({ session_id: sessionId }))).toBe('abcdef01-2345-6789-abcd-ef0123456789');
   },
 );
 
@@ -110,7 +100,7 @@ test('uses the Node UTF-8 decoder when atob is unavailable', () => {
 });
 
 test('reports when neither platform decoder exists', () => {
-  expect(() =>
-    withoutGlobal('atob', () => withoutGlobal('Buffer', () => decodeBase64Url('Zg'))),
-  ).toThrow('No base64 decoder available');
+  expect(() => withoutGlobal('atob', () => withoutGlobal('Buffer', () => decodeBase64Url('Zg')))).toThrow(
+    'No base64 decoder available',
+  );
 });

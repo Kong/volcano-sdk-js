@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoAuth,
-  VolcanoSystemError,
-} from '../src/index.ts';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
 
@@ -50,10 +45,9 @@ describe('VolcanoAuth function invocation and auth races', () => {
       reply(200, { result: 'success', data: [1, 2, 3] }, { 'x-volcano-version': 'staging-xyz' }),
     );
 
-    const { data, status, headers, version, error } = await volcano.functions.invoke(
-      'my-function',
-      { action: 'getData' },
-    );
+    const { data, status, headers, version, error } = await volcano.functions.invoke('my-function', {
+      action: 'getData',
+    });
 
     expect(error).toBeNull();
     expect(status).toBe(200);
@@ -433,11 +427,7 @@ describe('VolcanoAuth function invocation and auth races', () => {
     // nothing ran. Omitting the version header here would be a shape the
     // server never produces, and would let a check keyed on it pass.
     fetchMock.mockResolvedValueOnce(
-      reply(
-        400,
-        { error: 'function cannot be invoked (status: failed)' },
-        { 'x-volcano-version': 'v1' },
-      ),
+      reply(400, { error: 'function cannot be invoked (status: failed)' }, { 'x-volcano-version': 'v1' }),
     );
 
     const { data, status, error } = await volcano.functions.invoke('my-function', {

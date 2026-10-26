@@ -22,10 +22,7 @@ interface StartTransport {
   startDurableExecutionFromApplication: jest.Mock<StartOperation>;
 }
 
-function clientWithTransport(
-  overrides: Partial<StartTransport> = {},
-  config: Partial<VolcanoAuthConfig> = {},
-) {
+function clientWithTransport(overrides: Partial<StartTransport> = {}, config: Partial<VolcanoAuthConfig> = {}) {
   const transport = {
     startDurableExecutionFromApplication: jest.fn<StartOperation>().mockResolvedValue({
       data: execution,
@@ -92,20 +89,14 @@ describe('durable.start', () => {
     );
 
     await volcano.durable.start('order-pipeline');
-    expect(
-      transport.startDurableExecutionFromApplication.mock.calls[1]?.[2]?.headers,
-    ).toBeUndefined();
+    expect(transport.startDurableExecutionFromApplication.mock.calls[1]?.[2]?.headers).toBeUndefined();
   });
 
   test('refuses a missing function name before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
 
     for (const name of ['', '   ', undefined, 42]) {
-      const result: unknown = Reflect.apply(
-        volcano.durable.start.bind(volcano.durable),
-        undefined,
-        [name],
-      );
+      const result: unknown = Reflect.apply(volcano.durable.start.bind(volcano.durable), undefined, [name]);
       await expect(result).resolves.toMatchObject({
         data: null,
         status: null,
@@ -144,11 +135,7 @@ describe('durable.start', () => {
   test('refuses an execution name longer than the platform accepts', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    const { error } = await volcano.durable.start(
-      'order-pipeline',
-      {},
-      { executionName: 'o'.repeat(256) },
-    );
+    const { error } = await volcano.durable.start('order-pipeline', {}, { executionName: 'o'.repeat(256) });
 
     expect(error?.message).toContain('executionName must be at most 255 characters');
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
@@ -162,9 +149,7 @@ describe('durable.start', () => {
   test('surfaces a platform refusal with its status', async () => {
     const refusal = Object.assign(new Error('too many executions in flight'), { status: 429 });
     const { volcano } = clientWithTransport({
-      startDurableExecutionFromApplication: jest
-        .fn<StartOperation>()
-        .mockImplementation(() => Promise.reject(refusal)),
+      startDurableExecutionFromApplication: jest.fn<StartOperation>().mockImplementation(() => Promise.reject(refusal)),
     });
 
     await expect(volcano.durable.start('order-pipeline')).resolves.toEqual({

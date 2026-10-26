@@ -3,11 +3,7 @@ import {
   AuthSessionChangedError as EsmSessionChangedError,
   VolcanoSystemError as EsmSystemError,
 } from '../../dist/index.esm.mjs';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from '../../dist/index.js';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from '../../dist/index.js';
 
 // Browser consumers need no Node globals or ES2022 library to import these types.
 export const errors: Error[] = [

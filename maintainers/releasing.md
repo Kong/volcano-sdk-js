@@ -31,9 +31,9 @@ releases it:
 
 Some updates need a commit before CI passes:
 
-- If `pnpm check:openapi` fails, usually after an `openapi-codegen`, prettier or
-  TypeScript update, run `pnpm generate:openapi` and commit the result.
-- If a prettier update fails `pnpm format:check`, run `pnpm format` and commit
+- If `pnpm check:openapi` fails, usually after an `openapi-codegen` or TypeScript
+  update, run `pnpm generate:openapi` and commit the result.
+- If an oxfmt update fails `pnpm format:check`, run `pnpm format` and commit
   the result.
 
 Dependabot stops rebasing a pull request once someone else pushes to it, so

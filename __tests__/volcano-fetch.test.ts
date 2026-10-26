@@ -49,9 +49,11 @@ test('uses a status fallback when an error body is null', async () => {
   const client = {
     _generatedFetch: jest.fn(() => Promise.resolve(Response.json(null, { status: 400 }))),
   };
-  await expect(
-    volcanoFetch('/error', { volcanoAuthorization: 'anon', volcanoClient: client }),
-  ).rejects.toMatchObject({ message: 'Request failed with status 400', status: 400, info: null });
+  await expect(volcanoFetch('/error', { volcanoAuthorization: 'anon', volcanoClient: client })).rejects.toMatchObject({
+    message: 'Request failed with status 400',
+    status: 400,
+    info: null,
+  });
   await expect(
     volcanoFetch('/error', { volcanoAuthorization: 'anon', volcanoClient: client }),
   ).rejects.not.toHaveProperty('code');

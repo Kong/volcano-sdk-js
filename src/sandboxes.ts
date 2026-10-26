@@ -37,11 +37,7 @@ export class SandboxesApi implements Sandboxes {
     options: SandboxRequestOptions = {},
   ): ReturnType<Sandboxes['deleteTemplate']> {
     return sandboxResult(async () => {
-      await deleteSandbox(
-        pathId(projectId),
-        pathId(sandboxId),
-        requestOptions(this.client, options),
-      );
+      await deleteSandbox(pathId(projectId), pathId(sandboxId), requestOptions(this.client, options));
     });
   }
   logs(
@@ -85,16 +81,10 @@ export class SandboxesApi implements Sandboxes {
   }
   presets(options: SandboxRequestOptions = {}): ReturnType<Sandboxes['presets']> {
     return sandboxResult(async () =>
-      presetsResult(
-        await responseData(listSandboxPresets(requestOptions(this.client, options, 'anon'))),
-      ),
+      presetsResult(await responseData(listSandboxPresets(requestOptions(this.client, options, 'anon')))),
     );
   }
-  exec(
-    projectId: string,
-    command: string,
-    options: SandboxExecOptions,
-  ): ReturnType<Sandboxes['exec']> {
+  exec(projectId: string, command: string, options: SandboxExecOptions): ReturnType<Sandboxes['exec']> {
     return sandboxResult(async () => {
       await this.client._completeOAuthExchange();
       const response = await executeSandbox(
@@ -122,9 +112,7 @@ export class SandboxesApi implements Sandboxes {
       async () =>
         new SandboxSessionHandle(
           this.client,
-          await responseData(
-            getSandboxSession(pathId(sessionId), requestOptions(this.client, options)),
-          ),
+          await responseData(getSandboxSession(pathId(sessionId), requestOptions(this.client, options))),
         ),
     );
   }
@@ -143,17 +131,9 @@ export class SandboxesApi implements Sandboxes {
       );
     });
   }
-  revoke(
-    sessionId: string,
-    authUserId: string,
-    options: SandboxRequestOptions = {},
-  ): ReturnType<Sandboxes['revoke']> {
+  revoke(sessionId: string, authUserId: string, options: SandboxRequestOptions = {}): ReturnType<Sandboxes['revoke']> {
     return sandboxResult(async () => {
-      await revokeSandboxSession(
-        pathId(sessionId),
-        pathId(authUserId),
-        requestOptions(this.client, options),
-      );
+      await revokeSandboxSession(pathId(sessionId), pathId(authUserId), requestOptions(this.client, options));
     });
   }
 }

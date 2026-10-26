@@ -6,9 +6,7 @@ function git(...args: readonly string[]): string {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
 }
 
-const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src')
-  .split('\n')
-  .filter(Boolean);
+const paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--', 'src').split('\n').filter(Boolean);
 const allPatterns = mutationPatterns(paths);
 const shardIndex = process.env['MUTATION_SHARD_INDEX'];
 const shardCount = process.env['MUTATION_SHARD_COUNT'];
@@ -22,9 +20,7 @@ if (
   throw new Error('Mutation shard index and count must be non-negative integers');
 }
 const patterns =
-  shardIndex === undefined
-    ? allPatterns
-    : shardMutationPatterns(allPatterns, Number(shardIndex), Number(shardCount));
+  shardIndex === undefined ? allPatterns : shardMutationPatterns(allPatterns, Number(shardIndex), Number(shardCount));
 
 rmSync('reports/mutation.json', { force: true });
 const stryker = spawnSync('./node_modules/.bin/stryker', ['run', '--mutate', patterns.join(',')], {

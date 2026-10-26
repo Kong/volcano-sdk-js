@@ -157,17 +157,12 @@ describe('function invocation over HTTP', () => {
 
   it('falls back to the API path without a resolved endpoint', async () => {
     const functions = track(await startServer(() => [200, { ok: true }]));
-    const api = track(
-      await apiServer({ name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }),
-    );
+    const api = track(await apiServer({ name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }));
 
     const { error } = await client(api.url).functions.invoke('my-function', {});
 
     expect(error).toBeNull();
-    expect(api.targets()).toEqual([
-      '/functions/resolve?name=my-function',
-      `/functions/${FUNCTION_ID}/invoke`,
-    ]);
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
     expect(functions.targets()).toEqual([]);
   });
 
@@ -198,9 +193,7 @@ describe('function invocation over HTTP', () => {
     );
     const volcano = client(api.url);
 
-    const results = await Promise.all(
-      Array.from({ length: 8 }, () => volcano.functions.invoke('my-function', {})),
-    );
+    const results = await Promise.all(Array.from({ length: 8 }, () => volcano.functions.invoke('my-function', {})));
 
     expect(results.every((result) => result.error === null)).toBe(true);
     expect(api.targets()).toEqual(['/functions/resolve?name=my-function']);
@@ -293,9 +286,6 @@ describe('function invocation over HTTP', () => {
 
     expect(status).toBe(404);
     expect(error).toBeNull();
-    expect(api.targets()).toEqual([
-      '/functions/resolve?name=my-function',
-      `/functions/${FUNCTION_ID}/invoke`,
-    ]);
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
   });
 });

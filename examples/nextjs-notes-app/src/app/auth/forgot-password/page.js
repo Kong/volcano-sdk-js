@@ -33,12 +33,5 @@ export default function ForgotPasswordPage() {
     return null;
   }
 
-  return (
-    <AuthForm
-      mode="forgot-password"
-      onSubmit={handleResetPassword}
-      loading={loading}
-      error={error}
-    />
-  );
+  return <AuthForm mode="forgot-password" onSubmit={handleResetPassword} loading={loading} error={error} />;
 }

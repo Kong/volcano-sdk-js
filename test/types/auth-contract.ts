@@ -24,15 +24,7 @@ const status: UserStatus | undefined = user.status;
 const bannedUntil: string | null | undefined = user.banned_until;
 const lastSignInAt: string | undefined = user.last_sign_in_at;
 
-export const userFields = [
-  projectId,
-  emailConfirmed,
-  appMetadata,
-  avatarUrl,
-  status,
-  bannedUntil,
-  lastSignInAt,
-];
+export const userFields = [projectId, emailConfirmed, appMetadata, avatarUrl, status, bannedUntil, lastSignInAt];
 export const reset = auth.resetPasswordForEmail('alice@example.com');
 const tokenClient = new VolcanoClient({ anonKey: 'example', accessToken: 'supplied-access' });
 export const session = tokenClient.auth.getSession();

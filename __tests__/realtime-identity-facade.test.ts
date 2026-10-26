@@ -1,16 +1,11 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoRealtime } from '../src/realtime.ts';
-import {
-  deferredVoid,
-  subscriptionAt,
-  TestSubscription,
-  TestTransportClient,
-} from './realtime-transport-fixtures.ts';
+import { deferredVoid, subscriptionAt, TestSubscription, TestTransportClient } from './realtime-transport-fixtures.ts';
 
 function token(projectId: string, subject: string, expires = 1): string {
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: projectId, sub: subject, exp: expires }),
-  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ project_id: projectId, sub: subject, exp: expires })).toString(
+    'base64url',
+  );
   return `header.${payload}.signature`;
 }
 

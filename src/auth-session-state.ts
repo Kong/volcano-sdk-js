@@ -39,10 +39,7 @@ export function captureAuthContext(host: AuthSessionStateHost): AuthContext {
   });
 }
 
-export function adoptSessionInMemory(
-  host: AuthSessionStateHost,
-  session: CompleteSessionFields,
-): void {
+export function adoptSessionInMemory(host: AuthSessionStateHost, session: CompleteSessionFields): void {
   host._sessionGeneration += 1;
   host._sessionOperations = new AuthSessionOperations();
   host._oauthExchangeError = null;
@@ -56,11 +53,7 @@ export function isAuthContextCurrent(host: AuthSessionStateHost, context: AuthCo
   return context.generation === host._sessionGeneration;
 }
 
-export function setSession(
-  host: AuthSessionStateHost,
-  data: SessionInput,
-  expectedGeneration: number,
-): boolean {
+export function setSession(host: AuthSessionStateHost, data: SessionInput, expectedGeneration: number): boolean {
   if (expectedGeneration !== host._sessionGeneration) {
     return false;
   }

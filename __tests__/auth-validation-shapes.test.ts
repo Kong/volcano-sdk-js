@@ -28,12 +28,9 @@ test('accepts the required wire user shape without optional timestamps', () => {
   expect(validateOAuthSession({ access_token: 'access', user })).toBeNull();
 });
 
-test.each(['active', 'banned', 'deleted'] as const)(
-  'accepts the documented user status %s',
-  (status) => {
-    expect(validateAuthUser({ ...user, status })).toBeNull();
-  },
-);
+test.each(['active', 'banned', 'deleted'] as const)('accepts the documented user status %s', (status) => {
+  expect(validateAuthUser({ ...user, status })).toBeNull();
+});
 
 test.each([
   [null, 'Auth user must be an object'],
@@ -90,9 +87,9 @@ test('checks optional booleans, nullable strings, and JSON metadata', () => {
   expect(validateAuthUser({ ...user, user_metadata: { list: ['valid', new Date()] } })).toEqual(
     new TypeError('Auth user user_metadata must be JSON metadata'),
   );
-  expect(
-    validateAuthUser({ ...user, user_metadata: { nested: { valid: 'yes', invalid: Infinity } } }),
-  ).toEqual(new TypeError('Auth user user_metadata must be JSON metadata'));
+  expect(validateAuthUser({ ...user, user_metadata: { nested: { valid: 'yes', invalid: Infinity } } })).toEqual(
+    new TypeError('Auth user user_metadata must be JSON metadata'),
+  );
   expect(validateAuthUser({ ...user, user_metadata: null })).toEqual(
     new TypeError('Auth user user_metadata must be JSON metadata'),
   );
@@ -142,10 +139,7 @@ test('complete and OAuth sessions require the public user shape', () => {
 test.each([
   [null, 'Session must be an object'],
   [{ user }, 'Session access_token must be a non-empty string'],
-  [
-    { access_token: 'access', refresh_token: '', user },
-    'Session refresh_token must be a non-empty string',
-  ],
+  [{ access_token: 'access', refresh_token: '', user }, 'Session refresh_token must be a non-empty string'],
 ])('rejects malformed OAuth sessions: %p', (candidate, message) => {
   expect(validateOAuthSession(candidate)).toEqual(new TypeError(message));
 });

@@ -26,36 +26,33 @@ test.each([
   [60_000, undefined, 180_000],
   [60_000, 600, 720_000],
   [900_000, 600, 900_000],
-])(
-  'command requests budget provisioning time: %s/%s',
-  async (timeout, timeoutSeconds, expected) => {
-    const client = new VolcanoAuth({
-      apiUrl: 'https://api.test.com',
-      anonKey: 'anon',
-      accessToken: 'service',
-      timeout,
-    });
-    const fetchMock = jest.fn<typeof fetch>().mockResolvedValueOnce(Response.json(snapshot));
-    globalThis.fetch = fetchMock;
-    const session = await client.sandboxes.get(id);
-    if (session.data === null) {
-      throw session.error;
-    }
-    const timer = jest.spyOn(globalThis, 'setTimeout');
-    const options = timeoutSeconds === undefined ? {} : { timeoutSeconds };
-    fetchMock.mockImplementation(() => Promise.resolve(Response.json(command)));
-    const result = await session.data.exec('true', options);
-    expect(result.error).toBeNull();
-    expect(timer).toHaveBeenLastCalledWith(expect.any(Function), expected);
-    const executed = await client.sandboxes.exec(id, 'true', {
-      ...options,
-      preset: 'node22',
-      region: 'us-east-1',
-    });
-    expect(executed.error).toBeNull();
-    expect(timer).toHaveBeenLastCalledWith(expect.any(Function), expected);
-  },
-);
+])('command requests budget provisioning time: %s/%s', async (timeout, timeoutSeconds, expected) => {
+  const client = new VolcanoAuth({
+    apiUrl: 'https://api.test.com',
+    anonKey: 'anon',
+    accessToken: 'service',
+    timeout,
+  });
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValueOnce(Response.json(snapshot));
+  globalThis.fetch = fetchMock;
+  const session = await client.sandboxes.get(id);
+  if (session.data === null) {
+    throw session.error;
+  }
+  const timer = jest.spyOn(globalThis, 'setTimeout');
+  const options = timeoutSeconds === undefined ? {} : { timeoutSeconds };
+  fetchMock.mockImplementation(() => Promise.resolve(Response.json(command)));
+  const result = await session.data.exec('true', options);
+  expect(result.error).toBeNull();
+  expect(timer).toHaveBeenLastCalledWith(expect.any(Function), expected);
+  const executed = await client.sandboxes.exec(id, 'true', {
+    ...options,
+    preset: 'node22',
+    region: 'us-east-1',
+  });
+  expect(executed.error).toBeNull();
+  expect(timer).toHaveBeenLastCalledWith(expect.any(Function), expected);
+});
 
 test.each(['terminating', 'terminated'])('disposal skips %s sessions', async (state) => {
   const client = new VolcanoAuth({ anonKey: 'anon', accessToken: 'service' });

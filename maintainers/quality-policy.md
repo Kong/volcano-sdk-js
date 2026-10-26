@@ -1,7 +1,7 @@
 # Quality policy
 
 `pnpm quality` composes native tools in `package.json`: ESLint, TypeScript,
-Prettier, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
+oxfmt, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
 `quality:checks` runs the checks shared by both supported CI runtimes;
 `mutation:full` adds the complete mutation gate.
 

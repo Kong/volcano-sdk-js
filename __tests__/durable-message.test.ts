@@ -20,11 +20,7 @@ type Run = (context: FakeContext) => Promise<unknown>;
 interface FakeContext {
   logger: DurableLog;
   configureLogger(): void;
-  step(
-    name: unknown,
-    fn: (scope: { logger: DurableLog; attempt: number }) => unknown,
-    config?: unknown,
-  ): unknown;
+  step(name: unknown, fn: (scope: { logger: DurableLog; attempt: number }) => unknown, config?: unknown): unknown;
   wait(): Promise<void>;
   runInChildContext(name: unknown, fn: Run): Promise<unknown>;
   waitForCondition(): Promise<unknown>;
@@ -34,11 +30,7 @@ interface FakeContext {
     fn: (context: FakeContext, item: unknown, index: number) => Promise<unknown>,
   ): Promise<unknown>;
   parallel(name: unknown, branches: (Run | { func: Run })[]): Promise<unknown>;
-  waitForCallback?: (
-    name: unknown,
-    submitter: Submitter,
-    config: Record<string, unknown>,
-  ) => Promise<unknown>;
+  waitForCallback?: (name: unknown, submitter: Submitter, config: Record<string, unknown>) => Promise<unknown>;
   executionContext?: { durableExecutionArn?: unknown };
 }
 
@@ -111,9 +103,7 @@ function mockContext(executionContext?: FakeContext['executionContext']): FakeCo
     parallel: async (_name, branches) =>
       batch(
         await Promise.all(
-          branches.map((branch) =>
-            typeof branch === 'function' ? branch(mockContext()) : branch.func(mockContext()),
-          ),
+          branches.map((branch) => (typeof branch === 'function' ? branch(mockContext()) : branch.func(mockContext()))),
         ),
       ),
     async waitForCallback(name, submitter, config) {
@@ -141,10 +131,7 @@ jest.mock(
   { virtual: true },
 );
 
-function run<Result>(
-  handler: DurableHandler<unknown, Result>,
-  event?: Record<string, unknown>,
-): Promise<unknown> {
+function run<Result>(handler: DurableHandler<unknown, Result>, event?: Record<string, unknown>): Promise<unknown> {
   return durable(handler)({ input: {}, ...(event ?? { DurableExecutionArn: EXECUTION_ARN }) }, {});
 }
 
@@ -225,9 +212,7 @@ function onlyCallbackCall(): CallbackCall {
 
 function noRetry(config: unknown): void {
   const retryStrategy: unknown =
-    typeof config === 'object' && config !== null
-      ? Reflect.get(config, 'retryStrategy')
-      : undefined;
+    typeof config === 'object' && config !== null ? Reflect.get(config, 'retryStrategy') : undefined;
   if (typeof retryStrategy !== 'function') {
     throw new TypeError('Expected a retry strategy');
   }
@@ -388,10 +373,7 @@ describe('ctx.waitForMessage()', () => {
 
   it('names the wait in a final refusal', async () => {
     fetchMock().mockResolvedValueOnce(
-      Response.json(
-        { error: 'too many open waits', code: 'too_many_message_waits' },
-        { status: 409 },
-      ),
+      Response.json({ error: 'too many open waits', code: 'too_many_message_waits' }, { status: 409 }),
     );
 
     await expect(failureOf(receive(() => Promise.resolve(sent())))).resolves.toMatchObject({
@@ -474,9 +456,7 @@ describe('ctx.waitForMessage()', () => {
   ])('refuses %s', async (_case, result) => {
     const failure = receive(() => Promise.resolve(result));
     await expect(failure).rejects.toBeInstanceOf(TypeError);
-    await expect(failure).rejects.toThrow(
-      'Volcano resumed the message wait with a message this SDK cannot read',
-    );
+    await expect(failure).rejects.toThrow('Volcano resumed the message wait with a message this SDK cannot read');
   });
 
   it.each([
@@ -495,9 +475,9 @@ describe('ctx.waitForMessage()', () => {
       'timeout must be at most 31622400 seconds (366 days)',
     ],
   ])('refuses %s before registering anything', async (_case, args, message) => {
-    await expect(
-      run(callWith((ctx) => Reflect.apply(ctx.waitForMessage.bind(ctx), undefined, args))),
-    ).rejects.toThrow(message);
+    await expect(run(callWith((ctx) => Reflect.apply(ctx.waitForMessage.bind(ctx), undefined, args)))).rejects.toThrow(
+      message,
+    );
     expect(callbackCalls).toHaveLength(0);
     expect(fetchMock()).not.toHaveBeenCalled();
   });
@@ -738,16 +718,12 @@ describe('ctx.publish()', () => {
     ['a non-string name', [null], 'ctx.publish() requires a non-empty name'],
     ['a long name', ['n'.repeat(238)], 'ctx.publish() name must be at most 237 characters'],
     ['a name outside ASCII', ['progrès'], 'ctx.publish() name must be printable ASCII'],
-    [
-      'data that serializes to nothing',
-      ['ok', () => 1],
-      'ctx.publish() data must be serializable as JSON',
-    ],
+    ['data that serializes to nothing', ['ok', () => 1], 'ctx.publish() data must be serializable as JSON'],
     ['a symbol', ['ok', Symbol('data')], 'ctx.publish() data must be serializable as JSON'],
   ])('refuses %s before opening a session', async (_case, args, message) => {
-    await expect(
-      run(callWith((ctx) => Reflect.apply(ctx.publish.bind(ctx), undefined, args))),
-    ).rejects.toThrow(new TypeError(message));
+    await expect(run(callWith((ctx) => Reflect.apply(ctx.publish.bind(ctx), undefined, args)))).rejects.toThrow(
+      new TypeError(message),
+    );
     expect(callbackCalls).toHaveLength(0);
     expect(fetchMock()).not.toHaveBeenCalled();
   });
@@ -815,9 +791,7 @@ describe('ctx.publish()', () => {
   });
 
   it('treats a closed session callback as opened and uses the runtime outcome', async () => {
-    fetchMock().mockResolvedValueOnce(
-      Response.json({ error: 'closed', code: 'callback_closed' }, { status: 409 }),
-    );
+    fetchMock().mockResolvedValueOnce(Response.json({ error: 'closed', code: 'callback_closed' }, { status: 409 }));
 
     await run((_input, ctx) => ctx.publish('progress'));
 
@@ -851,11 +825,7 @@ describe('ctx.publish()', () => {
   });
 
   it.each([
-    [
-      401,
-      { error: 'invalid durable session' },
-      'Volcano refused the message (401): invalid durable session',
-    ],
+    [401, { error: 'invalid durable session' }, 'Volcano refused the message (401): invalid durable session'],
     [
       409,
       { error: 'execution is not running', code: 'execution_not_running' },
@@ -932,9 +902,7 @@ describe('ctx.publish()', () => {
   });
 
   it('fails every later publish in the context once the session failed to open', async () => {
-    fetchMock().mockResolvedValueOnce(
-      Response.json({ error: 'malformed request' }, { status: 400 }),
-    );
+    fetchMock().mockResolvedValueOnce(Response.json({ error: 'malformed request' }, { status: 400 }));
 
     await run(async (_input, ctx) => {
       await expect(ctx.publish('first')).rejects.toThrow(

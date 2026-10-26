@@ -140,10 +140,7 @@ const { data } = await volcano.from('posts').select('*').is('deleted_at', null);
 
 ```javascript
 // Posts with specific statuses
-const { data } = await volcano
-  .from('posts')
-  .select('*')
-  .in('status', ['draft', 'published', 'archived']);
+const { data } = await volcano.from('posts').select('*').in('status', ['draft', 'published', 'archived']);
 ```
 
 ### Combining Filters
@@ -504,11 +501,7 @@ const { data } = await volcano.from('posts').select('*');
 Don't fetch thousands of rows at once:
 
 ```javascript
-const { data } = await volcano
-  .from('posts')
-  .select('*')
-  .order('created_at', { ascending: false })
-  .limit(50); // Reasonable page size
+const { data } = await volcano.from('posts').select('*').order('created_at', { ascending: false }).limit(50); // Reasonable page size
 ```
 
 ### Use Filters to Limit Data
@@ -517,11 +510,7 @@ Let RLS and filters reduce the data server-side:
 
 ```javascript
 // Good - filters on server
-const { data } = await volcano
-  .from('posts')
-  .select('*')
-  .eq('status', 'published')
-  .eq('category', category);
+const { data } = await volcano.from('posts').select('*').eq('status', 'published').eq('category', category);
 
 // Avoid - fetches everything then filters client-side
 const { data } = await volcano.from('posts').select('*');

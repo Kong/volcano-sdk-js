@@ -8,10 +8,7 @@ interface DurableConfigEngine {
   createWaitStrategy(config: Record<string, unknown>): unknown;
 }
 
-export function stepConfig(
-  options: Record<string, unknown>,
-  engine: DurableConfigEngine,
-): Record<string, unknown> {
+export function stepConfig(options: Record<string, unknown>, engine: DurableConfigEngine): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   if (Boolean(options['atMostOnce'])) {
     config['semantics'] = engine.StepSemantics.AtMostOncePerRetry;

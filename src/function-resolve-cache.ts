@@ -110,11 +110,7 @@ function cacheExpiry(value: unknown): number | null {
   return typeof value.expiresAt === 'number' ? value.expiresAt : null;
 }
 
-export function pruneFunctionResolveCache(
-  state: FunctionResolveState,
-  nowMs = Date.now(),
-  force = false,
-): void {
+export function pruneFunctionResolveCache(state: FunctionResolveState, nowMs = Date.now(), force = false): void {
   if (!force && nowMs - state.lastPruneAtMs < PRUNE_INTERVAL_MS) {
     return;
   }

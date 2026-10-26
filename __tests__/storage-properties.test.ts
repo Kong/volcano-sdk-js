@@ -4,9 +4,7 @@ import { assert, asyncProperty, constantFrom, property, string, uint8Array } fro
 import { VolcanoClient } from '../src/index.ts';
 import { propertyOptions } from './support/property-options.ts';
 
-const payload = Buffer.from(JSON.stringify({ project_id: 'property-project' })).toString(
-  'base64url',
-);
+const payload = Buffer.from(JSON.stringify({ project_id: 'property-project' })).toString('base64url');
 const options = { apiUrl: 'https://api.example.test', anonKey: `ak-header.${payload}.signature` };
 
 afterEach(() => {

@@ -27,12 +27,8 @@ import type { Exact as Equal } from '../fixtures/public-api-compatibility.d.ts';
 type Assert<T extends true> = T;
 
 type SetSessionParameter = Parameters<Auth['setSession']>[0];
-type _CompleteSessionCanBeAdopted = Assert<
-  CompleteSession extends SetSessionParameter ? true : false
->;
-type _SetSessionRejectsNullRefreshToken = Assert<
-  null extends SetSessionParameter['refresh_token'] ? false : true
->;
+type _CompleteSessionCanBeAdopted = Assert<CompleteSession extends SetSessionParameter ? true : false>;
+type _SetSessionRejectsNullRefreshToken = Assert<null extends SetSessionParameter['refresh_token'] ? false : true>;
 type _SetSessionRejectsNullUser = Assert<null extends SetSessionParameter['user'] ? false : true>;
 
 declare const sourceAuth: Auth;
@@ -57,16 +53,12 @@ async function adoptCurrentSession(): Promise<unknown> {
 
 type SignupBody = OpenAPIOperations['authSignup']['requestBody']['content']['application/json'];
 type SignupMetadata = NonNullable<SignupBody['user_metadata']>;
-type _SignupMetadataAcceptsProperties = Assert<
-  { display_name: string } extends SignupMetadata ? true : false
->;
+type _SignupMetadataAcceptsProperties = Assert<{ display_name: string } extends SignupMetadata ? true : false>;
 
 type AuthUser = OpenAPIComponents['schemas']['AuthUser'];
 type UserMetadata = NonNullable<AuthUser['user_metadata']>;
 type AppMetadata = NonNullable<AuthUser['app_metadata']>;
-type _UserMetadataAcceptsProperties = Assert<
-  { display_name: string } extends UserMetadata ? true : false
->;
+type _UserMetadataAcceptsProperties = Assert<{ display_name: string } extends UserMetadata ? true : false>;
 type _AppMetadataAcceptsProperties = Assert<{ role: string } extends AppMetadata ? true : false>;
 type _AuthUserBanCanBeNull = Assert<null extends AuthUser['banned_until'] ? true : false>;
 
@@ -75,30 +67,21 @@ type _ListProjectsAcceptsMetadataExpansions = Assert<
   Equal<NonNullable<ListProjectsQuery['include']>[number], 'git_connection' | 'health'>
 >;
 type Project = OpenAPIComponents['schemas']['Project'];
-type _ProjectPlanUsesPublicNames = Assert<
-  Equal<NonNullable<Project['plan']>, 'HOBBY' | 'SUPERAGENT'>
->;
+type _ProjectPlanUsesPublicNames = Assert<Equal<NonNullable<Project['plan']>, 'HOBBY' | 'SUPERAGENT'>>;
 type _ProjectGitConnectionUsesSummary = Assert<
-  Equal<
-    NonNullable<Project['git_connection']>,
-    OpenAPIComponents['schemas']['ProjectGitConnectionSummary']
-  >
+  Equal<NonNullable<Project['git_connection']>, OpenAPIComponents['schemas']['ProjectGitConnectionSummary']>
 >;
 type _ProjectHealthUsesSummary = Assert<
   Equal<NonNullable<Project['health']>, OpenAPIComponents['schemas']['ProjectHealthSummary']>
 >;
 
 type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
-type _DefaultedRequestFieldsStayOptional = Assert<
-  { name: string } extends CreateProjectRequest ? true : false
->;
+type _DefaultedRequestFieldsStayOptional = Assert<{ name: string } extends CreateProjectRequest ? true : false>;
 
 type StorageBucket = OpenAPIComponents['schemas']['StorageBucket'];
 type StorageObject = OpenAPIComponents['schemas']['StorageObject'];
 type _StorageLimitsCanBeNull = Assert<null extends StorageBucket['file_size_limit'] ? true : false>;
-type _StorageMimeTypesCanBeNull = Assert<
-  null extends StorageBucket['allowed_mime_types'] ? true : false
->;
+type _StorageMimeTypesCanBeNull = Assert<null extends StorageBucket['allowed_mime_types'] ? true : false>;
 type _StorageOwnerCanBeNull = Assert<null extends StorageObject['owner_id'] ? true : false>;
 
 type UploadSessionCreated = NonNullable<CreateUploadSessionResponse['data']>;
@@ -108,14 +91,9 @@ interface UploadSessionCreatedShape {
   total_parts: number;
   expires_at: string;
 }
-type _UploadSessionCreatedMatchesHosting = Assert<
-  Equal<UploadSessionCreated, UploadSessionCreatedShape>
->;
+type _UploadSessionCreatedMatchesHosting = Assert<Equal<UploadSessionCreated, UploadSessionCreatedShape>>;
 type _UploadSessionCreatedKeysMatchOpenAPI = Assert<
-  Equal<
-    keyof UploadSessionCreated,
-    keyof OpenAPIComponents['schemas']['CreateUploadSessionResponse']
-  >
+  Equal<keyof UploadSessionCreated, keyof OpenAPIComponents['schemas']['CreateUploadSessionResponse']>
 >;
 
 type UploadSessionStatus = NonNullable<UploadSessionStatusResponse['data']>;
@@ -133,22 +111,14 @@ interface UploadSessionStatusShape {
   expires_at: string;
   created_at: string;
 }
-type _UploadSessionStatusMatchesHosting = Assert<
-  Equal<UploadSessionStatus, UploadSessionStatusShape>
->;
+type _UploadSessionStatusMatchesHosting = Assert<Equal<UploadSessionStatus, UploadSessionStatusShape>>;
 
-type InvocationPayload = NonNullable<
-  OpenAPIComponents['schemas']['FunctionInvocationRequest']['payload']
->;
-type _InvocationPayloadAcceptsProperties = Assert<
-  { action: string } extends InvocationPayload ? true : false
->;
+type InvocationPayload = NonNullable<OpenAPIComponents['schemas']['FunctionInvocationRequest']['payload']>;
+type _InvocationPayloadAcceptsProperties = Assert<{ action: string } extends InvocationPayload ? true : false>;
 
-type OAuthRequest =
-  OpenAPIOperations['callOAuthProviderAPI']['requestBody']['content']['application/json'];
+type OAuthRequest = OpenAPIOperations['callOAuthProviderAPI']['requestBody']['content']['application/json'];
 type OAuthBody = NonNullable<OAuthRequest['body']>;
-type OAuthResponse =
-  OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
+type OAuthResponse = OpenAPIOperations['callOAuthProviderAPI']['responses'][200]['content']['application/json'];
 type _OAuthBodyAcceptsProperties = Assert<{ visibility: string } extends OAuthBody ? true : false>;
 interface OAuthResponseShape {
   provider: 'google' | 'github' | 'microsoft' | 'apple';
@@ -173,9 +143,7 @@ interface DurableExecutionShape {
   region: string;
   created_at: string;
 }
-type _DurableStartHandleMatchesHosting = Assert<
-  DurableExecutionShape extends DurableExecution ? true : false
->;
+type _DurableStartHandleMatchesHosting = Assert<DurableExecutionShape extends DurableExecution ? true : false>;
 type _DurableExecutionComesOffTheWire = Assert<
   Equal<DurableExecution, OpenAPIComponents['schemas']['DurableExecution']>
 >;
@@ -208,9 +176,7 @@ async function followDurableExecution(): Promise<unknown> {
   return { result, executions, more, status: stopped.status };
 }
 
-type _DurableMessageComesOffTheWire = Assert<
-  Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>
->;
+type _DurableMessageComesOffTheWire = Assert<Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>>;
 
 declare const realtime: VolcanoRealtime;
 
@@ -226,10 +192,7 @@ async function exchangeDurableMessages(): Promise<unknown> {
   );
   const delivered: boolean = sent.data?.status === 'delivered';
 
-  const listed = await durable.messages.list(
-    { ...target, projectId: 'proj-1' },
-    { direction: 'out', after: 3 },
-  );
+  const listed = await durable.messages.list({ ...target, projectId: 'proj-1' }, { direction: 'out', after: 3 });
   const seqs: number[] = listed.data?.data.map((message) => message.seq) ?? [];
 
   const { data: subscription } = await durable.messages.subscribe(
@@ -256,9 +219,7 @@ type _LogSearchEventIsUsable = Assert<LogSearchEventShape extends LogSearchEvent
 type LogSearchEventStructuredShape = Omit<LogSearchEventShape, 'body'> & {
   body: { attempt: number };
 };
-type _LogSearchEventBodyKeepsJsonTypes = Assert<
-  LogSearchEventStructuredShape extends LogSearchEvent ? true : false
->;
+type _LogSearchEventBodyKeepsJsonTypes = Assert<LogSearchEventStructuredShape extends LogSearchEvent ? true : false>;
 
 // Hosting enforces which PEM fields each mode allows with `not` rules that
 // openapi-typescript does not translate, so the generated shape stays flat.
@@ -269,10 +230,7 @@ interface CustomDomainTLSShape {
   certificate_chain_pem?: string;
 }
 type _CustomDomainTLSMatchesHosting = Assert<
-  Equal<
-    OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest']['tls'],
-    CustomDomainTLSShape
-  >
+  Equal<OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest']['tls'], CustomDomainTLSShape>
 >;
 // The spec gives `mode` a `default: byoc` but also lists it as required, and
 // generation runs with `--default-non-nullable false`. The default must not
@@ -294,8 +252,7 @@ interface CustomDomainVerificationRecordShape {
 interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
-  domain_status:
-    'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
+  domain_status: 'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
   verification_status: 'pending' | 'verified' | 'failed';
   serving_certificate?: 'uploaded' | 'managed';
   failure_reason?: string;
@@ -320,9 +277,7 @@ type _CustomDomainConflictCarriesRequiredRecord = Assert<
   >
 >;
 
-type ProjectConfigCustomDomainTLS = NonNullable<
-  OpenAPIComponents['schemas']['ProjectConfigCustomDomain']['tls']
->;
+type ProjectConfigCustomDomainTLS = NonNullable<OpenAPIComponents['schemas']['ProjectConfigCustomDomain']['tls']>;
 type _ProjectConfigTLSMatchesHosting = Assert<
   Equal<
     ProjectConfigCustomDomainTLS,
@@ -337,10 +292,8 @@ type _ProjectConfigTLSMatchesHosting = Assert<
 >;
 // Hosting reads a manifest TLS block without `mode` as BYOC and no longer
 // declares a discriminator, so the union must resolve on `mode` alone.
-type ManagedManifestTLS =
-  OpenAPIComponents['schemas']['ManagedProjectConfigFrontendCustomDomainTLSConfig'];
-type BYOCManifestTLS =
-  OpenAPIComponents['schemas']['BYOCProjectConfigFrontendCustomDomainTLSConfig'];
+type ManagedManifestTLS = OpenAPIComponents['schemas']['ManagedProjectConfigFrontendCustomDomainTLSConfig'];
+type BYOCManifestTLS = OpenAPIComponents['schemas']['BYOCProjectConfigFrontendCustomDomainTLSConfig'];
 type ManifestTLSMembersAccepting<Block> = ProjectConfigCustomDomainTLS extends infer Member
   ? Member extends unknown
     ? Block extends Member
@@ -349,14 +302,9 @@ type ManifestTLSMembersAccepting<Block> = ProjectConfigCustomDomainTLS extends i
     : never
   : never;
 type _ProjectConfigTLSWithoutModeIsBYOC = Assert<
-  Equal<
-    ManifestTLSMembersAccepting<{ certificate_pem: string; private_key_pem: string }>,
-    BYOCManifestTLS
-  >
+  Equal<ManifestTLSMembersAccepting<{ certificate_pem: string; private_key_pem: string }>, BYOCManifestTLS>
 >;
-type _ProjectConfigEmptyTLSIsBYOC = Assert<
-  Equal<ManifestTLSMembersAccepting<Record<string, never>>, BYOCManifestTLS>
->;
+type _ProjectConfigEmptyTLSIsBYOC = Assert<Equal<ManifestTLSMembersAccepting<Record<string, never>>, BYOCManifestTLS>>;
 type _ProjectConfigManagedTLSStaysManaged = Assert<
   Equal<ManifestTLSMembersAccepting<{ mode: 'managed' }>, ManagedManifestTLS>
 >;
@@ -432,11 +380,7 @@ async function uploadResponseEnvelopes(): Promise<unknown> {
   const completed = await bucket.completeUploadSession('file.bin', 'session');
   const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
   const uploaded = await bucket.upload('file.bin', new Blob(['bytes']));
-  const names: (string | undefined)[] = [
-    completed.data?.object.name,
-    resumed.data?.object.name,
-    uploaded.data?.name,
-  ];
+  const names: (string | undefined)[] = [completed.data?.object.name, resumed.data?.object.name, uploaded.data?.name];
   return names;
 }
 
@@ -527,9 +471,7 @@ const primaryKey: string | number | undefined = postgresChange.id;
 const deliveryMode: 'lightweight' | undefined = postgresChange.mode;
 export const changeFields = [primaryKey, deliveryMode];
 
-async function functionErrorMetadata(
-  functions: import('../../src/index.ts').Functions,
-): Promise<unknown> {
+async function functionErrorMetadata(functions: import('../../src/index.ts').Functions): Promise<unknown> {
   const { error } = await functions.invoke('echo', { value: 'contract' });
   const status: number | null | undefined = error?.status;
   const code: string | undefined = error?.code;

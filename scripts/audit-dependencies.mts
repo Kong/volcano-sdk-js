@@ -15,10 +15,7 @@ function advisoryList(report: Record<string, unknown>): Advisory[] | undefined {
 
 // pnpm's auditConfig.ignoreGhsas cannot replace approvals: it drops an advisory
 // from the list but keeps it in these counts.
-function onlyApprovedVulnerabilities(
-  report: Record<string, unknown>,
-  approved: readonly Advisory[],
-): boolean {
+function onlyApprovedVulnerabilities(report: Record<string, unknown>, approved: readonly Advisory[]): boolean {
   const metadata = report['metadata'];
   if (!isRecord(metadata)) {
     return false;
@@ -28,9 +25,7 @@ function onlyApprovedVulnerabilities(
   return (
     isRecord(counts) &&
     severities.every(
-      (severity) =>
-        counts[severity] ===
-        approved.filter((advisory) => advisory['severity'] === severity).length,
+      (severity) => counts[severity] === approved.filter((advisory) => advisory['severity'] === severity).length,
     )
   );
 }
@@ -75,9 +70,7 @@ async function approvedScopes(): Promise<Set<string>> {
 // A scope names one advisory at one version, so the same advisory reached
 // through another version of the package is still reported.
 function advisoryScope(advisory: Advisory): string | undefined {
-  const versions = new Set(
-    array(advisory['findings']).map((finding) => stringValue(record(finding)['version'])),
-  );
+  const versions = new Set(array(advisory['findings']).map((finding) => stringValue(record(finding)['version'])));
   const [version] = versions;
   if (versions.size !== 1 || version === undefined) {
     return undefined;
@@ -104,11 +97,7 @@ try {
   const unused = await approvedScopes();
   const approved = approvedAdvisories(advisories ?? [], unused);
   // pnpm omits informational advisories from its list but retains their count.
-  if (
-    !isRecord(report) ||
-    advisories?.length !== approved.length ||
-    !onlyApprovedVulnerabilities(report, approved)
-  ) {
+  if (!isRecord(report) || advisories?.length !== approved.length || !onlyApprovedVulnerabilities(report, approved)) {
     throw new Error('Dependency audit must report zero advisories at every severity.');
   }
   if (unused.size > 0) {

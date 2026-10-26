@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, test } from '@jest/globals';
-import {
-  isResolutionOutcome,
-  type ResolutionClient,
-  resolveFunctionByHttp,
-} from '../src/function-resolution.ts';
+import { isResolutionOutcome, type ResolutionClient, resolveFunctionByHttp } from '../src/function-resolution.ts';
 import {
   cachedFunctionResolution,
   clearSharedFunctionResolveStateForTests,
@@ -42,9 +38,7 @@ test('accepts only complete, correctly shaped shared cache entries', () => {
 
 test('accepts only complete shared in-flight resolution outcomes', () => {
   expect(isResolutionOutcome({ functionId: 'fn-1', error: null, status: 200 })).toBe(true);
-  expect(isResolutionOutcome({ functionId: null, error: new Error('missing'), status: null })).toBe(
-    true,
-  );
+  expect(isResolutionOutcome({ functionId: null, error: new Error('missing'), status: null })).toBe(true);
   for (const value of [
     null,
     [],
@@ -57,9 +51,7 @@ test('accepts only complete shared in-flight resolution outcomes', () => {
   }
 });
 
-function clientWithResponse(
-  response: Awaited<ReturnType<ResolutionClient['_anonFetch']>>,
-): ResolutionClient {
+function clientWithResponse(response: Awaited<ReturnType<ResolutionClient['_anonFetch']>>): ResolutionClient {
   return {
     _functionResolveState: getSharedFunctionResolveState(),
     _anonFetch: () => Promise.resolve(response),
@@ -70,9 +62,7 @@ describe('function resolution response boundary', () => {
   test('returns a useful error when a failed transport has no error object', async () => {
     const client = clientWithResponse({ ok: false, status: 503, data: null, error: null });
 
-    await expect(
-      resolveFunctionByHttp(client, 'orders', 'token', 'orders-key'),
-    ).resolves.toMatchObject({
+    await expect(resolveFunctionByHttp(client, 'orders', 'token', 'orders-key')).resolves.toMatchObject({
       functionId: null,
       status: 503,
       error: { message: 'Failed to resolve function' },
@@ -83,9 +73,7 @@ describe('function resolution response boundary', () => {
   test('caches a missing function when the transport provides no error object', async () => {
     const client = clientWithResponse({ ok: false, status: 404, data: null, error: null });
 
-    await expect(
-      resolveFunctionByHttp(client, 'orders', 'token', 'orders-key'),
-    ).resolves.toMatchObject({
+    await expect(resolveFunctionByHttp(client, 'orders', 'token', 'orders-key')).resolves.toMatchObject({
       error: { message: 'Failed to resolve function' },
     });
     expect(client._functionResolveState.cache.get('orders-key')).toMatchObject({

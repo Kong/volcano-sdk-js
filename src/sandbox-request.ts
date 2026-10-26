@@ -70,10 +70,7 @@ export async function responseData(request: Promise<{ data: unknown }>): Promise
   return response.data;
 }
 
-export function executionRequestOptions(
-  client: SandboxClient,
-  options: SandboxCommandOptions,
-): TransportOptions {
+export function executionRequestOptions(client: SandboxClient, options: SandboxCommandOptions): TransportOptions {
   const timeoutMs = Math.max(client.timeout, ((options.timeoutSeconds ?? 60) + 120) * 1000);
   return requestOptions(client, options, 'replayable', timeoutMs);
 }

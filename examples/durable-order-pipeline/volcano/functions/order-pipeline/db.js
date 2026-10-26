@@ -19,8 +19,7 @@ function databaseSettings() {
 
 function volcano() {
   if (!client) {
-    const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY, VOLCANO_DATABASE } =
-      databaseSettings();
+    const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY, VOLCANO_DATABASE } = databaseSettings();
     client = new VolcanoClient({
       apiUrl: VOLCANO_API_URL,
       anonKey: VOLCANO_ANON_KEY,
@@ -62,25 +61,17 @@ const db = {
   },
 
   async refund(chargeId) {
-    const [charge] = unwrap(
-      await volcano().update('charges', { status: 'refunded' }).eq('id', chargeId),
-    );
+    const [charge] = unwrap(await volcano().update('charges', { status: 'refunded' }).eq('id', chargeId));
     return charge;
   },
 
   async packItem(orderId, item) {
-    unwrap(
-      await volcano()
-        .update('order_items', { packed_at: new Date().toISOString() })
-        .eq('id', item.id),
-    );
+    unwrap(await volcano().update('order_items', { packed_at: new Date().toISOString() }).eq('id', item.id));
     return { order_id: orderId, item_id: item.id, sku: item.sku };
   },
 
   async reviewStatus(orderId) {
-    const [order] = unwrap(
-      await volcano().from('orders').select('review_status').eq('id', orderId).limit(1),
-    );
+    const [order] = unwrap(await volcano().from('orders').select('review_status').eq('id', orderId).limit(1));
     return order?.review_status ?? 'pending';
   },
 

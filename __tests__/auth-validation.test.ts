@@ -1,20 +1,8 @@
 import { describe, expect, test } from '@jest/globals';
-import {
-  sanitizeProvider,
-  validateCompleteSession,
-  validateOAuthSession,
-} from '../src/auth-validation.ts';
+import { sanitizeProvider, validateCompleteSession, validateOAuthSession } from '../src/auth-validation.ts';
 
 const credentials = { access_token: 'access', refresh_token: 'refresh' };
-const invalidObjects: readonly unknown[] = [
-  null,
-  undefined,
-  false,
-  0,
-  'session',
-  [],
-  () => 'not a session',
-];
+const invalidObjects: readonly unknown[] = [null, undefined, false, 0, 'session', [], () => 'not a session'];
 const invalidStrings: readonly unknown[] = [null, undefined, false, 0, {}, [], '', ' \n\t '];
 
 describe('session validation', () => {
@@ -35,9 +23,7 @@ describe('session validation', () => {
   });
 
   test.each(invalidObjects)('rejects a non-object user: %p', (user) => {
-    expect(validateCompleteSession({ ...credentials, user })).toEqual(
-      new TypeError('Session user must be an object'),
-    );
+    expect(validateCompleteSession({ ...credentials, user })).toEqual(new TypeError('Session user must be an object'));
   });
 
   test.each(invalidStrings)('rejects invalid user IDs: %p', (id) => {
@@ -61,15 +47,11 @@ describe('session validation', () => {
   });
 
   test('reports the first invalid boundary', () => {
-    expect(validateCompleteSession({})).toEqual(
-      new TypeError('Session access_token must be a non-empty string'),
-    );
+    expect(validateCompleteSession({})).toEqual(new TypeError('Session access_token must be a non-empty string'));
     expect(validateCompleteSession({ access_token: 'access' })).toEqual(
       new TypeError('Session refresh_token must be a non-empty string'),
     );
-    expect(validateCompleteSession(credentials)).toEqual(
-      new TypeError('Session user must be an object'),
-    );
+    expect(validateCompleteSession(credentials)).toEqual(new TypeError('Session user must be an object'));
   });
 });
 
@@ -114,19 +96,12 @@ describe('provider validation', () => {
     }).not.toThrow();
   });
 
-  test.each([
-    ...invalidStrings,
-    'Google',
-    'with space',
-    '../google',
-    'oauth?state=secret',
-    'a/b',
-    'café',
-  ])('rejects %p', (provider) => {
-    expect(() => {
-      sanitizeProvider(provider);
-    }).toThrow(
-      'Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens',
-    );
-  });
+  test.each([...invalidStrings, 'Google', 'with space', '../google', 'oauth?state=secret', 'a/b', 'café'])(
+    'rejects %p',
+    (provider) => {
+      expect(() => {
+        sanitizeProvider(provider);
+      }).toThrow('Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens');
+    },
+  );
 });

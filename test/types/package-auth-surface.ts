@@ -20,10 +20,10 @@ type PublishedMember =
   | 'update'
   | 'delete'
   | 'initialize';
-type SameMembers<Client> = [
-  Exclude<keyof Client, PublishedMember>,
-  Exclude<PublishedMember, keyof Client>,
-] extends [never, never]
+type SameMembers<Client> = [Exclude<keyof Client, PublishedMember>, Exclude<PublishedMember, keyof Client>] extends [
+  never,
+  never,
+]
   ? true
   : false;
 type RequireTrue<Value extends true> = Value;

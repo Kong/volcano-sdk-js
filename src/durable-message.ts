@@ -70,10 +70,7 @@ export async function waitForMessage(
  * publishes carry; the runtime checkpoints it, so a replay reuses it. A
  * session that fails to open fails every later publish in the context.
  */
-export function messagePublisher(
-  context: PublishContext,
-  executionRef: string | undefined,
-): Publish {
+export function messagePublisher(context: PublishContext, executionRef: string | undefined): Publish {
   let session: Promise<string> | undefined;
   let published = 0;
   return async (name, data) => {
@@ -179,10 +176,7 @@ function hasNul(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.includes('\0');
   }
-  return (
-    isRecord(value) &&
-    Object.entries(value).some(([key, item]) => key.includes('\0') || hasNul(item))
-  );
+  return isRecord(value) && Object.entries(value).some(([key, item]) => key.includes('\0') || hasNul(item));
 }
 
 function notJson(options?: ErrorOptions): TypeError {
@@ -207,9 +201,7 @@ function readMessage(value: Record<string, unknown>): ReceivedMessage | null {
   return { ...envelope, data: value['data'] ?? null, sender };
 }
 
-function messageEnvelope(
-  value: Record<string, unknown>,
-): Pick<ReceivedMessage, 'id' | 'name' | 'sentAt'> | null {
+function messageEnvelope(value: Record<string, unknown>): Pick<ReceivedMessage, 'id' | 'name' | 'sentAt'> | null {
   const { id, name, sent_at: sentAt } = value;
   if (typeof id !== 'string' || typeof name !== 'string' || typeof sentAt !== 'string') {
     return null;
@@ -226,10 +218,7 @@ function messageSender(value: unknown): MessageSender | null {
 }
 
 function unreadableMessage(options?: ErrorOptions): TypeError {
-  return new TypeError(
-    'Volcano resumed the message wait with a message this SDK cannot read',
-    options,
-  );
+  return new TypeError('Volcano resumed the message wait with a message this SDK cannot read', options);
 }
 
 function sessionToken(result: unknown): string {
@@ -242,10 +231,7 @@ function sessionToken(result: unknown): string {
 }
 
 function unreadableSession(options?: ErrorOptions): TypeError {
-  return new TypeError(
-    'Volcano opened the messages session with a token this SDK cannot read',
-    options,
-  );
+  return new TypeError('Volcano opened the messages session with a token this SDK cannot read', options);
 }
 
 function publishedMessage(body: unknown): PublishedMessage {

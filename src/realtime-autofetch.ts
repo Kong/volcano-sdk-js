@@ -80,17 +80,10 @@ function preferredDatabaseName(realtime: FetchClient, client: unknown): string |
 
 function databaseFetchError(value: unknown): Error {
   const message = property(value, 'message');
-  return new Error(
-    typeof message === 'string' && message !== '' ? message : 'Database fetch failed',
-  );
+  return new Error(typeof message === 'string' && message !== '' ? message : 'Database fetch failed');
 }
 
-function runBatchQuery(
-  realtime: FetchClient,
-  schema: string,
-  table: string,
-  ids: string[],
-): unknown {
+function runBatchQuery(realtime: FetchClient, schema: string, table: string, ids: string[]): unknown {
   const client: unknown = realtime.getVolcanoClient();
   const selected = selectedDatabase(client, preferredDatabaseName(realtime, client));
   const tableName = schema !== '' && schema !== 'public' ? `${schema}.${table}` : table;

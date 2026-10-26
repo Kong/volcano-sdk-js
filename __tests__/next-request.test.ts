@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, test } from '@jest/globals';
-import {
-  getTokenFromRequest,
-  isBrowser,
-  isServer,
-  type MiddlewareRequest,
-} from '../src/next/request.ts';
+import { getTokenFromRequest, isBrowser, isServer, type MiddlewareRequest } from '../src/next/request.ts';
 
 function request(authorization?: string, cookie?: string): MiddlewareRequest {
   const headers = new Headers();
@@ -30,9 +25,7 @@ test('preserves an empty bearer token instead of falling back to a cookie', () =
   // Headers trims trailing whitespace; this typed header implementation keeps it.
   const headers = new Headers();
   headers.get = () => 'Bearer ';
-  expect(
-    getTokenFromRequest({ headers, cookies: { get: () => ({ value: 'cookie-token' }) } }),
-  ).toBe('');
+  expect(getTokenFromRequest({ headers, cookies: { get: () => ({ value: 'cookie-token' }) } })).toBe('');
 });
 
 test.each([undefined, 'Basic credentials', 'bearer lower-case'])(

@@ -18,10 +18,7 @@ test.each(['12345', '0', '-12345'])('replays integer seed %s', (seed) => {
   expect(propertyOptions()).toEqual({ numRuns: 200, seed: Number(seed) });
 });
 
-test.each(['', ' ', 'NaN', '1.5', 'Infinity', '9007199254740992'])(
-  'rejects an invalid seed %s',
-  (seed) => {
-    jest.replaceProperty(process, 'env', { ...process.env, VOLCANO_PROPERTY_SEED: seed });
-    expect(propertyOptions).toThrow('VOLCANO_PROPERTY_SEED must be an integer');
-  },
-);
+test.each(['', ' ', 'NaN', '1.5', 'Infinity', '9007199254740992'])('rejects an invalid seed %s', (seed) => {
+  jest.replaceProperty(process, 'env', { ...process.env, VOLCANO_PROPERTY_SEED: seed });
+  expect(propertyOptions).toThrow('VOLCANO_PROPERTY_SEED must be an integer');
+});

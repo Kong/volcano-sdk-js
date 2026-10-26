@@ -79,9 +79,7 @@ describe('Sandboxes facade', () => {
     const fetchMock = jest
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json(snapshot))
-      .mockResolvedValueOnce(
-        Response.json({ ...snapshot, state: 'suspended', desired_state: 'suspended' }),
-      );
+      .mockResolvedValueOnce(Response.json({ ...snapshot, state: 'suspended', desired_state: 'suspended' }));
     globalThis.fetch = fetchMock;
     const result = await client().sandboxes.create(projectId, {
       preset: 'node22',
@@ -98,15 +96,11 @@ describe('Sandboxes facade', () => {
       preset: 'node22',
       region: 'aws-us-east-1',
     });
-    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe(
-      requestId,
-    );
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe(requestId);
     const suspended = await handle.suspend();
     expect(suspended.error).toBeNull();
     expect(handle.state).toBe('suspended');
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      `https://api.test.com/sandbox-sessions/${sessionId}/suspend`,
-    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`https://api.test.com/sandbox-sessions/${sessionId}/suspend`);
   });
   test('does not replay a failed command automatically', async () => {
     const fetchMock = jest
@@ -197,9 +191,7 @@ test('rejects invalid selectors before issuing a request', async () => {
 test('lists public presets with only anonymous credentials and cancellation', async () => {
   const fetchMock = jest
     .fn<typeof fetch>()
-    .mockResolvedValue(
-      Response.json({ data: [{ id: 'node22', memory_mb: 1024, regions: ['aws-us-east-1'] }] }),
-    );
+    .mockResolvedValue(Response.json({ data: [{ id: 'node22', memory_mb: 1024, regions: ['aws-us-east-1'] }] }));
   globalThis.fetch = fetchMock;
   const signal = new AbortController().signal;
   const anonymousClient = new VolcanoAuth({
@@ -293,9 +285,7 @@ test('refreshes and resumes sessions and refuses changed identity', async () => 
   fetchMock.mockResolvedValueOnce(Response.json(snapshot));
   const observed5 = await result.data.resume();
   expect(observed5.data).toMatchObject({ state: 'running' });
-  expect(fetchMock.mock.calls[2]?.[0]).toBe(
-    `https://api.test.com/sandbox-sessions/${sessionId}/resume`,
-  );
+  expect(fetchMock.mock.calls[2]?.[0]).toBe(`https://api.test.com/sandbox-sessions/${sessionId}/resume`);
   fetchMock.mockResolvedValueOnce(Response.json({ ...snapshot, id: requestId }));
   const observed6 = await result.data.refresh();
   expect(observed6.error?.message).toBe('Sandbox session identity changed');
@@ -325,17 +315,13 @@ test('rejects invalid IDs before sending credentials', async () => {
 });
 
 test.each(['future-state', null])('rejects invalid session state %j', async (state) => {
-  globalThis.fetch = jest
-    .fn<typeof fetch>()
-    .mockResolvedValue(Response.json({ ...snapshot, state }));
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json({ ...snapshot, state }));
   const observed10 = await client().sandboxes.get(sessionId);
   expect(observed10.error).toBeInstanceOf(TypeError);
 });
 
 test('disposal of terminated sessions makes no request', async () => {
-  const fetchMock = jest
-    .fn<typeof fetch>()
-    .mockResolvedValue(Response.json({ ...snapshot, state: 'terminated' }));
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json({ ...snapshot, state: 'terminated' }));
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
   if (result.data === null) {
@@ -352,10 +338,7 @@ test('disposal propagates failures and large file writes fail locally', async ()
   if (result.data === null) {
     throw result.error;
   }
-  const observed11 = await result.data.files.write(
-    '/workspace/large',
-    new Uint8Array(8 * 1024 * 1024 + 1),
-  );
+  const observed11 = await result.data.files.write('/workspace/large', new Uint8Array(8 * 1024 * 1024 + 1));
   expect(observed11.error).toBeInstanceOf(RangeError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   fetchMock.mockResolvedValue(Response.json({ error: 'unavailable' }, { status: 503 }));
@@ -374,20 +357,13 @@ test('rejects malformed command flags', async () => {
 });
 
 test('normalizes non-Error failures without exposing arbitrary values', async () => {
-  const observed13 = await sandboxResult(
-    jest.fn<() => Promise<void>>().mockRejectedValue('secret'),
-  );
+  const observed13 = await sandboxResult(jest.fn<() => Promise<void>>().mockRejectedValue('secret'));
   expect(observed13).toEqual({ data: null, error: new Error('Sandbox request failed') });
 });
 test('default request options contain no mutation headers', () => {
   const generated = jest
     .fn<
-      (
-        mode: 'anon' | 'session',
-        headers?: Record<string, string>,
-        responseType?: 'blob',
-        timeoutMs?: number,
-      ) => object
+      (mode: 'anon' | 'session', headers?: Record<string, string>, responseType?: 'blob', timeoutMs?: number) => object
     >()
     .mockReturnValue({});
   requestOptions({
@@ -400,12 +376,7 @@ test('default request options contain no mutation headers', () => {
 test('replayable request options reject a non-UUID idempotency key', () => {
   const generated = jest
     .fn<
-      (
-        mode: 'anon' | 'session',
-        headers?: Record<string, string>,
-        responseType?: 'blob',
-        timeoutMs?: number,
-      ) => object
+      (mode: 'anon' | 'session', headers?: Record<string, string>, responseType?: 'blob', timeoutMs?: number) => object
     >()
     .mockReturnValue({});
   expect(() =>

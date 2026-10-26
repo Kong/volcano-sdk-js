@@ -63,11 +63,8 @@ test.each([3, true, 'yes'])('explains invalid top-level retry option %p', (retry
   );
 });
 
-test.each(['initialDelay', 'maxDelay'] as const)(
-  'names the invalid %s duration before calling the engine',
-  (field) => {
-    expect(() => toRetryStrategy({ [field]: '400ms' }, unexpectedEngine)).toThrow(
-      `${field} must be a duration in whole seconds`,
-    );
-  },
-);
+test.each(['initialDelay', 'maxDelay'] as const)('names the invalid %s duration before calling the engine', (field) => {
+  expect(() => toRetryStrategy({ [field]: '400ms' }, unexpectedEngine)).toThrow(
+    `${field} must be a duration in whole seconds`,
+  );
+});

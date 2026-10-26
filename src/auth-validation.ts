@@ -46,12 +46,7 @@ function isUserStatus(value: unknown): value is User['status'] {
 }
 
 function isJsonScalar(value: unknown): value is string | number | boolean | null {
-  return (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'boolean' ||
-    Number.isFinite(value)
-  );
+  return value === null || typeof value === 'string' || typeof value === 'boolean' || Number.isFinite(value);
 }
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
@@ -209,8 +204,6 @@ export function assertCompleteSession(session: unknown): asserts session is Comp
 
 export function sanitizeProvider(provider: unknown): void {
   if (typeof provider !== 'string' || !/^[a-z0-9-]+$/.test(provider)) {
-    throw new Error(
-      'Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens',
-    );
+    throw new Error('Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens');
   }
 }

@@ -74,10 +74,7 @@ describe(`packaging keeps ${RUNTIME} out of an SDK install`, () => {
         try {
           const runtimeDir = join(fixture, 'node_modules', '@aws', 'durable-execution-sdk-js');
           mkdirSync(runtimeDir, { recursive: true });
-          writeFileSync(
-            join(runtimeDir, 'package.json'),
-            JSON.stringify({ name: RUNTIME, main: 'index.cjs' }),
-          );
+          writeFileSync(join(runtimeDir, 'package.json'), JSON.stringify({ name: RUNTIME, main: 'index.cjs' }));
           writeFileSync(
             join(runtimeDir, 'index.cjs'),
             `module.exports = {

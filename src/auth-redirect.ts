@@ -54,9 +54,7 @@ function rejectHandoff(host: RedirectHost, params: URLSearchParams): false {
   return false;
 }
 
-function currentHandoff(
-  host: RedirectHost,
-): { params: URLSearchParams; accessToken: string } | null {
+function currentHandoff(host: RedirectHost): { params: URLSearchParams; accessToken: string } | null {
   if (host._urlSessionConsumed || !host._hasSessionInUrl()) {
     return null;
   }
@@ -88,11 +86,7 @@ export function consumeSessionFromUrl(host: RedirectHost): boolean {
   return true;
 }
 
-export function replaceSessionFromUrl(
-  host: RedirectHost,
-  accessToken: string,
-  refreshToken: string | null,
-): void {
+export function replaceSessionFromUrl(host: RedirectHost, accessToken: string, refreshToken: string | null): void {
   host.accessToken = accessToken;
   host.refreshToken = refreshToken === '' ? null : refreshToken;
   host.currentUser = null;
@@ -154,9 +148,7 @@ function providerFailure(callback: OAuthCallback): Error | null {
     return null;
   }
   return new Error(
-    callback.description === ''
-      ? `OAuth provider rejected sign-in: ${callback.providerError}`
-      : callback.description,
+    callback.description === '' ? `OAuth provider rejected sign-in: ${callback.providerError}` : callback.description,
   );
 }
 
@@ -213,8 +205,7 @@ export async function completeOAuthExchange(host: OAuthRedirectHost): Promise<vo
   try {
     await pending;
   } catch (error) {
-    host._oauthExchangeError =
-      error instanceof Error ? error : new Error('OAuth code exchange failed');
+    host._oauthExchangeError = error instanceof Error ? error : new Error('OAuth code exchange failed');
   } finally {
     if (host._oauthExchangePromise === pending) {
       host._oauthExchangePromise = null;

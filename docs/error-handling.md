@@ -300,9 +300,7 @@ if (error) {
 ### Download Errors
 
 ```javascript
-const { data: blob, error } = await volcano.storage
-  .from('uploads')
-  .download('documents/report.pdf');
+const { data: blob, error } = await volcano.storage.from('uploads').download('documents/report.pdf');
 
 if (error) {
   switch (true) {

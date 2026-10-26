@@ -19,29 +19,10 @@ export interface DurableClient {
   readonly accessToken: string | null;
   readonly _oauthExchangeError: Error | null;
   readonly _transport: {
-    startDurableExecutionFromApplication(
-      name: string,
-      input: unknown,
-      options: unknown,
-    ): Promise<unknown>;
-    getDurableExecution(
-      projectId: string,
-      name: string,
-      executionId: string,
-      options: unknown,
-    ): Promise<unknown>;
-    listDurableExecutions(
-      projectId: string,
-      name: string,
-      params: DurableOptions,
-      options: unknown,
-    ): Promise<unknown>;
-    stopDurableExecution(
-      projectId: string,
-      name: string,
-      executionId: string,
-      options: unknown,
-    ): Promise<unknown>;
+    startDurableExecutionFromApplication(name: string, input: unknown, options: unknown): Promise<unknown>;
+    getDurableExecution(projectId: string, name: string, executionId: string, options: unknown): Promise<unknown>;
+    listDurableExecutions(projectId: string, name: string, params: DurableOptions, options: unknown): Promise<unknown>;
+    stopDurableExecution(projectId: string, name: string, executionId: string, options: unknown): Promise<unknown>;
   };
   _completeOAuthExchange(): Promise<unknown>;
   _captureAuthContext(): { accessToken: string | null };
@@ -75,11 +56,7 @@ export class DurableFacade {
     );
   }
 
-  async get(
-    projectId: unknown,
-    functionName: unknown,
-    executionId: unknown,
-  ): Promise<DurableResult<DurableExecution>> {
+  async get(projectId: unknown, functionName: unknown, executionId: unknown): Promise<DurableResult<DurableExecution>> {
     const path = durablePathSegments({ projectId, functionName, executionId });
     if (path.error !== undefined) {
       return failure(path.error);
@@ -162,9 +139,7 @@ function validatedExecutionName(value: unknown): { name: string | null; error: E
   if (value.trim().length > MAX_EXECUTION_NAME_LENGTH) {
     return {
       name: null,
-      error: new Error(
-        `executionName must be at most ${String(MAX_EXECUTION_NAME_LENGTH)} characters`,
-      ),
+      error: new Error(`executionName must be at most ${String(MAX_EXECUTION_NAME_LENGTH)} characters`),
     };
   }
   return { name: value.trim(), error: null };
@@ -234,10 +209,7 @@ function responseResult<T>(
 
 function responseHasStatus(response: unknown): response is { status: number; data?: unknown } {
   return (
-    typeof response === 'object' &&
-    response !== null &&
-    'status' in response &&
-    typeof response.status === 'number'
+    typeof response === 'object' && response !== null && 'status' in response && typeof response.status === 'number'
   );
 }
 
