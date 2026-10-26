@@ -435,6 +435,9 @@ with the status and code in its message:
 
 ## `ctx.waitForCallback(name, submitter, options?)`
 
+> **Coming soon.** `ctx.waitForCallback` is not in a published SDK release yet,
+> and Volcano does not serve the `/durable-callbacks` requests below yet.
+
 Hands a token to another system and suspends until that system answers with
 it. Use it when the work happens somewhere you do not run code — a payment
 provider, a job queue, a partner's API — and that system can call back once it
@@ -512,8 +515,7 @@ it throws: the call throws the runtime's
 The token comes from `VOLCANO_PLATFORM_API_URL`, like an approval, and the
 request is retried for up to 30 seconds while Volcano is not ready for it. An
 invalid name, submitter, or option throws a `TypeError` before anything is
-registered. See [Durable callbacks](/platform/functions/durable-callbacks) for
-every request, response, and limit.
+registered.
 
 ## `ctx.publish(name, data?)`
 
