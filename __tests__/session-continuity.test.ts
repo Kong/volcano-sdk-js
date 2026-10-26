@@ -35,7 +35,7 @@ function client() {
   });
 }
 
-describe('server session continuity', () => {
+function rejectsUnprovenSessionRefreshes(): void {
   it.each([
     ['user-a', false],
     ['user-b', false],
@@ -68,7 +68,9 @@ describe('server session continuity', () => {
     expect(outcome.error?.message).toContain('session identifier');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+}
 
+function renewsAccessForRevocation(): void {
   it.each([false, true])('renews expired access for revocation, replacement: %s', async (replace) => {
     const current = client();
     fetchMock
@@ -110,7 +112,9 @@ describe('server session continuity', () => {
     expect(await resultError(current.auth.signOut())).toBeNull();
     expect(current.accessToken).toBeNull();
   });
+}
 
+function recoversExpiredAccessDuringSignOut(): void {
   it('never revokes another session while recovering expired access', async () => {
     const current = client();
     fetchMock
@@ -152,7 +156,9 @@ describe('server session continuity', () => {
     ]);
     expect(current.accessToken).toBeNull();
   });
+}
 
+function fallsBackForMalformedSessionClaims(): void {
   it('falls back to refresh-token logout for a malformed session claim', async () => {
     const current = new VolcanoAuth({
       anonKey: 'anon',
@@ -164,6 +170,9 @@ describe('server session continuity', () => {
     expect(await resultError(current.auth.signOut())).toBeNull();
     expect(fetchCall(0)[0]).toBe('https://api.test/auth/logout');
   });
+}
+
+function sharesTheOldRefreshAcrossReplacement(): void {
   it('shares the old refresh while a replacement session also refreshes', async () => {
     const current = client();
     const oldRequested = signal();
@@ -201,6 +210,14 @@ describe('server session continuity', () => {
     expect(JSON.parse(fetchBody(2))).toEqual({ refresh_token: 'rotated' });
     expect(current.currentUser?.id).toBe('user-b');
   });
+}
+
+describe('server session continuity', () => {
+  rejectsUnprovenSessionRefreshes();
+  renewsAccessForRevocation();
+  recoversExpiredAccessDuringSignOut();
+  fallsBackForMalformedSessionClaims();
+  sharesTheOldRefreshAcrossReplacement();
 });
 
 it.each([false, true])('does not trust a supplied profile without a session ID, enriched: %s', async (enriched) => {

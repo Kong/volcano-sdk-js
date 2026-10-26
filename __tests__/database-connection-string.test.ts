@@ -12,7 +12,7 @@ function appNameOf(connectionString: string): string | null {
   return new URL(connectionString).searchParams.get('application_name');
 }
 
-describe('databaseConnectionString', () => {
+function selectsTheAccessMode(): void {
   it('returns a full_access connection string when no userId is given', () => {
     const result = databaseConnectionString(BASE_URL);
     expect(appNameOf(result)).toBe('volcano_full_access');
@@ -26,7 +26,8 @@ describe('databaseConnectionString', () => {
   it('leaves the routing username, host, database and sslmode untouched', () => {
     const result = databaseConnectionString(BASE_URL, { userId: 'user-42' });
     const url = new URL(result);
-    expect(url.username).toBe(USERNAME); // routing key is the username, unchanged
+    // routing key is the username, unchanged
+    expect(url.username).toBe(USERNAME);
     expect(url.host).toBe('databases.volcano.dev:5432');
     expect(url.pathname).toBe('/my_app');
     expect(url.searchParams.get('sslmode')).toBe('require');
@@ -57,13 +58,15 @@ describe('databaseConnectionString', () => {
     const noAppName = `postgres://${USERNAME}:p@host:5432/db?sslmode=require`;
     expect(appNameOf(databaseConnectionString(noAppName))).toBe('volcano_full_access');
   });
+}
 
+function preservesTheBaseUrl(): void {
   it('throws when the base connection string is missing or invalid', () => {
-    expect(() => databaseConnectionString('')).toThrow(/required/);
-    expect(() => invokeUntyped(null)).toThrow(/required/);
-    expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
-    expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
-    expect(() => databaseConnectionString('prefix-postgres://host/db')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('')).toThrow(/required/u);
+    expect(() => invokeUntyped(null)).toThrow(/required/u);
+    expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/u);
+    expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/u);
+    expect(() => databaseConnectionString('prefix-postgres://host/db')).toThrow(/not a valid connection URL/u);
   });
 
   it('preserves unrelated query parameters (e.g. connect_timeout, channel_binding)', () => {
@@ -95,7 +98,9 @@ describe('databaseConnectionString', () => {
       'postgres://u:pa?ss#word@host/db?application_name=volcano_full_access',
     );
   });
+}
 
+function parsesTheQuery(): void {
   it('finds the query after user-info when the URI has no database path', () => {
     expect(databaseConnectionString('postgres://u:pa?ss@host')).toBe(
       'postgres://u:pa?ss@host?application_name=volcano_full_access',
@@ -139,10 +144,12 @@ describe('databaseConnectionString', () => {
   });
 
   it('rejects malformed percent encoding', () => {
-    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(/not a valid connection URL/);
-    expect(() => databaseConnectionString('postgresql:///app?options=%a')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(/not a valid connection URL/u);
+    expect(() => databaseConnectionString('postgresql:///app?options=%a')).toThrow(/not a valid connection URL/u);
   });
+}
 
+function appliesTheModeSafely(): void {
   it('round-trips a userId containing characters that must be URL-encoded', () => {
     // Impersonation ids are usually UUIDs, but the proxy takes everything after
     // the first colon verbatim, so a value with reserved chars must survive.
@@ -153,7 +160,7 @@ describe('databaseConnectionString', () => {
     // Spaces must be RFC3986 %20 (not the form-encoding '+'), so URI parsers
     // like libpq that don't treat '+' as a space still decode it correctly.
     expect(result).toContain('%20');
-    expect(result).not.toMatch(/application_name=[^&]*\+/);
+    expect(result).not.toMatch(/application_name=[^&]*\+/u);
   });
 
   it('is idempotent — re-applying the same mode does not stack application_name', () => {
@@ -161,7 +168,7 @@ describe('databaseConnectionString', () => {
     const twice = databaseConnectionString(once, { userId: 'u1' });
     expect(twice).toBe(once);
     // And exactly one application_name is present.
-    const raw = new URL(twice).search.match(/application_name=/g) ?? [];
+    const raw = new URL(twice).search.match(/application_name=/gu) ?? [];
     expect(raw).toHaveLength(1);
   });
 
@@ -175,6 +182,13 @@ describe('databaseConnectionString', () => {
     expect(b.host).toBe(a.host);
     expect(b.pathname).toBe(a.pathname);
   });
+}
+
+describe('databaseConnectionString', () => {
+  selectsTheAccessMode();
+  preservesTheBaseUrl();
+  parsesTheQuery();
+  appliesTheModeSafely();
 });
 
 function invokeUntyped(...args: unknown[]): string {

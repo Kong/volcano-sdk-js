@@ -6,7 +6,18 @@ function fetchFrom(client: unknown, name: string | null = null, schema = 'public
   return runBatchQuery({ getVolcanoClient: () => client, getDatabaseName: () => name }, schema, 'tasks', ['1', '2']);
 }
 
-describe('auto-fetch database boundary', () => {
+function recordingRow(resolved: unknown[], rejected: unknown[]): PendingRow {
+  return {
+    resolve(value) {
+      resolved.push(value);
+    },
+    reject(error) {
+      rejected.push(error);
+    },
+  };
+}
+
+function queriesTheConfiguredDatabase(): void {
   test('uses the configured database and schema-qualified table', () => {
     const requests: unknown[] = [];
     const query = {
@@ -45,7 +56,9 @@ describe('auto-fetch database boundary', () => {
     };
     expect(() => fetchFrom({ ...db, _currentDatabaseName: '', database: () => db })).toThrow('Database name not set');
   });
+}
 
+function requiresQueryCapabilities(): void {
   test('queries clients that directly expose from without a database selector', () => {
     const tables: string[] = [];
     const databaseNames: string[] = [];
@@ -86,7 +99,9 @@ describe('auto-fetch database boundary', () => {
     expect(() => fetchFrom({ from: () => ({}) })).toThrow('Database query does not support select');
     expect(() => fetchFrom({ from: () => ({ select: () => ({}) }) })).toThrow('Database query does not support in');
   });
+}
 
+function settlesFetchedRows(): void {
   test('validates query rows and returns clear database errors', () => {
     expect([...recordsFromQuery({ data: [null, [], { id: 1 }, { id: '2' }] })]).toEqual([
       ['1', { id: 1 }],
@@ -116,28 +131,8 @@ describe('auto-fetch database boundary', () => {
     const resolved: unknown[] = [];
     const rejected: unknown[] = [];
     const pending = new Map<string, PendingRow>([
-      [
-        '1',
-        {
-          resolve(value) {
-            resolved.push(value);
-          },
-          reject(error) {
-            rejected.push(error);
-          },
-        },
-      ],
-      [
-        '2',
-        {
-          resolve(value) {
-            resolved.push(value);
-          },
-          reject(error) {
-            rejected.push(error);
-          },
-        },
-      ],
+      ['1', recordingRow(resolved, rejected)],
+      ['2', recordingRow(resolved, rejected)],
     ]);
     settleBatch(pending, new Map([['1', { id: '1' }]]), 'tasks');
     expect(resolved).toEqual([{ id: '1' }]);
@@ -149,4 +144,10 @@ describe('auto-fetch database boundary', () => {
       new Error('offline'),
     ]);
   });
+}
+
+describe('auto-fetch database boundary', () => {
+  queriesTheConfiguredDatabase();
+  requiresQueryCapabilities();
+  settlesFetchedRows();
 });

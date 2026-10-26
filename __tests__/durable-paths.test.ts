@@ -3,7 +3,7 @@ import { durablePathSegments } from '../src/durable-paths.ts';
 
 const invalidIdentifiers: readonly unknown[] = [null, undefined, false, 0, {}, [], Symbol('identifier'), '', ' \n\t '];
 
-describe('durable route identifiers', () => {
+function rejectsUnusableIdentifiers(): void {
   test.each(invalidIdentifiers)('rejects an unusable identifier: %p', (functionName) => {
     expect(durablePathSegments({ functionName })).toEqual({
       error: new Error('functionName must be a non-empty string'),
@@ -39,7 +39,9 @@ describe('durable route identifiers', () => {
       error: new Error('functionName must be a non-empty string'),
     });
   });
+}
 
+function encodesIdentifiers(): void {
   test.each([
     ['  order-pipeline\t', 'order-pipeline'],
     ['a?b=c#fragment', 'a%3Fb%3Dc%23fragment'],
@@ -81,4 +83,9 @@ describe('durable route identifiers', () => {
   test('returns no path segments when no fields are supplied', () => {
     expect(durablePathSegments({})).toEqual({ segments: {} });
   });
+}
+
+describe('durable route identifiers', () => {
+  rejectsUnusableIdentifiers();
+  encodesIdentifiers();
 });

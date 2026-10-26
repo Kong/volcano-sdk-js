@@ -13,7 +13,7 @@ function createRealtime() {
   return { realtime, client };
 }
 
-describe('retained broadcast subscriptions', () => {
+function pausesAndResumesTheSameSubscription(): void {
   test('pauses and resumes the same subscription without dropping listeners', async () => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('room');
@@ -49,7 +49,9 @@ describe('retained broadcast subscriptions', () => {
     expect(onMessage).toHaveBeenCalledTimes(1);
     expect(client.newSubscription).toHaveBeenCalledTimes(2);
   });
+}
 
+function discardsPausedPublications(): void {
   test('discards server-side publications while paused and delivers new messages on resume', async () => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('room');
@@ -68,7 +70,9 @@ describe('retained broadcast subscriptions', () => {
     expect(onMessage).toHaveBeenCalledTimes(1);
     expect(onMessage.mock.calls[0]?.[0]).toEqual(message);
   });
+}
 
+function disposesPausedChannels(): void {
   const disposeCases: [string, (realtime: VolcanoRealtime) => void][] = [
     [
       'removeChannel',
@@ -105,4 +109,10 @@ describe('retained broadcast subscriptions', () => {
       expect(realtime.channel('room')).not.toBe(channel);
     },
   );
+}
+
+describe('retained broadcast subscriptions', () => {
+  pausesAndResumesTheSameSubscription();
+  discardsPausedPublications();
+  disposesPausedChannels();
 });

@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
+import { memoryStorage } from './support/auth-boundaries-storage.ts';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 
@@ -17,26 +18,11 @@ function jsonResponse(body: unknown): Response {
   return Response.json(body);
 }
 
-test('OAuth callback accepts cookie-backed token responses without a refresh token', async () => {
-  const user = { id: 'cookie-user', email: 'cookie@example.com', status: 'active' } as const;
-  const storage = (initial: Record<string, string>) => {
-    const items = new Map(Object.entries(initial));
-    return {
-      getItem: (key: string): string | null => items.get(key) ?? null,
-      setItem(key: string, value: string): void {
-        items.set(key, value);
-      },
-      removeItem(key: string): void {
-        items.delete(key);
-      },
-    };
-  };
-  const localStorage = storage({ volcano_refresh_token: 'stale-refresh' });
-  const sessionStorage = storage({
+function installCallbackWindow(localStorage: ReturnType<typeof memoryStorage>, replaceState: jest.Mock): void {
+  const sessionStorage = memoryStorage({
     volcano_auth_state: 'oauth-nonce',
     volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
   });
-  const replaceState = jest.fn();
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
@@ -52,6 +38,13 @@ test('OAuth callback accepts cookie-backed token responses without a refresh tok
       sessionStorage,
     },
   });
+}
+
+test('OAuth callback accepts cookie-backed token responses without a refresh token', async () => {
+  const user = { id: 'cookie-user', email: 'cookie@example.com', status: 'active' } as const;
+  const localStorage = memoryStorage({ volcano_refresh_token: 'stale-refresh' });
+  const replaceState = jest.fn();
+  installCallbackWindow(localStorage, replaceState);
 
   const fetchMock = jest
     .spyOn(globalThis, 'fetch')

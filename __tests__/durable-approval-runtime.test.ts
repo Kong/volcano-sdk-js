@@ -4,7 +4,7 @@ import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
 import { settledRun } from './support/settled-run.ts';
 
-// durable-approval.test.ts stands a double in for the runtime. These run the
+// The durable-approval tests stand a double in for the runtime. These run the
 // same calls through the runtime Volcano installs and its local checkpoint
 // service, so replay, callback timeouts, and the execution ARN behave as they
 // do in a deployed function.
@@ -102,7 +102,7 @@ afterEach(() => {
   Reflect.deleteProperty(process.env, 'VOLCANO_PLATFORM_API_URL');
 });
 
-describe('ctx.waitForApproval() on the durable runtime', () => {
+function resolvesTheDecision(): void {
   it('registers once, however often the execution replays', async () => {
     let invocations = 0;
     const runner = runnerFor(async (_input, ctx) => {
@@ -148,7 +148,9 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
     });
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
+}
 
+function reportsTheExecution(): void {
   it('registers the approval under the execution the runtime is running', async () => {
     const runner = runnerFor((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship order 42?' }));
 
@@ -157,7 +159,7 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
     });
 
     const [arn] = executionArns;
-    expect(arn).toEqual(expect.stringMatching(/\S/));
+    expect(arn).toEqual(expect.stringMatching(/\S/u));
     expect(bodyAt(0)).toMatchObject({ execution_ref: arn });
   });
 
@@ -185,4 +187,9 @@ describe('ctx.waitForApproval() on the durable runtime', () => {
     });
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
+}
+
+describe('ctx.waitForApproval() on the durable runtime', () => {
+  resolvesTheDecision();
+  reportsTheExecution();
 });

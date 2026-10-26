@@ -40,7 +40,7 @@ function clientWithTransport(overrides: Partial<StartTransport> = {}, config: Pa
   return { volcano, transport };
 }
 
-describe('durable.start', () => {
+function startsWithTheRightCredential(): void {
   test('starts with the anon key when there is no session, and returns the handle', async () => {
     const { volcano, transport } = clientWithTransport();
 
@@ -79,7 +79,9 @@ describe('durable.start', () => {
       expect.objectContaining({ volcanoAuthorization: 'anon' }),
     );
   });
+}
 
+function validatesNamesBeforeStarting(): void {
   test('sends the execution name as the idempotency header, and no header without one', async () => {
     const { volcano, transport } = clientWithTransport();
 
@@ -114,7 +116,9 @@ describe('durable.start', () => {
     expect(error?.message).toContain('executionName must be a non-empty string');
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
+}
 
+function refusesUnusableExecutionNames(): void {
   test('refuses a non-string execution name from an untyped caller', async () => {
     const { volcano, transport } = clientWithTransport();
     const result: unknown = Reflect.apply(volcano.durable.start.bind(volcano.durable), undefined, [
@@ -143,7 +147,9 @@ describe('durable.start', () => {
     await volcano.durable.start('order-pipeline', {}, { executionName: ` ${'o'.repeat(255)} ` });
     expect(transport.startDurableExecutionFromApplication).toHaveBeenCalledTimes(1);
   });
+}
 
+function reportsStartFailures(): void {
   // A refused start is not an exception: the caller gets the platform's status
   // so it can tell a private function (403) from a plan's concurrency cap (429).
   test('surfaces a platform refusal with its status', async () => {
@@ -172,4 +178,11 @@ describe('durable.start', () => {
     expect(status).toBeNull();
     expect(error?.message).toBe('Failed to start durable execution');
   });
+}
+
+describe('durable.start', () => {
+  startsWithTheRightCredential();
+  validatesNamesBeforeStarting();
+  refusesUnusableExecutionNames();
+  reportsStartFailures();
 });

@@ -10,7 +10,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('realtime channel facade', () => {
+function deliversOnActiveChannels(): void {
   test('starts active and delivers full publications', () => {
     const channel = realtime().channel('room');
     const received: unknown[] = [];
@@ -57,7 +57,9 @@ describe('realtime channel facade', () => {
     channel._deliverPayload(change, { data: change, offset: 2 });
     expect(changes).toEqual([{ data: change, context: { data: change, offset: 2 } }]);
   });
+}
 
+function tracksValidatedPresence(): void {
   test('delivers presence sync only for validated clients and keeps local tracking', async () => {
     const channel = realtime().channel('lobby', { type: 'presence' });
     const states: unknown[] = [];
@@ -77,7 +79,9 @@ describe('realtime channel facade', () => {
     await expect(channel.track({ status: 'online' })).resolves.toBeUndefined();
     expect(channel._myPresenceState).toEqual({ status: 'online' });
   });
+}
 
+function flushesPendingRows(): void {
   test('handles empty fetch batches and rejects pending rows when the database is missing', async () => {
     const channel = realtime().channel('public:tasks', { type: 'postgres' });
     const clear = jest.spyOn(globalThis, 'clearTimeout');
@@ -114,7 +118,9 @@ describe('realtime channel facade', () => {
     expect(channel._pendingFetches.size).toBe(0);
     expect(clear).not.toHaveBeenCalled();
   });
+}
 
+function recoversFromBatchFailures(): void {
   test('cancels a scheduled batch flush when it flushes early', async () => {
     const channel = realtime().channel('public:tasks', { type: 'postgres' });
     const timer = setTimeout(() => {
@@ -160,7 +166,9 @@ describe('realtime channel facade', () => {
     expect(delivered).toEqual([notification]);
     expect(warnings).toEqual([['[Realtime] Failed to fetch record for public.tasks:1:', 'offline']]);
   });
+}
 
+function removesCallbacksAndMalformedPresence(): void {
   test('removes event callbacks even if their registry was cleared', () => {
     const channel = realtime().channel('room');
     const received: unknown[] = [];
@@ -201,4 +209,12 @@ describe('realtime channel facade', () => {
     channel._updatePresenceState({ clients: 'invalid' });
     expect(channel._presenceState).toEqual({});
   });
+}
+
+describe('realtime channel facade', () => {
+  deliversOnActiveChannels();
+  tracksValidatedPresence();
+  flushesPendingRows();
+  recoversFromBatchFailures();
+  removesCallbacksAndMalformedPresence();
 });

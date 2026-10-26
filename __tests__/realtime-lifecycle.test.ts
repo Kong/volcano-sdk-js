@@ -14,7 +14,7 @@ function createRealtime() {
   return { realtime, client };
 }
 
-describe('realtime in-flight work', () => {
+function preservesPresenceIdentity(): void {
   test.each(['presence', 'join'])('preserves full client identity from %s events', async (event) => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('lobby', { type: 'presence' });
@@ -31,7 +31,9 @@ describe('realtime in-flight work', () => {
     expect(onSync).toHaveBeenLastCalledWith({ 'remote-client': info });
     channel.unsubscribe();
   });
+}
 
+function ignoresStaleRowFetches(): void {
   test.each(['resolve', 'reject'])('ignores a stale row fetch that will %s after resubscribing', async (settle) => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('public:items', { type: 'postgres' });
@@ -61,7 +63,9 @@ describe('realtime in-flight work', () => {
     await delivery;
     expect(onInsert).not.toHaveBeenCalled();
   });
+}
 
+function ignoresStalePresenceSnapshots(): void {
   test('ignores a stale presence snapshot after resubscribing', async () => {
     jest.useFakeTimers();
     try {
@@ -85,4 +89,10 @@ describe('realtime in-flight work', () => {
       jest.useRealTimers();
     }
   });
+}
+
+describe('realtime in-flight work', () => {
+  preservesPresenceIdentity();
+  ignoresStaleRowFetches();
+  ignoresStalePresenceSnapshots();
 });

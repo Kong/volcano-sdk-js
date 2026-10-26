@@ -1,9 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { loadWebSocket, webSocketFrom } from '../src/realtime-websocket.ts';
-
-class AlternateWebSocket {
-  readonly name = 'alternate';
-}
+import { AlternateWebSocket } from './support/realtime-alternate-websocket.ts';
 
 class FakeWebSocket {
   static readonly default = AlternateWebSocket;

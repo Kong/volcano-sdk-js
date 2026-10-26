@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoRealtime } from '../src/realtime.ts';
-import { deferredVoid, subscriptionAt, TestSubscription, TestTransportClient } from './realtime-transport-fixtures.ts';
+import { deferredVoid, subscriptionAt, TestTransportClient } from './realtime-transport-fixtures.ts';
+import { TestSubscription } from './support/realtime-test-subscription.ts';
 
 function token(projectId: string, subject: string, expires = 1): string {
   const payload = Buffer.from(JSON.stringify({ project_id: projectId, sub: subject, exp: expires })).toString(
@@ -20,7 +21,7 @@ function createRealtime(accessToken: string) {
   return { realtime, client };
 }
 
-describe('realtime auth identity', () => {
+function comparesRefreshedIdentities(): void {
   test.each([
     ['same user and project', token('project', 'user'), token('project', 'user', 2)],
     ['unchanged opaque credential', 'opaque', 'opaque'],
@@ -58,7 +59,9 @@ describe('realtime auth identity', () => {
     expect(client.newSubscription).toHaveBeenCalledTimes(2);
     expect(onMessage).toHaveBeenCalledTimes(1);
   });
+}
 
+function pausesWhileTheIdentityChanges(): void {
   test('ignores server presence events while a changed identity is paused', async () => {
     const { realtime } = createRealtime('old');
     const channel = realtime.channel('lobby', { type: 'presence' });
@@ -88,7 +91,9 @@ describe('realtime auth identity', () => {
     await expect(pending).rejects.toThrow('Subscription changed');
     expect(channel._subscription).toBeNull();
   });
+}
 
+function resumesAfterServerAcceptance(): void {
   test('waits for server acceptance but delivers recovery before ready resumes', async () => {
     const { realtime, client } = createRealtime('old');
     const channel = realtime.channel('lobby', { type: 'presence' });
@@ -114,4 +119,10 @@ describe('realtime auth identity', () => {
     ready.resolve();
     await pending;
   });
+}
+
+describe('realtime auth identity', () => {
+  comparesRefreshedIdentities();
+  pausesWhileTheIdentityChanges();
+  resumesAfterServerAcceptance();
 });

@@ -206,19 +206,19 @@ test.each([401, 403])('does not confuse concurrent deletion with refresh %s clea
   const target = client();
   const finishRefresh = deferred<Response>();
   const refreshing = signal();
-  fetchMock.mockImplementation(async (url, options) => {
+  fetchMock.mockImplementation((url, options) => {
     if (fetchUrl(url).includes('/functions/resolve')) {
-      return resolved();
+      return Promise.resolve(resolved());
     }
     if (fetchUrl(url).endsWith('/invoke')) {
-      return reply(401, { error: 'denied', code: 'original' });
+      return Promise.resolve(reply(401, { error: 'denied', code: 'original' }));
     }
     if (fetchUrl(url).endsWith('/auth/refresh')) {
       refreshing.resolve();
       return finishRefresh.promise;
     }
     expect(options?.method).toBe('DELETE');
-    return reply(204, {});
+    return Promise.resolve(reply(204, {}));
   });
   const pending = target.functions.invoke('echo');
   await within(refreshing.promise, 'refresh request');

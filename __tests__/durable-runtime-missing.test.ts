@@ -41,9 +41,9 @@ describe('durable() where the durable runtime is not available', () => {
   test('says to deploy as durable, and that durable execution is cloud-only', async () => {
     const error = await missingRuntimeError();
 
-    expect(error.message).toMatch(/deploy this one that way/);
-    expect(error.message).toMatch(/kind: durable/);
-    expect(error.message).toMatch(/cloud capability and does not run locally/);
+    expect(error.message).toMatch(/deploy this one that way/u);
+    expect(error.message).toMatch(/kind: durable/u);
+    expect(error.message).toMatch(/cloud capability and does not run locally/u);
     expect(error.cause).toBeDefined();
   });
 
@@ -53,7 +53,7 @@ describe('durable() where the durable runtime is not available', () => {
     // The platform installs it. A message naming a package would send the
     // reader to add a dependency that their function does not need and that
     // the build would then find already declared.
-    expect(error.message).not.toMatch(/npm install/);
-    expect(error.message).not.toMatch(/@aws\//);
+    expect(error.message).not.toMatch(/npm install/u);
+    expect(error.message).not.toMatch(/@aws\//u);
   });
 });

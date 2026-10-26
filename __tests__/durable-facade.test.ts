@@ -72,7 +72,7 @@ async function mockParallel(branches: EngineBranch[]): Promise<EngineBatch<unkno
 let mockContext: unknown = mockValidContext;
 const mockWrap = jest.fn(
   (handler: EngineHandler) =>
-    async (event: unknown): Promise<unknown> =>
+    (event: unknown): Promise<unknown> =>
       handler(event, mockContext),
 );
 
@@ -86,7 +86,7 @@ jest.mock('../src/durable-engine.ts', () => ({
     }),
 }));
 
-async function contextFor(handler: AuthoringHandler): Promise<unknown> {
+function contextFor(handler: AuthoringHandler): Promise<unknown> {
   return durable(handler)({}, {});
 }
 
@@ -124,71 +124,48 @@ describe('validated engine callback boundary', () => {
   });
 });
 
+type ContextMethod = 'step' | 'child' | 'map' | 'waitUntil' | 'wait';
+
+function invalidCall(method: ContextMethod, args: unknown[]): Promise<unknown> {
+  return contextFor((_input, context) => {
+    const rejected: unknown = Reflect.apply(context[method].bind(context), context, args);
+    return Promise.resolve(rejected);
+  });
+}
+
 describe('invalid operation calls from untyped JavaScript', () => {
   test('refuses a step without a callback', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.step.bind(context), context, ['named']);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.step() requires a function to run');
+    await expect(invalidCall('step', ['named'])).rejects.toThrow('ctx.step() requires a function to run');
   });
 
   test('refuses a child without a callback', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.child.bind(context), context, ['named']);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.child() requires a function to run');
+    await expect(invalidCall('child', ['named'])).rejects.toThrow('ctx.child() requires a function to run');
   });
 
   test('refuses a map without a callback', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.map.bind(context), context, ['named', []]);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.map() requires a function to run');
+    await expect(invalidCall('map', ['named', []])).rejects.toThrow('ctx.map() requires a function to run');
   });
 
   test('refuses non-array map items', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.map.bind(context), context, [
-          'named',
-          'not items',
-          () => Promise.resolve(null),
-        ]);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.map() requires an array of items');
+    await expect(invalidCall('map', ['named', 'not items', () => Promise.resolve(null)])).rejects.toThrow(
+      'ctx.map() requires an array of items',
+    );
   });
 
   test('refuses a condition without a callback', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.waitUntil.bind(context), context, [
-          'named',
-          null,
-          { initialState: 0, until: () => true },
-        ]);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.waitUntil() requires a function to run');
+    await expect(invalidCall('waitUntil', ['named', null, { initialState: 0, until: () => true }])).rejects.toThrow(
+      'ctx.waitUntil() requires a function to run',
+    );
   });
 
   test('refuses a non-string wait name', async () => {
-    await expect(
-      contextFor((_input, context) => {
-        const rejected: unknown = Reflect.apply(context.wait.bind(context), context, [30, '5m']);
-        return Promise.resolve(rejected);
-      }),
-    ).rejects.toThrow('ctx.wait() takes a name and a duration, or a duration alone');
+    await expect(invalidCall('wait', [30, '5m'])).rejects.toThrow(
+      'ctx.wait() takes a name and a duration, or a duration alone',
+    );
   });
 });
 
-describe('typed durable operations', () => {
+function typedStepsAndWaits(): void {
   test('passes input, step scope, and retry semantics through the engine', async () => {
     const result = await durable((input: number, context) =>
       context.step('charge', (scope) => Promise.resolve(input + scope.attempt), {
@@ -216,7 +193,9 @@ describe('typed durable operations', () => {
     expect(mockValidContext.wait).toHaveBeenNthCalledWith(1, 'settle', { seconds: 30 });
     expect(mockValidContext.wait).toHaveBeenNthCalledWith(2, { seconds: 45 });
   });
+}
 
+function typedChildrenAndConditions(): void {
   test('scopes named and unnamed child operations', async () => {
     await expect(
       contextFor(async (_input, context) => {
@@ -257,7 +236,9 @@ describe('typed durable operations', () => {
       expect.objectContaining({ initialState: 2 }),
     );
   });
+}
 
+function typedMapsBranchesAndLogger(): void {
   test('adapts named and unnamed maps', async () => {
     await expect(
       contextFor(async (_input, context) => {
@@ -294,4 +275,10 @@ describe('typed durable operations', () => {
     await durable(() => Promise.resolve(null), { logger: mockLogger })({}, {});
     expect(mockValidContext.configureLogger).toHaveBeenCalledWith({ customLogger: mockLogger });
   });
+}
+
+describe('typed durable operations', () => {
+  typedStepsAndWaits();
+  typedChildrenAndConditions();
+  typedMapsBranchesAndLogger();
 });

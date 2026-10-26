@@ -30,6 +30,85 @@ afterEach(() => {
   }
 });
 
+function encodesQueryDatabaseNames(): void {
+  it('should URL-encode databaseName in SELECT query URL', async () => {
+    volcano.accessToken = TEST_ACCESS_TOKEN;
+    volcano.database('db-with?special&chars');
+
+    fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
+
+    await volcano.from('users').execute();
+
+    const lastUrl = lastRequestUrl();
+    expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
+    expect(lastUrl).not.toContain('db-with?special&chars');
+  });
+
+  it('should URL-encode databaseName in INSERT mutation URL', async () => {
+    volcano.accessToken = TEST_ACCESS_TOKEN;
+    volcano.database('db-with?special&chars');
+
+    fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
+
+    await volcano.insert('users', { name: 'test' }).execute();
+
+    const lastUrl = lastRequestUrl();
+    expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
+  });
+}
+
+function encodesMutationDatabaseNames(): void {
+  it('should URL-encode databaseName in UPDATE mutation URL', async () => {
+    volcano.accessToken = TEST_ACCESS_TOKEN;
+    volcano.database('db-with?special&chars');
+
+    fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
+
+    await volcano.update('users', { name: 'test' }).eq('id', '1').execute();
+
+    const lastUrl = lastRequestUrl();
+    expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
+  });
+
+  it('should URL-encode databaseName in DELETE mutation URL', async () => {
+    volcano.accessToken = TEST_ACCESS_TOKEN;
+    volcano.database('db-with?special&chars');
+
+    fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
+
+    await volcano.delete('users').eq('id', '1').execute();
+
+    const lastUrl = lastRequestUrl();
+    expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
+  });
+}
+
+function restoresStoredSessions(): void {
+  it('should restore session from localStorage', async () => {
+    localStorage.setItem('volcano_access_token', 'stored-token');
+    localStorage.setItem('volcano_refresh_token', 'stored-refresh');
+
+    const newVolcano = new VolcanoAuth(config);
+
+    fetchMock.mockResolvedValueOnce(
+      reply(200, {
+        user: { id: 'restored-user', email: 'fixture@example.com', status: 'active' },
+      }),
+    );
+
+    const result = await newVolcano.initialize();
+
+    expect(result.user?.id).toBe('restored-user');
+  });
+
+  it('should return null user when no stored session', async () => {
+    const result = await volcano.initialize();
+
+    expect(result.user).toBeNull();
+    expect(result.error).toBeNull();
+  });
+}
+
 describe('VolcanoAuth database and initialization', () => {
   describe('Database Methods', () => {
     it('should set database name', () => {
@@ -44,79 +123,11 @@ describe('VolcanoAuth database and initialization', () => {
   });
 
   describe('Database Query - URL Encoding', () => {
-    it('should URL-encode databaseName in SELECT query URL', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with?special&chars');
-
-      fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
-
-      await volcano.from('users').execute();
-
-      const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
-      expect(lastUrl).not.toContain('db-with?special&chars');
-    });
-
-    it('should URL-encode databaseName in INSERT mutation URL', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with?special&chars');
-
-      fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
-
-      await volcano.insert('users', { name: 'test' }).execute();
-
-      const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
-    });
-
-    it('should URL-encode databaseName in UPDATE mutation URL', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with?special&chars');
-
-      fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
-
-      await volcano.update('users', { name: 'test' }).eq('id', '1').execute();
-
-      const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
-    });
-
-    it('should URL-encode databaseName in DELETE mutation URL', async () => {
-      volcano.accessToken = TEST_ACCESS_TOKEN;
-      volcano.database('db-with?special&chars');
-
-      fetchMock.mockResolvedValue(reply(200, { data: [], count: 0 }));
-
-      await volcano.delete('users').eq('id', '1').execute();
-
-      const lastUrl = lastRequestUrl();
-      expect(lastUrl).toContain(encodeURIComponent('db-with?special&chars'));
-    });
+    encodesQueryDatabaseNames();
+    encodesMutationDatabaseNames();
   });
 
   describe('Initialize', () => {
-    it('should restore session from localStorage', async () => {
-      localStorage.setItem('volcano_access_token', 'stored-token');
-      localStorage.setItem('volcano_refresh_token', 'stored-refresh');
-
-      const newVolcano = new VolcanoAuth(config);
-
-      fetchMock.mockResolvedValueOnce(
-        reply(200, {
-          user: { id: 'restored-user', email: 'fixture@example.com', status: 'active' },
-        }),
-      );
-
-      const result = await newVolcano.initialize();
-
-      expect(result.user?.id).toBe('restored-user');
-    });
-
-    it('should return null user when no stored session', async () => {
-      const result = await volcano.initialize();
-
-      expect(result.user).toBeNull();
-      expect(result.error).toBeNull();
-    });
+    restoresStoredSessions();
   });
 });

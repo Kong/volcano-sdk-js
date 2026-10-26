@@ -3,6 +3,48 @@ import { expect, jest, test } from '@jest/globals';
 import type { operations } from '../src/generated/openapi.d.ts';
 import { VolcanoAuth, VolcanoClient } from '../src/index.ts';
 
+const fetchMock = jest.mocked(globalThis.fetch);
+const user = {
+  id: 'user-123',
+  email: 'contract@example.com',
+  status: 'active',
+  created_at: '2026-08-26T12:00:00Z',
+  updated_at: '2026-08-26T12:00:00Z',
+} satisfies operations['authSignin']['responses'][200]['content']['application/json']['user'];
+const session = {
+  access_token: 'access-token',
+  refresh_token: 'refresh-token',
+  expires_in: 3600,
+};
+const signInPayload = {
+  user,
+  ...session,
+  token_type: 'bearer',
+} satisfies operations['authSignin']['responses'][200]['content']['application/json'];
+const row = { slug: 'contract-row', value: 'fixture-value' };
+const selectPayload = {
+  data: [row],
+  count: 1,
+} satisfies operations['queryDatabaseSelect']['responses'][200]['content']['application/json'];
+const uploaded = {
+  id: 'object-123',
+  bucket_id: 'bucket-123',
+  name: 'contract/object.bin',
+  is_public: false,
+  size: 5,
+  mime_type: 'application/octet-stream',
+} satisfies operations['uploadStorageObject']['responses'][201]['content']['application/json'];
+const leasePayload = {
+  expires_at: '2026-08-26T12:00:10Z',
+  fencing_token: 7,
+} satisfies operations['acquireProjectLock']['responses'][201]['content']['application/json'];
+const bytes = new Uint8Array([0, 127, 255]);
+const lockOptions = {
+  ttl: 10,
+  token: '00000000-0000-4000-8000-000000000001',
+  requestId: '10000000-0000-4000-8000-000000000001',
+};
+
 function requestAt(index: number): { url: string; options: RequestInit } {
   const call = jest.mocked(globalThis.fetch).mock.calls[index];
   if (call === undefined || typeof call[0] !== 'string' || call[1] === undefined) {
@@ -23,47 +65,7 @@ function jsonResponse(data: unknown, status: number): Response {
   return Response.json(data, { status });
 }
 
-test('VolcanoClient remains the preferred alias for VolcanoAuth', () => {
-  expect(VolcanoClient).toBe(VolcanoAuth);
-});
-
-test('the six contract operations preserve generated HTTP requests and response envelopes', async () => {
-  const user = {
-    id: 'user-123',
-    email: 'contract@example.com',
-    status: 'active',
-    created_at: '2026-08-26T12:00:00Z',
-    updated_at: '2026-08-26T12:00:00Z',
-  } satisfies operations['authSignin']['responses'][200]['content']['application/json']['user'];
-  const session = {
-    access_token: 'access-token',
-    refresh_token: 'refresh-token',
-    expires_in: 3600,
-  };
-  const signInPayload = {
-    user,
-    ...session,
-    token_type: 'bearer',
-  } satisfies operations['authSignin']['responses'][200]['content']['application/json'];
-  const row = { slug: 'contract-row', value: 'fixture-value' };
-  const selectPayload = {
-    data: [row],
-    count: 1,
-  } satisfies operations['queryDatabaseSelect']['responses'][200]['content']['application/json'];
-  const uploaded = {
-    id: 'object-123',
-    bucket_id: 'bucket-123',
-    name: 'contract/object.bin',
-    is_public: false,
-    size: 5,
-    mime_type: 'application/octet-stream',
-  } satisfies operations['uploadStorageObject']['responses'][201]['content']['application/json'];
-  const leasePayload = {
-    expires_at: '2026-08-26T12:00:10Z',
-    fencing_token: 7,
-  } satisfies operations['acquireProjectLock']['responses'][201]['content']['application/json'];
-  const bytes = new Uint8Array([0, 127, 255]);
-  const fetchMock = jest.mocked(globalThis.fetch);
+function mockContractResponses(): void {
   fetchMock
     .mockResolvedValueOnce(jsonResponse(signInPayload, 200))
     .mockResolvedValueOnce(jsonResponse(selectPayload, 200))
@@ -73,8 +75,9 @@ test('the six contract operations preserve generated HTTP requests and response 
     )
     .mockResolvedValueOnce(jsonResponse(leasePayload, 201))
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
+}
 
-  const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-contract' });
+async function signInAndSelect(volcano: VolcanoAuth): Promise<void> {
   await expect(volcano.auth.signIn({ email: 'contract@example.com', password: 'correct-password' })).resolves.toEqual({
     user,
     session,
@@ -86,8 +89,9 @@ test('the six contract operations preserve generated HTTP requests and response 
     count: 1,
     error: null,
   });
+}
 
-  const file = new File([bytes], 'object.bin', { type: 'application/octet-stream' });
+async function uploadAndDownload(volcano: VolcanoAuth, file: File): Promise<void> {
   await expect(volcano.storage.from('contract bucket').upload('contract/object name.bin', file)).resolves.toEqual({
     data: uploaded,
     error: null,
@@ -99,12 +103,9 @@ test('the six contract operations preserve generated HTTP requests and response 
     throw new TypeError('Expected a binary download');
   }
   expect(new Uint8Array(await download.data.arrayBuffer())).toEqual(bytes);
+}
 
-  const lockOptions = {
-    ttl: 10,
-    token: '00000000-0000-4000-8000-000000000001',
-    requestId: '10000000-0000-4000-8000-000000000001',
-  };
+async function acquireAndRelease(volcano: VolcanoAuth): Promise<void> {
   const acquired = await volcano.locks.acquire('contract:lock', lockOptions);
   expect(acquired).toEqual({
     acquired: true,
@@ -124,8 +125,9 @@ test('the six contract operations preserve generated HTTP requests and response 
       requestId: '10000000-0000-4000-8000-000000000002',
     }),
   ).resolves.toEqual({ error: null });
+}
 
-  expect(fetchMock).toHaveBeenCalledTimes(6);
+function expectSignInAndSelectRequests(): void {
   const signInRequest = requestAt(0);
   expect(signInRequest.url).toBe('https://api.test.com/auth/signin');
   expect(signInRequest.options.method).toBe('POST');
@@ -143,7 +145,9 @@ test('the six contract operations preserve generated HTTP requests and response 
     filters: [{ column: 'slug', operator: 'eq', value: 'contract-row' }],
   } satisfies operations['queryDatabaseSelect']['requestBody']['content']['application/json']);
   expect(new Headers(selectRequest.options.headers).get('Authorization')).toBe('Bearer access-token');
+}
 
+function expectStorageRequests(file: File): void {
   const uploadRequest = requestAt(2);
   expect(uploadRequest.url).toBe('https://api.test.com/storage/contract%20bucket/contract/object%20name.bin');
   expect(uploadRequest.options.method).toBe('POST');
@@ -158,7 +162,9 @@ test('the six contract operations preserve generated HTTP requests and response 
   expect(downloadRequest.url).toBe(uploadRequest.url);
   expect(downloadRequest.options.method).toBe('GET');
   expect(new Headers(downloadRequest.options.headers).get('Authorization')).toBe('Bearer access-token');
+}
 
+function expectLockRequests(): void {
   const acquireRequest = requestAt(4);
   expect(acquireRequest.url).toBe('https://api.test.com/locks/contract%3Alock/lease');
   expect(acquireRequest.options.method).toBe('POST');
@@ -177,4 +183,23 @@ test('the six contract operations preserve generated HTTP requests and response 
   expect(releaseHeaders.get('Authorization')).toBe('Bearer access-token');
   expect(releaseHeaders.get('X-Volcano-Lock-Token')).toBe(lockOptions.token);
   expect(releaseHeaders.get('X-Volcano-Request-Id')).toBe('10000000-0000-4000-8000-000000000002');
+}
+
+test('VolcanoClient remains the preferred alias for VolcanoAuth', () => {
+  expect(VolcanoClient).toBe(VolcanoAuth);
+});
+
+test('the six contract operations preserve generated HTTP requests and response envelopes', async () => {
+  mockContractResponses();
+
+  const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-contract' });
+  await signInAndSelect(volcano);
+  const file = new File([bytes], 'object.bin', { type: 'application/octet-stream' });
+  await uploadAndDownload(volcano, file);
+  await acquireAndRelease(volcano);
+
+  expect(fetchMock).toHaveBeenCalledTimes(6);
+  expectSignInAndSelectRequests();
+  expectStorageRequests(file);
+  expectLockRequests();
 });

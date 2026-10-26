@@ -84,6 +84,17 @@ function requests(path: string): { headers: unknown; body: unknown }[] {
     });
 }
 
+function publishRequest(key: number, body: unknown): { headers: Record<string, string>; body: unknown } {
+  return {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Volcano-Durable-Session': 'vdms_session',
+      'Idempotency-Key': `${SESSION_HASH}:${String(key)}`,
+    },
+    body,
+  };
+}
+
 let seq = 0;
 
 function answer(url: unknown): Response {
@@ -109,7 +120,7 @@ afterEach(() => {
   Reflect.deleteProperty(process.env, 'VOLCANO_PLATFORM_API_URL');
 });
 
-describe('durable messages on the durable runtime', () => {
+function publishesOncePerExecution(): void {
   it('opens one session and publishes each message once, however often the execution replays', async () => {
     const runner = runnerFor(async (_input, ctx) => {
       const started = await ctx.publish('started', { step: 1 });
@@ -148,25 +159,13 @@ describe('durable messages on the durable runtime', () => {
       { headers: expect.anything(), body: expect.objectContaining({ name: 'go' }) },
     ]);
     expect(requests('/durable-messages/publish')).toEqual([
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Volcano-Durable-Session': 'vdms_session',
-          'Idempotency-Key': `${SESSION_HASH}:1`,
-        },
-        body: { name: 'started', data: { step: 1 } },
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Volcano-Durable-Session': 'vdms_session',
-          'Idempotency-Key': `${SESSION_HASH}:2`,
-        },
-        body: { name: 'done', data: { step: 2 } },
-      },
+      publishRequest(1, { name: 'started', data: { step: 1 } }),
+      publishRequest(2, { name: 'done', data: { step: 2 } }),
     ]);
   });
+}
 
+function settlesTimeoutsAndRefusals(): void {
   // The checkpoint service keeps callback timers in its own worker, out of
   // reach of skipTime, so this waits out the shortest timeout for real.
   it('resolves null when no message arrives in time', async () => {
@@ -201,7 +200,9 @@ describe('durable messages on the durable runtime', () => {
     );
     expect(requests('/durable-messages/publish')).toHaveLength(1);
   });
+}
 
+function replaysSessionFailures(): void {
   it('replays a publish that failed to open the session without reading it again', async () => {
     fetchMock().mockImplementation((url) =>
       Promise.resolve(
@@ -226,7 +227,9 @@ describe('durable messages on the durable runtime', () => {
     expect(requests('/durable-messages/sessions')).toHaveLength(1);
     expect(requests('/durable-messages/publish')).toHaveLength(0);
   });
+}
 
+function keepsPublishOrder(): void {
   // Live, `second` starts while the session waits for Volcano. On replay the
   // session is already answered, so it resolves before `second` starts.
   it('keeps a publish in its place among steps that start while its session opens', async () => {
@@ -248,4 +251,11 @@ describe('durable messages on the durable runtime', () => {
     expect(result.getResult()).toEqual({ published: { id: 'msg-1', seq: 1 }, second: 2 });
     expect(requests('/durable-messages/publish')).toHaveLength(1);
   });
+}
+
+describe('durable messages on the durable runtime', () => {
+  publishesOncePerExecution();
+  settlesTimeoutsAndRefusals();
+  replaysSessionFailures();
+  keepsPublishOrder();
 });
