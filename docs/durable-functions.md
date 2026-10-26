@@ -512,8 +512,7 @@ it throws: the call throws the runtime's
 The token comes from `VOLCANO_PLATFORM_API_URL`, like an approval, and the
 request is retried for up to 30 seconds while Volcano is not ready for it. An
 invalid name, submitter, or option throws a `TypeError` before anything is
-registered. See [Durable callbacks](/platform/functions/durable-callbacks) for
-every request, response, and limit.
+registered.
 
 ## `ctx.publish(name, data?)`
 
