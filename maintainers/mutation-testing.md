@@ -33,3 +33,11 @@ async-local storage instances; its CPU profile was dominated by Node's
 after long runs but were killed in fresh workers. Bounded reuse preserves every
 mutant and the existing timeout allowance. CI retains `stryker.log` on failure
 to distinguish worker behavior from test assertions.
+
+A reused worker also keeps the timers a test file started. A test that fails
+under one mutant can abandon an SDK request on its 60-second timeout. When the
+timeout fires during a later mutant's run, that mutant reports a `RuntimeError`
+instead of `Killed`. Like jsdom, the Node test environment
+(`scripts/node-environment.cts`) stops a file's timers when the file finishes.
+Restarting workers after every mutant would also prevent this, but it doubles
+the run time.
