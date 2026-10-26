@@ -14,6 +14,8 @@ also treats `Timeout` as detected, so `scripts/check-mutation-report.mts`
 checks the JSON report separately: every valid mutant must be `Killed`, while
 invalid `CompileError` mutants are accepted. Surviving, uncovered, timed-out,
 ignored, crashed, pending, empty, and incomplete results fail.
+[Stryker's state and score definitions](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)
+explain the distinction.
 
 Stryker runs every test that covers a mutant, one after another, even after the
 first failure. A mutant that breaks the shared fetch path (`src/fetch-lifecycle.ts`)
@@ -21,8 +23,6 @@ fails about 620 tests, and about 70 of them only after their 2- or 5-second wait
 expires: about 160 seconds on a fast machine. The 600-second per-mutant
 allowance keeps those slow kills from turning into timeouts on slower CI
 runners. Reaching it still fails.
-[Stryker's state and score definitions](https://stryker-mutator.io/docs/mutation-testing-elements/mutant-states-and-metrics/)
-explain the distinction.
 
 ## Runner lifetime
 
