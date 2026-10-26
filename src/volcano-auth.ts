@@ -372,8 +372,16 @@ class VolcanoAuth {
     this._initializeCredentials(config);
     this._beginOAuthCallback(config);
 
+    // Deprecated aliases, kept until the next major release. Built apart from
+    // the literal typed as Auth, where no-deprecated reports defining them.
+    const deprecatedAuth = {
+      signUpAnonymous: this.signUpAnonymous.bind(this),
+      forgotPassword: this.forgotPassword.bind(this),
+    };
+
     // Sub-objects for organization
     this.auth = {
+      ...deprecatedAuth,
       signUp: this.signUp.bind(this),
       signIn: this.signIn.bind(this),
       getSession: this.getSession.bind(this),
@@ -386,14 +394,12 @@ class VolcanoAuth {
       user: () => this.currentUser,
       // Anonymous user methods
       signInAnonymously: this.signInAnonymously.bind(this),
-      signUpAnonymous: this.signUpAnonymous.bind(this),
       convertAnonymous: this.convertAnonymous.bind(this),
       // Email confirmation methods
       confirmEmail: this.confirmEmail.bind(this),
       resendConfirmation: this.resendConfirmation.bind(this),
       // Password recovery methods
       resetPasswordForEmail: this.resetPasswordForEmail.bind(this),
-      forgotPassword: this.forgotPassword.bind(this),
       resetPassword: this.resetPassword.bind(this),
       // Email change methods
       requestEmailChange: this.requestEmailChange.bind(this),
