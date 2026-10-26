@@ -10,10 +10,10 @@
  * invoke_url.
  */
 
-import * as http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import { realFetch } from './setup.ts';
+import { apiServer, startServer, type TestServer } from './support/functions-http-server.ts';
 
 const FUNCTION_ID = '3cd3e058-e3ff-42a5-ae4d-650ef9b45746';
 // Signed with the project the SDK requires on a function token.
@@ -22,115 +22,18 @@ const ACCESS_TOKEN = [
   'eyJwcm9qZWN0X2lkIjoicHJvamVjdC0xMjMiLCJzdWIiOiJ1c2VyLTEifQ',
   'signature',
 ].join('.');
-
-type HttpReply = readonly [status: number, payload: unknown, headers?: Record<string, string>];
-type Respond = (target: string) => HttpReply | Promise<HttpReply>;
-
-interface RecordedRequest {
-  target: string;
-  body: unknown;
-  authorization: string | null;
-}
-
-/** Starts a local HTTP server that answers from `respond` and records requests. */
-async function startServer(respond: Respond) {
-  const requests: RecordedRequest[] = [];
-  const server = http.createServer((request, response) => {
-    const chunks: Buffer[] = [];
-    request.on('data', (chunk: Buffer) => chunks.push(chunk));
-    request.on('end', () => {
-      void respondToRequest().catch((error: unknown) => {
-        response.destroy(error instanceof Error ? error : new Error('Server response failed'));
-      });
-    });
-    async function respondToRequest(): Promise<void> {
-      const target = request.url;
-      if (target === undefined) {
-        response.writeHead(400);
-        response.end();
-        return;
-      }
-      const body = Buffer.concat(chunks).toString();
-      requests.push({
-        target,
-        body: body.length > 0 ? JSON.parse(body) : null,
-        authorization:
-          request.headers.authorization !== undefined && request.headers.authorization.length > 0
-            ? request.headers.authorization
-            : null,
-      });
-      const [status, payload, extraHeaders] = await respond(target);
-      const encoded = JSON.stringify(payload);
-      response.writeHead(status, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(encoded),
-        // The server stamps this on every response, errors included, so a test
-        // that omits it would accept a client keying the retry off its absence.
-        'X-Volcano-Version': 'test-build',
-        ...extraHeaders,
-      });
-      response.end(encoded);
-    }
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  if (address === null || typeof address === 'string') {
-    throw new TypeError('Expected a bound TCP port');
-  }
-  return {
-    requests,
-    url: `http://127.0.0.1:${String(address.port)}`,
-    targets: () => requests.map((request) => request.target),
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => {
-          if (error !== undefined) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        }),
-      ),
-  };
-}
-
-function apiServer(
-  resolvePayload: unknown,
-  { status = 200, resolveDelayMs = 0 }: { status?: number; resolveDelayMs?: number } = {},
-) {
-  return startServer(async (target) => {
-    if (!target.startsWith('/functions/resolve')) {
-      return [200, { ok: 'via-api' }];
-    }
-    if (resolveDelayMs !== 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, resolveDelayMs));
-    }
-    return [status, resolvePayload];
-  });
-}
+let servers: TestServer[];
 
 function client(apiUrl: string) {
   return new VolcanoAuth({ apiUrl, anonKey: 'ak-test-anon-key', accessToken: ACCESS_TOKEN });
 }
 
-describe('function invocation over HTTP', () => {
-  let servers: Awaited<ReturnType<typeof startServer>>[];
+function track(server: TestServer): TestServer {
+  servers.push(server);
+  return server;
+}
 
-  beforeEach(() => {
-    servers = [];
-    // The shared setup mocks fetch; these tests need the real one.
-    globalThis.fetch = realFetch;
-  });
-
-  afterEach(async () => {
-    await Promise.all(servers.map((server) => server.close()));
-  });
-
-  const track = (server: Awaited<ReturnType<typeof startServer>>) => {
-    servers.push(server);
-    return server;
-  };
-
+function reachesResolvedHost(): void {
   it('resolves once and reaches the resolved host for repeated invocations', async () => {
     const functions = track(await startServer(() => [200, { ok: true }]));
     const api = track(
@@ -165,7 +68,9 @@ describe('function invocation over HTTP', () => {
     expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
     expect(functions.targets()).toEqual([]);
   });
+}
 
+function sharesResolution(): void {
   it('does not re-resolve an unknown name on every attempt', async () => {
     const api = track(await apiServer({ error: 'function not found' }, { status: 404 }));
     const volcano = client(api.url);
@@ -199,7 +104,9 @@ describe('function invocation over HTTP', () => {
     expect(api.targets()).toEqual(['/functions/resolve?name=my-function']);
     expect(functions.targets()).toHaveLength(8);
   });
+}
 
+function retriesOnlyPlatformNotFound(): void {
   it('resolves a recreated function again after a platform 404', async () => {
     let invoked = 0;
     const api = track(
@@ -229,6 +136,27 @@ describe('function invocation over HTTP', () => {
     ]);
   });
 
+  it('returns a function-authored 404 without invoking it twice', async () => {
+    const api = track(
+      await startServer((target) => {
+        if (target.startsWith('/functions/resolve')) {
+          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
+        }
+        // The function ran and chose 404. Retrying would repeat whatever it did
+        // on the way to deciding that.
+        return [404, { error: 'no such record' }, { 'X-Volcano-Function-Invoked': 'true' }];
+      }),
+    );
+
+    const { status, error } = await client(api.url).functions.invoke('my-function', {});
+
+    expect(status).toBe(404);
+    expect(error).toBeNull();
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
+  });
+}
+
+function separatesPlatformAndFunctionErrors(): void {
   // The server stamps x-volcano-version on every response, so a check keyed on
   // its absence never fires and every platform failure would be handed back as
   // though the function had answered.
@@ -269,23 +197,21 @@ describe('function invocation over HTTP', () => {
     expect(status).toBe(400);
     expect(data).toEqual({ error: 'bad input' });
   });
+}
 
-  it('returns a function-authored 404 without invoking it twice', async () => {
-    const api = track(
-      await startServer((target) => {
-        if (target.startsWith('/functions/resolve')) {
-          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
-        }
-        // The function ran and chose 404. Retrying would repeat whatever it did
-        // on the way to deciding that.
-        return [404, { error: 'no such record' }, { 'X-Volcano-Function-Invoked': 'true' }];
-      }),
-    );
-
-    const { status, error } = await client(api.url).functions.invoke('my-function', {});
-
-    expect(status).toBe(404);
-    expect(error).toBeNull();
-    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
+describe('function invocation over HTTP', () => {
+  beforeEach(() => {
+    servers = [];
+    // The shared setup mocks fetch; these tests need the real one.
+    globalThis.fetch = realFetch;
   });
+
+  afterEach(async () => {
+    await Promise.all(servers.map((server) => server.close()));
+  });
+
+  reachesResolvedHost();
+  sharesResolution();
+  retriesOnlyPlatformNotFound();
+  separatesPlatformAndFunctionErrors();
 });

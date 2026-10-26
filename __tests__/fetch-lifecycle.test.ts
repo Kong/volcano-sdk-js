@@ -28,7 +28,7 @@ function deferred<Result>(): {
 
 function requestSignal(request: jest.SpiedFunction<typeof fetch>): AbortSignal {
   const signal = request.mock.calls[0]?.[1]?.signal;
-  if (signal == null) {
+  if (signal === undefined || signal === null) {
     throw new Error('Fetch did not receive an AbortSignal');
   }
   return signal;

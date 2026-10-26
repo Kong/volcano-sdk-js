@@ -5,7 +5,7 @@ import { callbackOperationId } from '../src/durable-callback-token.ts';
 import type { CallbackSubmitter, DurableHandler } from '../src/durable-types.ts';
 import { settledRun } from './support/settled-run.ts';
 
-// durable-callback-token.test.ts stands a double in for the runtime. These run
+// The durable-callback-token tests stand a double in for the runtime. These run
 // the same calls through the runtime Volcano installs and its local
 // checkpoint service, so a failure keeps its type across replay, as it does
 // in a deployed function. The runner is loaded untyped, as in
@@ -94,7 +94,7 @@ function runnerFor(handler: DurableHandler): Runner {
   });
 }
 
-async function settlePayment(
+function settlePayment(
   runner: Runner,
   settle: (operation: Operation) => Promise<unknown>,
 ): Promise<{ getResult(): unknown }> {
@@ -143,7 +143,7 @@ afterEach(() => {
   Reflect.deleteProperty(process.env, 'VOLCANO_PLATFORM_API_URL');
 });
 
-describe('durable callbacks on the durable runtime', () => {
+function resolvesAcrossReplays(): void {
   it('registers once and resolves with the result, however often the execution replays', async () => {
     const runner = runnerFor(awaitPayment);
 
@@ -179,7 +179,9 @@ describe('durable callbacks on the durable runtime', () => {
 
     expect(members).toEqual(['function', 'function']);
   });
+}
 
+function failsAndHeartbeats(): void {
   it('raises the failure with its type, and raises it again on replay', async () => {
     const runner = runnerFor(async (_input, ctx) => {
       const failure = await ctx.waitForCallback('payment', record).then(
@@ -213,7 +215,9 @@ describe('durable callbacks on the durable runtime', () => {
 
     expect(result.getResult()).toBe('settled');
   });
+}
 
+function timesOut(): void {
   // The checkpoint service keeps callback timers in its own worker, out of
   // reach of skipTime, so these wait out the shortest timeout for real.
   it('resolves null when the callback times out', async () => {
@@ -234,4 +238,10 @@ describe('durable callbacks on the durable runtime', () => {
 
     expect(result.getResult()).toBeNull();
   });
+}
+
+describe('durable callbacks on the durable runtime', () => {
+  resolvesAcrossReplays();
+  failsAndHeartbeats();
+  timesOut();
 });

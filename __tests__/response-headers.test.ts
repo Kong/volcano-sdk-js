@@ -83,7 +83,7 @@ test('preserves native normalization and repeated header values', () => {
   const pairs = array(
     tuple(
       constantFrom('X-Request-ID', 'x-request-id', 'Retry-After', 'Content-Type'),
-      stringMatching(/^[a-z0-9]{0,24}$/),
+      stringMatching(/^[a-z0-9]{0,24}$/u),
     ),
     { maxLength: 20 },
   );

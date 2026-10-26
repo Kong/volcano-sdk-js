@@ -3,6 +3,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
 import { fetchCall, fetchUrl, jsonField, reply, resultError } from './auth-concurrency-fixtures.ts';
 import { sessionToken } from './session-fixtures.ts';
+import { memoryStorage } from './support/auth-boundaries-storage.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 
@@ -20,7 +21,8 @@ const replacement = {
   refresh_token: 'other-refresh',
   user: { id: 'other', email: 'other@example.com', status: 'active' },
 } as const;
-const cases: readonly [string, (client: VolcanoAuth) => Promise<{ error: unknown }>, number, unknown][] = [
+type Invoke = (client: VolcanoAuth) => Promise<{ error: unknown }>;
+const cases: readonly [string, Invoke, number, unknown][] = [
   ['request email', (c) => c.auth.requestEmailChange('new@example.com'), 200, {}],
   ['cancel email', (c) => c.auth.cancelEmailChange(), 200, {}],
   [
@@ -67,7 +69,7 @@ function client() {
   });
 }
 
-describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
+function replaysOnceAfterUnauthorized(invoke: Invoke, status: number, body: unknown): void {
   it.each(['json', 'empty', 'html'])('replays the captured request after %s401', async (rejection) => {
     const denied = reply(401, { error: 'expired' });
     if (rejection !== 'json') {
@@ -100,7 +102,9 @@ describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
     expect(await resultError(invoke(client()))).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+}
 
+function preservesReplacementSessions(invoke: Invoke, status: number, body: unknown): void {
   it('preserves explicit replacement during the request', async () => {
     const current = client();
     fetchMock.mockImplementation(async () => {
@@ -122,6 +126,11 @@ describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
       expect(new Headers(options?.headers).get('Authorization')).toBe(`Bearer ${sessionToken(SESSION)}`);
     }
   });
+}
+
+describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
+  replaysOnceAfterUnauthorized(invoke, status, body);
+  preservesReplacementSessions(invoke, status, body);
 });
 
 it('captures ownership before serializing a provider API body', async () => {
@@ -183,18 +192,6 @@ it('captures ownership before serializing email confirmation', async () => {
 
 it('captures ownership after an OAuth exchange settles without another auth call', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const storage = (initial: Record<string, string>) => {
-    const items = new Map(Object.entries(initial));
-    return {
-      getItem: (key: string): string | null => items.get(key) ?? null,
-      setItem(key: string, value: string): void {
-        items.set(key, value);
-      },
-      removeItem(key: string): void {
-        items.delete(key);
-      },
-    };
-  };
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
@@ -207,8 +204,8 @@ it('captures ownership after an OAuth exchange settles without another auth call
         search: '?code=one-time&state=oauth-nonce',
       },
       history: { state: null, replaceState: jest.fn() },
-      localStorage: storage({}),
-      sessionStorage: storage({
+      localStorage: memoryStorage({}),
+      sessionStorage: memoryStorage({
         volcano_auth_state: 'oauth-nonce',
         volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
       }),

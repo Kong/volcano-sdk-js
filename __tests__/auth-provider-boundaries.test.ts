@@ -19,6 +19,32 @@ const context: AuthContext = {
   refreshToken: 'refresh',
 };
 
+const providerRequests = [
+  { path: '/auth/oauth/github/link', options: { method: 'POST' } },
+  { path: '/auth/oauth/github/unlink', options: { method: 'DELETE' } },
+  { path: '/auth/oauth/providers', options: undefined },
+  { path: '/auth/oauth/github/refresh-token', options: { method: 'POST' } },
+  { path: '/auth/oauth/github/token', options: undefined },
+  {
+    path: '/auth/oauth/github/call-api',
+    options: {
+      method: 'POST',
+      body: JSON.stringify({
+        endpoint: '/repositories',
+        method: 'POST',
+        body: { owner: 'volcano' },
+      }),
+    },
+  },
+  {
+    path: '/auth/oauth/github/call-api',
+    options: {
+      method: 'POST',
+      body: JSON.stringify({ endpoint: '/profile', method: 'GET', body: null }),
+    },
+  },
+];
+
 test('provider methods route to their distinct endpoints with exact method and body', async () => {
   const data = {
     providers: [{ provider: 'github' }],
@@ -66,29 +92,5 @@ test('provider methods route to their distinct endpoints with exact method and b
     data: { repository: 'volcano' },
     error: null,
   });
-  expect(calls).toEqual([
-    { path: '/auth/oauth/github/link', options: { method: 'POST' } },
-    { path: '/auth/oauth/github/unlink', options: { method: 'DELETE' } },
-    { path: '/auth/oauth/providers', options: undefined },
-    { path: '/auth/oauth/github/refresh-token', options: { method: 'POST' } },
-    { path: '/auth/oauth/github/token', options: undefined },
-    {
-      path: '/auth/oauth/github/call-api',
-      options: {
-        method: 'POST',
-        body: JSON.stringify({
-          endpoint: '/repositories',
-          method: 'POST',
-          body: { owner: 'volcano' },
-        }),
-      },
-    },
-    {
-      path: '/auth/oauth/github/call-api',
-      options: {
-        method: 'POST',
-        body: JSON.stringify({ endpoint: '/profile', method: 'GET', body: null }),
-      },
-    },
-  ]);
+  expect(calls).toEqual(providerRequests);
 });

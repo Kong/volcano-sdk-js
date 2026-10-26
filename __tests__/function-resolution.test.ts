@@ -58,7 +58,7 @@ function clientWithResponse(response: Awaited<ReturnType<ResolutionClient['_anon
   };
 }
 
-describe('function resolution response boundary', () => {
+function reportsFailedResolutions(): void {
   test('returns a useful error when a failed transport has no error object', async () => {
     const client = clientWithResponse({ ok: false, status: 503, data: null, error: null });
 
@@ -92,7 +92,9 @@ describe('function resolution response boundary', () => {
 
     expect([...client._functionResolveState.cache.keys()]).toEqual(['orders-key']);
   });
+}
 
+function rejectsUnusableResolutions(): void {
   test('rejects an empty successful response before caching it', async () => {
     const client = clientWithResponse({ ok: true, status: 200, data: null, error: null });
 
@@ -137,4 +139,9 @@ describe('function resolution response boundary', () => {
       error: 'function not found',
     });
   });
+}
+
+describe('function resolution response boundary', () => {
+  reportsFailedResolutions();
+  rejectsUnusableResolutions();
 });

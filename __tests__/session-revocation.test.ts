@@ -46,7 +46,7 @@ async function replaceAtPhase(current: VolcanoAuth, replace: string, phase: stri
   }
 }
 
-describe('captured-session revocation coordination', () => {
+function preventsRefreshAfterSignOutClaims(): void {
   it('prevents a new refresh after sign-out claims the session', async () => {
     const current = client();
     const entered = signal();
@@ -64,7 +64,9 @@ describe('captured-session revocation coordination', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(current.accessToken).toBeNull();
   });
+}
 
+function retainsARunningRefreshForRevocation(): void {
   it.each(['none', 'before-refresh-finishes', 'after-refresh-finishes'])(
     'retains an already-running refresh for revocation with replacement %s',
     async (replace) => {
@@ -99,7 +101,9 @@ describe('captured-session revocation coordination', () => {
       expect(current.accessToken).toBe(replace === 'none' ? null : replacement.access_token);
     },
   );
+}
 
+function sharesConcurrentRevocationOutcomes(): void {
   it.each([401, 403, 429, 503])(
     'surfaces a shared refresh rejection %s without inventing replacement',
     async (status) => {
@@ -142,6 +146,12 @@ describe('captured-session revocation coordination', () => {
     expect(await Promise.all([first, second])).toEqual([{ error: null }, { error: null }]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+}
+
+describe('captured-session revocation coordination', () => {
+  preventsRefreshAfterSignOutClaims();
+  retainsARunningRefreshForRevocation();
+  sharesConcurrentRevocationOutcomes();
 });
 
 it('revokes a server-issued pair without requiring an access-token refresh', async () => {

@@ -1,24 +1,13 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { RealtimeChannel, VolcanoRealtime } from '../src/realtime.ts';
-import { deferredVoid, TestSubscription, TestTransportClient } from './realtime-transport-fixtures.ts';
+import { deferredVoid, TestTransportClient } from './realtime-transport-fixtures.ts';
+import { TestSubscription } from './support/realtime-test-subscription.ts';
 
-describe('channel subscription readiness', () => {
-  let client: TestTransportClient;
-  let channel: RealtimeChannel;
-  let transport: TestSubscription;
+let client: TestTransportClient;
+let channel: RealtimeChannel;
+let transport: TestSubscription;
 
-  beforeEach(() => {
-    transport = new TestSubscription();
-    client = new TestTransportClient();
-    client.newSubscription.mockReturnValue(transport);
-    const realtime = new VolcanoRealtime({
-      apiUrl: 'https://api.example.com',
-      anonKey: 'project.key',
-    });
-    jest.spyOn(realtime, 'getClient').mockReturnValue(client);
-    channel = realtime.channel('room');
-  });
-
+function waitsForReadinessAndPausesFailures(): void {
   test('waits for readiness, including concurrent subscribe calls', async () => {
     const ready = deferredVoid();
     transport.ready.mockReturnValue(ready.promise);
@@ -43,7 +32,9 @@ describe('channel subscription readiness', () => {
     expect(channel._subscription).toBe(transport);
     expect(channel._paused).toBe(true);
   });
+}
 
+function retriesTheRetainedSubscription(): void {
   test('retries the retained subscription after readiness fails', async () => {
     transport.ready.mockRejectedValue(new Error('denied'));
     await expect(channel.subscribe()).rejects.toThrow('denied');
@@ -69,4 +60,21 @@ describe('channel subscription readiness', () => {
     expect(channel._subscription).toBe(transport);
     expect(channel._paused).toBe(false);
   });
+}
+
+describe('channel subscription readiness', () => {
+  beforeEach(() => {
+    transport = new TestSubscription();
+    client = new TestTransportClient();
+    client.newSubscription.mockReturnValue(transport);
+    const realtime = new VolcanoRealtime({
+      apiUrl: 'https://api.example.com',
+      anonKey: 'project.key',
+    });
+    jest.spyOn(realtime, 'getClient').mockReturnValue(client);
+    channel = realtime.channel('room');
+  });
+
+  waitsForReadinessAndPausesFailures();
+  retriesTheRetainedSubscription();
 });

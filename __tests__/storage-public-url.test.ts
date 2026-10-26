@@ -94,7 +94,7 @@ test.each([null, 'value', {}, { project_id: null }, { project_id: 42 }, { projec
 test('reports malformed anon-key JSON', () => {
   const result = storagePublicUrl('https://api.volcano.dev', 'bucket', 'a.invalid.c', 'file.txt');
   expect(result.data).toBeNull();
-  expect(result.error?.message).toMatch(/^Failed to parse anon key:/);
+  expect(result.error?.message).toMatch(/^Failed to parse anon key:/u);
 });
 
 test('reports a path that cannot be encoded as the path, not the anon key', () => {

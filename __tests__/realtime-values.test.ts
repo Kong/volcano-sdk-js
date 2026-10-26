@@ -26,7 +26,7 @@ import {
 const location = { schema: 'public', table: 'tasks', timestamp: '2025-01-01T00:00:00Z' };
 const absent = undefined;
 
-describe('untrusted realtime payloads', () => {
+function readsChangeNotifications(): void {
   test('reads fields only from objects', () => {
     expect(property(null, 'data')).toBeUndefined();
     expect(property('text', 'data')).toBeUndefined();
@@ -70,7 +70,9 @@ describe('untrusted realtime payloads', () => {
     expect(isPostgresChange({ ...location, type: 'UPSERT' })).toBe(false);
     expect(isPostgresChange({ ...location, type: 'INSERT', schema: 1 })).toBe(false);
   });
+}
 
+function validatesPublicationContexts(): void {
   test('validates publication offsets and tags', () => {
     expect(validTags(absent)).toBe(true);
     expect(validTags(null)).toBe(false);
@@ -83,7 +85,9 @@ describe('untrusted realtime payloads', () => {
     expect(isPublicationContext({ data: 'hello', tags: { project: 'p', offset: 2 } })).toBe(false);
     expect(isPublicationContext({ data: 'hello', offset: 0, tags: { project: 'p' } })).toBe(true);
   });
+}
 
+function normalizesConnectionEventContexts(): void {
   test('normalizes connection event contexts without forwarding malformed fields', () => {
     expect(connectContext(null)).toEqual({});
     expect(connectContext({ client: 'c', latency: 1 })).toEqual({ client: 'c', latency: 1 });
@@ -124,7 +128,9 @@ describe('untrusted realtime payloads', () => {
     });
     expect(errorContext({ error: null })).toStrictEqual({ error: null });
   });
+}
 
+function validatesPresenceConfigurationAndChanges(): void {
   test('validates presence state and optional fields', () => {
     expect(optionalRecord(absent)).toBe(true);
     expect(optionalRecord({})).toBe(true);
@@ -168,4 +174,11 @@ describe('untrusted realtime payloads', () => {
     expect(matchesPostgresChange(change, 'UPDATE', 'public', 'tasks')).toBe(true);
     expect(matchesPostgresChange(change, '*', 'public', 'tasks')).toBe(true);
   });
+}
+
+describe('untrusted realtime payloads', () => {
+  readsChangeNotifications();
+  validatesPublicationContexts();
+  normalizesConnectionEventContexts();
+  validatesPresenceConfigurationAndChanges();
 });
