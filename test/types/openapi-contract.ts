@@ -189,10 +189,7 @@ type _WaitForCallbackSendsTheRegistration = Assert<
   >
 >;
 type _WaitForCallbackReadsItsToken = Assert<
-  Equal<
-    keyof RegisterDurableCallback['responses'][201]['content']['application/json'],
-    'token' | 'expires_at'
-  >
+  Equal<keyof RegisterDurableCallback['responses'][201]['content']['application/json'], 'token' | 'expires_at'>
 >;
 
 declare const realtime: VolcanoRealtime;
