@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, expect, jest, test } from '@jest/globals';
-import { VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
+import { type AuthStateCallback, VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import {
   bodyText,
   deferred,
@@ -11,6 +11,8 @@ import {
   signal,
   within,
 } from './auth-concurrency-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 
@@ -67,6 +69,18 @@ function isOriginalRequest(isResolve: boolean, options: RequestInit | undefined,
   return matchesStage && authorization === `Bearer ${token()}`;
 }
 
+// Rows: refresh status (title only), configured refresh token, refresh replies to queue, refresh requests.
+const refreshOutcomes: readonly [number | null, string | null, readonly number[], number][] = [
+  [null, null, [], 0],
+  [401, 'old-refresh', [401], 1],
+  [503, 'old-refresh', [503], 1],
+];
+// Each row makes payload serialization call `read` from a getter or from `toJSON`.
+const payloadBoundaries: readonly [string, (read: () => string) => object][] = [
+  ['getter', (read) => Object.defineProperty({}, 'value', { enumerable: true, get: read })],
+  ['toJSON', (read) => ({ toJSON: read })],
+];
+
 function cachedStringError(value: unknown): string {
   if (typeof value !== 'object' || value === null) {
     throw new Error('Expected a cached string error');
@@ -81,12 +95,15 @@ beforeEach(() => {
   VolcanoAuth.__resetFunctionResolveCacheForTests();
 });
 
-test.each(['resolve', 'invoke'])('keeps payload values when %s recovery mutates the caller object', async (stage) => {
+test.each([
+  ['resolve', 1],
+  ['invoke', 2],
+])('keeps payload values when %s recovery mutates the caller object', async (stage, invocations) => {
   const payload = { values: ['original'] };
   fetchMock.mockImplementation((url, options) => Promise.resolve(recoveryResponse(url, options, stage, payload)));
   expect(await resultError(client().functions.invoke('echo', payload))).toBeNull();
   const calls = fetchMock.mock.calls.filter(([url]) => fetchUrl(url).endsWith('/invoke'));
-  expect(calls).toHaveLength(stage === 'invoke' ? 2 : 1);
+  expect(calls).toHaveLength(invocations);
   for (const [, options] of calls) {
     expect(JSON.parse(bodyText(options))).toEqual({ payload: { values: ['original'] } });
   }
@@ -103,23 +120,24 @@ test('captures function payload before the first asynchronous boundary', async (
   });
 });
 
-test.each([null, 401, 503])('keeps resolver rejection metadata when refresh is %s', async (refreshStatus) => {
-  const target = client(refreshStatus === null ? null : 'old-refresh');
-  fetchMock.mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
-  if (refreshStatus !== null) {
-    fetchMock.mockResolvedValueOnce(reply(refreshStatus, { error: 'refresh failed' }));
-  }
-  const result = await target.functions.invoke('echo');
-  expect(result.error).toMatchObject({
-    message: 'Session expired',
-    status: 401,
-    code: 'original',
-    retryAfter: 7,
-  });
-  expect(fetchMock).toHaveBeenCalledTimes(refreshStatus === null ? 1 : 2);
-});
+test.each(refreshOutcomes)(
+  'keeps resolver rejection metadata when refresh is %s',
+  async (_refreshStatus, refreshToken, refreshStatuses, refreshes) => {
+    const target = client(refreshToken);
+    fetchMock.mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
+    refreshStatuses.forEach((status) => fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' })));
+    const result = await target.functions.invoke('echo');
+    expect(result.error).toMatchObject({
+      message: 'Session expired',
+      status: 401,
+      code: 'original',
+      retryAfter: 7,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1 + refreshes);
+  },
+);
 
-test.each(['getter', 'toJSON'])('captures ownership before payload %s', async (boundary) => {
+test.each(payloadBoundaries)('captures ownership before payload %s', async (_boundary, payloadThatReads) => {
   const target = client();
   const replaceSession = () => {
     void target.auth.setSession({
@@ -129,45 +147,45 @@ test.each(['getter', 'toJSON'])('captures ownership before payload %s', async (b
     });
     return 'changed';
   };
-  const payload =
-    boundary === 'getter'
-      ? Object.defineProperty({}, 'value', { enumerable: true, get: replaceSession })
-      : { toJSON: replaceSession };
-  const result = await target.functions.invoke('echo', payload);
+  const result = await target.functions.invoke('echo', payloadThatReads(replaceSession));
   expect(result.error).toMatchObject({ code: 'auth_session_changed' });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test.each([null, 401, 503])('keeps invocation rejection metadata when refresh is %s', async (refreshStatus) => {
-  const target = client(refreshStatus === null ? null : 'old-refresh');
-  fetchMock
-    .mockResolvedValueOnce(resolved())
-    .mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
-  if (refreshStatus !== null) {
-    fetchMock.mockResolvedValueOnce(reply(refreshStatus, { error: 'refresh failed' }));
-  }
-  const result = await target.functions.invoke('echo');
-  expect(VolcanoSystemError.is(result.error)).toBe(true);
-  expect(result.error).toMatchObject({
-    message: 'denied',
-    status: 401,
-    code: 'original',
-    retryAfter: 7,
-  });
-  expect(fetchMock).toHaveBeenCalledTimes(refreshStatus === null ? 2 : 3);
-  expect(JSON.stringify(result.error)).toBe('{}');
-});
+test.each(refreshOutcomes)(
+  'keeps invocation rejection metadata when refresh is %s',
+  async (_refreshStatus, refreshToken, refreshStatuses, refreshes) => {
+    const target = client(refreshToken);
+    fetchMock
+      .mockResolvedValueOnce(resolved())
+      .mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
+    refreshStatuses.forEach((status) => fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' })));
+    const result = await target.functions.invoke('echo');
+    expect(VolcanoSystemError.is(result.error)).toBe(true);
+    expect(result.error).toMatchObject({
+      message: 'denied',
+      status: 401,
+      code: 'original',
+      retryAfter: 7,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2 + refreshes);
+    expect(JSON.stringify(result.error)).toBe('{}');
+  },
+);
 
 test('does not adopt a replacement session from a rejected-refresh callback', async () => {
   const target = client();
-  target.onAuthStateChange((user) => {
-    if (user === null && target.accessToken === null) {
-      void target.auth.setSession({
-        access_token: token(true),
-        refresh_token: 'replacement-refresh',
-        user: { id: 'other', email: 'fixture@example.com', status: 'active' },
-      });
-    }
+  const listener = jest.fn<AuthStateCallback>();
+  target.onAuthStateChange(listener);
+  const accessWhenNotified: (string | null)[] = [];
+  // Registration already reported the initial user; the next notification is the rejected refresh clearing.
+  listener.mockImplementationOnce(() => {
+    accessWhenNotified.push(target.accessToken);
+    void target.auth.setSession({
+      access_token: token(true),
+      refresh_token: 'replacement-refresh',
+      user: { id: 'other', email: 'fixture@example.com', status: 'active' },
+    });
   });
   fetchMock
     .mockResolvedValueOnce(resolved())
@@ -177,49 +195,50 @@ test('does not adopt a replacement session from a rejected-refresh callback', as
   expect(result.error).toMatchObject({ code: 'auth_session_changed' });
   expect(target.accessToken).toBe(token(true));
   expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(listener).toHaveBeenNthCalledWith(2, null);
+  expect(accessWhenNotified).toEqual([null]);
 });
 
-test.each(['getter', 'toJSON'])('blocks cached invocation after payload %s starts sign-out', async (boundary) => {
-  const target = client();
-  fetchMock.mockResolvedValueOnce(resolved()).mockResolvedValueOnce(reply(200, {}));
-  expect(await resultError(target.functions.invoke('echo'))).toBeNull();
-  fetchMock.mockClear();
-  fetchMock.mockResolvedValue(reply(200, {}));
-  const signOutTasks: ReturnType<typeof target.auth.signOut>[] = [];
-  const revoke = () => {
-    signOutTasks.push(target.auth.signOut());
-    return 'value';
-  };
-  const payload =
-    boundary === 'getter' ? Object.defineProperty({}, 'value', { enumerable: true, get: revoke }) : { toJSON: revoke };
-  const result = await target.functions.invoke('echo', payload);
-  const signOut = signOutTasks[0];
-  if (signOut === undefined) {
-    throw new Error('Expected payload serialization to start sign-out');
-  }
-  await signOut;
-  expect(result.error).toMatchObject({ code: 'auth_session_changed' });
-  expect(fetchMock.mock.calls.filter(([url]) => fetchUrl(url).endsWith('/invoke'))).toHaveLength(0);
-});
+test.each(payloadBoundaries)(
+  'blocks cached invocation after payload %s starts sign-out',
+  async (_boundary, payloadThatReads) => {
+    const target = client();
+    fetchMock.mockResolvedValueOnce(resolved()).mockResolvedValueOnce(reply(200, {}));
+    expect(await resultError(target.functions.invoke('echo'))).toBeNull();
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(reply(200, {}));
+    const signOutTasks: ReturnType<typeof target.auth.signOut>[] = [];
+    const revoke = () => {
+      signOutTasks.push(target.auth.signOut());
+      return 'value';
+    };
+    const result = await target.functions.invoke('echo', payloadThatReads(revoke));
+    const signOut = signOutTasks[0];
+    expectPresent(signOut);
+    await signOut;
+    expect(result.error).toMatchObject({ code: 'auth_session_changed' });
+    expect(fetchMock.mock.calls.filter(([url]) => fetchUrl(url).endsWith('/invoke'))).toHaveLength(0);
+  },
+);
 
 test.each([401, 403])('does not confuse concurrent deletion with refresh %s clearing', async (status) => {
   const target = client();
   const finishRefresh = deferred<Response>();
   const refreshing = signal();
-  fetchMock.mockImplementation((url, options) => {
-    if (fetchUrl(url).includes('/functions/resolve')) {
-      return Promise.resolve(resolved());
-    }
-    if (fetchUrl(url).endsWith('/invoke')) {
-      return Promise.resolve(reply(401, { error: 'denied', code: 'original' }));
-    }
-    if (fetchUrl(url).endsWith('/auth/refresh')) {
-      refreshing.resolve();
-      return finishRefresh.promise;
-    }
-    expect(options?.method).toBe('DELETE');
-    return Promise.resolve(reply(204, {}));
-  });
+  fetchMock.mockImplementation(
+    fetchRoutes({
+      '/functions/resolve': () => Promise.resolve(resolved()),
+      [`/functions/${FUNCTION_ID}/invoke`]: () => Promise.resolve(reply(401, { error: 'denied', code: 'original' })),
+      '/auth/refresh': () => {
+        refreshing.resolve();
+        return finishRefresh.promise;
+      },
+      [`/auth/user/sessions/${SESSION_ID}`]: (options) => {
+        expect(options?.method).toBe('DELETE');
+        return Promise.resolve(reply(204, {}));
+      },
+    }),
+  );
   const pending = target.functions.invoke('echo');
   await within(refreshing.promise, 'refresh request');
   expect(await within(resultError(target.auth.deleteSession(SESSION_ID)), 'session deletion')).toBeNull();
@@ -254,9 +273,7 @@ test('retains an owned metadata snapshot for negative resolution cache hits', as
   });
   const cached = [...target._functionResolveState.cache.values()][0];
   expect(new Error(cachedStringError(cached)).message).toBe('Function not found');
-  if (first.error === null) {
-    throw new Error('Expected an invocation error');
-  }
+  expectPresent(first.error);
   Object.assign(first.error, { message: 'changed', status: 500, code: 'changed', retryAfter: 99 });
   const second = await target.functions.invoke('missing');
   expect(second.error).toMatchObject({

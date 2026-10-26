@@ -1,5 +1,14 @@
 import { expect, jest, test } from '@jest/globals';
 import { parallelBranches } from '../src/durable-parallel-branches.ts';
+import { expectInstanceOf } from './support/assertions.ts';
+
+type AdaptedBranch = ReturnType<typeof parallelBranches>[number];
+
+function expectNamedBranch(
+  branch: AdaptedBranch | undefined,
+): asserts branch is Extract<AdaptedBranch, { func: unknown }> {
+  expect(branch).toMatchObject({ func: expect.any(Function) });
+}
 
 test('parallel branches require an array', () => {
   expect(() => parallelBranches({}, (context) => context)).toThrow('ctx.parallel() requires an array of branches');
@@ -19,9 +28,7 @@ test('adapts anonymous branches with a durable context', () => {
   const contextFor = jest.fn((context: unknown): object => ({ engineContext: context }));
   const branch = jest.fn((context: unknown): unknown => context);
   const [adapted] = parallelBranches([branch], contextFor);
-  if (typeof adapted !== 'function') {
-    throw new TypeError('expected an anonymous branch');
-  }
+  expectInstanceOf(adapted, Function);
 
   expect(adapted('engine')).toEqual({ engineContext: 'engine' });
   expect(contextFor).toHaveBeenCalledWith('engine');
@@ -37,9 +44,7 @@ test('adapts named branches while preserving the run receiver', () => {
     },
   };
   const [adapted] = parallelBranches([branch], (context) => ({ engineContext: context }));
-  if (adapted === undefined || typeof adapted === 'function') {
-    throw new TypeError('expected a named branch');
-  }
+  expectNamedBranch(adapted);
 
   expect(adapted.name).toBe('named');
   expect(adapted.func('engine')).toEqual({

@@ -2,6 +2,7 @@
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { deployment, firstCall, projectId, requestId, templateId } from './support/sandbox-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 const originalFetch = globalThis.fetch;
 function client(): VolcanoAuth {
@@ -36,16 +37,12 @@ test('uploads raw archive bytes and preserves deployment replay identity', async
   expect(call[0]).toBe(`https://api.test.com/projects/${projectId}/sandboxes/${templateId}/deployments`);
   expect(new Headers(call[1]?.headers).get('Idempotency-Key')).toBe(requestId);
   const body = call[1]?.body;
-  if (!(body instanceof FormData)) {
-    throw new TypeError('Expected multipart source upload');
-  }
+  expectInstanceOf(body, FormData);
   expect(body.get('name')).toBe('my-image');
   expect(body.get('memory_mb')).toBe('2048');
   expect(body.get('ports')).toBe('[8080]');
   const code = body.get('code');
-  if (!(code instanceof Blob)) {
-    throw new TypeError('Expected binary archive');
-  }
+  expectInstanceOf(code, Blob);
   expect(code.type).toBe('application/gzip');
   expect(new Uint8Array(await code.arrayBuffer())).toEqual(bytes);
 });
@@ -81,10 +78,7 @@ test('omits optional deployment fields and accepts boundary ports', async () => 
   });
   expect(minimal.error).toBeNull();
   const body = firstCall(fetchMock.mock.calls)[1]?.body;
-  expect(body).toBeInstanceOf(FormData);
-  if (!(body instanceof FormData)) {
-    throw new TypeError('Expected multipart upload');
-  }
+  expectInstanceOf(body, FormData);
   expect(body.has('memory_mb')).toBe(false);
   expect(body.has('ports')).toBe(false);
   const boundary = await sdk.sandboxes.deploy(projectId, templateId, new Uint8Array(), {
@@ -159,8 +153,6 @@ test('accepts sixteen unique template ports', async () => {
   });
   expect(outcome.error).toBeNull();
   const body = firstCall(fetchMock.mock.calls)[1]?.body;
-  if (!(body instanceof FormData)) {
-    throw new TypeError('Expected multipart upload');
-  }
+  expectInstanceOf(body, FormData);
   expect(body.get('ports')).toBe(JSON.stringify(ports));
 });

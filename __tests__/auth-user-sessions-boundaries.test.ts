@@ -4,6 +4,8 @@ import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
 import { type AuthUserSessionsHost, deleteSession, getSessions } from '../src/auth-user-sessions.ts';
 import { AuthSessionChangedError } from '../src/errors.ts';
+import { expectInstanceOf } from './support/assertions.ts';
+import { recordAuthRequests } from './support/auth-request-recorder.ts';
 
 const sessionId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const token = `header.${Buffer.from(JSON.stringify({ session_id: sessionId })).toString('base64url')}.signature`;
@@ -52,10 +54,7 @@ test('a successful current-session delete does not invent a cause after ownershi
 
   const { error } = await deleteSession(host, sessionId);
 
-  expect(error).toBeInstanceOf(AuthSessionChangedError);
-  if (error === null) {
-    throw new Error('Expected a changed-session error');
-  }
+  expectInstanceOf(error, AuthSessionChangedError);
   expect(Object.hasOwn(error, 'cause')).toBe(false);
 });
 
@@ -63,15 +62,15 @@ test('session pagination omits defaults and sends explicit page and limit', asyn
   const data = { sessions: [], total: 0, page: 1, limit: 20, total_pages: 0 };
   const { host } = fixture({ ok: true, status: 200, data, error: null });
   host._isAuthContextCurrent = () => true;
-  const paths: string[] = [];
-  host._authFetchWithContext = (path) => {
-    paths.push(typeof path === 'function' ? path() : path);
-    return Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context });
-  };
+  const { requests, authFetchWithContext } = recordAuthRequests({
+    result: { ok: true, status: 200, data, error: null },
+    context,
+  });
+  host._authFetchWithContext = authFetchWithContext;
 
   expect(await getSessions(host, { page: 1, limit: 20 })).toEqual({ ...data, error: null });
   expect(await getSessions(host, { page: 3, limit: 7 })).toEqual({ ...data, error: null });
-  expect(paths).toEqual(['/auth/user/sessions', '/auth/user/sessions?page=3&limit=7']);
+  expect(requests.map(({ path }) => path)).toEqual(['/auth/user/sessions', '/auth/user/sessions?page=3&limit=7']);
 });
 
 test('a network failure deleting the current session still clears owned local credentials', async () => {
@@ -101,16 +100,16 @@ test.each([
 });
 
 test.each([
-  [42, null, '/auth/user/sessions/42'],
-  [{}, new Error('sessionId must be a non-empty string'), null],
-])('converts only a primitive session ID %p, as before', async (id, error, path) => {
+  [42, null, ['/auth/user/sessions/42']],
+  [{}, new Error('sessionId must be a non-empty string'), []],
+])('converts only a primitive session ID %p, as before', async (id, error, paths) => {
   const { host } = fixture({ ok: true, status: 204, data: null, error: null });
   host._isAuthContextCurrent = () => true;
   const fetch = jest.spyOn(host, '_authFetchWithContext');
 
   const result: unknown = await Reflect.apply(deleteSession, undefined, [host, id]);
   expect(result).toEqual({ error });
-  expect(fetch.mock.calls.map(([url]) => url)).toEqual(path === null ? [] : [path]);
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual(paths);
 });
 
 test('encodes a session ID containing dots as one path segment', async () => {

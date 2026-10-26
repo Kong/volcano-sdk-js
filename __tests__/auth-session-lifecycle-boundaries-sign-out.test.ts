@@ -6,6 +6,7 @@ import {
   revokeAccessSession,
   signOutCaptured,
 } from '../src/auth-session-lifecycle.ts';
+import { expectPresent } from './support/assertions.ts';
 import { fixture, type RequestResult, session } from './support/auth-boundaries-lifecycle-fixtures.ts';
 
 test('sign-out normalizes a rejected concurrent refresh and still clears the session', async () => {
@@ -81,9 +82,7 @@ test('a stale sign-out without revocation error has no cause', async () => {
 
   const result = await signOutCaptured(host, context, null);
   expect(result.error?.name).toBe('AuthSessionChangedError');
-  if (result.error === null) {
-    throw new Error('Expected a stale session error');
-  }
+  expectPresent(result.error);
   expect(Object.hasOwn(result.error, 'cause')).toBe(false);
 });
 

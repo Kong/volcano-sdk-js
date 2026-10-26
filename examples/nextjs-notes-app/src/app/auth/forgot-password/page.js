@@ -8,7 +8,7 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
 
@@ -24,9 +24,7 @@ export default function ForgotPasswordPage() {
   }, [user, loading, router]);
 
   // Handle password reset
-  const handleResetPassword = async ({ email }) => {
-    return await resetPassword(email);
-  };
+  const handleResetPassword = useCallback(async ({ email }) => await resetPassword(email), [resetPassword]);
 
   // Don't render form if already authenticated
   if (user) {

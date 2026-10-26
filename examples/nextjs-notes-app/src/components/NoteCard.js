@@ -14,7 +14,7 @@
  * />
  */
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { NoteCardEditor } from './NoteCardEditor';
 import { NoteCardView } from './NoteCardView';
 import { useNoteCardEditor } from './useNoteCardEditor';
@@ -31,20 +31,23 @@ export function NoteCard({ note, onEdit, onDelete }) {
   // ---------------------------------------------------------------------------
 
   const editor = useNoteCardEditor(note, onEdit);
+  const { setIsEditing } = editor;
   const [isDeleting, setIsDeleting] = useState(false);
 
   // ---------------------------------------------------------------------------
   // HANDLERS
   // ---------------------------------------------------------------------------
 
-  const handleDelete = async () => {
+  const handleEdit = useCallback(() => setIsEditing(true), [setIsEditing]);
+
+  const handleDelete = useCallback(async () => {
     if (!confirm('Are you sure you want to delete this note?')) {
       return;
     }
 
     setIsDeleting(true);
     await onDelete(note.id);
-  };
+  }, [onDelete, note.id]);
 
   // ---------------------------------------------------------------------------
   // RENDER
@@ -54,12 +57,5 @@ export function NoteCard({ note, onEdit, onDelete }) {
     return <NoteCardEditor editor={editor} />;
   }
 
-  return (
-    <NoteCardView
-      note={note}
-      isDeleting={isDeleting}
-      onEdit={() => editor.setIsEditing(true)}
-      onDelete={handleDelete}
-    />
-  );
+  return <NoteCardView note={note} isDeleting={isDeleting} onEdit={handleEdit} onDelete={handleDelete} />;
 }

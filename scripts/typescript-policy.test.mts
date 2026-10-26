@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { requireLinted } from './oxlint-report.mts';
 import { requireUnsuppressed } from './suppression-policy.mts';
+// oxlint-disable-next-line import/max-dependencies -- This test checks every tracked file against each native tool.
 import { array, record, stringValue } from './values.mts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -29,6 +30,20 @@ function handwrittenSource(files: readonly string[]): string[] {
       !path.startsWith('src/generated/') &&
       !path.startsWith('src/generated-runtime/'),
   );
+}
+
+function handwrittenTests(files: readonly string[]): string[] {
+  return files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
+}
+
+// Every tracked TypeScript file one of the compiler projects must check.
+function typedFiles(files: readonly string[]): string[] {
+  return [
+    ...handwrittenSource(files),
+    ...handwrittenTests(files),
+    ...files.filter((path) => path.startsWith('test/') && path.endsWith('.ts')),
+    ...files.filter((path) => path.startsWith('scripts/') && /\.[cm]ts$/u.test(path)),
+  ];
 }
 
 function maintainedCode(files: readonly string[]): string[] {
@@ -143,28 +158,24 @@ function requireRootFormatting(path: string): void {
 
 async function requireNoManifestOverrides(files: readonly string[]): Promise<void> {
   const qualityKeys = ['eslintConfig', 'jest', 'nyc', 'c8'];
-  for (const path of files.filter((item) => item.includes('/') && item.endsWith('/package.json'))) {
-    const absolute = isAbsolute(path) ? path : join(root, path);
-    const manifest = record(JSON.parse(await readFile(absolute, 'utf8')));
-    for (const key of qualityKeys) {
-      assert.equal(manifest[key], undefined, `${path} overrides ${key}`);
-    }
-  }
+  const nestedManifests = files.filter((item) => item.includes('/') && item.endsWith('/package.json'));
+  await Promise.all(
+    nestedManifests.map(async (path) => {
+      const absolute = isAbsolute(path) ? path : join(root, path);
+      const nested = record(JSON.parse(await readFile(absolute, 'utf8')));
+      for (const key of qualityKeys) {
+        assert.equal(nested[key], undefined, `${path} overrides ${key}`);
+      }
+    }),
+  );
 }
 
 await test('tracked SDK code remains in native lint, format, type, test, and coverage gates', async () => {
   const files = trackedFiles();
-  const runtime = handwrittenSource(files);
-  const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
-  assert.ok(runtime.length > 0);
-  assert.ok(tests.some((path) => path.endsWith('.test.ts')));
+  assert.ok(handwrittenSource(files).length > 0);
+  assert.ok(handwrittenTests(files).some((path) => path.endsWith('.test.ts')));
   const typechecked = new Set([...typecheckedFiles('tsconfig.json'), ...typecheckedFiles('tsconfig.tooling.json')]);
-  for (const path of [
-    ...runtime,
-    ...tests,
-    ...files.filter((item) => item.startsWith('test/') && item.endsWith('.ts')),
-    ...files.filter((item) => item.startsWith('scripts/') && /\.[cm]ts$/u.test(item)),
-  ]) {
+  for (const path of typedFiles(files)) {
     assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
   }
   requireFullCoverage(coverageConfig);
@@ -173,11 +184,13 @@ await test('tracked SDK code remains in native lint, format, type, test, and cov
   for (const path of files.filter((item) => /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/u.test(item))) {
     assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
   }
-  for (const path of maintainedCode(files)) {
-    requireLinted(path);
-    requireRootFormatting(path);
-    requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
-  }
+  await Promise.all(
+    maintainedCode(files).map(async (path) => {
+      requireLinted(path);
+      requireRootFormatting(path);
+      requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
+    }),
+  );
   assert.deepEqual(
     files.filter((path) => untypedHandwrittenFile(path)),
     [],

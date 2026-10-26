@@ -72,8 +72,9 @@ async function submitOrder(auth, input) {
 
   const volcano = client(auth.access_token);
   const [order] = unwrap(await volcano.insert('orders', { user_id: auth.user_id, status: 'submitted' }));
-  for (const item of items) {
-    unwrap(await insertOrderItem(volcano, order, item));
+  const inserted = await Promise.all(items.map((item) => insertOrderItem(volcano, order, item)));
+  for (const result of inserted) {
+    unwrap(result);
   }
 
   const execution = await startExecution(order.id);

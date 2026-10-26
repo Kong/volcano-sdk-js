@@ -8,6 +8,7 @@ import {
   signInWithHostedAuth,
   signInWithOAuth,
 } from '../src/auth-oauth-url.ts';
+import { expectPresent } from './support/assertions.ts';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 
@@ -73,7 +74,9 @@ test('OAuth preserves application query parameters and binds the nonce', () => {
       redirectTo: 'https://app.example.test/callback?keep=one',
     }),
   );
-  const redirect = new URL(url.searchParams.get('redirect_url') ?? '');
+  const redirectUrl = url.searchParams.get('redirect_url');
+  expectPresent(redirectUrl);
+  const redirect = new URL(redirectUrl);
 
   expect(navigate).toHaveBeenCalledWith(url.toString());
   expect(stored).toHaveBeenCalledWith('nonce-1', 'https://app.example.test/callback?keep=one');
@@ -176,7 +179,9 @@ test('OAuth redirect defaults on blank input and adds one nonce parameter', () =
   const { host, stored } = fixture();
 
   const url = new URL(signInWithOAuth(host, 'github', { redirectTo: '  ' }));
-  const redirect = new URL(url.searchParams.get('redirect_url') ?? '');
+  const redirectUrl = url.searchParams.get('redirect_url');
+  expectPresent(redirectUrl);
+  const redirect = new URL(redirectUrl);
 
   expect(stored).toHaveBeenCalledWith('nonce-1', 'https://app.example.test/callback');
   expect(redirect.search).toBe('?vh_state=nonce-1');
@@ -212,7 +217,10 @@ test('hosted sign-in throws for a refused project ID without navigating', () => 
   browser(navigate);
   const { host, stored } = fixture();
   host._resolveProjectIdForHostedAuth = () => '..';
-  host.getHostedAuthUrl = (options) => getHostedAuthUrl(host, options ?? {});
+  host.getHostedAuthUrl = (options) => {
+    expectPresent(options);
+    return getHostedAuthUrl(host, options);
+  };
 
   expect(() => signInWithHostedAuth(host, { projectId: '..' })).toThrow(
     new Error('projectId cannot contain "/" or be "." or ".."'),

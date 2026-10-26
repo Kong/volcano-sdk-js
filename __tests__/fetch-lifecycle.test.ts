@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { fetchWithTimeout } from '../src/fetch-lifecycle.ts';
+import { expectNoPendingTimers } from './support/fake-timer-leaks.ts';
 
 const endpoint = 'https://api.example.test/resource';
 
@@ -39,7 +40,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  expect(jest.getTimerCount()).toBe(0);
+  expectNoPendingTimers();
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
@@ -55,10 +56,12 @@ test('returns the response and preserves request options', async () => {
   expect(options.signal).toBeUndefined();
 });
 
-test.each([undefined, null])('accepts an absent caller signal: %p', async (signal) => {
+test.each<[undefined | null, RequestInit]>([
+  [undefined, {}],
+  [null, { signal: null }],
+])('accepts an absent caller signal: %p', async (_signal, options) => {
   const response = new Response('ok');
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(response);
-  const options: RequestInit = signal === undefined ? {} : { signal };
   await expect(fetchWithTimeout(endpoint, options)).resolves.toBe(response);
 });
 

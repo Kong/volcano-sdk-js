@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { bodyJson, projectId, requestCall, requestId, sessionId, snapshot } from './support/sandbox-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
 
 const originalFetch = globalThis.fetch;
 function client(): VolcanoAuth {
@@ -63,9 +64,7 @@ function controlsSessionsWithoutReplay(): void {
     });
     expect(result.error).toBeNull();
     const handle = result.data;
-    if (handle === null) {
-      throw result.error;
-    }
+    expectPresent(handle);
     expect(handle.id).toBe(sessionId);
     expect(bodyJson(fetchMock.mock.calls[0])).toEqual({
       preset: 'node22',
@@ -114,9 +113,8 @@ test('passes session lifetime controls and terminates on async disposal', async 
     max_duration_seconds: 300,
     idle_timeout_seconds: 60,
   });
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   await result.data[Symbol.asyncDispose]();
   const disposal = requestCall(fetchMock.mock.calls, 1);
   expect(disposal[0]).toBe(`https://api.test.com/sandbox-sessions/${sessionId}`);
@@ -138,9 +136,8 @@ test('preserves binary files and returns a scoped HTTP credential', async () => 
     );
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   const bytes = new Uint8Array([0, 255, 128]);
   const written = await result.data.files.write('/workspace/data', bytes);
   expect(written.error).toBeNull();
@@ -220,9 +217,8 @@ test('selects a template and forwards command limits and cancellation', async ()
     memory_mb: 2048,
   });
   expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   fetchMock.mockResolvedValue(
     Response.json({
       stdout: 'ok',

@@ -34,9 +34,8 @@ export function useAuthSession({ setUser, setLoading }) {
         setUser(restoredUser);
       } catch (err) {
         console.error('Auth initialization error:', err);
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     }
 
     initAuth();

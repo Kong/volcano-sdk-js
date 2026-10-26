@@ -4,6 +4,7 @@ import type { RequestResult } from '../src/auth-request.ts';
 import { clearSharedFunctionResolveStateForTests } from '../src/function-resolve-cache.ts';
 import { VolcanoAuth } from '../src/index.ts';
 import type { User } from '../src/sdk-public-types.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 beforeEach(clearSharedFunctionResolveStateForTests);
 afterEach(() => {
@@ -29,9 +30,7 @@ function rejectsInvalidProjects(): void {
     const sdk = client();
     const fetch = jest.spyOn(sdk, '_authFetch');
     const send: unknown = Reflect.get(sdk, '_postProjectLogRequest');
-    if (typeof send !== 'function') {
-      throw new TypeError('Missing project log method');
-    }
+    expectInstanceOf(send, Function);
 
     await expect(Reflect.apply(send, sdk, [42, 'search', {}])).resolves.toMatchObject({
       data: null,
@@ -102,27 +101,27 @@ describe('facade log request boundary', () => {
 });
 
 function initializesFromCredentials(): void {
+  const user: User = { id: 'user', email: 'u@example.test', status: 'active' };
   test.each([
-    { access: null, refresh: null, hasSession: false },
-    { access: '', refresh: null, hasSession: false },
-    { access: null, refresh: '', hasSession: false },
-    { access: 'access', refresh: null, hasSession: true },
-    { access: null, refresh: 'refresh', hasSession: true },
-    { access: '', refresh: 'refresh', hasSession: true },
-    { access: 'access', refresh: '', hasSession: true },
+    { access: null, refresh: null, getUserCalls: 0, initializedUser: null },
+    { access: '', refresh: null, getUserCalls: 0, initializedUser: null },
+    { access: null, refresh: '', getUserCalls: 0, initializedUser: null },
+    { access: 'access', refresh: null, getUserCalls: 1, initializedUser: user },
+    { access: null, refresh: 'refresh', getUserCalls: 1, initializedUser: user },
+    { access: '', refresh: 'refresh', getUserCalls: 1, initializedUser: user },
+    { access: 'access', refresh: '', getUserCalls: 1, initializedUser: user },
   ])(
     'initializes only when a nonempty credential exists: access=$access refresh=$refresh',
-    async ({ access, refresh, hasSession }) => {
+    async ({ access, refresh, getUserCalls, initializedUser }) => {
       const sdk = client();
       sdk.accessToken = access;
       sdk.refreshToken = refresh;
-      const user: User = { id: 'user', email: 'u@example.test', status: 'active' };
       const getUser = jest.spyOn(sdk, 'getUser').mockResolvedValue({ user, error: null });
 
       const result = await sdk.initialize();
 
-      expect(getUser).toHaveBeenCalledTimes(hasSession ? 1 : 0);
-      expect(result).toEqual(hasSession ? { user, error: null } : { user: null, error: null });
+      expect(getUser).toHaveBeenCalledTimes(getUserCalls);
+      expect(result).toEqual({ user: initializedUser, error: null });
     },
   );
 }

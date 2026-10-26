@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { type StorageFetcher, storageRequest } from '../src/storage-transport.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 function fetcher(response: Response) {
   const request = jest.fn<StorageFetcher>();
@@ -39,9 +40,7 @@ test('preserves binary bytes for a successful blob download', async () => {
     responseType: 'blob',
   });
   expect(result.error).toBeNull();
-  if (!(result.data instanceof Blob)) {
-    throw new TypeError('Expected a Blob');
-  }
+  expectInstanceOf(result.data, Blob);
   expect(new Uint8Array(await result.data.arrayBuffer())).toEqual(bytes);
 });
 

@@ -6,27 +6,32 @@
  * NoteCard in editing mode: inline title and content inputs.
  */
 
+import { useCallback } from 'react';
+
 /**
  * @param {Object} props
  * @param {Object} props.editor - Edit state and handlers from useNoteCardEditor
  */
 export function NoteCardEditor({ editor }) {
   const { editTitle, setEditTitle, editContent, setEditContent, handleSave, handleCancel, handleKeyDown } = editor;
+  const handleTitleChange = useCallback((e) => setEditTitle(e.target.value), [setEditTitle]);
+  const handleContentChange = useCallback((e) => setEditContent(e.target.value), [setEditContent]);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-volcano-200 p-4 ring-2 ring-volcano-500">
       <input
         type="text"
         value={editTitle}
-        onChange={(e) => setEditTitle(e.target.value)}
+        onChange={handleTitleChange}
         onKeyDown={handleKeyDown}
         className="w-full text-lg font-semibold text-gray-900 border-0 border-b border-gray-200 focus:border-volcano-500 focus:ring-0 pb-2 mb-2"
         placeholder="Note title"
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- The Edit button that had focus unmounts as this opens.
         autoFocus
       />
       <textarea
         value={editContent}
-        onChange={(e) => setEditContent(e.target.value)}
+        onChange={handleContentChange}
         onKeyDown={handleKeyDown}
         className="w-full text-gray-600 border-0 focus:ring-0 resize-none min-h-[100px]"
         placeholder="Note content..."

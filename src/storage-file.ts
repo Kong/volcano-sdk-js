@@ -1,4 +1,3 @@
-import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import type {
   CompleteUploadSessionResponse,
@@ -29,9 +28,9 @@ import {
 } from './storage-file-objects.ts';
 import {
   invalidTarget,
-  legacyStringDefault,
   preflight,
   preflightPaths,
+  sessionRefusal,
   type StorageResult,
   validatedResult,
 } from './storage-file-request.ts';
@@ -81,17 +80,8 @@ export class StorageFileApi {
    * Check if user is authenticated
    * @private
    */
-  async _checkAuth(): Promise<StorageResult<never> | null> {
-    await this.volcanoAuth._completeOAuthExchange();
-    if (!this.volcanoAuth.accessToken) {
-      const exchangeError = this.volcanoAuth._oauthExchangeError;
-      return errorResult(
-        exchangeError instanceof Error
-          ? exchangeError
-          : legacyStringDefault(exchangeError, 'No active session. Please sign in first.'),
-      );
-    }
-    return null;
+  _checkAuth(): Promise<StorageResult<never> | null> {
+    return sessionRefusal(this);
   }
 
   /**

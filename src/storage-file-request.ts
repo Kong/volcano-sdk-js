@@ -37,6 +37,20 @@ export function invalidTarget(bucketName: string, paths: readonly unknown[]): St
   return message === null ? null : errorResult(message);
 }
 
+/** Refuse a request without a session, once any pending OAuth exchange settles. */
+export async function sessionRefusal(host: StorageFileApi): Promise<StorageResult<never> | null> {
+  await host.volcanoAuth._completeOAuthExchange();
+  if (!host.volcanoAuth.accessToken) {
+    const exchangeError = host.volcanoAuth._oauthExchangeError;
+    return errorResult(
+      exchangeError instanceof Error
+        ? exchangeError
+        : legacyStringDefault(exchangeError, 'No active session. Please sign in first.'),
+    );
+  }
+  return null;
+}
+
 export async function preflightPaths(
   host: StorageFileApi,
   paths: readonly unknown[],

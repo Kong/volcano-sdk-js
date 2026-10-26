@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 const config = { apiUrl: 'https://api.test.com', anonKey: 'ak-test-anon-key' };
@@ -11,12 +12,7 @@ beforeEach(() => {
   volcano = new VolcanoAuth(config);
 });
 
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === 'string') {
-    return input;
-  }
-  return input instanceof URL ? input.href : input.url;
-}
+type Route = (options: RequestInit | undefined) => Promise<Response>;
 
 function refreshedSession(): Response {
   return reply(200, {
@@ -27,34 +23,28 @@ function refreshedSession(): Response {
   });
 }
 
+function currentProfile(): Promise<Response> {
+  return Promise.resolve(reply(200, { user: { id: 'user-1', email: 'fixture@example.com', status: 'active' } }));
+}
+
 function sharesConcurrentRefresh(): void {
   it('shares one refresh across concurrent authenticated requests', async () => {
     const refreshResponse = deferred<Response>();
     const refreshStarted = signal();
-    let userRequests = 0;
-    let refreshRequests = 0;
     volcano._setSession({
       access_token: 'old-access',
       refresh_token: 'shared-refresh',
       user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
     });
-    fetchMock.mockImplementation((url) => {
-      if (requestUrl(url).endsWith('/auth/refresh')) {
-        refreshRequests += 1;
-        refreshStarted.resolve();
-        return refreshResponse.promise;
-      }
-
-      userRequests += 1;
-      if (userRequests <= 2) {
-        return Promise.resolve(reply(401, { error: 'Token expired' }));
-      }
-      return Promise.resolve(
-        reply(200, {
-          user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
-        }),
-      );
+    const refreshRoute = jest.fn<Route>(() => {
+      refreshStarted.resolve();
+      return refreshResponse.promise;
     });
+    const userRoute = jest
+      .fn<Route>(currentProfile)
+      .mockResolvedValueOnce(reply(401, { error: 'Token expired' }))
+      .mockResolvedValueOnce(reply(401, { error: 'Token expired' }));
+    fetchMock.mockImplementation(fetchRoutes({ '/auth/refresh': refreshRoute, '/auth/user': userRoute }));
 
     const first = volcano.auth.getUser();
     const second = volcano.auth.getUser();
@@ -63,7 +53,7 @@ function sharesConcurrentRefresh(): void {
 
     const [firstResult, secondResult] = await within(Promise.all([first, second]), 'shared profile refresh');
 
-    expect(refreshRequests).toBe(1);
+    expect(refreshRoute).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual({
       user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       error: null,
@@ -72,7 +62,7 @@ function sharesConcurrentRefresh(): void {
       user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       error: null,
     });
-    expect(userRequests).toBe(4);
+    expect(userRoute).toHaveBeenCalledTimes(4);
     expect(volcano.accessToken).toBe('new-access');
   });
 }
@@ -80,32 +70,17 @@ function sharesConcurrentRefresh(): void {
 function reusesCompletedRefresh(): void {
   it('reuses a completed refresh for a delayed request from the same session', async () => {
     const delayedResponse = deferred<Response>();
-    let userRequests = 0;
-    let refreshRequests = 0;
     volcano._setSession({
       access_token: 'old-access',
       refresh_token: 'shared-refresh',
       user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
     });
-    fetchMock.mockImplementation((url) => {
-      if (requestUrl(url).endsWith('/auth/refresh')) {
-        refreshRequests += 1;
-        return Promise.resolve(refreshedSession());
-      }
-
-      userRequests += 1;
-      if (userRequests === 1) {
-        return Promise.resolve(reply(401, { error: 'Token expired' }));
-      }
-      if (userRequests === 2) {
-        return delayedResponse.promise;
-      }
-      return Promise.resolve(
-        reply(200, {
-          user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
-        }),
-      );
-    });
+    const refreshRoute = jest.fn<Route>(() => Promise.resolve(refreshedSession()));
+    const userRoute = jest
+      .fn<Route>(currentProfile)
+      .mockResolvedValueOnce(reply(401, { error: 'Token expired' }))
+      .mockReturnValueOnce(delayedResponse.promise);
+    fetchMock.mockImplementation(fetchRoutes({ '/auth/refresh': refreshRoute, '/auth/user': userRoute }));
 
     const first = volcano.auth.getUser();
     const delayed = volcano.auth.getUser();
@@ -119,8 +94,8 @@ function reusesCompletedRefresh(): void {
       user: { id: 'user-1', email: 'fixture@example.com', status: 'active' },
       error: null,
     });
-    expect(refreshRequests).toBe(1);
-    expect(userRequests).toBe(4);
+    expect(refreshRoute).toHaveBeenCalledTimes(1);
+    expect(userRoute).toHaveBeenCalledTimes(4);
     expect(volcano.accessToken).toBe('new-access');
   });
 }

@@ -2,6 +2,7 @@
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { assert, asyncProperty, integer, uint8Array } from 'fast-check';
 import { type ResumableStorageHost, uploadResumable } from '../src/storage-resumable.ts';
+import { expectPresent } from './support/assertions.ts';
 import { propertyOptions } from './support/property-options.ts';
 
 const SESSION = { session_id: 'session-1', total_parts: 2, part_size: 3 };
@@ -107,11 +108,9 @@ test('uploads each slice and reports progress before completion', async () => {
     partSize: 3,
   });
   expect(given.upload).toHaveBeenCalledTimes(2);
-  const first = given.upload.mock.calls[0];
-  const second = given.upload.mock.calls[1];
-  if (first === undefined || second === undefined) {
-    throw new Error('Expected two uploaded parts');
-  }
+  const [first, second] = given.upload.mock.calls;
+  expectPresent(first);
+  expectPresent(second);
   expect(new Uint8Array(await first[3].arrayBuffer())).toEqual(Uint8Array.from([0, 255, 1]));
   expect(new Uint8Array(await second[3].arrayBuffer())).toEqual(Uint8Array.from([128, 42]));
   expect(progress).toEqual([
@@ -215,11 +214,8 @@ test('resumable chunks preserve arbitrary binary bytes', async () => {
         const body = new Blob([new Uint8Array(bytes)]);
         const result = await uploadResumable(given.host, 'binary.dat', body);
         expect(result.error).toBeNull();
-        const observed: number[] = [];
-        for (const call of given.upload.mock.calls) {
-          observed.push(...new Uint8Array(await call[3].arrayBuffer()));
-        }
-        expect(observed).toEqual(Array.from(bytes));
+        const parts = await Promise.all(given.upload.mock.calls.map((call) => call[3].arrayBuffer()));
+        expect(parts.flatMap((part) => Array.from(new Uint8Array(part)))).toEqual(Array.from(bytes));
         expect(given.upload).toHaveBeenCalledTimes(Math.ceil(bytes.length / partSize));
       },
     ),

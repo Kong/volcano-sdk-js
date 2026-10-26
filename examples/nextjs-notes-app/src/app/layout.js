@@ -8,6 +8,7 @@
  * - Navbar (navigation)
  */
 
+// oxlint-disable-next-line import/no-unassigned-import -- Next.js loads global CSS only by a side-effect import.
 import './globals.css';
 
 import { Navbar } from '@/components/Navbar';

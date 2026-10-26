@@ -55,13 +55,12 @@ test.each([
 });
 
 test('rejects a non-string version at the response boundary', async () => {
+  const headerValues = new Map<string, unknown>([['x-volcano-version', 42]]);
   const response = {
     ok: true,
     status: 200,
     text: () => Promise.resolve('ok'),
-    headers: {
-      get: (name: string): unknown => (name === 'x-volcano-version' ? 42 : null),
-    },
+    headers: { get: (name: string): unknown => headerValues.get(name) },
   };
   await expect(functionInvokeResult(response, false)).resolves.toMatchObject({
     data: 'ok',

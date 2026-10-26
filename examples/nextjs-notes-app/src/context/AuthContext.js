@@ -15,7 +15,7 @@
  * }
  */
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { useAuthMethods } from './useAuthMethods';
 import { useAuthSession } from './useAuthSession';
 
@@ -85,21 +85,25 @@ export function AuthProvider({ children }) {
   // CONTEXT VALUE
   // ---------------------------------------------------------------------------
 
-  const value = {
-    // State
-    user,
-    loading,
-    error,
-    isAnonymous,
+  // Memoised so consumers re-render only when auth state or a method changes
+  const value = useMemo(
+    () => ({
+      // State
+      user,
+      loading,
+      error,
+      isAnonymous,
 
-    // Methods
-    signIn,
-    signUp,
-    signUpAnonymous,
-    signOut,
-    resetPassword,
-    clearError,
-  };
+      // Methods
+      signIn,
+      signUp,
+      signUpAnonymous,
+      signOut,
+      resetPassword,
+      clearError,
+    }),
+    [user, loading, error, isAnonymous, signIn, signUp, signUpAnonymous, signOut, resetPassword, clearError],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -89,28 +89,28 @@ function postsDecisions(): void {
 function surfacesRefusals(): void {
   // A refusal is a result, not an exception, and keeps the platform's code so
   // a caller can tell a decision that lost a race from one it may not make.
-  test.each([
+  test.each<[number, { message: string; code?: string }]>([
     [
       403,
-      undefined,
-      'project access tokens cannot decide durable approvals; a person decides in the dashboard or with a platform token',
+      {
+        message:
+          'project access tokens cannot decide durable approvals; a person decides in the dashboard or with a platform token',
+      },
     ],
-    [404, undefined, 'durable approval not found'],
-    [409, 'approval_decided', 'approval was already denied'],
-    [409, 'approval_expired', 'approval expired'],
-  ])('surfaces a %d refusal with its status and code', async (status, code, message) => {
-    jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ error: message, code }, { status }));
+    [404, { message: 'durable approval not found' }],
+    [409, { message: 'approval was already denied', code: 'approval_decided' }],
+    [409, { message: 'approval expired', code: 'approval_expired' }],
+  ])('surfaces a %d refusal with its status and code', async (status, refusal) => {
+    jest
+      .mocked(globalThis.fetch)
+      .mockResolvedValueOnce(Response.json({ error: refusal.message, code: refusal.code }, { status }));
 
     const result = await realClient().durable.approvals.approve('proj-1', 'apr-1');
 
     expect(result.data).toBeNull();
     expect(result.status).toBe(status);
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.error).toMatchObject({
-      status,
-      message,
-      ...(code === undefined ? {} : { code }),
-    });
+    expect(result.error).toMatchObject({ status, ...refusal });
   });
 }
 

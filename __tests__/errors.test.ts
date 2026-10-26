@@ -109,6 +109,7 @@ test('preserves the receiver when reading an inherited error brand', () => {
   const read = jest.fn(function (this: unknown): boolean {
     return this === 'branded';
   });
+  // oxlint-disable-next-line eslint/no-extend-native -- Only a getter on a primitive's prototype can observe the receiver.
   Object.defineProperty(String.prototype, 'isSystemError', { get: read, configurable: true });
   try {
     expect(VolcanoSystemError.is('branded')).toBe(true);

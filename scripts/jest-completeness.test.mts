@@ -60,14 +60,16 @@ const incompleteRuns: [string, string][] = [
   ],
 ];
 
-for (const [name, source] of incompleteRuns) {
-  await test(`rejects ${name}`, async () => {
-    const result = await runFixture(source);
-    assert.equal(result.error, undefined);
-    assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stderr, /Incomplete test run:/u);
-  });
-}
+await Promise.all(
+  incompleteRuns.map(([name, source]) =>
+    test(`rejects ${name}`, async () => {
+      const result = await runFixture(source);
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /Incomplete test run:/u);
+    }),
+  ),
+);
 
 await test('rejects empty discovery even with passWithNoTests', async () => {
   const result = await runFixture(undefined, ['--passWithNoTests']);

@@ -1,5 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   bodyAt,
   decide,
@@ -129,12 +130,12 @@ function handlesRefusals(): void {
 
     const failure = await failureOf(registered());
 
-    expect(failure).toBeInstanceOf(Error);
-    expect(failure).toMatchObject({
-      status,
-      message: `Volcano refused the approval request (${[status, code].filter(Boolean).join(' ')}): ${body.error}`,
-    });
-    expect(failure instanceof Error ? Reflect.get(failure, 'code') : 'not an error').toBe(code);
+    expectInstanceOf(failure, Error);
+    expect(failure.message).toBe(
+      `Volcano refused the approval request (${[status, code].filter(Boolean).join(' ')}): ${body.error}`,
+    );
+    // The error's own fields; toEqual reads a missing code as undefined.
+    expect({ ...failure }).toEqual({ status, code });
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 

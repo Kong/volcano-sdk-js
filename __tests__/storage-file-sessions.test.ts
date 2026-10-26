@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { completedUpload, uploadPart, uploadSession, uploadStatus } from './storage-response-fixtures.ts';
 import { apiUrl, fixture } from './support/storage-file-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -17,9 +18,7 @@ test.each([undefined, null, false, 0, Number.NaN, ''])('rejects falsy upload siz
     'file.bin',
     { totalSize },
   ]);
-  if (!(pending instanceof Promise)) {
-    throw new TypeError('Expected a session promise');
-  }
+  expectInstanceOf(pending, Promise);
   await expect(pending).resolves.toMatchObject({ error: { message: 'totalSize is required' } });
   expect(given.fetch).not.toHaveBeenCalled();
 });

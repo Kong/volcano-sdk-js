@@ -7,6 +7,7 @@ import {
   resetApprovalDouble,
   restoreApprovalDouble,
 } from './support/durable-approval-double.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 jest.mock('@aws/durable-execution-sdk-js', () => mockApprovalRuntime(), { virtual: true });
@@ -144,8 +145,8 @@ function refusesUnreadableDecisions(): void {
       (error: unknown) => error,
     );
 
-    expect(failure).toBeInstanceOf(TypeError);
-    expect(failure instanceof Error ? failure.cause : undefined).toBeInstanceOf(SyntaxError);
+    expectInstanceOf(failure, TypeError);
+    expect(failure.cause).toBeInstanceOf(SyntaxError);
   });
 
   it.each([

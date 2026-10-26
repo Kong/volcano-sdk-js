@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   completeSession,
   expectAdoptedSession,
@@ -84,7 +85,7 @@ function adoptsCompleteSessions(): void {
 
     await volcano.auth.setSession(completeSession());
 
-    await expectAdoptedSession(volcano);
+    await expect(volcano.auth.getSession()).resolves.toEqual({ data: { session: completeSession() }, error: null });
   });
 
   it('owns the supplied session and returned snapshot deeply', async () => {
@@ -98,12 +99,10 @@ function adoptsCompleteSessions(): void {
     snapshot.refresh_token = 'mutated-result-token';
     const metadata = required(required(snapshot.user).user_metadata);
     const preferences: unknown = metadata['preferences'];
-    if (typeof preferences !== 'object' || preferences === null) {
-      throw new Error('Expected nested user preferences');
-    }
+    expectInstanceOf(preferences, Object);
     Reflect.set(preferences, 'theme', 'blue');
 
-    await expectAdoptedSession(volcano);
+    await expect(volcano.auth.getSession()).resolves.toEqual({ data: { session: completeSession() }, error: null });
   });
 }
 

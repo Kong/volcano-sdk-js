@@ -6,7 +6,7 @@
  * Holds NoteCard's inline-edit state and its save, cancel, and keyboard handlers.
  */
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 /**
  * @param {Object} note - Note being edited
@@ -17,7 +17,7 @@ export function useNoteCardEditor(note, onEdit) {
   const [editTitle, setEditTitle] = useState(note.title);
   const [editContent, setEditContent] = useState(note.content || '');
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!editTitle.trim()) {
       return;
     }
@@ -28,21 +28,24 @@ export function useNoteCardEditor(note, onEdit) {
     });
 
     setIsEditing(false);
-  };
+  }, [editTitle, editContent, onEdit, note.id]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setEditTitle(note.title);
     setEditContent(note.content || '');
     setIsEditing(false);
-  };
+  }, [note.title, note.content]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      handleCancel();
-    } else if (e.key === 'Enter' && e.metaKey) {
-      handleSave();
-    }
-  };
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Escape') {
+        handleCancel();
+      } else if (e.key === 'Enter' && e.metaKey) {
+        handleSave();
+      }
+    },
+    [handleCancel, handleSave],
+  );
 
   return {
     isEditing,

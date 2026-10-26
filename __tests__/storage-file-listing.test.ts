@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { storageObject } from './storage-response-fixtures.ts';
 import { apiUrl, fixture } from './support/storage-file-fixtures.ts';
+import { expectInstanceOf, expectPresent } from './support/assertions.ts';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -40,9 +41,7 @@ test('omits falsy list options from the URL', async () => {
     '',
     { limit: Number.NaN, cursor: null },
   ]);
-  if (!(pending instanceof Promise)) {
-    throw new TypeError('Expected a list promise');
-  }
+  expectInstanceOf(pending, Promise);
   await pending;
   expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket`);
 });
@@ -59,16 +58,16 @@ test('treats a missing cursor as an empty final page', async () => {
   await expect(given.api.list()).resolves.toEqual({ data: [], error: null, nextCursor: null });
 });
 
-test.each([null, 3, { objects: 'not an array' }])('rejects malformed list responses: %p', async (payload) => {
+test.each([
+  [null, 'Storage list response is not an object'],
+  [3, 'Storage list response is not an object'],
+  [{ objects: 'not an array' }, 'Storage list response has invalid objects'],
+])('rejects malformed list responses: %p', async (payload, message) => {
   const given = fixture();
   given.fetch.mockResolvedValue(Response.json(payload));
   const result = await given.api.list();
   expect(result.data).toBeNull();
-  expect(result.error?.message).toBe(
-    typeof payload !== 'object' || payload === null
-      ? 'Storage list response is not an object'
-      : 'Storage list response has invalid objects',
-  );
+  expect(result.error?.message).toBe(message);
   expect(result.nextCursor).toBeNull();
 });
 
@@ -151,9 +150,7 @@ test('remove does not copy absent or undefined error metadata', async () => {
   });
   const result = await given.api.remove('failed.bin');
   expect(result.error).toMatchObject({ message: 'Failed to delete 1 file(s): failed.bin' });
-  if (result.error === null) {
-    throw new TypeError('Expected a removal error');
-  }
+  expectPresent(result.error);
   expect(Reflect.has(result.error, 'status')).toBe(false);
   expect(Reflect.has(result.error, 'code')).toBe(false);
 });

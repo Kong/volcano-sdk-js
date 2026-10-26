@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
 import { cloneJsonValue } from '../src/json-clone.ts';
+import { expectPresent } from './support/assertions.ts';
 
 test('copies nested session values with native structuredClone', () => {
   const original = { user: { metadata: { name: 'first' } } };
@@ -19,15 +20,14 @@ test('preserves binary and date values with native structuredClone', () => {
   const copied = cloneJsonValue(original);
   expect(copied).toEqual(original);
   expect(copied).not.toBe(original);
-  if (typeof copied !== 'object' || copied === null || !('bytes' in copied) || !('expiresAt' in copied)) {
-    throw new TypeError('Expected a cloned object with binary and date data');
-  }
-  expect(copied.bytes).toBeInstanceOf(Uint8Array);
-  expect(Object.prototype.toString.call(copied.expiresAt)).toBe('[object Date]');
+  expect(copied).toHaveProperty('bytes', expect.any(Uint8Array));
+  // The clone may come from another realm; equality checks the Date tag and time, not the constructor.
+  expect(copied).toHaveProperty('expiresAt', original.expiresAt);
 });
 
 test('uses JSON cloning when structuredClone is unavailable', () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'structuredClone');
+  expectPresent(descriptor);
   Object.defineProperty(globalThis, 'structuredClone', { configurable: true, value: undefined });
   try {
     const original = { user: { name: 'first' } };
@@ -35,10 +35,6 @@ test('uses JSON cloning when structuredClone is unavailable', () => {
     expect(copied).toEqual(original);
     expect(copied).not.toBe(original);
   } finally {
-    if (descriptor === undefined) {
-      Reflect.deleteProperty(globalThis, 'structuredClone');
-    } else {
-      Object.defineProperty(globalThis, 'structuredClone', descriptor);
-    }
+    Object.defineProperty(globalThis, 'structuredClone', descriptor);
   }
 });

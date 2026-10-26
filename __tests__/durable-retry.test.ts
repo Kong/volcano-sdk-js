@@ -1,5 +1,6 @@
 import { expect, test } from '@jest/globals';
 import { toRetryStrategy } from '../src/durable-retry.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 const unexpectedEngine = {
   createRetryStrategy(): never {
@@ -18,9 +19,7 @@ test('uses the engine default for an omitted retry option', () => {
 
 test('fails on the first error when retry is false', () => {
   const strategy = toRetryStrategy(false, unexpectedEngine);
-  if (typeof strategy !== 'function') {
-    throw new TypeError('expected a retry callback');
-  }
+  expectInstanceOf(strategy, Function);
   const decision: unknown = Reflect.apply(strategy, null, [new TypeError('failed'), 1]);
   expect(decision).toEqual({ shouldRetry: false });
 });

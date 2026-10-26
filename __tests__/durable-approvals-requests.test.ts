@@ -173,14 +173,16 @@ function checksIdentifiers(): void {
       [approvals.approve.bind(approvals), ['proj-1', 42], 'approvalId'],
       [approvals.deny.bind(approvals), ['proj-1', ' '], 'approvalId'],
     ];
-    for (const [operation, args, field] of cases) {
-      const result: unknown = Reflect.apply(operation, undefined, args);
-      await expect(result).resolves.toEqual({
-        data: null,
-        status: null,
-        error: new Error(`${field} must be a non-empty string`),
-      });
-    }
+    await Promise.all(
+      cases.map(([operation, args, field]) => {
+        const result: unknown = Reflect.apply(operation, undefined, args);
+        return expect(result).resolves.toEqual({
+          data: null,
+          status: null,
+          error: new Error(`${field} must be a non-empty string`),
+        });
+      }),
+    );
     for (const mock of Object.values(transport)) {
       expect(mock).not.toHaveBeenCalled();
     }

@@ -27,15 +27,15 @@ async function runCoverage(
 ): Promise<SpawnSyncReturns<string> & { coverage: Record<string, unknown> }> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-typed-coverage-'));
   try {
-    for (const [name, contents] of Object.entries({
-      'src/value.ts': source,
-      '__tests__/value.test.ts': assertions,
-      ...files,
-    })) {
-      const path = join(directory, name);
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, contents);
-    }
+    await Promise.all(
+      Object.entries({ 'src/value.ts': source, '__tests__/value.test.ts': assertions, ...files }).map(
+        async ([name, contents]) => {
+          const path = join(directory, name);
+          await mkdir(dirname(path), { recursive: true });
+          await writeFile(path, contents);
+        },
+      ),
+    );
     const result = spawnSync(
       process.execPath,
       [

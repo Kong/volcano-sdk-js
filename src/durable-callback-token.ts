@@ -39,10 +39,10 @@ export async function waitForCallback(
   const config = waitConfig(options);
   const apiUrl = platformApiUrl(OPERATION, 'wait for callbacks');
   const execution = requiredExecutionRef(OPERATION, executionRef);
-  const waitForCallback = callbacks(context, 'callbacks');
+  const runtimeWait = callbacks(context, 'callbacks');
   const submit = registering(apiUrl, execution, callbackName, submitter, replayedOperation(context));
   try {
-    return callbackResult(await waitForCallback(callbackName, submit, config), unreadableResult);
+    return callbackResult(await runtimeWait(callbackName, submit, config), unreadableResult);
   } catch (error) {
     return timedOut(error);
   }

@@ -22,12 +22,12 @@ function refusesWithoutSession(): void {
     };
     const volcano = new VolcanoClient(options);
 
-    for (const call of [
-      () => volcano.durable.get('proj-1', 'order-pipeline', 'exec-1'),
-      () => volcano.durable.list('proj-1', 'order-pipeline'),
-      () => volcano.durable.stop('proj-1', 'order-pipeline', 'exec-1'),
-    ]) {
-      const { data, status, error } = await call();
+    const refusals = await Promise.all([
+      volcano.durable.get('proj-1', 'order-pipeline', 'exec-1'),
+      volcano.durable.list('proj-1', 'order-pipeline'),
+      volcano.durable.stop('proj-1', 'order-pipeline', 'exec-1'),
+    ]);
+    for (const { data, status, error } of refusals) {
       expect(data).toBeNull();
       expect(status).toBeNull();
       expect(error?.message).toContain('No active session');
@@ -126,9 +126,12 @@ function keepsFailuresInTheEnvelope(): void {
     };
     const volcano = new VolcanoClient(options);
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const malformed = await volcano.durable.get('proj-1', 'order-pipeline', 'exec-1');
-      expect(malformed).toMatchObject({
+    const malformed = await Promise.all(
+      Array.from({ length: 4 }, () => volcano.durable.get('proj-1', 'order-pipeline', 'exec-1')),
+    );
+    expect(getDurableExecution).toHaveBeenCalledTimes(4);
+    for (const result of malformed) {
+      expect(result).toMatchObject({
         data: null,
         status: null,
         error: { message: 'Failed to read durable execution' },

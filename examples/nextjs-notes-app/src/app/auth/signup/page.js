@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
+import { useDashboardRedirect } from '@/hooks/useDashboardRedirect';
 
 export default function SignUpPage() {
   const { user, loading, error, signUp } = useAuth();
@@ -24,15 +25,7 @@ export default function SignUpPage() {
   }, [user, loading, router]);
 
   // Handle sign up
-  const handleSignUp = async (data) => {
-    const result = await signUp(data);
-
-    if (!result.error) {
-      router.push('/dashboard');
-    }
-
-    return result;
-  };
+  const handleSignUp = useDashboardRedirect(signUp);
 
   // Don't render form if already authenticated
   if (user) {

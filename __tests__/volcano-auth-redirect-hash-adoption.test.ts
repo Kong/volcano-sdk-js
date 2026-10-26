@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { NONCE, resetRedirectState, seedNonce } from './support/volcano-auth-redirect-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -11,9 +12,7 @@ function adoptsSessionsAtConstruction(): void {
     window.localStorage.setItem('volcano_access_token', 'stored-access');
     window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
     const sdk: unknown = Reflect.construct(VolcanoAuth, [{ anonKey: 'ak-test-key', accessToken }]);
-    if (!(sdk instanceof VolcanoAuth)) {
-      throw new TypeError('Expected a VolcanoAuth instance');
-    }
+    expectInstanceOf(sdk, VolcanoAuth);
 
     expect(sdk.accessToken).toBe('stored-access');
     expect(sdk.refreshToken).toBe('stored-refresh');

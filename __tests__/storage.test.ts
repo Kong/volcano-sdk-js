@@ -15,8 +15,16 @@ let volcano: VolcanoAuth;
 
 const absentValues = [undefined, null, false, 0, Number.NaN, ''];
 
+type BucketRequest = (bucket: ReturnType<VolcanoAuth['storage']['from']>) => Promise<{ error: unknown }>;
+
+const missingObjectRequests: [string, BucketRequest][] = [
+  ['status', (bucket) => bucket.getUploadSession('missing.bin', 'missing-session')],
+  ['abort', (bucket) => bucket.abortUploadSession('missing.bin', 'missing-session')],
+  ['download', (bucket) => bucket.download('missing.bin')],
+];
+
 function preservesMissingObjectStatus(): void {
-  it.each(['status', 'abort', 'download'])('preserves a missing object HTTP status for %s', async (operation) => {
+  it.each(missingObjectRequests)('preserves a missing object HTTP status for %s', async (_operation, request) => {
     fetchMock.mockResolvedValueOnce(
       responseFixture({
         ok: false,
@@ -24,21 +32,7 @@ function preservesMissingObjectStatus(): void {
         json: () => Promise.resolve({ error: 'not found', code: 'storage_not_found' }),
       }),
     );
-    const bucket = volcano.storage.from('uploads');
-    let result;
-    switch (operation) {
-      case 'status': {
-        result = await bucket.getUploadSession('missing.bin', 'missing-session');
-        break;
-      }
-      case 'abort': {
-        result = await bucket.abortUploadSession('missing.bin', 'missing-session');
-        break;
-      }
-      default: {
-        result = await bucket.download('missing.bin');
-      }
-    }
+    const result = await request(volcano.storage.from('uploads'));
     expect(result.error).toMatchObject({
       status: 404,
       message: 'not found',

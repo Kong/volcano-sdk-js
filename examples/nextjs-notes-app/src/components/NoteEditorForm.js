@@ -6,6 +6,8 @@
  * NoteEditor once expanded: title and content inputs with save and cancel.
  */
 
+import { useCallback } from 'react';
+
 /**
  * @param {Object} props
  * @param {Object} props.editor - Draft state and handlers from useNoteEditor
@@ -13,13 +15,19 @@
 export function NoteEditorForm({ editor }) {
   const { title, setTitle, content, setContent, isSubmitting, handleSubmit, handleCancel } = editor;
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      handleCancel();
-    } else if (e.key === 'Enter' && e.metaKey) {
-      handleSubmit(e);
-    }
-  };
+  const handleTitleChange = useCallback((e) => setTitle(e.target.value), [setTitle]);
+  const handleContentChange = useCallback((e) => setContent(e.target.value), [setContent]);
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Escape') {
+        handleCancel();
+      } else if (e.key === 'Enter' && e.metaKey) {
+        handleSubmit(e);
+      }
+    },
+    [handleCancel, handleSubmit],
+  );
 
   return (
     <form
@@ -29,15 +37,16 @@ export function NoteEditorForm({ editor }) {
       <input
         type="text"
         value={title}
-        onChange={(e) => setTitle(e.target.value)}
+        onChange={handleTitleChange}
         onKeyDown={handleKeyDown}
         className="w-full text-lg font-semibold text-gray-900 border-0 border-b border-gray-200 focus:border-volcano-500 focus:ring-0 pb-2 mb-2"
         placeholder="Note title"
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- The button that had focus unmounts as this form opens.
         autoFocus
       />
       <textarea
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={handleContentChange}
         onKeyDown={handleKeyDown}
         className="w-full text-gray-600 border-0 focus:ring-0 resize-none min-h-[100px]"
         placeholder="Write your note here..."

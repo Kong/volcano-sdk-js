@@ -16,9 +16,16 @@ function fixture(payload: unknown, accessToken: string | null = 'session', error
   return { client, query };
 }
 
-test.each([undefined, 'application/vnd.volcano+json'])(
+test.each([
+  [undefined, {}, 'application/json'],
+  [
+    'application/vnd.volcano+json',
+    { headers: { 'Content-Type': 'application/vnd.volcano+json' } },
+    'application/vnd.volcano+json',
+  ],
+] as const)(
   'typed SELECT transport preserves filter JSON and content type %p',
-  async (contentType) => {
+  async (_contentType, headerOptions, sentContentType) => {
     const fetchResponse = Response.json(
       { data: [{ id: 1 }] },
       {
@@ -38,13 +45,12 @@ test.each([undefined, 'application/vnd.volcano+json'])(
         { column: 'id', operator: 'in' as const, value: [null, 1] },
       ],
     };
-    const headers = contentType === undefined ? undefined : { 'Content-Type': contentType };
 
     await expect(
       queryDatabaseSelectTransport('db%20one', request, {
         volcanoAuthorization: 'session',
         volcanoClient: client,
-        ...(headers === undefined ? {} : { headers }),
+        ...headerOptions,
       }),
     ).resolves.toMatchObject({ data: { data: [{ id: 1 }] } });
 
@@ -59,7 +65,7 @@ test.each([undefined, 'application/vnd.volcano+json'])(
       undefined,
     );
     const call = generatedFetch.mock.calls[0];
-    expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(contentType ?? 'application/json');
+    expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(sentContentType);
   },
 );
 

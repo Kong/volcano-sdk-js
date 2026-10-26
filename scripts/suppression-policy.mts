@@ -35,6 +35,108 @@ const approvedComments = new Map([
       "// oxlint-disable-next-line unicorn/no-thenable -- Delivery must adopt a handler's non-Promise thenable.",
     ]),
   ],
+  [
+    'src/durable-platform-request.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Each retry waits out its backoff after the previous attempt failed.',
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- A retry is sent only once the previous attempt has failed.',
+    ]),
+  ],
+  [
+    'src/durable-message-stream.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Each page starts after the last message the previous page delivered.',
+    ]),
+  ],
+  [
+    'src/storage-file-objects.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Delete one path at a time so a long list never bursts the API.',
+    ]),
+  ],
+  [
+    'src/storage-resumable.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Parts upload in order, and the first failure aborts the session.',
+    ]),
+  ],
+  [
+    'src/volcano-auth.ts',
+    new Set([
+      '// oxlint-disable-next-line import/max-dependencies -- VolcanoAuth composes one module per public sub-API.',
+    ]),
+  ],
+  [
+    'scripts/property-policy.test.mts',
+    new Set([
+      "// oxlint-disable-next-line import/max-dependencies -- This end-to-end test drives Babel, Jest, and Node's process APIs.",
+    ]),
+  ],
+  [
+    'scripts/typescript-policy.test.mts',
+    new Set([
+      '// oxlint-disable-next-line import/max-dependencies -- This test checks every tracked file against each native tool.',
+    ]),
+  ],
+  [
+    '__tests__/durable-message-runtime.test.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- 50 turns in sequence let a replayed session resolve before `second`.',
+    ]),
+  ],
+  [
+    '__tests__/durable-messages-subscribe-retries.test.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Fake time must advance step by step to observe each backoff delay.',
+    ]),
+  ],
+  [
+    '__tests__/support/durable-messages-realtime.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Polls once per event-loop turn; the next check must follow this turn.',
+    ]),
+  ],
+  [
+    '__tests__/functions-http.test.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Each repeat must follow the cached first resolve.',
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Each retry must follow the cached failed resolve.',
+    ]),
+  ],
+  [
+    '__tests__/realtime-channel-lifecycle-presence.test.ts',
+    new Set([
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Each refresh advances the shared fake clock before the next.',
+    ]),
+  ],
+  [
+    '__tests__/errors.test.ts',
+    new Set([
+      "// oxlint-disable-next-line eslint/no-extend-native -- Only a getter on a primitive's prototype can observe the receiver.",
+    ]),
+  ],
+  [
+    'examples/nextjs-notes-app/src/app/layout.js',
+    new Set([
+      '// oxlint-disable-next-line import/no-unassigned-import -- Next.js loads global CSS only by a side-effect import.',
+    ]),
+  ],
+  [
+    'examples/nextjs-notes-app/src/components/NoteCardEditor.js',
+    new Set([
+      '// oxlint-disable-next-line jsx-a11y/no-autofocus -- The Edit button that had focus unmounts as this opens.',
+    ]),
+  ],
+  [
+    'examples/nextjs-notes-app/src/components/NoteEditorForm.js',
+    new Set([
+      '// oxlint-disable-next-line jsx-a11y/no-autofocus -- The button that had focus unmounts as this form opens.',
+    ]),
+  ],
+  [
+    'examples/nextjs-notes-app/src/components/useNoteEditor.js',
+    new Set(['// oxlint-disable-next-line react/memo-dependencies -- The rule misses onCreate inside try/finally.']),
+  ],
 ]);
 
 export function requireUnsuppressed(path: string, source: string): void {

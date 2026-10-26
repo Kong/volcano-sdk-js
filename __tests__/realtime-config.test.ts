@@ -52,16 +52,16 @@ test('channel overrides inherit parent settings and cannot re-enable a disabled 
 test('arbitrary API authorities keep their host and discard paths, queries, and fragments', () => {
   assert(
     property(
-      constantFrom('http', 'https'),
+      constantFrom(['http', 'ws'] as const, ['https', 'wss'] as const),
       constantFrom('localhost', 'api.example.com', '127.0.0.1'),
       integer({ min: 1000, max: 9999 }),
-      (scheme, host, port) => {
+      ([scheme, socketScheme], host, port) => {
         expect(realtimeWebSocketUrl(`${scheme}://${host}:${String(port)}/v1?token=secret#fragment`)).toBe(
-          `${scheme === 'https' ? 'wss' : 'ws'}://${host}:${String(port)}/realtime/v1/websocket`,
+          `${socketScheme}://${host}:${String(port)}/realtime/v1/websocket`,
         );
       },
     ),
     propertyOptions(),
   );
-  expect(() => realtimeWebSocketUrl('not a URL')).toThrow();
+  expect(() => realtimeWebSocketUrl('not a URL')).toThrow('Invalid URL');
 });

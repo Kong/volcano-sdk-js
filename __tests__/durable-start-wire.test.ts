@@ -2,6 +2,7 @@
 
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoClient } from '../src/index.ts';
+import { bodyText } from './auth-concurrency-fixtures.ts';
 
 const execution = {
   id: 'exec-1',
@@ -51,12 +52,9 @@ describe('durable.start over the wire', () => {
     const [url, init] = firstRequest(fetchMock);
     expect(requestUrl(url)).toBe('https://api.test.com/durable-functions/order-pipeline/executions');
     expect(init.method).toBe('POST');
-    if (typeof init.body !== 'string') {
-      throw new TypeError('Expected JSON request body');
-    }
-    expect(JSON.parse(init.body)).toEqual({ order_id: 42 });
+    expect(JSON.parse(bodyText(init))).toEqual({ order_id: 42 });
     const headers = new Headers(init.headers);
-    expect(headers.get('apikey') ?? headers.get('authorization')).toContain('ak-durable');
+    expect(headers.get('authorization')).toBe('Bearer ak-durable');
     expect(headers.get('x-volcano-execution-name')).toBeNull();
   });
 

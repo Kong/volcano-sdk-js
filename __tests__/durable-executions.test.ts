@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoClient } from '../src/index.ts';
+import { fetchCall } from './auth-concurrency-fixtures.ts';
 import { execution, mockClientFactory, page, type TransportOperation } from './support/durable-executions-fixtures.ts';
 
 const clientWithTransport = mockClientFactory(VolcanoClient);
@@ -110,16 +111,19 @@ function refusesEmptyIdentifiers(): void {
       [['proj-1', 'order-pipeline', 42], 'executionId'],
     ];
 
-    for (const [args, field] of cases) {
-      for (const operation of [volcano.durable.get.bind(volcano.durable), volcano.durable.stop.bind(volcano.durable)]) {
-        const result: unknown = Reflect.apply(operation, undefined, args);
-        await expect(result).resolves.toMatchObject({
-          data: null,
-          status: null,
-          error: { message: expect.stringContaining(`${field} must be a non-empty string`) },
-        });
-      }
-    }
+    const operations = [volcano.durable.get.bind(volcano.durable), volcano.durable.stop.bind(volcano.durable)];
+    await Promise.all(
+      cases.flatMap(([args, field]) =>
+        operations.map((operation) => {
+          const result: unknown = Reflect.apply(operation, undefined, args);
+          return expect(result).resolves.toMatchObject({
+            data: null,
+            status: null,
+            error: { message: expect.stringContaining(`${field} must be a non-empty string`) },
+          });
+        }),
+      ),
+    );
 
     const listed = await volcano.durable.list('proj-1', '');
     expect(listed.error?.message).toContain('functionName must be a non-empty string');
@@ -182,7 +186,7 @@ describe('durable owner operations over the wire', () => {
     expect(error).toBeNull();
     expect(data).toEqual(execution);
 
-    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    const [url, init] = fetchCall(0);
     expect(url).toBe('https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1');
     expect(init?.method).toBe('GET');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
@@ -191,7 +195,7 @@ describe('durable owner operations over the wire', () => {
   test('carries list filters as query parameters', async () => {
     await realClient().durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 5 });
 
-    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    const [url, init] = fetchCall(0);
     expect(url).toBe(
       'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions?status=running&limit=5',
     );
@@ -201,7 +205,7 @@ describe('durable owner operations over the wire', () => {
   test('posts a stop to the execution', async () => {
     await realClient().durable.stop('proj-1', 'order-pipeline', 'exec-1');
 
-    const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    const [url, init] = fetchCall(0);
     expect(url).toBe('https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop');
     expect(init?.method).toBe('POST');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');

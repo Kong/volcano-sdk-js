@@ -1,5 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   callbackCalls,
   failureOf,
@@ -75,7 +76,8 @@ function refusesUnreadableSessions(): void {
 
     const failure = await failureOf(run((_input, ctx) => ctx.publish('progress')));
 
-    expect(failure instanceof Error ? failure.cause : undefined).toBeInstanceOf(SyntaxError);
+    expectInstanceOf(failure, Error);
+    expect(failure.cause).toBeInstanceOf(SyntaxError);
   });
 
   it('names the session when Volcano refuses it', async () => {

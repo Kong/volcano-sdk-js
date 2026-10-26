@@ -1,7 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
-import { deferred, fetchCall, reply, signal, within } from './auth-concurrency-fixtures.ts';
+import { deferred, fetchBody, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 const config = { apiUrl: 'https://api.test.com', anonKey: 'ak-test-anon-key' };
@@ -88,11 +88,7 @@ function keepsReplacementSessions(): void {
     const result = await within(signOut, 'stale sign-out completion');
 
     expect(AuthSessionChangedError.is(result.error)).toBe(true);
-    const [, options] = fetchCall(0);
-    if (typeof options?.body !== 'string') {
-      throw new TypeError('Expected JSON revocation body');
-    }
-    const body: unknown = JSON.parse(options.body);
+    const body: unknown = JSON.parse(fetchBody(0));
     expect(body).toEqual({
       refresh_token: 'old-refresh',
     });

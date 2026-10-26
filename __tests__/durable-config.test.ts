@@ -1,5 +1,6 @@
 import { expect, jest, test } from '@jest/globals';
 import { batchConfig, conditionConfig, stepConfig } from '../src/durable-config.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 function engine() {
   return {
@@ -54,9 +55,7 @@ test('condition config preserves state and builds bounded suspended polling', ()
   });
   const config = runtime.createWaitStrategy.mock.calls[0]?.[0];
   const shouldContinue = config?.['shouldContinuePolling'];
-  if (typeof shouldContinue !== 'function') {
-    throw new TypeError('expected the polling predicate');
-  }
+  expectInstanceOf(shouldContinue, Function);
   expect(Reflect.apply(shouldContinue, undefined, [1])).toBe(true);
   expect(Reflect.apply(shouldContinue, undefined, [2])).toBe(false);
 });

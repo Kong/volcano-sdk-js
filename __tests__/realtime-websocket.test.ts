@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { loadWebSocket, webSocketFrom } from '../src/realtime-websocket.ts';
 import { AlternateWebSocket } from './support/realtime-alternate-websocket.ts';
+import { expectPresent } from './support/assertions.ts';
 
 class FakeWebSocket {
   static readonly default = AlternateWebSocket;
@@ -29,28 +30,26 @@ describe('WebSocket dependency boundary', () => {
     const first = await loadWebSocket();
     expect(first).toBe(window.WebSocket);
     const descriptor = Object.getOwnPropertyDescriptor(window, 'WebSocket');
+    expectPresent(descriptor);
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: FakeWebSocket });
     try {
       expect(await loadWebSocket()).toBe(first);
     } finally {
-      if (descriptor !== undefined) {
-        Object.defineProperty(window, 'WebSocket', descriptor);
-      }
+      Object.defineProperty(window, 'WebSocket', descriptor);
     }
   });
 
   test('loads the Node implementation when the browser constructor is absent', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(window, 'WebSocket');
+    expectPresent(descriptor);
     Object.defineProperty(window, 'WebSocket', { configurable: true, value: null });
     try {
       await jest.isolateModulesAsync(async () => {
-        const module = await import('../src/realtime-websocket.ts');
-        expect(typeof (await module.loadWebSocket())).toBe('function');
+        const websocketModule = await import('../src/realtime-websocket.ts');
+        expect(typeof (await websocketModule.loadWebSocket())).toBe('function');
       });
     } finally {
-      if (descriptor !== undefined) {
-        Object.defineProperty(window, 'WebSocket', descriptor);
-      }
+      Object.defineProperty(window, 'WebSocket', descriptor);
     }
   });
 });

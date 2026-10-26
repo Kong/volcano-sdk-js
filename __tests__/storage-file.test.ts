@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { storageObject } from './storage-response-fixtures.ts';
 import { apiUrl, fixture } from './support/storage-file-fixtures.ts';
+import { expectInstanceOf, expectPresent } from './support/assertions.ts';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -93,9 +94,7 @@ test.each([
   const given = fixture();
   await given.api.upload('folder/file.bin', body, { contentType: 'application/custom' });
   const call = given.upload.mock.calls[0];
-  if (call === undefined) {
-    throw new Error('Expected an upload');
-  }
+  expectPresent(call);
   expect(call[2].file.name).toBe('file.bin');
   expect(call[2].file.type).toBe('application/custom');
 });
@@ -107,9 +106,7 @@ test.each([
   const given = fixture();
   await given.api.upload(path, new Blob(['data']));
   const call = given.upload.mock.calls[0];
-  if (call === undefined) {
-    throw new Error('Expected an upload');
-  }
+  expectPresent(call);
   expect(call[0]).toBe('bucket');
   expect(call[1]).toBe(encodedPath);
   expect(call[2].file.name).toBe(name);
@@ -124,13 +121,16 @@ test('rejects unsupported upload bodies before transport', async () => {
   expect(given.upload).not.toHaveBeenCalled();
 });
 
-test.each([new Error('upload failed'), 'upload failed'])('normalizes upload failures', async (failure) => {
+test.each([
+  [new Error('upload failed'), 'upload failed'],
+  ['upload failed', 'Upload failed'],
+])('normalizes upload failures', async (failure, message) => {
   const given = fixture();
   given.upload.mockRejectedValue(failure);
   const result = await given.api.upload('file.bin', new Blob(['data']));
   expect(result.data).toBeNull();
   expect(result.error).toBeInstanceOf(Error);
-  expect(result.error?.message).toBe(failure instanceof Error ? failure.message : 'Upload failed');
+  expect(result.error?.message).toBe(message);
 });
 
 test('does not upload without a session', async () => {
@@ -159,9 +159,7 @@ test('downloads binary data and forwards a range header', async () => {
 test('omits a falsy range while preserving JavaScript caller behavior', async () => {
   const given = fixture();
   const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, ['file.bin', { range: null }]);
-  if (!(pending instanceof Promise)) {
-    throw new TypeError('Expected a download promise');
-  }
+  expectInstanceOf(pending, Promise);
   await pending;
   expect(given.download).toHaveBeenCalledWith('bucket', 'file.bin', {
     headers: undefined,
@@ -170,12 +168,15 @@ test('omits a falsy range while preserving JavaScript caller behavior', async ()
   });
 });
 
-test.each([new Error('download failed'), 'download failed'])('normalizes download failures', async (failure) => {
+test.each([
+  [new Error('download failed'), 'download failed'],
+  ['download failed', 'Download failed'],
+])('normalizes download failures', async (failure, message) => {
   const given = fixture();
   given.download.mockRejectedValue(failure);
   const result = await given.api.download('file.bin');
   expect(result.data).toBeNull();
-  expect(result.error?.message).toBe(failure instanceof Error ? 'download failed' : 'Download failed');
+  expect(result.error?.message).toBe(message);
 });
 
 test('rejects a malformed binary result from a custom transport', async () => {

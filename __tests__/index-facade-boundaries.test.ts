@@ -120,9 +120,9 @@ function suppliesTransportOptions(): void {
 
 function loadsModulesAndBoundsCaches(): void {
   test('loads the realtime entrypoint only when requested', async () => {
-    const module = await loadRealtime();
-    expect(module.VolcanoRealtime).toBeDefined();
-    expect(module.RealtimeChannel).toBeDefined();
+    const realtime = await loadRealtime();
+    expect(realtime.VolcanoRealtime).toBeDefined();
+    expect(realtime.RealtimeChannel).toBeDefined();
   });
 
   test('rejects invalid resolver cache limits', () => {

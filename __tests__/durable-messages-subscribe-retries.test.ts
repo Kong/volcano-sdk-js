@@ -191,12 +191,16 @@ function backsOffBetweenRetries(): void {
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
-    for (const delay of [500, 1000, 2000, 4000, 8000, 16_000, 30_000, 30_000]) {
+    // A retry is still pending a millisecond before its delay and fires at it.
+    const steps = [500, 1000, 2000, 4000, 8000, 16_000, 30_000, 30_000].flatMap((delay) => [
+      { advance: delay - 1, retries: 0 },
+      { advance: 1, retries: 1 },
+    ]);
+    for (const { advance, retries } of steps) {
       const calls = list.mock.calls.length;
-      await jest.advanceTimersByTimeAsync(delay - 1);
-      expect(list).toHaveBeenCalledTimes(calls);
-      await jest.advanceTimersByTimeAsync(1);
-      expect(list).toHaveBeenCalledTimes(calls + 1);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Fake time must advance step by step to observe each backoff delay.
+      await jest.advanceTimersByTimeAsync(advance);
+      expect(list).toHaveBeenCalledTimes(calls + retries);
     }
 
     realtime.disconnect();

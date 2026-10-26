@@ -110,6 +110,7 @@ export async function deletePaths(
   const deleted: string[] = [];
   const failures: RemovedPath[] = [];
   for (const path of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Delete one path at a time so a long list never bursts the API.
     const result = await host._storageRequest(host._buildUrl(path), { method: 'DELETE' });
     if (result.error === null) {
       deleted.push(path);

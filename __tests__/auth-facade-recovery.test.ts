@@ -1,9 +1,12 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
-import { fetchCall, fetchUrl, jsonField, reply, resultError } from './auth-concurrency-fixtures.ts';
+import { fetchCall, jsonField, reply, resultError } from './auth-concurrency-fixtures.ts';
 import { sessionToken } from './session-fixtures.ts';
+import { profileBoundaries, unauthorizedReplies, unrecoveredFailures } from './support/auth-facade-recovery-cases.ts';
 import { memoryStorage } from './support/auth-boundaries-storage.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
+import { installWindow, restoreWindow } from './support/volcano-auth-sessions-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
 
@@ -60,6 +63,15 @@ const cases: readonly [string, Invoke, number, unknown][] = [
     { data: { ok: true } },
   ],
 ];
+const localClearings: readonly [
+  string,
+  (current: VolcanoAuth) => Promise<{ error: unknown }>,
+  { error: { status: number } | null },
+][] = [
+  ['sign out', (current) => current.auth.signOut(), { error: null }],
+  ['rejected refresh', (current) => current.auth.refreshSession(), { error: { status: 401 } }],
+];
+
 function client() {
   return new VolcanoAuth({
     apiUrl: 'https://api.test',
@@ -70,12 +82,11 @@ function client() {
 }
 
 function replaysOnceAfterUnauthorized(invoke: Invoke, status: number, body: unknown): void {
-  it.each(['json', 'empty', 'html'])('replays the captured request after %s401', async (rejection) => {
-    const denied = reply(401, { error: 'expired' });
-    if (rejection !== 'json') {
-      jest.spyOn(denied, 'json').mockRejectedValue(new SyntaxError(rejection));
-    }
-    fetchMock.mockResolvedValueOnce(denied).mockResolvedValueOnce(renewed()).mockResolvedValueOnce(reply(status, body));
+  it.each(unauthorizedReplies)('replays the captured request after %s401', async (_rejection, unauthorized) => {
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(renewed())
+      .mockResolvedValueOnce(reply(status, body));
     const current = client();
     expect(await resultError(invoke(current))).toBeNull();
     expect(fetchMock.mock.calls.map(([, options]) => new Headers(options?.headers).get('Authorization'))).toEqual([
@@ -93,12 +104,8 @@ function replaysOnceAfterUnauthorized(invoke: Invoke, status: number, body: unkn
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each(['transport', '503'])('does not retry %s failures', async (failure) => {
-    if (failure === 'transport') {
-      fetchMock.mockRejectedValue(new Error('response lost'));
-    } else {
-      fetchMock.mockResolvedValue(reply(503));
-    }
+  it.each(unrecoveredFailures)('does not retry %s failures', async (_failure, respond) => {
+    fetchMock.mockImplementation(respond);
     expect(await resultError(invoke(client()))).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -149,28 +156,14 @@ it('captures ownership before serializing a provider API body', async () => {
 });
 
 describe.each(['updateUser', 'convertAnonymous'] as const)('%s profile ownership', (method) => {
-  it.each(['getter', 'toJSON'])('captures ownership before a profile %s', async (boundary) => {
+  it.each(profileBoundaries)('captures ownership before a profile %s', async (_boundary, profileOptions) => {
     const current = client();
     fetchMock.mockResolvedValue(reply(200, { user: { id: 'other' } }));
     const replaceSession = () => {
       void current.auth.setSession(replacement);
       return { name: 'original' };
     };
-    const options =
-      boundary === 'getter'
-        ? {
-            email: 'replacement@example.com',
-            password: 'synthetic',
-            get metadata() {
-              return replaceSession();
-            },
-          }
-        : {
-            email: 'replacement@example.com',
-            password: 'synthetic',
-            metadata: Object.defineProperty({}, 'toJSON', { value: replaceSession }),
-          };
-    const result = await current.auth[method](options);
+    const result = await current.auth[method](profileOptions(replaceSession));
     expect(result.error).toBeInstanceOf(AuthSessionChangedError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -191,25 +184,21 @@ it('captures ownership before serializing email confirmation', async () => {
 });
 
 it('captures ownership after an OAuth exchange settles without another auth call', async () => {
-  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      document: {},
-      location: {
-        href: 'https://app.example.com/auth/callback?code=one-time&state=oauth-nonce',
-        origin: 'https://app.example.com',
-        hash: '',
-        pathname: '/auth/callback',
-        search: '?code=one-time&state=oauth-nonce',
-      },
-      history: { state: null, replaceState: jest.fn() },
-      localStorage: memoryStorage({}),
-      sessionStorage: memoryStorage({
-        volcano_auth_state: 'oauth-nonce',
-        volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
-      }),
+  installWindow({
+    document: {},
+    location: {
+      href: 'https://app.example.com/auth/callback?code=one-time&state=oauth-nonce',
+      origin: 'https://app.example.com',
+      hash: '',
+      pathname: '/auth/callback',
+      search: '?code=one-time&state=oauth-nonce',
     },
+    history: { state: null, replaceState: jest.fn() },
+    localStorage: memoryStorage({}),
+    sessionStorage: memoryStorage({
+      volcano_auth_state: 'oauth-nonce',
+      volcano_auth_redirect_url: 'https://app.example.com/auth/callback',
+    }),
   });
   try {
     fetchMock.mockResolvedValueOnce(renewed()).mockResolvedValue(reply(200));
@@ -223,11 +212,7 @@ it('captures ownership after an OAuth exchange settles without another auth call
       expect(new Headers(options?.headers).get('Authorization')).toBe(`Bearer ${sessionToken(SESSION, true)}`);
     }
   } finally {
-    if (originalWindow === undefined) {
-      Reflect.deleteProperty(globalThis, 'window');
-    } else {
-      Object.defineProperty(globalThis, 'window', originalWindow);
-    }
+    restoreWindow();
   }
 });
 
@@ -266,22 +251,23 @@ it('captures ownership before reading session-list options', async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it.each(['sign out', 'rejected refresh'])(
+it.each(localClearings)(
   'rejects another-session deletion after local clearing by %s',
-  async (clearing) => {
+  async (_clearing, clear, clearingOutcome) => {
     const current = client();
-    let clearingResult: { error: { status?: number } | null } | undefined;
-    fetchMock.mockImplementation(async (url) => {
-      if (fetchUrl(url).endsWith('/auth/refresh')) {
-        return reply(401, { error: 'expired refresh' });
-      }
-      if (fetchUrl(url).endsWith(OTHER)) {
-        clearingResult = await (clearing === 'sign out' ? current.auth.signOut() : current.auth.refreshSession());
-      }
-      return reply(204);
-    });
+    const clearingResults: { error: unknown }[] = [];
+    fetchMock.mockImplementation(
+      fetchRoutes({
+        '/auth/refresh': () => Promise.resolve(reply(401, { error: 'expired refresh' })),
+        [`/auth/user/sessions/${SESSION}`]: () => Promise.resolve(reply(204)),
+        [`/auth/user/sessions/${OTHER}`]: async () => {
+          clearingResults.push(await clear(current));
+          return reply(204);
+        },
+      }),
+    );
     expect(await resultError(current.auth.deleteSession(OTHER))).toBeInstanceOf(AuthSessionChangedError);
-    expect(clearingResult?.error?.status ?? null).toBe(clearing === 'sign out' ? null : 401);
+    expect(clearingResults).toMatchObject([clearingOutcome]);
     expect(current.accessToken).toBeNull();
   },
 );

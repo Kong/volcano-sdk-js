@@ -2,6 +2,7 @@
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { assert, asyncProperty, constantFrom, property, string, uint8Array } from 'fast-check';
 import { VolcanoClient } from '../src/index.ts';
+import { expectInstanceOf, expectPresent } from './support/assertions.ts';
 import { propertyOptions } from './support/property-options.ts';
 
 const payload = Buffer.from(JSON.stringify({ project_id: 'property-project' })).toString('base64url');
@@ -18,13 +19,14 @@ test('public storage URLs encode Unicode without changing query, fragment, or pr
       const path = `files/item-${value.replaceAll('/', '-')}`;
       const result = bucket.getPublicUrl(path);
       expect(result.error).toBeNull();
-      expect(result.data?.publicUrl).toBe(
+      expectPresent(result.data);
+      expect(result.data.publicUrl).toBe(
         `${options.apiUrl}/public/property-project/bucket/${path
           .split('/')
           .map((segment) => encodeURIComponent(segment))
           .join('/')}`,
       );
-      const url = new URL(result.data?.publicUrl ?? '');
+      const url = new URL(result.data.publicUrl);
       expect(url.search).toBe('');
       expect(url.hash).toBe('');
     }),
@@ -57,10 +59,7 @@ test('storage downloads preserve arbitrary bytes through the generated transport
       }).storage.from('bucket');
       const result = await bucket.download('payload.bin');
       expect(result.error).toBeNull();
-      expect(result.data).toBeInstanceOf(Blob);
-      if (result.data === null) {
-        throw new Error('Download returned no binary body');
-      }
+      expectInstanceOf(result.data, Blob);
       expect(new Uint8Array(await result.data.arrayBuffer())).toEqual(bytes);
       expect(fetch).toHaveBeenLastCalledWith(
         `${options.apiUrl}/storage/bucket/payload.bin`,

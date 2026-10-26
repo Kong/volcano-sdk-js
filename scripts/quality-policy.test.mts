@@ -37,9 +37,9 @@ const requiredTasks = {
   'build:tooling': 'tsc -p tsconfig.tooling.json',
 };
 
-function requireTasks(scripts: Record<string, unknown>): void {
+function requireTasks(tasks: Record<string, unknown>): void {
   for (const [name, command] of Object.entries(requiredTasks)) {
-    assert.equal(scripts[name], command, `${name} must run its mandatory native check`);
+    assert.equal(tasks[name], command, `${name} must run its mandatory native check`);
   }
 }
 

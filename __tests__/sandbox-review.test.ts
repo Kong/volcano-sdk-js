@@ -2,6 +2,7 @@
 import { inspect } from 'node:util';
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
+import { expectPresent } from './support/assertions.ts';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const snapshot = { id, project_id: id, region: 'us-east-1', state: 'running', expires_at: '' };
@@ -23,10 +24,10 @@ afterEach(() => {
 });
 
 test.each([
-  [60_000, undefined, 180_000],
-  [60_000, 600, 720_000],
-  [900_000, 600, 900_000],
-])('command requests budget provisioning time: %s/%s', async (timeout, timeoutSeconds, expected) => {
+  [60_000, undefined, 180_000, {}],
+  [60_000, 600, 720_000, { timeoutSeconds: 600 }],
+  [900_000, 600, 900_000, { timeoutSeconds: 600 }],
+])('command requests budget provisioning time: %s/%s', async (timeout, _timeoutSeconds, expected, options) => {
   const client = new VolcanoAuth({
     apiUrl: 'https://api.test.com',
     anonKey: 'anon',
@@ -36,11 +37,9 @@ test.each([
   const fetchMock = jest.fn<typeof fetch>().mockResolvedValueOnce(Response.json(snapshot));
   globalThis.fetch = fetchMock;
   const session = await client.sandboxes.get(id);
-  if (session.data === null) {
-    throw session.error;
-  }
+  expect(session.error).toBeNull();
+  expectPresent(session.data);
   const timer = jest.spyOn(globalThis, 'setTimeout');
-  const options = timeoutSeconds === undefined ? {} : { timeoutSeconds };
   fetchMock.mockImplementation(() => Promise.resolve(Response.json(command)));
   const result = await session.data.exec('true', options);
   expect(result.error).toBeNull();
@@ -62,9 +61,8 @@ test.each(['terminating', 'terminated'])('disposal skips %s sessions', async (st
     .mockResolvedValueOnce(Response.json({ ...snapshot, state }));
   globalThis.fetch = fetchMock;
   const session = await client.sandboxes.get(id);
-  if (session.data === null) {
-    throw session.error;
-  }
+  expect(session.error).toBeNull();
+  expectPresent(session.data);
   const terminated = await session.data.terminate();
   expect(terminated.error).toBeNull();
   await session.data[Symbol.asyncDispose]();
@@ -78,9 +76,8 @@ test('disposal accepts an already removed session', async () => {
     .mockResolvedValueOnce(Response.json(snapshot))
     .mockResolvedValueOnce(Response.json({ error: 'not found' }, { status: 404 }));
   const session = await client.sandboxes.get(id);
-  if (session.data === null) {
-    throw session.error;
-  }
+  expect(session.error).toBeNull();
+  expectPresent(session.data);
   await expect(session.data[Symbol.asyncDispose]()).resolves.toBeUndefined();
 });
 
@@ -93,9 +90,8 @@ test('scoped access credentials remain usable but are absent from routine logs',
       Response.json({ url: 'https://session.test', token: 'private-access-token', expires_at: '' }),
     );
   const session = await client.sandboxes.get(id);
-  if (session.data === null) {
-    throw session.error;
-  }
+  expect(session.error).toBeNull();
+  expectPresent(session.data);
   const access = await session.data.access(8080);
   expect(access.data?.token).toBe('private-access-token');
   expect(inspect(access)).not.toContain('private-access-token');
@@ -111,8 +107,7 @@ test('disposal preserves network errors', async () => {
     .mockResolvedValueOnce(Response.json(snapshot))
     .mockRejectedValueOnce(failure);
   const session = await client.sandboxes.get(id);
-  if (session.data === null) {
-    throw session.error;
-  }
+  expect(session.error).toBeNull();
+  expectPresent(session.data);
   await expect(session.data[Symbol.asyncDispose]()).rejects.toBe(failure);
 });

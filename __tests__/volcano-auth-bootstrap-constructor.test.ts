@@ -12,59 +12,57 @@ const config = {
 
 let volcano: VolcanoAuth;
 
-function expectCoreAuthMethods(auth: VolcanoAuth['auth']): void {
+// Public auth methods, grouped as the auth surface documents them.
+const AUTH_METHODS = [
   // Core auth
-  expect(typeof auth.signUp).toBe('function');
-  expect(typeof auth.signIn).toBe('function');
-  expect(typeof auth.getSession).toBe('function');
-  expect(typeof auth.signOut).toBe('function');
-  expect(typeof auth.getUser).toBe('function');
-  expect(typeof auth.updateUser).toBe('function');
-  expect(typeof auth.refreshSession).toBe('function');
-  expect(typeof auth.onAuthStateChange).toBe('function');
-  expect(typeof auth.user).toBe('function');
-
+  'signUp',
+  'signIn',
+  'getSession',
+  'signOut',
+  'getUser',
+  'updateUser',
+  'refreshSession',
+  'onAuthStateChange',
+  'user',
   // Anonymous
-  expect(typeof auth.signInAnonymously).toBe('function');
-  expect(typeof Reflect.get(auth, 'signUpAnonymous')).toBe('function');
-  expect(typeof auth.convertAnonymous).toBe('function');
-}
-
-function expectAccountAuthMethods(auth: VolcanoAuth['auth']): void {
+  'signInAnonymously',
+  'convertAnonymous',
   // Email confirmation
-  expect(typeof auth.confirmEmail).toBe('function');
-  expect(typeof auth.resendConfirmation).toBe('function');
-
+  'confirmEmail',
+  'resendConfirmation',
   // Password recovery
-  expect(typeof auth.resetPasswordForEmail).toBe('function');
-  expect(typeof Reflect.get(auth, 'forgotPassword')).toBe('function');
-  expect(typeof auth.resetPassword).toBe('function');
-
+  'resetPasswordForEmail',
+  'resetPassword',
   // Email change
-  expect(typeof auth.requestEmailChange).toBe('function');
-  expect(typeof auth.confirmEmailChange).toBe('function');
-  expect(typeof auth.cancelEmailChange).toBe('function');
-}
-
-function expectOAuthAndSessionMethods(auth: VolcanoAuth['auth']): void {
+  'requestEmailChange',
+  'confirmEmailChange',
+  'cancelEmailChange',
   // OAuth
-  expect(typeof auth.signInWithOAuth).toBe('function');
-  expect(typeof auth.signInWithGoogle).toBe('function');
-  expect(typeof auth.signInWithGitHub).toBe('function');
-  expect(typeof auth.signInWithMicrosoft).toBe('function');
-  expect(typeof auth.signInWithApple).toBe('function');
-  expect(typeof auth.linkOAuthProvider).toBe('function');
-  expect(typeof auth.unlinkOAuthProvider).toBe('function');
-  expect(typeof auth.getLinkedOAuthProviders).toBe('function');
-  expect(typeof auth.refreshOAuthToken).toBe('function');
-  expect(typeof auth.getOAuthProviderToken).toBe('function');
-  expect(typeof auth.callOAuthAPI).toBe('function');
-
+  'signInWithOAuth',
+  'signInWithGoogle',
+  'signInWithGitHub',
+  'signInWithMicrosoft',
+  'signInWithApple',
+  'linkOAuthProvider',
+  'unlinkOAuthProvider',
+  'getLinkedOAuthProviders',
+  'refreshOAuthToken',
+  'getOAuthProviderToken',
+  'callOAuthAPI',
   // Session management
-  expect(typeof auth.setSession).toBe('function');
-  expect(typeof auth.getSessions).toBe('function');
-  expect(typeof auth.deleteSession).toBe('function');
-  expect(typeof auth.deleteAllOtherSessions).toBe('function');
+  'setSession',
+  'getSessions',
+  'deleteSession',
+  'deleteAllOtherSessions',
+] as const satisfies readonly (keyof VolcanoAuth['auth'])[];
+// Legacy aliases that the public auth type does not declare.
+const UNTYPED_AUTH_ALIASES = ['signUpAnonymous', 'forgotPassword'] as const;
+
+function authMethodTypes(auth: VolcanoAuth['auth']): Record<string, string> {
+  return Object.fromEntries([
+    ...AUTH_METHODS.map((name) => [name, typeof auth[name]]),
+    ...UNTYPED_AUTH_ALIASES.map((name) => [name, typeof Reflect.get(auth, name)]),
+  ]);
 }
 
 function validatesConfig(): void {
@@ -175,9 +173,9 @@ function exposesAuthSurface(): void {
   });
 
   it('should expose all auth methods', () => {
-    expectCoreAuthMethods(volcano.auth);
-    expectAccountAuthMethods(volcano.auth);
-    expectOAuthAndSessionMethods(volcano.auth);
+    expect(authMethodTypes(volcano.auth)).toEqual(
+      Object.fromEntries([...AUTH_METHODS, ...UNTYPED_AUTH_ALIASES].map((name) => [name, 'function'])),
+    );
   });
 }
 

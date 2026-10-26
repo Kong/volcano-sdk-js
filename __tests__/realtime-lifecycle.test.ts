@@ -15,26 +15,34 @@ function createRealtime() {
 }
 
 function preservesPresenceIdentity(): void {
-  test.each(['presence', 'join'])('preserves full client identity from %s events', async (event) => {
+  const info = {
+    client: 'remote-client',
+    user: 'user-id',
+    connInfo: { user_metadata: { display_name: 'Contract' } },
+  };
+  test.each([
+    ['presence', { clients: { 'remote-client': info } }],
+    ['join', { info }],
+  ])('preserves full client identity from %s events', async (event, context) => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('lobby', { type: 'presence' });
     const onSync = jest.fn();
     channel.onPresenceSync(onSync);
     await channel.subscribe();
-    const info = {
-      client: 'remote-client',
-      user: 'user-id',
-      connInfo: { user_metadata: { display_name: 'Contract' } },
-    };
-    subscriptionAt(client, 0).emit(event, event === 'join' ? { info } : { clients: { 'remote-client': info } });
+    subscriptionAt(client, 0).emit(event, context);
     expect(channel.getPresenceState()).toEqual({ 'remote-client': info });
     expect(onSync).toHaveBeenLastCalledWith({ 'remote-client': info });
     channel.unsubscribe();
   });
 }
 
+type RowFetch = ReturnType<typeof deferred<unknown>>;
+
 function ignoresStaleRowFetches(): void {
-  test.each(['resolve', 'reject'])('ignores a stale row fetch that will %s after resubscribing', async (settle) => {
+  test.each([
+    ['resolve', (fetch: RowFetch) => fetch.resolve({ id: 1 })],
+    ['reject', (fetch: RowFetch) => fetch.reject(new Error('stale failure'))],
+  ] as const)('ignores a stale row fetch that will %s after resubscribing', async (_outcome, settle) => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('public:items', { type: 'postgres' });
     const fetch = deferred<unknown>();
@@ -55,11 +63,7 @@ function ignoresStaleRowFetches(): void {
     const onInsert = jest.fn();
     channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
     await channel.subscribe();
-    if (settle === 'resolve') {
-      fetch.resolve({ id: 1 });
-    } else {
-      fetch.reject(new Error('stale failure'));
-    }
+    settle(fetch);
     await delivery;
     expect(onInsert).not.toHaveBeenCalled();
   });

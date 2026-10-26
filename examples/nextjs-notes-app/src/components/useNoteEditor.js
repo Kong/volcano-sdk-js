@@ -6,7 +6,7 @@
  * Holds NoteEditor's expanded state and draft, and creates the note on submit.
  */
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 /**
  * @param {Function} onCreate - Create handler ({ title, content })
@@ -17,35 +17,37 @@ export function useNoteEditor(onCreate) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
 
-    if (!title.trim()) {
-      return;
-    }
+      const note = { title: title.trim(), content: content.trim() };
+      if (!note.title) {
+        return;
+      }
 
-    setIsSubmitting(true);
+      setIsSubmitting(true);
 
-    try {
-      await onCreate({
-        title: title.trim(),
-        content: content.trim(),
-      });
+      try {
+        await onCreate(note);
 
-      // Reset form
-      setTitle('');
-      setContent('');
-      setIsExpanded(false);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+        // Reset form
+        setTitle('');
+        setContent('');
+        setIsExpanded(false);
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    // oxlint-disable-next-line react/memo-dependencies -- The rule misses onCreate inside try/finally.
+    [title, content, onCreate],
+  );
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setTitle('');
     setContent('');
     setIsExpanded(false);
-  };
+  }, []);
 
   return {
     isExpanded,

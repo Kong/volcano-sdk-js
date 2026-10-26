@@ -11,10 +11,10 @@ export type * from './sdk-public-types.ts';
 
 /** Lazy-load realtime without adding it to ordinary SDK initialization. */
 export async function loadRealtime(): Promise<RealtimeModule> {
-  const module = await import('./realtime.ts');
+  const realtime = await import('./realtime.ts');
   return {
-    VolcanoRealtime: module.VolcanoRealtime,
-    RealtimeChannel: module.RealtimeChannel,
+    VolcanoRealtime: realtime.VolcanoRealtime,
+    RealtimeChannel: realtime.RealtimeChannel,
   };
 }
 

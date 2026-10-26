@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
+import { fetchBody } from './auth-concurrency-fixtures.ts';
 import { filterOperators, responseFixture } from './support/query-builder-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -63,11 +64,7 @@ function updatesRows(): void {
 
       expect(result.data).toEqual([{ id: 1, title: 'Updated' }]);
 
-      const body = fetchMock.mock.calls[0]?.[1]?.body;
-      if (typeof body !== 'string') {
-        throw new TypeError('Expected a JSON request body');
-      }
-      const requestBody: unknown = JSON.parse(body);
+      const requestBody: unknown = JSON.parse(fetchBody(0));
       expect(requestBody).toMatchObject({
         filters: expect.arrayContaining([{ column: 'id', operator: 'eq', value: 1 }]),
       });

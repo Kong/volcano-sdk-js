@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
+import { useDashboardRedirect } from '@/hooks/useDashboardRedirect';
 
 export default function SignInPage() {
   const { user, loading, error, signIn, signUpAnonymous } = useAuth();
@@ -26,26 +27,10 @@ export default function SignInPage() {
   }, [user, loading, router]);
 
   // Handle sign in
-  const handleSignIn = async (credentials) => {
-    const result = await signIn(credentials);
-
-    if (!result.error) {
-      router.push('/dashboard');
-    }
-
-    return result;
-  };
+  const handleSignIn = useDashboardRedirect(signIn);
 
   // Handle anonymous sign up
-  const handleAnonymousSignIn = async () => {
-    const result = await signUpAnonymous();
-
-    if (!result.error) {
-      router.push('/dashboard');
-    }
-
-    return result;
-  };
+  const handleAnonymousSignIn = useDashboardRedirect(signUpAnonymous);
 
   // Don't render form if already authenticated
   if (user) {

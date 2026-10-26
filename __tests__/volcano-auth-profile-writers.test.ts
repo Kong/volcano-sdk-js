@@ -27,7 +27,7 @@ const STALE_WRITERS = [
 ] as const;
 
 function discardsStaleWriterResponses(): void {
-  it.each(STALE_WRITERS)('discards a stale %s response', async (_name, invoke, tracksRedirectNotification) => {
+  it.each(STALE_WRITERS)('discards a stale %s response', async (_name, invoke, pendingRedirectNotification) => {
     const response = deferred<Response>();
     const requestStarted = signal();
     const callback = jest.fn();
@@ -38,9 +38,7 @@ function discardsStaleWriterResponses(): void {
     });
     volcano.auth.onAuthStateChange(callback);
     callback.mockClear();
-    if (tracksRedirectNotification) {
-      volcano._pendingUrlAuthNotify = true;
-    }
+    volcano._pendingUrlAuthNotify = pendingRedirectNotification;
     fetchMock.mockImplementationOnce(() => {
       requestStarted.resolve();
       return response.promise;

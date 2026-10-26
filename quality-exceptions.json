@@ -40,5 +40,119 @@
     "scope": "__tests__/durable-messages-subscribe-handlers.test.ts:runsReturnedThenables",
     "rationale": "Durable message delivery adopts whatever a handler returns through Promise.resolve, so a handler may return any thenable. The test needs a plain object with a then method, not a Promise, to prove a non-Promise thenable's rejection is reported.",
     "evidence": "src/durable-message-stream.ts reports handler results with Promise.resolve(result).catch(...). https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise#thenables documents that Promise.resolve adopts thenables. A real Promise passes through Promise.resolve unchanged, so only a plain thenable exercises adoption."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "src/durable-platform-request.ts:postToPlatform.retryTimeout",
+    "rationale": "postToPlatform retries one request. Each retry first waits out its backoff delay, which starts only after the previous attempt failed with a retryable answer, and stops at the 30-second deadline, so the waits cannot overlap.",
+    "evidence": "RETRY_DELAYS_MS backs off from 0.5 to 5 seconds and retryTimeout checks the deadline after each sleep. __tests__/durable-approval-deadline.test.ts expects eight attempts by 27.499 seconds and the ninth and last at 27.5."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "src/durable-platform-request.ts:postToPlatform.send",
+    "rationale": "A retry is sent only once the previous attempt has failed and its backoff has passed; a success or a final refusal ends the loop. Sending attempts in parallel would repeat a request Volcano may already have accepted.",
+    "evidence": "postToPlatform returns the first successful body and throws a non-retryable failure at once. __tests__/durable-approval-deadline.test.ts counts each attempt against fake time and gives each one only the time left before the deadline."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "src/durable-message-stream.ts:DurableMessageStream.readPages",
+    "rationale": "Catch-up reads one page at a time: each request asks for the messages after lastSeq, which delivering the previous page advances, so the next page's cursor is unknown until the previous page is delivered.",
+    "evidence": "readPages sets after = this.lastSeq before each listAfter call. __tests__/durable-messages-subscribe-gaps.test.ts expects the list calls to ask for after 0 and then after 1, and to stop once a page delivers nothing new."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "src/storage-file-objects.ts:deletePaths",
+    "rationale": "remove() sends one DELETE per path from a caller-supplied list with no size limit. Deleting one path at a time keeps a long list from opening that many requests at once against a rate-limited API, and keeps requests in list order.",
+    "evidence": "__tests__/storage-mutations.test.ts answers the three deletes of one remove call with 404, 200, and 429 rate_limited from mocks consumed in request order, and expects each failure reported against its path in list order."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "src/storage-resumable.ts:uploadParts",
+    "rationale": "A resumable upload sends its parts in order. The first failed part aborts the session before any later part is sent, and onProgress reports the uploaded byte count growing after each part; parallel parts would keep uploading into an aborted session.",
+    "evidence": "uploadParts returns abortFailedPart on the first part error and calls onProgress(end, size) after each part. __tests__/storage-resumable.test.ts checks the slices in order, progress [3/5, 5/5], and the abort without completion after a failed part."
+  },
+  {
+    "rule": "import/max-dependencies",
+    "scope": "src/volcano-auth.ts:imports",
+    "rationale": "VolcanoAuth is the SDK's composition root: it wires one module per public sub-API (accounts, database builders, storage, durable, locks, sandboxes) to the bootstrap, transport configuration, facades, and services base class, so its imports track the published client surface.",
+    "evidence": "test/fixtures/published-api/client.d.ts publishes auth, durable, storage, locks, sandboxes, from, and insert on one VolcanoAuth class. Moving their construction into a pass-through module would hide the same dependencies instead of removing them."
+  },
+  {
+    "rule": "import/max-dependencies",
+    "scope": "scripts/property-policy.test.mts:imports",
+    "rationale": "This end-to-end policy test compiles a fixture with Babel, runs Jest on it in a temporary directory, and reads the JSON report, so it needs Node's process, file, module, OS, path, test, and URL APIs as well as Babel and the shared report helpers.",
+    "evidence": "Eight of its eleven imports are node: built-ins, and the file holds one scenario (a failing property keeps its seed and counterexample); splitting it would separate that scenario's setup from its assertions."
+  },
+  {
+    "rule": "import/max-dependencies",
+    "scope": "scripts/typescript-policy.test.mts:imports",
+    "rationale": "This policy test checks every tracked file against the TypeScript projects, Jest discovery, oxlint, oxfmt, and the suppression policy, so it needs the compiler API, the shared lint and suppression checks, and Node's process, file, module, path, test, and URL APIs.",
+    "evidence": "Seven of its eleven imports are node: built-ins. typecheckedFiles, discoveredTests, requireRootFormatting, requireLinted, and requireUnsuppressed each wrap a different tool, and one test applies them all to the same git ls-files scan."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/durable-message-runtime.test.ts:keepsPublishOrder",
+    "rationale": "The test yields fifty microtask turns one after another so that, on replay, the already answered session resolves before step second starts. Awaiting them together would collapse them into one turn and change the interleaving the test checks.",
+    "evidence": "The comment above keepsPublishOrder describes the live and replayed orders, and the test expects { published: { id: 'msg-1', seq: 1 }, second: 2 } with exactly one publish request."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/durable-messages-subscribe-retries.test.ts:backsOffBetweenRetries",
+    "rationale": "Fake time has to advance in order, to a millisecond before each backoff delay and then onto it, so the test can check the list call count after each step. Each step depends on the timers the previous step left pending.",
+    "evidence": "The steps come from the delays [500, 1000, 2000, 4000, 8000, 16000, 30000, 30000]; each asserts toHaveBeenCalledTimes(calls + retries), and the total of ten calls is checked after disconnecting."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/support/durable-messages-realtime.ts:until",
+    "rationale": "until re-checks a condition once per event-loop turn, for at most twenty turns. Each check has to follow the previous turn, or it cannot see the asynchronous work that turn finished.",
+    "evidence": "Subscribe tests await until(() => reported.mock.calls.length > 0) for handler rejections logged on later turns; settled() resolves on setImmediate and until throws 'condition not reached' after twenty turns."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/functions-http.test.ts:reachesResolvedHost",
+    "rationale": "Invocations two and three must start after the first one has cached the resolved function. Run concurrently they would share one in-flight resolve, which the separate concurrent-invocation test already covers.",
+    "evidence": "After three sequential invokes the test expects api.targets() to equal ['/functions/resolve?name=my-function'] and functions.targets() to equal ['/', '/', '/']."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/functions-http.test.ts:sharesResolution",
+    "rationale": "Each retry must run after the earlier failed resolve is cached, so the test checks that a failed resolve is cached. Concurrent calls would only share the in-flight request.",
+    "evidence": "After three sequential invokes of missing-function the test expects api.targets() to equal ['/functions/resolve?name=missing-function']."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "__tests__/realtime-channel-lifecycle-presence.test.ts:ignoresMalformedPresence",
+    "rationale": "Each malformed presence snapshot must be emitted and the fake clock advanced before the next, because the cases share one client, one channel state, and one fake timer.",
+    "evidence": "Each refreshPresence call sets client.presenceResult, emits subscribed, and advances fake time by 150 ms, and the test asserts state._presenceState before the next snapshot."
+  },
+  {
+    "rule": "eslint/no-extend-native",
+    "scope": "__tests__/errors.test.ts:preservesInheritedBrandReceiver",
+    "rationale": "hasValue boxes a primitive and reads the brand with the primitive as receiver. Only an inherited getter can observe the receiver, and a string's prototype chain holds only String.prototype and Object.prototype, so the test installs one there and removes it in finally.",
+    "evidence": "src/errors-brand.ts calls Reflect.get(new BoxValue(value), key, value). Without a getter on String.prototype no test fails when the third argument is dropped, and stryker.config.json breaks below a 100% mutation score."
+  },
+  {
+    "rule": "import/no-unassigned-import",
+    "scope": "examples/nextjs-notes-app/src/app/layout.js:RootLayout",
+    "rationale": "The Next.js App Router loads global CSS only through a side-effect import in a layout; the stylesheet exports nothing to assign, and the root layout is where the example applies its Tailwind styles.",
+    "evidence": "https://nextjs.org/docs/app/getting-started/css documents global styles as import './global.css' in app/layout. The rule's allow option for CSS would change the pinned .oxlintrc.json."
+  },
+  {
+    "rule": "jsx-a11y/no-autofocus",
+    "scope": "examples/nextjs-notes-app/src/components/NoteCardEditor.js:NoteCardEditor",
+    "rationale": "The editor replaces the note's view when the user clicks Edit. That Edit button had focus and unmounts, so without autoFocus keyboard focus falls back to the document body instead of moving into the editor the user opened.",
+    "evidence": "NoteCard renders NoteCardEditor in place of NoteCardView once editor.isEditing is set by the Edit button's handler; the editor never appears on page load."
+  },
+  {
+    "rule": "jsx-a11y/no-autofocus",
+    "scope": "examples/nextjs-notes-app/src/components/NoteEditorForm.js:NoteEditorForm",
+    "rationale": "The form replaces the collapsed Create a new note button when the user clicks it. That button had focus and unmounts, so without autoFocus keyboard focus falls back to the document body instead of moving into the form the user opened.",
+    "evidence": "NoteEditor renders NoteEditorForm in place of the collapsed button once its click handler sets isExpanded; the form never appears on page load."
+  },
+  {
+    "rule": "react/memo-dependencies",
+    "scope": "examples/nextjs-notes-app/src/components/useNoteEditor.js:useNoteEditor.handleSubmit",
+    "rationale": "handleSubmit calls onCreate inside a try block whose finally clears isSubmitting, so onCreate is a real dependency. Dropping it would create notes through a stale onCreate after useNotes replaces it for a new user.",
+    "evidence": "oxlint 1.88.0 reports any identifier used only inside try { } finally { } as an extra dependency: useCallback(async () => { try { await save(); } finally { setBusy(false); } }, [save, setBusy]) is flagged for save."
   }
 ]

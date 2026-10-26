@@ -8,6 +8,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { transformFileAsync } from '@babel/core';
 import { assertionResults, failureMessages } from './jest-results.mts';
+// oxlint-disable-next-line import/max-dependencies -- This end-to-end test drives Babel, Jest, and Node's process APIs.
 import { record } from './values.mts';
 
 const require = createRequire(import.meta.url);

@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest 
 import { CallbackFailedError, durable } from '../src/durable.ts';
 import { callbackOperationId } from '../src/durable-callback-token.ts';
 import type { CallbackSubmitter, DurableHandler } from '../src/durable-types.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { settledRun } from './support/settled-run.ts';
 
 // The durable-callback-token tests stand a double in for the runtime. These run
@@ -186,8 +187,10 @@ function failsAndHeartbeats(): void {
     const runner = runnerFor(async (_input, ctx) => {
       const failure = await ctx.waitForCallback('payment', record).then(
         () => null,
-        (error: unknown) =>
-          error instanceof CallbackFailedError ? { type: error.type, message: error.message } : String(error),
+        (error: unknown) => {
+          expectInstanceOf(error, CallbackFailedError);
+          return { type: error.type, message: error.message };
+        },
       );
       await ctx.wait('1s');
       return failure;

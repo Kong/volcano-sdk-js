@@ -166,6 +166,7 @@ export class DurableMessageStream {
     let page: DurableResult<DurableMessageList>;
     do {
       after = this.lastSeq;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each page starts after the last message the previous page delivered.
       page = await this.listAfter(after);
       if (page.data === null) {
         return page;

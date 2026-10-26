@@ -1,14 +1,13 @@
 import { subscribeChannel } from '../src/realtime-channel-lifecycle.ts';
 import { deferred } from './realtime-transport-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
 import { presenceState } from './support/realtime-channel-lifecycle-state.ts';
 
 test('presence events update state and are ignored while paused or malformed', async () => {
   const state = presenceState();
   await subscribeChannel(state);
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   const subscription = client.subscription;
   expect(client.created).toEqual([{ name: 'presence:lobby', joinLeave: true }]);
   await subscription.emit('presence', { clients: {} });
@@ -42,33 +41,29 @@ test('presence snapshot applies after delay and ignores stale and malformed resu
     const state = presenceState();
     await subscribeChannel(state);
     const client = state.client;
-    if (client === null) {
-      throw new Error('client missing');
-    }
-    client.presenceResult = Promise.resolve({ clients: { alice: { client: 'alice' } } });
-    await client.subscription.emit('subscribed', {});
-    await jest.advanceTimersByTimeAsync(150);
+    expectPresent(client);
+    const refreshPresence = async (result: Promise<unknown>): Promise<void> => {
+      client.presenceResult = result;
+      await client.subscription.emit('subscribed', {});
+      await jest.advanceTimersByTimeAsync(150);
+    };
+    await refreshPresence(Promise.resolve({ clients: { alice: { client: 'alice' } } }));
     expect(client.presenceCalls).toEqual(['presence:lobby']);
     expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
     expect(state.syncs).toBe(1);
     expect(state._presenceTimeoutId).toBeNull();
 
-    client.presenceResult = Promise.resolve({ clients: [] });
-    await client.subscription.emit('subscribed', {});
-    await jest.advanceTimersByTimeAsync(150);
+    await refreshPresence(Promise.resolve({ clients: [] }));
     expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
 
     for (const malformed of [null, 7, 'invalid']) {
-      client.presenceResult = Promise.resolve({ clients: malformed });
-      await client.subscription.emit('subscribed', {});
-      await jest.advanceTimersByTimeAsync(150);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each refresh advances the shared fake clock before the next.
+      await refreshPresence(Promise.resolve({ clients: malformed }));
       expect(state._presenceState).toEqual({ alice: { client: 'alice' } });
     }
 
     const waiting = deferred<unknown>();
-    client.presenceResult = waiting.promise;
-    await client.subscription.emit('subscribed', {});
-    await jest.advanceTimersByTimeAsync(150);
+    await refreshPresence(waiting.promise);
     state.unsubscribe();
     waiting.resolve({ clients: { stale: { client: 'stale' } } });
     await jest.advanceTimersByTimeAsync(0);
@@ -85,9 +80,7 @@ test('presence refresh tolerates absent client, absent subscription and query fa
     const state = presenceState();
     await subscribeChannel(state);
     const client = state.client;
-    if (client === null) {
-      throw new Error('client missing');
-    }
+    expectPresent(client);
     await client.subscription.emit('subscribed', {});
     state.client = null;
     await jest.advanceTimersByTimeAsync(150);

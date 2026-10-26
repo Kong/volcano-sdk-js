@@ -50,14 +50,16 @@ const incomplete: [string, string, string[]][] = [
   ['name-filtered case', `${passing} await test('filtered', () => {});`, ['--test-name-pattern=passes']],
   ['focused case', `${passing} await test.only('focused', () => {});`, ['--test-only']],
 ];
-for (const [name, source, arguments_] of incomplete) {
-  await test(`native reporter rejects ${name}`, async () => {
-    const result = await runFixture(source, arguments_);
-    assert.equal(result.error, undefined);
-    assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stderr, /Incomplete native test run/u);
-  });
-}
+await Promise.all(
+  incomplete.map(([name, source, arguments_]) =>
+    test(`native reporter rejects ${name}`, async () => {
+      const result = await runFixture(source, arguments_);
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /Incomplete native test run/u);
+    }),
+  ),
+);
 
 await test('native reporter rejects empty file discovery', async () => {
   const result = await runFixture();
@@ -69,10 +71,12 @@ const failed: [string, string][] = [
   ['assertion failure', "await test('fails', () => assert.equal(1, 2));"],
   ['cancelled case', "await test('cancelled', () => new Promise(() => {}));"],
 ];
-for (const [name, source] of failed) {
-  await test(`native reporter preserves ${name}`, async () => {
-    const result = await runFixture(source);
-    assert.equal(result.error, undefined);
-    assert.equal(result.status, 1, result.stderr);
-  });
-}
+await Promise.all(
+  failed.map(([name, source]) =>
+    test(`native reporter preserves ${name}`, async () => {
+      const result = await runFixture(source);
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, result.stderr);
+    }),
+  ),
+);

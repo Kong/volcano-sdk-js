@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   approvalDouble,
   askToShip,
@@ -121,7 +122,8 @@ function refusesBadArguments(): void {
     await expect(
       run((_input, ctx) => {
         const result: unknown = Reflect.apply(ctx.waitForApproval.bind(ctx), undefined, [name, options]);
-        return result instanceof Promise ? result : Promise.reject(new Error('Expected a promise'));
+        expectInstanceOf(result, Promise);
+        return result;
       }),
     ).rejects.toThrow(new TypeError(message));
     expect(callbackCalls).toHaveLength(0);
@@ -131,14 +133,11 @@ function refusesBadArguments(): void {
 
 function needsThePlatformURL(): void {
   it.each([
-    ['unset', undefined],
-    ['blank', '   '],
-  ])('explains that the platform URL is missing when it is %s', async (_case, value) => {
-    if (value === undefined) {
-      Reflect.deleteProperty(process.env, 'VOLCANO_PLATFORM_API_URL');
-    } else {
-      process.env['VOLCANO_PLATFORM_API_URL'] = value;
-    }
+    ['unset', {}],
+    ['blank', { VOLCANO_PLATFORM_API_URL: '   ' }],
+  ])('explains that the platform URL is missing when it is %s', async (_case, env) => {
+    Reflect.deleteProperty(process.env, 'VOLCANO_PLATFORM_API_URL');
+    Object.assign(process.env, env);
 
     await expect(run(shipping)).rejects.toThrow(
       'ctx.waitForApproval() needs VOLCANO_PLATFORM_API_URL, which Volcano sets on durable functions. Deploy this function as durable to request approvals.',

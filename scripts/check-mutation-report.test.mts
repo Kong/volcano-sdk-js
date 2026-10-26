@@ -18,11 +18,13 @@ await test('accepts killed mutants and invalid compile errors', () => {
   assert.deepEqual(mutationReportProblems(report), []);
 });
 
-for (const status of ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError', 'Ignored', 'Pending']) {
-  await test(`rejects ${status} separately`, () => {
-    assert.deepEqual(mutationReportProblems(reportWith(status)), [`src/example.ts:7 ${status}`]);
-  });
-}
+await Promise.all(
+  ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError', 'Ignored', 'Pending'].map((status) =>
+    test(`rejects ${status} separately`, () => {
+      assert.deepEqual(mutationReportProblems(reportWith(status)), [`src/example.ts:7 ${status}`]);
+    }),
+  ),
+);
 
 await test('rejects missing or empty reports', () => {
   assert.deepEqual(mutationReportProblems({}), ['Missing mutation report files']);

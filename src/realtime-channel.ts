@@ -165,10 +165,10 @@ class RealtimeChannel {
 
     // Return unsubscribe function
     return () => {
-      const callbacks = this._callbacks.get(event) ?? [];
+      const registered = this._callbacks.get(event) ?? [];
       this._callbacks.set(
         event,
-        callbacks.filter((cb) => cb !== deliver),
+        registered.filter((cb) => cb !== deliver),
       );
     };
   }

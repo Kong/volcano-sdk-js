@@ -55,10 +55,12 @@ export async function postToPlatform(apiUrl: string, request: PlatformRequest): 
     if (outcome.failure === undefined) {
       return outcome.body;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each retry waits out its backoff after the previous attempt failed.
     const timeout = await retryTimeout(outcome.failure, delay, deadline);
     if (timeout === null) {
       break;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- A retry is sent only once the previous attempt has failed.
     outcome = await send(url, init, request, timeout);
   }
   if (outcome.failure !== undefined) {

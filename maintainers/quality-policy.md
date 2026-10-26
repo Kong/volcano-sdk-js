@@ -7,16 +7,32 @@ oxfmt, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
 
 ## Lint
 
-oxlint runs its `correctness` and `pedantic` categories at their defaults, the
-same configuration as Kong/volcano-hosting. `scripts/lint-policy.test.mts` pins
-`.oxlintrc.json`, so a rule, plugin, or override change fails until the policy
-test changes with it. TypeScript's strict compiler options are the type-safety
+oxlint runs its `correctness`, `suspicious`, `pedantic`, and `perf` categories
+as errors with the `typescript`, `unicorn`, `oxc`, `import`, `jest`, `promise`,
+`node`, `react`, `react-perf`, `jsx-a11y`, and `nextjs` plugins, so Jest suites
+and the Next.js example also get their framework's rules.
+`scripts/lint-policy.test.mts` pins `.oxlintrc.json`, so a rule, plugin, or
+override change fails until the policy test changes with it, and lints fixtures
+to show the categories and framework rules apply where that code lives.
+
+Two rules are off:
+
+- `eslint/no-underscore-dangle`: a leading underscore is how JavaScript
+  consumers recognise the SDK's `@internal` members, which the published types
+  strip. Renaming them would make internals look public.
+- `react/react-in-jsx-scope`: it predates React 17's automatic JSX runtime,
+  which Next.js uses, so it only demands unused imports.
+
+The `style` and `restriction` categories are not enabled: they hold opinions and
+feature bans meant to be adopted rule by rule. `nursery` is not enabled because
+its rules are unstable. TypeScript's strict compiler options are the type-safety
 gate; oxlint adds no type-aware rules.
 
-A finding that the published API makes unavoidable can be approved in
-`quality-exceptions.json` with the rule, a declaration scope, a rationale, and
-evidence. Its `// oxlint-disable-next-line <rule> -- <reason>` directive must
-match an entry in `scripts/typescript-policy.test.mts`, and
+A finding that cannot be fixed without changing behavior, such as a loop whose
+iterations must run in order, can be approved in `quality-exceptions.json` with
+the rule, a declaration scope, a rationale, and evidence. Its exact
+`// oxlint-disable-next-line <rule> -- <reason>` directive must be listed for
+that file in `scripts/suppression-policy.mts`, and
 `scripts/quality-exceptions.test.mts` fails once the rule no longer fires
 without it. Every other suppression comment fails the tracked-file policy.
 

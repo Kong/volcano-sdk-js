@@ -86,6 +86,7 @@ function NoteCardActions({ isDeleting, onEdit, onDelete }) {
         disabled={isDeleting}
         className="p-1.5 text-gray-400 hover:text-volcano-600 rounded transition-colors"
         title="Edit note"
+        aria-label="Edit note"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -101,6 +102,7 @@ function NoteCardActions({ isDeleting, onEdit, onDelete }) {
         disabled={isDeleting}
         className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
         title="Delete note"
+        aria-label="Delete note"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path

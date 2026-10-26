@@ -33,7 +33,7 @@ function handwrittenRuntime(path: string): boolean {
 }
 
 export function mutationPatterns(paths: readonly string[]): string[] {
-  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].sort((left, right) =>
+  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].toSorted((left, right) =>
     left.localeCompare(right),
   );
 }
@@ -54,7 +54,7 @@ function safeCutLines(path: string, source: string, lineCount: number): number[]
       }
     }
   }
-  return [...cuts].sort((left, right) => left - right);
+  return [...cuts].toSorted((left, right) => left - right);
 }
 
 function chunkEnd(cuts: readonly number[], start: number): number | undefined {
@@ -78,7 +78,7 @@ function safeChunks(path: string, source: string, lineCount: number): LineRange[
 }
 
 function selectedRanges(path: string, lines: ReadonlySet<number>, start: number, end: number): MutationShard {
-  const selected = [...lines].filter((line) => line >= start && line <= end).sort((a, b) => a - b);
+  const selected = [...lines].filter((line) => line >= start && line <= end).toSorted((a, b) => a - b);
   const ranges: string[] = [];
   let current: LineRange | undefined;
   for (const line of selected) {
@@ -186,7 +186,7 @@ function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCou
   }));
   const ordered = [...groups.values()]
     .flatMap((group) => shardItems(group))
-    .sort((left, right) => {
+    .toSorted((left, right) => {
       const weightOrder = right.weight - left.weight;
       return weightOrder === 0 ? firstPattern(left).localeCompare(firstPattern(right)) : weightOrder;
     });

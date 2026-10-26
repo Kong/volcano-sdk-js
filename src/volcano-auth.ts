@@ -33,6 +33,7 @@ import type {
 import { StorageFileApi as RuntimeStorageFileApi } from './storage-file.ts';
 import { beginOAuthCallback, hasInitialSession, initializeCredentials } from './volcano-auth-bootstrap.ts';
 import { GENERATED_TRANSPORT, type RuntimeTransport } from './volcano-auth-config.ts';
+// oxlint-disable-next-line import/max-dependencies -- VolcanoAuth composes one module per public sub-API.
 import { authApi, durableApi } from './volcano-auth-facades.ts';
 import { VolcanoAuthServices } from './volcano-auth-services.ts';
 

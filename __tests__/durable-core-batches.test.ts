@@ -81,14 +81,10 @@ function readsMapArguments(): void {
 function reportsFailedItems(): void {
   it('reports a failed item instead of rejecting', async () => {
     const failure = new Error('cannot ship b');
-    const result = await run((_input, ctx) =>
-      ctx.map('ship', ['a', 'b'], (item) => {
-        if (item === 'b') {
-          return Promise.reject(failure);
-        }
-        return Promise.resolve(item.toUpperCase());
-      }),
-    );
+    const ship = jest.fn<(item: string) => Promise<string>>().mockResolvedValueOnce('A').mockRejectedValueOnce(failure);
+    const result = await run((_input, ctx) => ctx.map('ship', ['a', 'b'], ship));
+
+    expect(ship.mock.calls.map(([item]) => item)).toEqual(['a', 'b']);
 
     // `results` holds what succeeded, so it is not aligned with the input; the
     // input order lives in `items`.

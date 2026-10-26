@@ -21,12 +21,11 @@ function client(options: { apiUrl?: string; timeout?: number; refreshToken?: str
 
 function skipsRefreshForRejectedCredentials(): void {
   test.each([
-    { status: 403, useAnonKey: false, message: 'forbidden' },
-    { status: 401, useAnonKey: true, message: 'anonymous key rejected' },
+    { status: 403, useAnonKey: false, message: 'forbidden', token: testAccessToken() },
+    { status: 401, useAnonKey: true, message: 'anonymous key rejected', token: anonToken },
   ])(
     'does not refresh a $status resolver error with useAnonKey=$useAnonKey',
-    async ({ status, useAnonKey, message }) => {
-      const token = useAnonKey ? anonToken : testAccessToken();
+    async ({ status, useAnonKey, message, token }) => {
       const sdk = new VolcanoAuth({
         anonKey: anonToken,
         accessToken: token,
@@ -187,8 +186,23 @@ function resetsStateAndRefusesEmptyRefresh(): void {
   });
 }
 
+type RefreshOutcome = (sdk: VolcanoAuth) => ReturnType<VolcanoAuth['_refreshSessionForContext']>;
+
+function discardRefresh(): ReturnType<RefreshOutcome> {
+  return Promise.resolve({ session: null, error: new AuthRefreshDiscardedError() });
+}
+
+function changeSessionDuringRefresh(sdk: VolcanoAuth): ReturnType<RefreshOutcome> {
+  sdk.accessToken = 'other-session';
+  sdk._sessionGeneration += 1;
+  return Promise.resolve({ session: null, error: null });
+}
+
 function keepsTheCurrentSession(): void {
-  test.each(['discarded', 'changed'] as const)('does not overwrite the session after a %s refresh', async (outcome) => {
+  test.each<[string, RefreshOutcome]>([
+    ['discarded', discardRefresh],
+    ['changed', changeSessionDuringRefresh],
+  ])('does not overwrite the session after a %s refresh', async (_outcome, refresh) => {
     const sdk = client({ refreshToken: 'refresh' });
     const token = `x.${Buffer.from(JSON.stringify({ project_id: 'project' })).toString('base64url')}.x`;
     const key = functionResolveCacheKey(sdk.apiUrl, name, token, false);
@@ -196,14 +210,7 @@ function keepsTheCurrentSession(): void {
       key,
       Promise.resolve({ functionId: null, error: new Error('unauthorized'), status: 401 }),
     );
-    jest.spyOn(sdk, '_refreshSessionForContext').mockImplementation(() => {
-      if (outcome === 'changed') {
-        sdk.accessToken = 'other-session';
-        sdk._sessionGeneration += 1;
-        return Promise.resolve({ session: null, error: null });
-      }
-      return Promise.resolve({ session: null, error: new AuthRefreshDiscardedError() });
-    });
+    jest.spyOn(sdk, '_refreshSessionForContext').mockImplementation(() => refresh(sdk));
     await expect(resolveWith(sdk, token, false)).rejects.toBeInstanceOf(AuthRefreshDiscardedError);
   });
 }
