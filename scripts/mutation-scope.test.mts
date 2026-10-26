@@ -5,6 +5,7 @@ import {
   changedShardPatterns,
   mutationPatterns,
   mutationShardCount,
+  selectMutationPatterns,
   shardMutationPatterns,
 } from './mutation-scope.mts';
 import { record, stringValue } from './values.mts';
@@ -68,6 +69,41 @@ await test('a new handwritten runtime file cannot fall outside the full mutation
   } finally {
     unlinkSync(path);
   }
+});
+
+function fakeGit(outputs: Readonly<Record<string, string>>): (...args: string[]) => string {
+  return (...args) => outputs[args.join(' ')] ?? assert.fail(`unexpected git ${args.join(' ')}`);
+}
+
+await test('a base commit limits mutation to changed and untracked runtime files', () => {
+  const git = fakeGit({
+    'ls-files --cached -- src': 'src/auth-validation.ts\nsrc/lock-clock.ts\nsrc/generated/client.ts\n',
+    'diff --name-only base-sha -- src': 'src/lock-clock.ts\nsrc/removed-runtime.ts\nsrc/durable-runtime-peer.d.ts\n',
+    'ls-files --others --exclude-standard -- src': 'src/json-clone.ts\n',
+  });
+  assert.deepEqual(selectMutationPatterns(undefined, git), [
+    'src/auth-validation.ts',
+    'src/json-clone.ts',
+    'src/lock-clock.ts',
+  ]);
+  assert.deepEqual(selectMutationPatterns('base-sha', git), ['src/json-clone.ts', 'src/lock-clock.ts']);
+  const shards = Array.from({ length: 4 }, (_, index) => selectMutationPatterns('base-sha', git, { index, count: 4 }));
+  assert.deepEqual(
+    shards.flat().toSorted((left, right) => left.localeCompare(right)),
+    ['src/json-clone.ts', 'src/lock-clock.ts'],
+  );
+  assert.deepEqual(shards.slice(2), [[], []]);
+});
+
+await test('only the complete scope rejects an empty shard', () => {
+  const git = fakeGit({
+    'ls-files --cached -- src': 'src/lock-clock.ts\n',
+    'diff --name-only base-sha -- src': '',
+    'ls-files --others --exclude-standard -- src': '',
+  });
+  assert.throws(() => selectMutationPatterns(undefined, git, { index: 3, count: 4 }), /selected no source/);
+  assert.deepEqual(selectMutationPatterns('base-sha', git), []);
+  assert.deepEqual(selectMutationPatterns('base-sha', git, { index: 0, count: 4 }), []);
 });
 
 function assertShardOwnership(patterns: readonly string[], expectedFiles: number): void {

@@ -216,3 +216,30 @@ export function changedShardPatterns(patterns: readonly string[], shardIndex: nu
   validateShardSelection(shardIndex, shardCount);
   return mutationShards(patterns, shardCount)[shardIndex] ?? [];
 }
+
+function lines(output: string): string[] {
+  return output.split('\n').filter(Boolean);
+}
+
+interface ShardSelection {
+  index: number;
+  count: number;
+}
+
+// With a base commit, mutate only the runtime files changed since it;
+// otherwise, the complete target.
+export function selectMutationPatterns(
+  base: string | undefined,
+  git: (...args: string[]) => string,
+  shard?: ShardSelection,
+): string[] {
+  const listed =
+    base === undefined ? git('ls-files', '--cached', '--', 'src') : git('diff', '--name-only', base, '--', 'src');
+  const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src');
+  const scope = mutationPatterns([...lines(listed), ...lines(untracked)]);
+  if (shard === undefined) {
+    return scope;
+  }
+  const select = base === undefined ? shardMutationPatterns : changedShardPatterns;
+  return select(scope, shard.index, shard.count);
+}

@@ -1,13 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
-import { changedShardPatterns, mutationPatterns, shardMutationPatterns } from './mutation-scope.mts';
+import { mutantCount } from './mutant-inventory.mts';
+import { selectMutationPatterns } from './mutation-scope.mts';
 
 function git(...args: readonly string[]): string {
   return execFileSync('/usr/bin/git', args, { encoding: 'utf8' });
-}
-
-function lines(output: string): string[] {
-  return output.split('\n').filter(Boolean);
 }
 
 const shardIndex = process.env['MUTATION_SHARD_INDEX'];
@@ -24,16 +21,16 @@ if (
   throw new Error('Mutation shard index and count must be non-negative integers');
 }
 
-const untracked = lines(git('ls-files', '--others', '--exclude-standard', '--', 'src'));
-const scope =
-  base === undefined
-    ? mutationPatterns([...lines(git('ls-files', '--cached', '--', 'src')), ...untracked])
-    : mutationPatterns([...lines(git('diff', '--name-only', base, '--', 'src')), ...untracked]);
-const selectShard = base === undefined ? shardMutationPatterns : changedShardPatterns;
-const patterns = shardIndex === undefined ? scope : selectShard(scope, Number(shardIndex), Number(shardCount));
+const patterns = selectMutationPatterns(
+  base,
+  git,
+  shardIndex === undefined ? undefined : { index: Number(shardIndex), count: Number(shardCount) },
+);
 
-if (patterns.length === 0) {
-  process.stdout.write(`No handwritten runtime changed since ${String(base)} in this shard; skipping Stryker.\n`);
+// A changed file can hold only types, which give Stryker no mutants; it then
+// exits with "No tests were executed".
+if (patterns.length === 0 || (base !== undefined && mutantCount(patterns) === 0)) {
+  process.stdout.write(`No mutable runtime code changed since ${String(base)} in this shard; skipping Stryker.\n`);
 } else {
   rmSync('reports/mutation.json', { force: true });
   const stryker = spawnSync('./node_modules/.bin/stryker', ['run', '--mutate', patterns.join(',')], {
