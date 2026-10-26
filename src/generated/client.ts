@@ -56,6 +56,7 @@ import type {
   SandboxTemplate,
   SandboxTemplatePage,
   SendDurableMessageRequest,
+  StorageRangeNotSatisfiableResponse,
   UploadSessionStatusResponse,
   UploadStorageObjectBodyOne
 } from './model';
@@ -2690,6 +2691,11 @@ export type downloadStorageObjectResponse404 = {
   status: 404
 }
 
+export type downloadStorageObjectResponse416 = {
+  data: StorageRangeNotSatisfiableResponse
+  status: 416
+}
+
 export type downloadStorageObjectResponse429 = {
   data: BandwidthCapExceededResponse
   status: 429
@@ -2698,7 +2704,7 @@ export type downloadStorageObjectResponse429 = {
 export type downloadStorageObjectResponseSuccess = (downloadStorageObjectResponse200ApplicationOctetStream | downloadStorageObjectResponse200ApplicationJson | downloadStorageObjectResponse206) & {
   headers: Headers;
 };
-export type downloadStorageObjectResponseError = (downloadStorageObjectResponse400 | downloadStorageObjectResponse403 | downloadStorageObjectResponse404 | downloadStorageObjectResponse429) & {
+export type downloadStorageObjectResponseError = (downloadStorageObjectResponse400 | downloadStorageObjectResponse403 | downloadStorageObjectResponse404 | downloadStorageObjectResponse416 | downloadStorageObjectResponse429) & {
   headers: Headers;
 };
 

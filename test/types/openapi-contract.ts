@@ -249,6 +249,10 @@ interface CustomDomainVerificationRecordShape {
   type: string;
   value: string;
 }
+interface CustomDomainRedirectShape {
+  to: string;
+  status: 301 | 302 | 307 | 308;
+}
 interface CustomDomainResponseShape {
   domain: string;
   tls_mode: 'managed' | 'byoc';
@@ -260,6 +264,7 @@ interface CustomDomainResponseShape {
   required_routing_record?: { record_type: 'CNAME'; name: string; value: string };
   routing_target_hostname?: string;
   effective_urls: string[];
+  redirect: CustomDomainRedirectShape | null;
   created_at: string;
   updated_at: string;
 }
