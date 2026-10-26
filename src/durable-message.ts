@@ -94,7 +94,7 @@ export function messagePublisher(context: PublishContext, executionRef: string |
     // Started now, so it takes its place among the context's operations when
     // called. A step started once the session opened could take another's on
     // replay, where the session is answered sooner.
-    return context.runInChildContext(message.name, async () => {
+    return await context.runInChildContext(message.name, async () => {
       const token = await opened;
       return publishedMessage(await publish(apiUrl, token, publishKey(token, position), message));
     });

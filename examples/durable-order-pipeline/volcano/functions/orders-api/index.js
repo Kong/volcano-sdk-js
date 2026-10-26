@@ -51,7 +51,7 @@ async function requestedAction(auth, input) {
 }
 
 async function insertOrderItem(volcano, order, item) {
-  return volcano.insert('order_items', {
+  return await volcano.insert('order_items', {
     order_id: order.id,
     sku: item.sku,
     quantity: item.quantity ?? 1,

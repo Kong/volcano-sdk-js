@@ -130,14 +130,14 @@ function isPresenceInfo(value: unknown): value is PresenceInfo {
 }
 
 function isPresenceState(value: unknown): value is PresenceState {
-  return record(value) && Object.values(value).every(isPresenceInfo);
+  return record(value) && Object.values(value).every((item) => isPresenceInfo(item));
 }
 
 function requiredApiUrl(value: unknown): string {
   if (typeof value !== 'string' || value === '') {
     throw new Error('apiUrl is required');
   }
-  return value.replace(/\/$/, '');
+  return value.replace(/\/$/u, '');
 }
 
 function requiredAnonKey(value: unknown): string {
@@ -153,11 +153,11 @@ function optionalDatabaseName(value: string | undefined): string | null {
 
 function payloadEvent(data: unknown): unknown {
   const event = property(data, 'event');
-  if (Boolean(event)) {
+  if (event) {
     return event;
   }
   const type = property(data, 'type');
-  return Boolean(type) ? type : 'message';
+  return type ? type : 'message';
 }
 
 function matchesPostgresChange(

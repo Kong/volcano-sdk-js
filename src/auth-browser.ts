@@ -48,10 +48,10 @@ export function storeAuthState(nonce: string, redirectUrl = ''): void {
   }
   try {
     window.sessionStorage.setItem(stateKey, nonce);
-    if (redirectUrl !== '') {
-      window.sessionStorage.setItem(redirectKey, redirectUrl);
-    } else {
+    if (redirectUrl === '') {
       window.sessionStorage.removeItem(redirectKey);
+    } else {
+      window.sessionStorage.setItem(redirectKey, redirectUrl);
     }
   } catch {
     // Without session storage, the callback fails closed when its nonce is missing.

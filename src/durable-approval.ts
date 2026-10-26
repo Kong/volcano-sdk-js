@@ -182,7 +182,7 @@ function stringOr<Fallback>(value: unknown, fallback: Fallback): string | Fallba
 
 // RFC 3339, the form Volcano writes. Date.parse alone accepts looser text,
 // such as a bare year.
-const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3])(?::[0-5]\d){2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3])(?::[0-5]\d){2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 
 function timestamp(value: unknown): string | null {
   return typeof value === 'string' && isTimestamp(value) ? value : null;

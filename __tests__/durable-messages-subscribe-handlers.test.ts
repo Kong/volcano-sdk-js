@@ -164,8 +164,8 @@ function runsReturnedThenables(): void {
     const then = jest.fn((_resolve: (value: unknown) => void, reject: (reason: unknown) => void) => {
       reject(thrown);
     });
-    const thenable = {};
-    Reflect.set(thenable, 'then', then);
+    // oxlint-disable-next-line unicorn/no-thenable -- Delivery must adopt a handler's non-Promise thenable.
+    const thenable = { then };
     await volcano.durable.messages.subscribe(target, () => thenable, { realtime });
     const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
 

@@ -19,9 +19,11 @@ export async function loadRealtime(): Promise<RealtimeModule> {
 }
 
 export { VolcanoAuth as default, VolcanoAuth, VolcanoAuth as VolcanoClient } from './volcano-auth.ts';
+// oxlint-disable-next-line eslint/no-redeclare -- The published runtime value and public type share this name.
 export const QueryBuilder = RuntimeQueryBuilder;
 export type QueryBuilder<T = Record<string, JsonValue>> = PublicQueryBuilder<T>;
 export { isBrowser } from './next/request.ts';
+// oxlint-disable-next-line eslint/no-redeclare -- The published runtime value and public type share this name.
 export const StorageFileApi = RuntimeStorageFileApi;
 export type StorageFileApi = PublicStorageFileApi;
 export type { DatabaseConnectionStringOptions } from './database-connection-string.ts';

@@ -1,14 +1,24 @@
-import { loadCentrifuge } from './realtime-centrifuge.ts';
-import { RealtimeChannel } from './realtime-channel.ts';
-import { globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
+import type { RealtimeChannel } from './realtime-channel.ts';
 import {
-  attachConnectionHandlers,
-  connectionOptions,
-  detachConnectionHandlers,
-  waitForConnection,
-} from './realtime-connection.ts';
-import { serverEventRoute } from './realtime-event-route.ts';
-import { recoveryIdentity, sameRecoveryIdentity } from './realtime-identity.ts';
+  channelName,
+  closeAllChannels,
+  closeChannel,
+  closeDurableChannel,
+  openChannel,
+  openDurableChannel,
+  synchronizeRecoveryIdentity,
+} from './realtime-client-channels.ts';
+import { adoptAccessToken, connectOnce, connectRealtime, disconnectRealtime } from './realtime-client-connect.ts';
+import {
+  activePresenceChannel,
+  handleServerJoin,
+  handleServerLeave,
+  handleServerPublication,
+  handleServerSubscribed,
+} from './realtime-client-events.ts';
+import { addConnectListener, addDisconnectListener, addErrorListener } from './realtime-client-listeners.ts';
+import { globalFetchConfig, realtimeWebSocketUrl } from './realtime-config.ts';
+import { recoveryIdentity } from './realtime-identity.ts';
 import type {
   ActiveFetchConfig,
   ChannelType,
@@ -27,34 +37,10 @@ import type {
   UnsubscribeFunction,
   WebSocketConstructor,
 } from './realtime-public-types.ts';
-import {
-  connectContext,
-  disconnectContext,
-  errorContext,
-  optionalDatabaseName,
-  property,
-  record,
-  requiredAnonKey,
-  requiredApiUrl,
-} from './realtime-values.ts';
-import { loadWebSocket } from './realtime-websocket.ts';
+import { optionalDatabaseName, requiredAnonKey, requiredApiUrl } from './realtime-values.ts';
 
 /** @internal */
-export function isTransportClient(value: unknown): value is TransportClient {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  return [
-    'connect',
-    'disconnect',
-    'on',
-    'off',
-    'newSubscription',
-    'getSubscription',
-    'removeSubscription',
-    'presence',
-  ].every((method) => typeof Reflect.get(value, method) === 'function');
-}
+export { isTransportClient } from './realtime-client-connect.ts';
 
 /**
  * VolcanoRealtime - Main realtime client
@@ -180,131 +166,30 @@ class VolcanoRealtime {
   /**
    * Connect to the realtime server
    */
-  async connect(): Promise<void> {
-    if (this._connected) {
-      return;
-    }
-    if (this._connectionPromise !== null) {
-      return this._connectionPromise;
-    }
-
-    this._connectionPromise = this._doConnect();
-    try {
-      await this._connectionPromise;
-    } finally {
-      this._connectionPromise = null;
-    }
+  connect(): Promise<void> {
+    return connectOnce(this);
   }
 
   /** @internal */
-  async _doConnect(): Promise<void> {
-    const CentrifugeClient = await loadCentrifuge();
-    const WebSocket = this._webSocket ?? (await loadWebSocket());
-
-    const wsUrl = `${this.wsUrl}?apikey=${encodeURIComponent(this.anonKey)}`;
-
-    const candidate: unknown = Reflect.construct(CentrifugeClient, [
-      wsUrl,
-      connectionOptions(
-        this.accessToken,
-        this.getToken,
-        (token) => {
-          this._adoptAccessToken(token);
-        },
-        WebSocket,
-      ),
-    ]);
-    if (!isTransportClient(candidate)) {
-      throw new TypeError('Realtime transport does not provide the required client methods');
-    }
-    this._client = candidate;
-
-    // Set up event handlers (store references for cleanup)
-    this._clientHandlers = {
-      connected: (ctx) => {
-        this._connected = true;
-        this._onConnect.forEach((cb) => {
-          cb(connectContext(ctx));
-        });
-      },
-      disconnected: (ctx) => {
-        this._connected = false;
-        this._onDisconnect.forEach((cb) => {
-          cb(disconnectContext(ctx));
-        });
-      },
-      error: (ctx) => {
-        this._onError.forEach((cb) => {
-          cb(errorContext(ctx));
-        });
-      },
-      publication: (ctx) => {
-        this._handleServerPublication(ctx);
-      },
-      join: (ctx) => {
-        this._handleServerJoin(ctx);
-      },
-      leave: (ctx) => {
-        this._handleServerLeave(ctx);
-      },
-      subscribed: (ctx) => {
-        this._handleServerSubscribed(ctx);
-      },
-    };
-
-    attachConnectionHandlers(this._client, this._clientHandlers);
-    return waitForConnection(this._client);
+  _doConnect(): Promise<void> {
+    return connectRealtime(this);
   }
 
   /** @internal */
   _adoptAccessToken(token: string): void {
-    this.accessToken = token;
-    this._synchronizeRecoveryIdentity();
+    adoptAccessToken(this, token);
   }
 
   /** @internal */
   _synchronizeRecoveryIdentity(): void {
-    const nextIdentity = recoveryIdentity(this.accessToken);
-    if (sameRecoveryIdentity(this._recoveryIdentity, nextIdentity)) {
-      return;
-    }
-    this._recoveryIdentity = nextIdentity;
-    for (const channel of this._channels.values()) {
-      channel._resetForIdentityChange();
-    }
+    synchronizeRecoveryIdentity(this);
   }
 
   /**
    * Disconnect from the realtime server
    */
   disconnect(): void {
-    // Unsubscribe all channels first to clean up their timers
-    for (const channel of this._channels.values()) {
-      try {
-        channel._dispose();
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
-    this._channels.clear();
-
-    if (this._client !== null) {
-      // Remove event handlers first to prevent memory leaks
-      if (this._clientHandlers !== null) {
-        detachConnectionHandlers(this._client, this._clientHandlers);
-        this._clientHandlers = null;
-      }
-
-      // Manually trigger disconnect callbacks
-      this._onDisconnect.forEach((cb) => {
-        cb({ reason: 'manual' });
-      });
-
-      // Disconnect the client
-      this._client.disconnect();
-      this._client = null;
-      this._connected = false;
-    }
+    disconnectRealtime(this);
   }
 
   /**
@@ -324,147 +209,47 @@ class VolcanoRealtime {
    * @param {number} [options.fetchMaxBatchSize] - Max batch size for fetch requests
    */
   channel(name: string, options: ChannelOptions = {}): RealtimeChannel {
-    const type = options.type ?? 'broadcast';
-    const fullName = this._formatChannelName(name, type);
-
-    const existing = this._channels.get(fullName);
-    if (existing !== undefined) {
-      return existing;
-    }
-
-    const channel = new RealtimeChannel(this, fullName, type, options);
-    this._channels.set(fullName, channel);
-    return channel;
+    return openChannel(this, name, options);
   }
 
-  /**
-   * Format channel name for subscription
-   * Format: type:name
-   *
-   * The server automatically adds the project ID prefix based on
-   * the authenticated connection. Clients never need to know about project IDs.
-   */
   /** @internal */
   _formatChannelName(name: string, type: InternalChannelType): string {
-    return `${type}:${name}`;
+    return channelName(name, type);
   }
 
-  /**
-   * Open the channel a durable execution publishes on, or return null when
-   * this client already has it open.
-   */
   /** @internal */
   _durableChannel(executionId: string, clientToken: string | null): RealtimeChannel | null {
-    const fullName = this._formatChannelName(executionId, 'durable');
-    if (this._channels.has(fullName)) {
-      return null;
-    }
-    const channel = new RealtimeChannel(this, fullName, 'durable', {});
-    channel._subscribeData = clientToken === null ? null : { client_token: clientToken };
-    this._channels.set(fullName, channel);
-    return channel;
+    return openDurableChannel(this, executionId, clientToken);
   }
 
   /** @internal */
   _removeDurableChannel(channel: RealtimeChannel): void {
-    if (this._channels.get(channel._name) !== channel) {
-      return;
-    }
-    channel._dispose();
-    this._channels.delete(channel._name);
+    closeDurableChannel(this, channel);
   }
 
-  /**
-   * Handle publications from server-side subscriptions
-   * The server uses project-prefixed channels: "projectId:type:name"
-   * We extract the type:name portion and route to the SDK channel
-   */
   /** @internal */
   _handleServerPublication(ctx: unknown): void {
-    const route = serverEventRoute(ctx);
-    if (route === null) {
-      // Not a valid server channel format, ignore
-      return;
-    }
-
-    // Find the SDK channel and deliver the message
-    let channel = this._channels.get(route.sdkChannel);
-
-    // Postgres changes are delivered on a per-user channel for RLS isolation:
-    // projectId:postgres:schema:table:userID. onPostgresChanges takes schema and
-    // table as separate single-identifier args, so a postgres channel is always
-    // exactly postgres:schema:table and the per-user form is exactly 5 segments.
-    // Match the base channel the client subscribed to by dropping the trailing
-    // userID; otherwise the publication is silently dropped and onPostgresChanges
-    // never fires. Requiring exactly 5 segments avoids over-matching anything
-    // that isn't this well-defined per-user format.
-    channel ??= this._channels.get(route.postgresBaseChannel ?? route.sdkChannel);
-
-    if (channel !== undefined) {
-      channel._handlePublication(ctx);
-    }
+    handleServerPublication(this, ctx);
   }
 
   /** @internal */
   _activePresenceChannel(ctx: unknown): RealtimeChannel | null {
-    const route = serverEventRoute(ctx);
-    if (route === null) {
-      return null;
-    }
-    const channel = this._channels.get(route.sdkChannel);
-    return channel?._type === 'presence' && !channel._paused ? channel : null;
+    return activePresenceChannel(this, ctx);
   }
 
-  /**
-   * Handle join events from server-side subscriptions
-   */
   /** @internal */
   _handleServerJoin(ctx: unknown): void {
-    const channel = this._activePresenceChannel(ctx);
-    if (channel === null) {
-      return;
-    }
-    const info = property(ctx, 'info');
-    const client = property(info, 'client');
-    if (typeof client === 'string') {
-      channel._presenceState[client] = info;
-    }
-    channel._triggerPresenceSync();
-    channel._triggerEvent('join', info);
+    handleServerJoin(this, ctx);
   }
 
-  /**
-   * Handle leave events from server-side subscriptions
-   */
   /** @internal */
   _handleServerLeave(ctx: unknown): void {
-    const channel = this._activePresenceChannel(ctx);
-    if (channel === null) {
-      return;
-    }
-    const info = property(ctx, 'info');
-    const client = property(info, 'client');
-    if (typeof client === 'string') {
-      Reflect.deleteProperty(channel._presenceState, client);
-    }
-    channel._triggerPresenceSync();
-    channel._triggerEvent('leave', info);
+    handleServerLeave(this, ctx);
   }
 
-  /**
-   * Handle subscribed events - includes initial presence state
-   */
   /** @internal */
   _handleServerSubscribed(ctx: unknown): void {
-    const channel = this._activePresenceChannel(ctx);
-    if (channel === null) {
-      return;
-    }
-    const presence = property(property(ctx, 'data'), 'presence');
-    if (record(presence)) {
-      channel._presenceState = { ...presence };
-      channel._triggerPresenceSync();
-    }
+    handleServerSubscribed(this, ctx);
   }
 
   /**
@@ -478,30 +263,21 @@ class VolcanoRealtime {
    * Register callback for connection events
    */
   onConnect(callback: (context: ConnectContext) => void): UnsubscribeFunction {
-    this._onConnect.push(callback);
-    return () => {
-      this._onConnect = this._onConnect.filter((cb) => cb !== callback);
-    };
+    return addConnectListener(this, callback);
   }
 
   /**
    * Register callback for disconnection events
    */
   onDisconnect(callback: (context: DisconnectContext) => void): UnsubscribeFunction {
-    this._onDisconnect.push(callback);
-    return () => {
-      this._onDisconnect = this._onDisconnect.filter((cb) => cb !== callback);
-    };
+    return addDisconnectListener(this, callback);
   }
 
   /**
    * Register callback for error events
    */
   onError(callback: (context: ErrorContext) => void): UnsubscribeFunction {
-    this._onError.push(callback);
-    return () => {
-      this._onError = this._onError.filter((cb) => cb !== callback);
-    };
+    return addErrorListener(this, callback);
   }
 
   /**
@@ -510,22 +286,14 @@ class VolcanoRealtime {
    * @param {string} [type='broadcast'] - Channel type
    */
   removeChannel(name: string, type: ChannelType = 'broadcast'): void {
-    const fullName = this._formatChannelName(name, type);
-    const channel = this._channels.get(fullName);
-    if (channel !== undefined) {
-      channel._dispose();
-      this._channels.delete(fullName);
-    }
+    closeChannel(this, name, type);
   }
 
   /**
    * Remove all channels and listeners
    */
   removeAllChannels(): void {
-    for (const channel of this._channels.values()) {
-      channel._dispose();
-    }
-    this._channels.clear();
+    closeAllChannels(this);
   }
 }
 

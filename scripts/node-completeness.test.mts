@@ -55,7 +55,7 @@ for (const [name, source, arguments_] of incomplete) {
     const result = await runFixture(source, arguments_);
     assert.equal(result.error, undefined);
     assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stderr, /Incomplete native test run/);
+    assert.match(result.stderr, /Incomplete native test run/u);
   });
 }
 

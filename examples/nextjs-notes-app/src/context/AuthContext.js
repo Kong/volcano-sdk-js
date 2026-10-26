@@ -15,8 +15,9 @@
  * }
  */
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { volcano } from '@/lib/volcano';
+import { createContext, useContext, useState } from 'react';
+import { useAuthMethods } from './useAuthMethods';
+import { useAuthSession } from './useAuthSession';
 
 // ---------------------------------------------------------------------------
 // CONTEXT DEFINITION
@@ -67,233 +68,15 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ---------------------------------------------------------------------------
-  // INITIALIZATION
-  // ---------------------------------------------------------------------------
+  // Restore the session on mount and follow auth state changes
+  useAuthSession({ setUser, setLoading });
 
-  /**
-   * Initialize authentication state on mount.
-   * Restores session from localStorage if available.
-   */
-  useEffect(() => {
-    async function initAuth() {
-      try {
-        // volcano.initialize() restores session from localStorage
-        const { user: restoredUser, error: initError } = await volcano.initialize();
-
-        if (initError) {
-          console.warn('Session restore failed:', initError.message);
-          // Don't set error state - just means no valid session
-        }
-
-        setUser(restoredUser);
-      } catch (err) {
-        console.error('Auth initialization error:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    initAuth();
-
-    // Listen for auth state changes (sign in, sign out, token refresh)
-    const unsubscribe = volcano.auth.onAuthStateChange((updatedUser) => {
-      setUser(updatedUser);
-    });
-
-    // Cleanup listener on unmount to prevent memory leaks
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // AUTHENTICATION METHODS
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Sign in with email and password
-   *
-   * @param {Object} credentials
-   * @param {string} credentials.email - User's email address
-   * @param {string} credentials.password - User's password
-   * @returns {Promise<{user: Object|null, error: Error|null}>}
-   *
-   * @example
-   * const { user, error } = await signIn({
-   *   email: 'user@example.com',
-   *   password: 'securePassword123'
-   * });
-   */
-  const signIn = useCallback(async ({ email, password }) => {
-    setError(null);
-    setLoading(true);
-
-    try {
-      const result = await volcano.auth.signIn({ email, password });
-
-      if (result.error) {
-        setError(result.error);
-        return { user: null, error: result.error };
-      }
-
-      setUser(result.user);
-      return { user: result.user, error: null };
-    } catch (err) {
-      setError(err);
-      return { user: null, error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  /**
-   * Create a new user account
-   *
-   * @param {Object} options
-   * @param {string} options.email - User's email address
-   * @param {string} options.password - User's password (min 8 characters)
-   * @param {Object} [options.metadata] - Optional user metadata (name, etc.)
-   * @returns {Promise<{user: Object|null, error: Error|null}>}
-   *
-   * @example
-   * const { user, error } = await signUp({
-   *   email: 'user@example.com',
-   *   password: 'securePassword123',
-   *   metadata: { name: 'John Doe' }
-   * });
-   */
-  const signUp = useCallback(async ({ email, password, metadata }) => {
-    setError(null);
-    setLoading(true);
-
-    try {
-      const result = await volcano.auth.signUp({ email, password, metadata });
-
-      if (result.error) {
-        setError(result.error);
-        return { user: null, error: result.error };
-      }
-
-      setUser(result.user);
-      return { user: result.user, error: null };
-    } catch (err) {
-      setError(err);
-      return { user: null, error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  /**
-   * Sign up anonymously (no email/password required)
-   *
-   * Creates a temporary user that can:
-   * - Access the app immediately
-   * - Create and manage notes
-   * - Later upgrade to a full account (link email/password)
-   *
-   * @returns {Promise<{user: Object|null, error: Error|null}>}
-   *
-   * @example
-   * const { user, error } = await signUpAnonymous();
-   * // User is now signed in with a temporary account
-   */
-  const signUpAnonymous = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-
-    try {
-      const result = await volcano.auth.signUpAnonymous();
-
-      if (result.error) {
-        setError(result.error);
-        return { user: null, error: result.error };
-      }
-
-      setUser(result.user);
-      return { user: result.user, error: null };
-    } catch (err) {
-      setError(err);
-      return { user: null, error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  /**
-   * Sign out the current user
-   *
-   * Clears the session from memory and localStorage.
-   *
-   * @returns {Promise<{error: Error|null}>}
-   *
-   * @example
-   * await signOut();
-   * // User is now signed out, redirect to login
-   */
-  const signOut = useCallback(async () => {
-    setError(null);
-
-    try {
-      const result = await volcano.auth.signOut();
-
-      if (result.error) {
-        setError(result.error);
-        return { error: result.error };
-      }
-
-      setUser(null);
-      return { error: null };
-    } catch (err) {
-      setError(err);
-      return { error: err };
-    }
-  }, []);
-
-  /**
-   * Send a password reset email
-   *
-   * @param {string} email - User's email address
-   * @returns {Promise<{error: Error|null}>}
-   *
-   * @example
-   * const { error } = await resetPassword('user@example.com');
-   * if (!error) {
-   *   alert('Check your email for reset instructions');
-   * }
-   */
-  const resetPassword = useCallback(async (email) => {
-    setError(null);
-    setLoading(true);
-
-    try {
-      const result = await volcano.auth.resetPasswordForEmail(email);
-
-      if (result.error) {
-        setError(result.error);
-        return { error: result.error };
-      }
-
-      return { error: null };
-    } catch (err) {
-      setError(err);
-      return { error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  /**
-   * Clear the current error
-   */
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // COMPUTED VALUES
-  // ---------------------------------------------------------------------------
+  // Sign in, sign up, sign out, and password reset
+  const { signIn, signUp, signUpAnonymous, signOut, resetPassword, clearError } = useAuthMethods({
+    setUser,
+    setLoading,
+    setError,
+  });
 
   // Check if user is anonymous (has no email)
   const isAnonymous = user && !user.email;

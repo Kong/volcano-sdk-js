@@ -71,7 +71,7 @@ for (const [name, config] of Object.entries({ unit })) {
         { title: 'later test', status: 'passed' },
       ],
     );
-    assert.match(failureMessages(assertions[0]), /detached work failed/);
+    assert.match(failureMessages(assertions[0]), /detached work failed/u);
   });
 
   await test(`${name} accepts a rejection handled on the next event-loop turn`, async () => {

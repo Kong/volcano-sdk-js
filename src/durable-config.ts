@@ -10,11 +10,11 @@ interface DurableConfigEngine {
 
 export function stepConfig(options: Record<string, unknown>, engine: DurableConfigEngine): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  if (Boolean(options['atMostOnce'])) {
+  if (options['atMostOnce']) {
     config['semantics'] = engine.StepSemantics.AtMostOncePerRetry;
   }
   const retryStrategy = toRetryStrategy(options['retry'], engine);
-  if (Boolean(retryStrategy)) {
+  if (retryStrategy) {
     config['retryStrategy'] = retryStrategy;
   }
   return config;
@@ -47,7 +47,7 @@ export function conditionConfig(
       engineConfig({
         shouldContinuePolling(state: unknown) {
           const reached: unknown = Reflect.apply(until, options, [state]);
-          return !Boolean(reached);
+          return !reached;
         },
         maxAttempts: options['maxAttempts'],
         initialDelay: optionalDuration(options['interval'], 'interval'),

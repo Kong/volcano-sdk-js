@@ -25,7 +25,7 @@ const MAX_SHARD_LINES = 80;
 export const mutationShardCount = 32;
 function handwrittenRuntime(path: string): boolean {
   return (
-    /^src\/.+\.(?:js|ts)$/.test(path) &&
+    /^src\/.+\.(?:js|ts)$/u.test(path) &&
     !path.endsWith('.d.ts') &&
     !path.startsWith('src/generated/') &&
     !path.startsWith('src/generated-runtime/')
@@ -57,13 +57,17 @@ function safeCutLines(path: string, source: string, lineCount: number): number[]
   return [...cuts].sort((left, right) => left - right);
 }
 
+function chunkEnd(cuts: readonly number[], start: number): number | undefined {
+  const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
+  return preferred.at(-1) ?? cuts.find((line) => line >= start);
+}
+
 function safeChunks(path: string, source: string, lineCount: number): LineRange[] {
   const cuts = safeCutLines(path, source, lineCount);
   const chunks: LineRange[] = [];
   let start = 1;
   while (start <= lineCount) {
-    const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
-    const end = preferred.at(-1) ?? cuts.find((line) => line >= start);
+    const end = chunkEnd(cuts, start);
     if (end === undefined) {
       throw new Error(`${path}: no safe mutation shard boundary after line ${String(start)}`);
     }
@@ -119,7 +123,7 @@ function parsePattern(pattern: string): {
   first: string | undefined;
   last: string | undefined;
 } {
-  const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
+  const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/u.exec(pattern);
   const path = match?.[1];
   if (path === undefined) {
     throw new Error(`Invalid mutation pattern: ${pattern}`);
@@ -184,7 +188,7 @@ function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCou
     .flatMap((group) => shardItems(group))
     .sort((left, right) => {
       const weightOrder = right.weight - left.weight;
-      return weightOrder !== 0 ? weightOrder : firstPattern(left).localeCompare(firstPattern(right));
+      return weightOrder === 0 ? firstPattern(left).localeCompare(firstPattern(right)) : weightOrder;
     });
   for (const item of ordered) {
     const target = lightestShard(shards);

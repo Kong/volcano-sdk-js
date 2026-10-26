@@ -100,7 +100,7 @@ async function requestOnce(
   options: RequestInit,
   token: string | null,
 ): Promise<{ response: Response; data: unknown }> {
-  return fetchWithTimeout(
+  return await fetchWithTimeout(
     url,
     { ...options, headers: requestHeaders(token, options.headers) },
     host.timeout,

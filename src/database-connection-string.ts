@@ -63,7 +63,7 @@ export function databaseConnectionString(
 function applicationName(value: string | number | bigint | boolean | symbol | null | undefined): string {
   // Preserve JavaScript callers' historical primitive coercion; public types
   // continue to accept only string or null user IDs.
-  const userId = value == null ? '' : String(value);
+  const userId = value === null || value === undefined ? '' : String(value);
   return userId === '' ? 'volcano_full_access' : `volcano_user_access:${userId}`;
 }
 

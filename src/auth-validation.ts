@@ -62,13 +62,13 @@ function isJsonValue(value: unknown): value is JsonValue {
     return true;
   }
   if (Array.isArray(value)) {
-    return value.every(isJsonValue);
+    return value.every((item) => isJsonValue(item));
   }
-  return isJsonRecord(value) && Object.values(value).every(isJsonValue);
+  return isJsonRecord(value) && Object.values(value).every((item) => isJsonValue(item));
 }
 
 function isUserMetadata(value: unknown): value is UserMetadata {
-  return isJsonRecord(value) && Object.values(value).every(isJsonValue);
+  return isJsonRecord(value) && Object.values(value).every((item) => isJsonValue(item));
 }
 
 function optionalStringError(user: Record<string, unknown>): TypeError | null {
@@ -145,10 +145,12 @@ export function assertAuthUser(user: unknown): asserts user is User {
 }
 
 function assertOptionalRefreshToken(data: Record<string, unknown>): void {
-  if (Object.hasOwn(data, 'refresh_token') && data['refresh_token'] !== undefined) {
-    if (!isNonEmptyString(data['refresh_token'])) {
-      throw new TypeError('Auth refresh_token must be a non-empty string');
-    }
+  if (
+    Object.hasOwn(data, 'refresh_token') &&
+    data['refresh_token'] !== undefined &&
+    !isNonEmptyString(data['refresh_token'])
+  ) {
+    throw new TypeError('Auth refresh_token must be a non-empty string');
   }
 }
 
@@ -203,7 +205,7 @@ export function assertCompleteSession(session: unknown): asserts session is Comp
 }
 
 export function sanitizeProvider(provider: unknown): void {
-  if (typeof provider !== 'string' || !/^[a-z0-9-]+$/.test(provider)) {
+  if (typeof provider !== 'string' || !/^[a-z0-9-]+$/u.test(provider)) {
     throw new Error('Provider must be a non-empty string containing only lowercase letters, numbers, and hyphens');
   }
 }

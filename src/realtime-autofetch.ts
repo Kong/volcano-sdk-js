@@ -92,7 +92,7 @@ function runBatchQuery(realtime: FetchClient, schema: string, table: string, ids
 
 function recordsFromQuery(result: unknown): Map<string, Record<string, unknown>> {
   const error = property(result, 'error');
-  if (Boolean(error)) {
+  if (error) {
     throw databaseFetchError(error);
   }
   return recordsById(property(result, 'data'));

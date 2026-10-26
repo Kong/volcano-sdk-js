@@ -31,10 +31,8 @@ function onlyApprovedVulnerabilities(report: Record<string, unknown>, approved: 
 }
 
 function failureOutput(error: unknown): string | undefined {
-  if (error instanceof Error && 'stdout' in error) {
-    if (typeof error.stdout === 'string' && error.stdout !== '') {
-      return error.stdout;
-    }
+  if (error instanceof Error && 'stdout' in error && typeof error.stdout === 'string' && error.stdout !== '') {
+    return error.stdout;
   }
   return undefined;
 }

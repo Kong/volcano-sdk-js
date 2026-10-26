@@ -6,7 +6,7 @@ interface BodyResponse extends HeaderResponse {
 }
 
 export async function parseResponseBody(response: BodyResponse | null | undefined): Promise<unknown> {
-  if (response == null) {
+  if (response === null || response === undefined) {
     return null;
   }
   if (typeof response.text !== 'function') {
@@ -31,7 +31,7 @@ async function parseJsonResponse(response: BodyResponse): Promise<unknown> {
 
 function hasJsonContentType(response: HeaderResponse): boolean {
   const value = getHeaderValue(response, 'content-type');
-  if (!Boolean(value)) {
+  if (!value) {
     return false;
   }
   if (typeof value !== 'string') {

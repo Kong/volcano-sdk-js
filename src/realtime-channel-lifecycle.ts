@@ -74,7 +74,7 @@ function deliverPublication(state: ChannelLifecycleState, context: unknown): voi
   }
   const data = property(context, 'data');
   const eventValue = property(data, 'event');
-  const event = Boolean(eventValue) ? eventValue : 'message';
+  const event = eventValue ? eventValue : 'message';
   notifyCallbacks(state, event, data, context);
   notifyCallbacks(state, '*', data, context);
 }

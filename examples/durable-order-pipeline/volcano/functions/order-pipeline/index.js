@@ -45,11 +45,18 @@ exports.handler = durable(async (input, ctx) => {
   });
 
   if (review === 'rejected') {
-    await ctx.step('refund', () => db.refund(charge.id), { atMostOnce: true, retry: false });
-    await ctx.step('mark-refunded', () => db.setStatus(order.id, 'refunded'));
-    return { order_id: order.id, outcome: 'refunded', charge_id: charge.id };
+    return await refundOrder(ctx, order, charge);
   }
+  return await shipOrder(ctx, order, charge, packed);
+});
 
+async function refundOrder(ctx, order, charge) {
+  await ctx.step('refund', () => db.refund(charge.id), { atMostOnce: true, retry: false });
+  await ctx.step('mark-refunded', () => db.setStatus(order.id, 'refunded'));
+  return { order_id: order.id, outcome: 'refunded', charge_id: charge.id };
+}
+
+async function shipOrder(ctx, order, charge, packed) {
   // A carrier that rejects the request is worth retrying; a durable execution
   // can afford to back off for minutes.
   const dispatch = await ctx.step('dispatch', () => db.dispatch(order, packed.results), {
@@ -66,4 +73,4 @@ exports.handler = durable(async (input, ctx) => {
     tracking: dispatch.tracking,
     packed: packed.succeeded,
   };
-});
+}

@@ -40,19 +40,19 @@ async function emittedDeclarations(directory: string): Promise<string[]> {
 
 function toCjsDeclaration(declaration: string): string {
   return declaration
-    .replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2$3')
-    .replaceAll(/(import\(\s*['"])(\.{1,2}\/[^'"]+)\.ts(['"]\s*\))/g, '$1$2$3');
+    .replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)\.ts(['"])/gu, '$1$2$3')
+    .replaceAll(/(import\(\s*['"])(\.{1,2}\/[^'"]+)\.ts(['"]\s*\))/gu, '$1$2$3');
 }
 
 function toEsmDeclaration(declaration: string, source: string, stems: ReadonlySet<string>): string {
   return declaration
     .replaceAll(
-      /(from\s+['"])(\.{1,2}\/[^'"]+)(['"])/g,
+      /(from\s+['"])(\.{1,2}\/[^'"]+)(['"])/gu,
       (match: string, prefix: string, specifier: string, suffix: string) =>
         replaceRelativeSpecifier(match, prefix, specifier, suffix, source, stems),
     )
     .replaceAll(
-      /(import\(\s*['"])(\.{1,2}\/[^'"]+)(['"]\s*\))/g,
+      /(import\(\s*['"])(\.{1,2}\/[^'"]+)(['"]\s*\))/gu,
       (match: string, prefix: string, specifier: string, suffix: string) =>
         replaceRelativeSpecifier(match, prefix, specifier, suffix, source, stems),
     );

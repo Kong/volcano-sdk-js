@@ -19,8 +19,8 @@ const digest = createHash('sha256')
   .update(await readFile(tarball))
   .digest('hex');
 const document = await readFile(new URL('../docs/getting-started.md', import.meta.url), 'utf8');
-const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /)[0];
-const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/g) ?? [])];
+const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /u)[0];
+const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/gu) ?? [])];
 assert.equal(examples.length, 1, 'Expected one complete documented quickstart');
 const quickstart = examples[0]?.[1];
 assert.ok(quickstart !== undefined);

@@ -1,9 +1,24 @@
 # Quality policy
 
-`pnpm quality` composes native tools in `package.json`: ESLint, TypeScript,
+`pnpm quality` composes native tools in `package.json`: oxlint, TypeScript,
 oxfmt, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
 `quality:checks` runs the checks shared by both supported CI runtimes;
 `mutation:full` adds the complete mutation gate.
+
+## Lint
+
+oxlint runs its `correctness` and `pedantic` categories at their defaults, the
+same configuration as Kong/volcano-hosting. `scripts/lint-policy.test.mts` pins
+`.oxlintrc.json`, so a rule, plugin, or override change fails until the policy
+test changes with it. TypeScript's strict compiler options are the type-safety
+gate; oxlint adds no type-aware rules.
+
+A finding that the published API makes unavoidable can be approved in
+`quality-exceptions.json` with the rule, a declaration scope, a rationale, and
+evidence. Its `// oxlint-disable-next-line <rule> -- <reason>` directive must
+match an entry in `scripts/typescript-policy.test.mts`, and
+`scripts/quality-exceptions.test.mts` fails once the rule no longer fires
+without it. Every other suppression comment fails the tracked-file policy.
 
 ## Dependency audit exceptions
 
@@ -48,7 +63,7 @@ from the [Node release index](https://nodejs.org/dist/index.json),
 
 `tsconfig.tooling.json` applies the SDK's strict compiler flags to every maintained
 script and native Node test. `pnpm build:tooling` emits ordinary JavaScript into
-`.quality-tools/`; ESLint checks the TypeScript sources. Knip inventories their
+`.quality-tools/`; oxlint checks the TypeScript sources. Knip inventories their
 source entrypoints, and the tracked-file policy rejects untyped scripts or tests.
 Jest's two CJS loader files only load the compiled environment adapters.
 
@@ -72,5 +87,5 @@ switch. Node even reports an empty test file as a passing case named after its
 path; Node 22 accepts an unmatched test glob. `scripts/node-completeness.mts`
 rejects those outcomes and skipped or pending cases while the native TAP reporter
 formats results. Negative suites prove these failures.
-ESLint rejects empty test files, focus and skip syntax before execution, including
-native test options.
+`scripts/jest-completeness.cts` does the same for Jest: focused, skipped, todo,
+and retried tests fail the run.

@@ -27,7 +27,7 @@ await test('regeneration exposes handwritten files added to generated directorie
     assert.equal(status, 'AD src/generated/handwritten.ts\n');
     const check = spawnSync(process.execPath, [checker], { cwd: directory, encoding: 'utf8' });
     assert.equal(check.status, 1);
-    assert.match(check.stderr, /Generated OpenAPI files are not up to date/);
+    assert.match(check.stderr, /Generated OpenAPI files are not up to date/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

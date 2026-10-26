@@ -19,12 +19,12 @@ export interface VolcanoRequestInit extends RequestInit {
 async function readBody(response: Response): Promise<unknown> {
   const contentType = response.headers.get('content-type')?.toLowerCase();
   if (isJsonContentType(contentType) || typeof response.blob !== 'function') {
-    return response.json();
+    return await response.json();
   }
   if (isTextContentType(contentType)) {
-    return response.text();
+    return await response.text();
   }
-  return response.blob();
+  return await response.blob();
 }
 
 function isJsonContentType(contentType: string | undefined): boolean {
@@ -41,10 +41,10 @@ async function responseData(response: Response, responseType?: 'blob'): Promise<
   }
 
   if (response.ok && responseType === 'blob') {
-    return response.blob();
+    return await response.blob();
   }
 
-  return readBody(response);
+  return await readBody(response);
 }
 
 function responseError(response: Response, data: unknown): Error {
@@ -53,16 +53,11 @@ function responseError(response: Response, data: unknown): Error {
   if (hasErrorCode(data)) {
     Object.assign(error, { code: data.code });
   }
-  const retryAfter = retryDelay(response);
+  const retryAfter = retryAfterSeconds(response.headers.get('retry-after'));
   if (retryAfter !== undefined) {
     Object.assign(error, { retryAfter });
   }
   return error;
-}
-
-function retryDelay(response: Response): number | undefined {
-  const seconds = Number.parseInt(String(response.headers.get('retry-after')), 10);
-  return Number.isFinite(seconds) ? seconds : undefined;
 }
 
 function hasErrorCode(data: unknown): data is { code: unknown } {
@@ -88,6 +83,15 @@ export async function volcanoFetch<T>(path: string, options: VolcanoRequestInit)
     throw responseError(response, data);
   }
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.
   return { data, status: response.status, headers: response.headers } as T;
+}
+
+/** Seconds from a Retry-After header value, or undefined when it has no leading integer. */
+export function retryAfterSeconds(header: unknown): number | undefined {
+  if (typeof header !== 'string') {
+    return undefined;
+  }
+  // oxlint-disable-next-line unicorn/prefer-number-coercion -- Retry-After keeps parseInt's leading-integer parsing.
+  const seconds = Number.parseInt(header, 10);
+  return Number.isFinite(seconds) ? seconds : undefined;
 }

@@ -15,7 +15,7 @@ export async function safeJsonParse(response: Response, signal?: AbortSignal): P
 
 function cancellationReason(signal: AbortSignal, fallback: unknown): unknown {
   const reason: unknown = signal.reason;
-  return Boolean(reason) ? reason : fallback;
+  return reason ? reason : fallback;
 }
 
 function hasAbortName(value: unknown): boolean {

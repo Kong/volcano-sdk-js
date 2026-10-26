@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "pnpm --dir ../.. exec eslint examples/nextjs-notes-app --max-warnings=0"
+    "lint": "pnpm --dir ../.. exec oxlint examples/nextjs-notes-app"
   },
   "dependencies": {
     "@volcano.dev/sdk": "workspace:*",

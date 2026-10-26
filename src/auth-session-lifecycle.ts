@@ -72,9 +72,9 @@ export async function signOut(host: AuthLifecycleHost): Promise<SignOutResult> {
 type PrecedingRefresh = RefreshResult | { ok: false; error: unknown } | null;
 
 async function precedingRefresh(refreshing: Promise<RefreshResult> | null): Promise<PrecedingRefresh> {
-  return refreshing === null
+  return await (refreshing === null
     ? null
-    : refreshing.catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error }));
+    : refreshing.catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error })));
 }
 
 function credentialsForSignOut(
@@ -123,7 +123,7 @@ function finishSignOut(host: AuthLifecycleHost, context: AuthContext, error: Err
     return { error };
   }
   const changed = new AuthSessionChangedError();
-  if (Boolean(error)) {
+  if (error) {
     Object.defineProperty(changed, 'cause', { configurable: true, value: error, writable: true });
   }
   return { error: changed };
@@ -175,7 +175,7 @@ export async function revokeAccessSession(
 }
 
 function previousFailure(preceding: Exclude<PrecedingRefresh, null>, fallback: unknown): unknown {
-  return Boolean(preceding.error) ? preceding.error : fallback;
+  return preceding.error ? preceding.error : fallback;
 }
 
 export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshResponse> {
@@ -211,7 +211,7 @@ export async function refreshSessionForContext(
   } catch (error) {
     return { session: null, error: normalizedError(error, 'Refresh failed') };
   }
-  return performSessionRefresh(host, context);
+  return await performSessionRefresh(host, context);
 }
 
 export async function fetchSessionRefresh(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {

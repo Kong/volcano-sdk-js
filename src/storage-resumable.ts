@@ -22,7 +22,8 @@ export interface ResumableStorageHost {
   completeUploadSession(path: string, sessionId: string): Promise<StorageResult>;
 }
 
-const DEFAULT_UPLOAD_PART_SIZE = 26_214_400; // 25 MiB
+// 25 MiB
+const DEFAULT_UPLOAD_PART_SIZE = 26_214_400;
 
 /** Coordinate resumable upload without trusting the session response body. */
 export async function uploadResumable(

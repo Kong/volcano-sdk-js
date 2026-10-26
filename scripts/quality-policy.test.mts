@@ -13,7 +13,7 @@ const requiredTasks = {
   'format:check': 'oxfmt --check',
   'check:unused':
     'knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries',
-  lint: 'pnpm build && eslint . --max-warnings=0 && oxlint __tests__ && pnpm format:check',
+  lint: 'oxlint && pnpm format:check',
   test: 'pnpm build && jest',
   'test:types': 'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
   'test:package':

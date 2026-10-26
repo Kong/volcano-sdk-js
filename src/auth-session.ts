@@ -15,7 +15,7 @@ export class AuthSessionOperations<RefreshResult, SignOutResult> {
     if (this.locallyCleared) {
       return;
     }
-    this.verifiedPair = data !== null ? [data.access_token, data.refresh_token] : null;
+    this.verifiedPair = data === null ? null : [data.access_token, data.refresh_token];
   }
 
   clearLocalCredentials(): void {

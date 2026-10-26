@@ -1,4 +1,4 @@
-const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const FUNCTION_HOST_LABEL_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
 export function sanitizeFunctionIdentifierForHost(identifier: unknown): string | null {
   if (typeof identifier !== 'string') {

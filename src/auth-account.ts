@@ -1,5 +1,6 @@
+import { adoptedUser, type MessageResult } from './auth-account-email.ts';
 import type { ContextRequest, RequestResult } from './auth-request.ts';
-import { optionalStringField, optionalTokenField, requiredField } from './auth-response.ts';
+import { optionalStringField, requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import {
   assertAuthTokenResponse,
@@ -13,6 +14,17 @@ import { AuthSessionChangedError } from './errors.ts';
 import type { authSignin } from './generated/client.ts';
 import { cloneJsonValue } from './json-clone.ts';
 import type { Session, User } from './sdk-public-types.ts';
+
+export {
+  cancelEmailChange,
+  confirmEmail,
+  confirmEmailChange,
+  forgotPassword,
+  requestEmailChange,
+  resendConfirmation,
+  resetPassword,
+  resetPasswordForEmail,
+} from './auth-account-email.ts';
 
 export interface AuthAccountHost {
   _sessionGeneration: number;
@@ -49,11 +61,6 @@ interface CurrentSessionResult {
   data: {
     session: { access_token: string; refresh_token: string | null; user: User | null } | null;
   };
-  error: Error | null;
-}
-
-interface MessageResult {
-  message: string | null;
   error: Error | null;
 }
 
@@ -188,7 +195,7 @@ export function setSession(host: AuthAccountHost, session: unknown): Promise<Cur
 
 function isUserResponseCurrent(host: AuthAccountHost, context: AuthContext, user: User): boolean {
   const currentId = host.currentUser?.id;
-  return host._isAuthContextCurrent(context) && (!Boolean(currentId) || user.id === currentId);
+  return host._isAuthContextCurrent(context) && (!currentId || user.id === currentId);
 }
 
 export function onAuthStateChange(host: AuthAccountHost, callback: (user: User | null) => void): () => void {
@@ -283,105 +290,4 @@ export async function convertAnonymous(
     };
   });
   return adoptedUser(host, context, result);
-}
-
-function adoptedUser(
-  host: AuthAccountHost,
-  context: AuthContext,
-  result: RequestResult,
-): { user: User | null; error: Error | null } {
-  if (result.ok !== true) {
-    return { user: null, error: result.error };
-  }
-  if (!host._isAuthContextCurrent(context)) {
-    return { user: null, error: new AuthSessionChangedError() };
-  }
-  const user = requiredField(result.data, 'user');
-  assertAuthUser(user);
-  host.currentUser = user;
-  return { user, error: null };
-}
-
-async function messageRequest(
-  host: AuthAccountHost,
-  path: string,
-  body: Record<string, unknown>,
-): Promise<MessageResult> {
-  const result = await host._anonFetch(path, { method: 'POST', body: JSON.stringify(body) });
-  return result.ok === true
-    ? { message: optionalStringField(result.data, 'message'), error: null }
-    : { message: null, error: result.error };
-}
-
-export function confirmEmail(host: AuthAccountHost, token: string): Promise<MessageResult> {
-  return messageRequest(host, '/auth/confirm', { token });
-}
-
-export function resendConfirmation(host: AuthAccountHost, email: string): Promise<MessageResult> {
-  return messageRequest(host, '/auth/resend-confirmation', { email });
-}
-
-export function forgotPassword(host: AuthAccountHost, email: string): Promise<MessageResult> {
-  return messageRequest(host, '/auth/forgot-password', { email });
-}
-
-export function resetPasswordForEmail(host: AuthAccountHost, email: string): Promise<MessageResult> {
-  return host.forgotPassword(email);
-}
-
-export function resetPassword(
-  host: AuthAccountHost,
-  { token, newPassword }: { token: string; newPassword: string },
-): Promise<MessageResult> {
-  return messageRequest(host, '/auth/reset-password', { token, new_password: newPassword });
-}
-
-interface EmailChangeResult {
-  message: string | null;
-  newEmail: string | null;
-  emailChangeToken?: string | undefined;
-  error: Error | null;
-}
-
-export async function requestEmailChange(host: AuthAccountHost, newEmail: string): Promise<EmailChangeResult> {
-  const { result, context } = await host._authFetchWithContext('/auth/user/change-email', () => ({
-    method: 'POST',
-    body: JSON.stringify({ new_email: newEmail }),
-  }));
-  if (result.ok !== true) {
-    return { message: null, newEmail: null, error: result.error };
-  }
-  if (!host._isAuthContextCurrent(context)) {
-    return { message: null, newEmail: null, error: new AuthSessionChangedError() };
-  }
-  return {
-    message: optionalStringField(result.data, 'message'),
-    newEmail: optionalStringField(result.data, 'new_email'),
-    emailChangeToken: optionalTokenField(result.data, 'email_change_token'),
-    error: null,
-  };
-}
-
-export async function confirmEmailChange(
-  host: AuthAccountHost,
-  emailChangeToken: string,
-): Promise<{ user: User | null; error: Error | null }> {
-  const { result, context } = await host._authFetchWithContext('/auth/user/confirm-email-change', () => ({
-    method: 'POST',
-    body: JSON.stringify({ email_change_token: emailChangeToken }),
-  }));
-  return adoptedUser(host, context, result);
-}
-
-export async function cancelEmailChange(host: AuthAccountHost): Promise<MessageResult> {
-  const { result, context } = await host._authFetchWithContext('/auth/user/cancel-email-change', {
-    method: 'DELETE',
-  });
-  if (result.ok !== true) {
-    return { message: null, error: result.error };
-  }
-  if (!host._isAuthContextCurrent(context)) {
-    return { message: null, error: new AuthSessionChangedError() };
-  }
-  return { message: optionalStringField(result.data, 'message'), error: null };
 }

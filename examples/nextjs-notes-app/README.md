@@ -214,7 +214,7 @@ You only see YOUR notes. No extra code needed!
 Sessions are automatically saved to `localStorage`. When the app loads:
 
 ```javascript
-// In AuthContext.js
+// In context/useAuthSession.js, which AuthProvider calls
 useEffect(() => {
   volcano.initialize().then(({ user }) => {
     setUser(user);

@@ -44,7 +44,7 @@ const RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 5000, 5000, 5000, 5000];
  * final.
  */
 export async function postToPlatform(apiUrl: string, request: PlatformRequest): Promise<unknown> {
-  const url = `${apiUrl.replace(/\/$/, '')}${request.path}`;
+  const url = `${apiUrl.replace(/\/$/u, '')}${request.path}`;
   const init = {
     headers: { 'Content-Type': 'application/json', ...request.headers },
     body: JSON.stringify(request.body),
@@ -183,5 +183,7 @@ function isRetryable(status: number): boolean {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

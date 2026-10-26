@@ -1,12 +1,12 @@
 async function readBody(response) {
     const contentType = response.headers.get('content-type')?.toLowerCase();
     if (isJsonContentType(contentType) || typeof response.blob !== 'function') {
-        return response.json();
+        return await response.json();
     }
     if (isTextContentType(contentType)) {
-        return response.text();
+        return await response.text();
     }
-    return response.blob();
+    return await response.blob();
 }
 function isJsonContentType(contentType) {
     return contentType?.includes('json') === true;
@@ -19,9 +19,9 @@ async function responseData(response, responseType) {
         return undefined;
     }
     if (response.ok && responseType === 'blob') {
-        return response.blob();
+        return await response.blob();
     }
-    return readBody(response);
+    return await readBody(response);
 }
 function responseError(response, data) {
     const message = errorMessage(response.status, data);
@@ -29,15 +29,11 @@ function responseError(response, data) {
     if (hasErrorCode(data)) {
         Object.assign(error, { code: data.code });
     }
-    const retryAfter = retryDelay(response);
+    const retryAfter = retryAfterSeconds(response.headers.get('retry-after'));
     if (retryAfter !== undefined) {
         Object.assign(error, { retryAfter });
     }
     return error;
-}
-function retryDelay(response) {
-    const seconds = Number.parseInt(String(response.headers.get('retry-after')), 10);
-    return Number.isFinite(seconds) ? seconds : undefined;
 }
 function hasErrorCode(data) {
     return typeof data === 'object' && data !== null && 'code' in data;
@@ -58,6 +54,14 @@ export async function volcanoFetch(path, options) {
     if (!response.ok) {
         throw responseError(response, data);
     }
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.
     return { data, status: response.status, headers: response.headers };
+}
+/** Seconds from a Retry-After header value, or undefined when it has no leading integer. */
+export function retryAfterSeconds(header) {
+    if (typeof header !== 'string') {
+        return undefined;
+    }
+    // oxlint-disable-next-line unicorn/prefer-number-coercion -- Retry-After keeps parseInt's leading-integer parsing.
+    const seconds = Number.parseInt(header, 10);
+    return Number.isFinite(seconds) ? seconds : undefined;
 }

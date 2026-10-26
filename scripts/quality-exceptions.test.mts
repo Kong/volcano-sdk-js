@@ -1,100 +1,81 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import test from 'node:test';
-import { ESLint } from 'eslint';
+import { fileURLToPath } from 'node:url';
+import { lint } from './oxlint-report.mts';
 import { array, record, stringValue } from './values.mts';
 
-const rule = '@typescript-eslint/no-unnecessary-type-parameters';
-const expected = [
-  'src/sdk-public-types.ts:Functions.invoke<TPayload>',
-  'src/sdk-public-types.ts:Durable.start<TInput>',
-];
-const boundaryRules = ['@typescript-eslint/consistent-type-assertions', '@typescript-eslint/no-unsafe-type-assertion'];
+const root = fileURLToPath(new URL('..', import.meta.url));
 const auditRule = 'pnpm audit';
+const directive = '// oxlint-disable';
+// Each approved lint exception and the declaration its directive must precede.
+const declarations = new Map([
+  ['src/index.ts:QueryBuilder', 'export const QueryBuilder ='],
+  ['src/index.ts:StorageFileApi', 'export const StorageFileApi ='],
+  ['src/volcano-fetch.ts:retryAfterSeconds', 'const seconds = Number.parseInt('],
+  ['scripts/jest-completeness.cts:testNamePattern', 'this.testNamePattern = pattern'],
+  ['src/database-query.ts:QueryBuilder.then', 'then<'],
+  ['src/database-mutations.ts:MutationBuilder.then', 'then<'],
+  ['__tests__/durable-messages-subscribe-handlers.test.ts:runsReturnedThenables', 'const thenable = { then };'],
+]);
 
-await test('legacy public generic exceptions are exact and remain in use', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
-  assert.deepEqual(
-    exceptions.filter((item) => item['rule'] === rule).map((item) => item['scope']),
-    expected,
-  );
-  for (const item of exceptions) {
-    assert.ok(stringValue(item['rationale']).length > 30);
-    assert.ok(stringValue(item['evidence']).length > 30);
+async function exceptions(): Promise<Record<string, unknown>[]> {
+  const content = await readFile(join(root, 'quality-exceptions.json'), 'utf8');
+  return array(JSON.parse(content)).map((value) => record(value));
+}
+
+function directiveLines(lines: readonly string[]): number[] {
+  return lines.flatMap((line, index) => (line.trim().startsWith(directive) ? [index] : []));
+}
+
+async function lintWithoutDirectives(path: string, lines: readonly string[]): Promise<Set<string>> {
+  // Lint a sibling copy so the repository's ignore patterns and scope still apply.
+  const directory = await mkdtemp(join(root, dirname(path), 'quality-fixture-'));
+  try {
+    const copy = join(directory, basename(path));
+    const stripped = lines.map((line) => (line.trim().startsWith(directive) ? '//' : line));
+    await writeFile(copy, stripped.join('\n'));
+    return new Set(lint([copy]).findings.map(({ code, line }) => `${code}:${String(line)}`));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
+}
 
-  const eslint = new ESLint();
-  const results = await eslint.lintFiles(['src/sdk-public-types.ts']);
-  const found = await verifiedScopes(results);
-  assert.deepEqual(
-    found.toSorted((left, right) => left.localeCompare(right)),
-    expected.toSorted((left, right) => left.localeCompare(right)),
-  );
-});
+function oxlintCode(rule: string): string {
+  const [plugin, name] = rule.split('/');
+  return `${stringValue(plugin)}(${stringValue(name)})`;
+}
 
-await test('Orval boundary exceptions apply only to its generic response expression', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
+await test('every lint exception is approved, exact, and still needed', async () => {
+  const approved = (await exceptions()).filter((item) => item['rule'] !== auditRule);
   assert.deepEqual(
-    exceptions
-      .filter((item) => item['rule'] !== rule && item['rule'] !== auditRule)
-      .map(({ rule, scope }) => ({ rule, scope })),
-    boundaryRules.map((rule) => ({ rule, scope: 'src/volcano-fetch.ts:volcanoFetch:return' })),
+    approved.map((item) => item['scope']),
+    [...declarations.keys()],
   );
-  const results = await new ESLint().lintFiles(['src/volcano-fetch.ts']);
-  assert.equal(results.length, 1);
-  const [result] = results;
-  assert.ok(result !== undefined);
-  assert.deepEqual(result.messages, []);
-  assert.deepEqual(
-    result.suppressedMessages
-      .map((message) => message.ruleId ?? '')
-      .toSorted((left, right) => left.localeCompare(right)),
-    boundaryRules.toSorted((left, right) => left.localeCompare(right)),
-  );
-  const source = await readFile(result.filePath, 'utf8');
-  const lines = source.split('\n');
-  for (const diagnostic of result.suppressedMessages) {
-    assert.equal(
-      lines[diagnostic.line - 1]?.trim(),
-      'return { data, status: response.status, headers: response.headers } as T;',
-    );
+  const paths = new Set(approved.map((item) => stringValue(item['scope']).split(':')[0] ?? ''));
+  const directives = new Map<string, number[]>();
+  for (const path of paths) {
+    const lines = (await readFile(join(root, path), 'utf8')).split('\n');
+    directives.set(path, directiveLines(lines));
+    const findings = await lintWithoutDirectives(path, lines);
+    for (const item of approved.filter((entry) => stringValue(entry['scope']).startsWith(`${path}:`))) {
+      const scope = stringValue(item['scope']);
+      const rule = stringValue(item['rule']);
+      const target = lines.findIndex((line) => line.trim().startsWith(declarations.get(scope) ?? '\0'));
+      assert.ok((lines[target - 1] ?? '').trim().startsWith(`${directive}-next-line ${rule} -- `), scope);
+      assert.ok(findings.has(`${oxlintCode(rule)}:${String(target + 1)}`), `${scope} no longer needs ${rule}`);
+      assert.ok(stringValue(item['rationale']).length > 30);
+      assert.ok(stringValue(item['evidence']).length > 30);
+    }
   }
+  const total = [...directives.values()].reduce((sum, lines) => sum + lines.length, 0);
+  assert.equal(total, approved.length, 'Each lint exception covers exactly one directive');
 });
 
 await test('the dependency audit has no exceptions', async () => {
-  const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map((value) => record(value));
   assert.deepEqual(
-    exceptions.filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
+    (await exceptions()).filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
     [],
   );
 });
-
-async function verifiedScopes(results: readonly ESLint.LintResult[]): Promise<string[]> {
-  const found: string[] = [];
-  for (const result of results) {
-    assert.deepEqual(result.messages, []);
-    const source = await readFile(result.filePath, 'utf8');
-    const lines = source.split('\n');
-    for (const message of result.suppressedMessages) {
-      assert.equal(message.ruleId, rule);
-      const declaration = lines[message.line - 1]?.trim() ?? '';
-      const scope = scopeForDiagnostic(declaration);
-      assert.ok(
-        scope !== undefined,
-        `Unexpected ${rule} at ${result.filePath}:${String(message.line)}: ${declaration}`,
-      );
-      found.push(scope);
-    }
-  }
-  return found;
-}
-
-function scopeForDiagnostic(declaration: string): string | undefined {
-  if (declaration.startsWith('invoke<TPayload')) {
-    return expected[0];
-  }
-  if (declaration.startsWith('start<TInput')) {
-    return expected[1];
-  }
-  return undefined;
-}

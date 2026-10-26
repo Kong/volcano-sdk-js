@@ -12,7 +12,7 @@ export function centrifugeFrom(loaded: unknown): CentrifugeConstructor {
     throw new TypeError('Centrifuge does not export a client constructor');
   }
   const named: unknown = Reflect.get(loaded, 'Centrifuge');
-  const candidate: unknown = Boolean(named) ? named : Reflect.get(loaded, 'default');
+  const candidate: unknown = named ? named : Reflect.get(loaded, 'default');
   if (!isConstructor(candidate)) {
     throw new TypeError('Centrifuge does not export a client constructor');
   }

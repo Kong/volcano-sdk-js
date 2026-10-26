@@ -1,26 +1,44 @@
 [
   {
-    "rule": "@typescript-eslint/no-unnecessary-type-parameters",
-    "scope": "src/sdk-public-types.ts:Functions.invoke<TPayload>",
-    "rationale": "Preserves existing caller-specified payload and result type parameters for source-compatible SDK upgrades.",
-    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options. Sean Keever approved this declaration-scoped compatibility exception on 2026-09-24."
+    "rule": "eslint/no-redeclare",
+    "scope": "src/index.ts:QueryBuilder",
+    "rationale": "The published QueryBuilder is both the runtime class and the public generic type. TypeScript keeps values and types in separate declaration spaces, so the pair is one public name, not a redeclaration.",
+    "evidence": "https://www.typescriptlang.org/docs/handbook/declaration-merging.html describes separate value and type meanings for one name. oxlint's eslint/no-redeclare does not separate them and has no option to. Renaming either half breaks the published API that test/fixtures/public-api-compatibility.d.ts checks."
   },
   {
-    "rule": "@typescript-eslint/no-unnecessary-type-parameters",
-    "scope": "src/sdk-public-types.ts:Durable.start<TInput>",
-    "rationale": "Preserves the published caller-specified durable input type parameter.",
-    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options. Sean Keever approved this declaration-scoped compatibility exception on 2026-09-24."
+    "rule": "eslint/no-redeclare",
+    "scope": "src/index.ts:StorageFileApi",
+    "rationale": "The published StorageFileApi is both the runtime class and the public type. TypeScript keeps values and types in separate declaration spaces, so the pair is one public name, not a redeclaration.",
+    "evidence": "https://www.typescriptlang.org/docs/handbook/declaration-merging.html describes separate value and type meanings for one name. oxlint's eslint/no-redeclare does not separate them and has no option to. Renaming either half breaks the published API that test/fixtures/public-api-compatibility.d.ts checks."
   },
   {
-    "rule": "@typescript-eslint/consistent-type-assertions",
-    "scope": "src/volcano-fetch.ts:volcanoFetch:return",
-    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
-    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+    "rule": "unicorn/prefer-number-coercion",
+    "scope": "src/volcano-fetch.ts:retryAfterSeconds",
+    "rationale": "Retry-After parsing keeps parseInt's leading-integer semantics. The rule's replacement, Math.trunc(Number(header)), turns '' into 0 and reads '0x10' as 16 and '1e3' as 1000, which would change retryAfter on errors for malformed headers.",
+    "evidence": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number#number_coercion and https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt document the differing conversions. API errors and generated-client errors share this one parser."
   },
   {
-    "rule": "@typescript-eslint/no-unsafe-type-assertion",
-    "scope": "src/volcano-fetch.ts:volcanoFetch:return",
-    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
-    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+    "rule": "eslint/require-unicode-regexp",
+    "scope": "scripts/jest-completeness.cts:testNamePattern",
+    "rationale": "The completeness reporter must select the same tests as Jest's --testNamePattern, which Jest compiles with the i flag only. The u flag rejects patterns Jest accepts, such as a\\-b, and its case folding matches characters Jest's pattern does not.",
+    "evidence": "jest-circus 30.5.2 builds the filter with new RegExp(testNamePattern, 'i'). https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/unicode documents the stricter u-mode syntax. scripts/jest-completeness.test.mts checks the case-insensitive selection."
+  },
+  {
+    "rule": "unicorn/no-thenable",
+    "scope": "src/database-query.ts:QueryBuilder.then",
+    "rationale": "Awaiting a query builder runs the query. That is the published database API (`await volcano.from('posts').select('*')`), so the builder must stay thenable.",
+    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. docs/database.md documents awaiting query builders, and removing `then` breaks every awaited query."
+  },
+  {
+    "rule": "unicorn/no-thenable",
+    "scope": "src/database-mutations.ts:MutationBuilder.then",
+    "rationale": "Awaiting a mutation builder runs the mutation. That is the published database API (`await volcano.insert('posts', row)`), so the builder must stay thenable.",
+    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. docs/database.md documents awaiting mutation builders, and removing `then` breaks every awaited mutation."
+  },
+  {
+    "rule": "unicorn/no-thenable",
+    "scope": "__tests__/durable-messages-subscribe-handlers.test.ts:runsReturnedThenables",
+    "rationale": "Durable message delivery adopts whatever a handler returns through Promise.resolve, so a handler may return any thenable. The test needs a plain object with a then method, not a Promise, to prove a non-Promise thenable's rejection is reported.",
+    "evidence": "src/durable-message-stream.ts reports handler results with Promise.resolve(result).catch(...). https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise#thenables documents that Promise.resolve adopts thenables. A real Promise passes through Promise.resolve unchanged, so only a plain thenable exercises adoption."
   }
 ]

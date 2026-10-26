@@ -66,7 +66,7 @@ async function retryAfterUnauthorized<Context extends AuthContext>(
   if (AuthRefreshDiscardedError.is(refreshed.error)) {
     throw refreshed.error;
   }
-  if (refreshed.error != null) {
+  if ((refreshed.error ?? null) !== null) {
     return response;
   }
   if (!client._isAuthContextCurrent(context)) {

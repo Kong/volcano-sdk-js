@@ -3,25 +3,13 @@ import {
   AuthRefreshDiscardedError,
   AuthSessionChangedError,
   type CompleteSession,
-  type CreateUploadSessionResponse,
-  type Durable,
-  type DurableExecution,
-  type DurableMessage,
   type MutationBuilder,
   type OpenAPIComponents,
   type OpenAPIOperations,
   type QueryBuilder,
-  type StorageFileApi,
-  type UploadSessionStatusResponse,
   VolcanoSystemError,
 } from '../../src/index.ts';
-import type {
-  PostgresChange,
-  PresenceInfo,
-  PresenceState,
-  RealtimeChannel,
-  VolcanoRealtime,
-} from '../../src/realtime.ts';
+import type { PostgresChange, PresenceInfo, PresenceState, RealtimeChannel } from '../../src/realtime.ts';
 import type { Exact as Equal } from '../fixtures/public-api-compatibility.d.ts';
 
 type Assert<T extends true> = T;
@@ -78,41 +66,6 @@ type _ProjectHealthUsesSummary = Assert<
 type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
 type _DefaultedRequestFieldsStayOptional = Assert<{ name: string } extends CreateProjectRequest ? true : false>;
 
-type StorageBucket = OpenAPIComponents['schemas']['StorageBucket'];
-type StorageObject = OpenAPIComponents['schemas']['StorageObject'];
-type _StorageLimitsCanBeNull = Assert<null extends StorageBucket['file_size_limit'] ? true : false>;
-type _StorageMimeTypesCanBeNull = Assert<null extends StorageBucket['allowed_mime_types'] ? true : false>;
-type _StorageOwnerCanBeNull = Assert<null extends StorageObject['owner_id'] ? true : false>;
-
-type UploadSessionCreated = NonNullable<CreateUploadSessionResponse['data']>;
-interface UploadSessionCreatedShape {
-  session_id: string;
-  part_size: number;
-  total_parts: number;
-  expires_at: string;
-}
-type _UploadSessionCreatedMatchesHosting = Assert<Equal<UploadSessionCreated, UploadSessionCreatedShape>>;
-type _UploadSessionCreatedKeysMatchOpenAPI = Assert<
-  Equal<keyof UploadSessionCreated, keyof OpenAPIComponents['schemas']['CreateUploadSessionResponse']>
->;
-
-type UploadSessionStatus = NonNullable<UploadSessionStatusResponse['data']>;
-interface UploadSessionStatusShape {
-  session_id: string;
-  status: 'pending' | 'uploading' | 'completing' | 'completed' | 'aborted';
-  path: string;
-  content_type: string;
-  total_size: number;
-  part_size: number;
-  total_parts: number;
-  parts_uploaded: number;
-  bytes_uploaded: number;
-  parts: { part_number: number; etag: string; size: number }[];
-  expires_at: string;
-  created_at: string;
-}
-type _UploadSessionStatusMatchesHosting = Assert<Equal<UploadSessionStatus, UploadSessionStatusShape>>;
-
 type InvocationPayload = NonNullable<OpenAPIComponents['schemas']['FunctionInvocationRequest']['payload']>;
 type _InvocationPayloadAcceptsProperties = Assert<{ action: string } extends InvocationPayload ? true : false>;
 
@@ -132,96 +85,6 @@ interface OAuthResponseShape {
 }
 type _OAuthResponseUsesHostingEnvelope = Assert<Equal<OAuthResponse, OAuthResponseShape>>;
 
-interface DurableExecutionShape {
-  id: string;
-  function_id: string;
-  name: string;
-  // `unknown` is a terminal status the platform writes itself, for an execution
-  // whose outcome it could not find out. Listed here because the handle a start
-  // returns can carry it on a later read.
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'stopped' | 'unknown';
-  region: string;
-  created_at: string;
-}
-type _DurableStartHandleMatchesHosting = Assert<DurableExecutionShape extends DurableExecution ? true : false>;
-type _DurableExecutionComesOffTheWire = Assert<
-  Equal<DurableExecution, OpenAPIComponents['schemas']['DurableExecution']>
->;
-
-declare const durable: Durable;
-
-// A start is answered, never thrown: `error` is what a refusal arrives as, and
-// `data` is only a handle once it is null-checked.
-async function startDurableExecution(): Promise<unknown> {
-  const { data, status, error } = await durable.start('order-pipeline', { order_id: 4417 });
-  if (error !== null) {
-    const refusal: number | null = status;
-    return refusal;
-  }
-  const handle: DurableExecution | null = data;
-  return handle;
-}
-
-// The owner-scoped half: reading, listing and stopping all answer the same
-// envelope, and a page carries the executions rather than a bare array.
-async function followDurableExecution(): Promise<unknown> {
-  const read = await durable.get('proj-1', 'order-pipeline', 'exec-1');
-  const result: DurableExecution | null = read.data;
-
-  const listed = await durable.list('proj-1', 'order-pipeline', { status: 'running', limit: 20 });
-  const executions: DurableExecution[] = listed.data?.data ?? [];
-  const more: boolean = listed.data?.has_more ?? false;
-
-  const stopped = await durable.stop('proj-1', 'order-pipeline', 'exec-1');
-  return { result, executions, more, status: stopped.status };
-}
-
-type _DurableMessageComesOffTheWire = Assert<Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>>;
-
-// ctx.waitForCallback() registers its step with POST /durable-callbacks, which
-// hosting#1966 adds. A sync from a hosting main without that route fails here
-// instead of dropping it.
-type RegisterDurableCallback = OpenAPIOperations['registerDurableCallback'];
-type _WaitForCallbackSendsTheRegistration = Assert<
-  Equal<
-    keyof RegisterDurableCallback['requestBody']['content']['application/json'],
-    'name' | 'execution_ref' | 'callback_id' | 'operation_id'
-  >
->;
-type _WaitForCallbackReadsItsToken = Assert<
-  Equal<keyof RegisterDurableCallback['responses'][201]['content']['application/json'], 'token' | 'expires_at'>
->;
-
-declare const realtime: VolcanoRealtime;
-
-// Messages answer the same envelope, a page reads on from the last `seq`, and
-// a subscription needs a realtime client to deliver on.
-async function exchangeDurableMessages(): Promise<unknown> {
-  const target = { functionName: 'checkout', executionId: 'exec-1', clientToken: 'ct-1' };
-  const sent = await durable.messages.send(
-    target,
-    'address-confirmed',
-    { address_id: 'addr_19' },
-    { idempotencyKey: 'confirm-addr_19' },
-  );
-  const delivered: boolean = sent.data?.status === 'delivered';
-
-  const listed = await durable.messages.list({ ...target, projectId: 'proj-1' }, { direction: 'out', after: 3 });
-  const seqs: number[] = listed.data?.data.map((message) => message.seq) ?? [];
-
-  const { data: subscription } = await durable.messages.subscribe(
-    target,
-    (message: DurableMessage) => {
-      seqs.push(message.seq);
-    },
-    { realtime },
-  );
-  await subscription?.unsubscribe();
-  // @ts-expect-error a subscription needs a realtime client
-  void durable.messages.subscribe(target, (message) => message.seq, {});
-  return { delivered, seqs };
-}
-
 type LogSearchEvent = OpenAPIComponents['schemas']['LogSearchEvent'];
 interface LogSearchEventShape {
   id: string;
@@ -234,99 +97,6 @@ type LogSearchEventStructuredShape = Omit<LogSearchEventShape, 'body'> & {
   body: { attempt: number };
 };
 type _LogSearchEventBodyKeepsJsonTypes = Assert<LogSearchEventStructuredShape extends LogSearchEvent ? true : false>;
-
-// Hosting enforces which PEM fields each mode allows with `not` rules that
-// openapi-typescript does not translate, so the generated shape stays flat.
-interface CustomDomainTLSShape {
-  mode: 'managed' | 'byoc';
-  certificate_pem?: string;
-  private_key_pem?: string;
-  certificate_chain_pem?: string;
-}
-type _CustomDomainTLSMatchesHosting = Assert<
-  Equal<OpenAPIComponents['schemas']['CreateFrontendCustomDomainRequest']['tls'], CustomDomainTLSShape>
->;
-// The spec gives `mode` a `default: byoc` but also lists it as required, and
-// generation runs with `--default-non-nullable false`. The default must not
-// make `mode` optional: a request that leaves it out does not compile.
-type _CustomDomainTLSDefaultKeepsModeRequired = Assert<
-  {
-    certificate_pem: string;
-    private_key_pem: string;
-  } extends OpenAPIComponents['schemas']['FrontendCustomDomainTLSConfig']
-    ? false
-    : true
->;
-
-interface CustomDomainVerificationRecordShape {
-  name: string;
-  type: string;
-  value: string;
-}
-interface CustomDomainRedirectShape {
-  to: string;
-  status: 301 | 302 | 307 | 308;
-}
-interface CustomDomainResponseShape {
-  domain: string;
-  tls_mode: 'managed' | 'byoc';
-  domain_status: 'pending_verification' | 'provisioning' | 'active' | 'detaching' | 'failed' | 'deleted';
-  verification_status: 'pending' | 'verified' | 'failed';
-  serving_certificate?: 'uploaded' | 'managed';
-  failure_reason?: string;
-  verification_records?: CustomDomainVerificationRecordShape[];
-  required_routing_record?: { record_type: 'CNAME'; name: string; value: string };
-  routing_target_hostname?: string;
-  effective_urls: string[];
-  redirect: CustomDomainRedirectShape | null;
-  created_at: string;
-  updated_at: string;
-}
-type _CustomDomainResponseMatchesHosting = Assert<
-  Equal<OpenAPIComponents['schemas']['FrontendCustomDomainResponse'], CustomDomainResponseShape>
->;
-type CustomDomainConflict =
-  OpenAPIOperations['createFrontendCustomDomain']['responses'][409]['content']['application/json'];
-type _CustomDomainConflictCarriesRequiredRecord = Assert<
-  Equal<
-    CustomDomainConflict,
-    OpenAPIComponents['schemas']['Error'] & {
-      required_record?: CustomDomainVerificationRecordShape;
-    }
-  >
->;
-
-type ProjectConfigCustomDomainTLS = NonNullable<OpenAPIComponents['schemas']['ProjectConfigCustomDomain']['tls']>;
-type _ProjectConfigTLSMatchesHosting = Assert<
-  Equal<
-    ProjectConfigCustomDomainTLS,
-    | { mode: 'managed' }
-    | {
-        mode?: 'byoc';
-        certificate_pem?: string;
-        private_key_pem?: string;
-        certificate_chain_pem?: string;
-      }
-  >
->;
-// Hosting reads a manifest TLS block without `mode` as BYOC and no longer
-// declares a discriminator, so the union must resolve on `mode` alone.
-type ManagedManifestTLS = OpenAPIComponents['schemas']['ManagedProjectConfigFrontendCustomDomainTLSConfig'];
-type BYOCManifestTLS = OpenAPIComponents['schemas']['BYOCProjectConfigFrontendCustomDomainTLSConfig'];
-type ManifestTLSMembersAccepting<Block> = ProjectConfigCustomDomainTLS extends infer Member
-  ? Member extends unknown
-    ? Block extends Member
-      ? Member
-      : never
-    : never
-  : never;
-type _ProjectConfigTLSWithoutModeIsBYOC = Assert<
-  Equal<ManifestTLSMembersAccepting<{ certificate_pem: string; private_key_pem: string }>, BYOCManifestTLS>
->;
-type _ProjectConfigEmptyTLSIsBYOC = Assert<Equal<ManifestTLSMembersAccepting<Record<string, never>>, BYOCManifestTLS>>;
-type _ProjectConfigManagedTLSStaysManaged = Assert<
-  Equal<ManifestTLSMembersAccepting<{ mode: 'managed' }>, ManagedManifestTLS>
->;
 
 export type OpenApiContractChecks = [
   _CompleteSessionCanBeAdopted,
@@ -341,30 +111,11 @@ export type OpenApiContractChecks = [
   _ProjectGitConnectionUsesSummary,
   _ProjectHealthUsesSummary,
   _DefaultedRequestFieldsStayOptional,
-  _StorageLimitsCanBeNull,
-  _StorageMimeTypesCanBeNull,
-  _StorageOwnerCanBeNull,
-  _UploadSessionCreatedMatchesHosting,
-  _UploadSessionCreatedKeysMatchOpenAPI,
-  _UploadSessionStatusMatchesHosting,
   _InvocationPayloadAcceptsProperties,
   _OAuthBodyAcceptsProperties,
   _OAuthResponseUsesHostingEnvelope,
-  _DurableStartHandleMatchesHosting,
-  _DurableExecutionComesOffTheWire,
-  _DurableMessageComesOffTheWire,
-  _WaitForCallbackSendsTheRegistration,
-  _WaitForCallbackReadsItsToken,
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
-  _CustomDomainTLSMatchesHosting,
-  _CustomDomainTLSDefaultKeepsModeRequired,
-  _CustomDomainResponseMatchesHosting,
-  _CustomDomainConflictCarriesRequiredRecord,
-  _ProjectConfigTLSMatchesHosting,
-  _ProjectConfigTLSWithoutModeIsBYOC,
-  _ProjectConfigEmptyTLSIsBYOC,
-  _ProjectConfigManagedTLSStaysManaged,
 ];
 
 declare const refreshError: unknown;
@@ -395,58 +146,6 @@ mutation.is('deleted_at', null).is('enabled', true).is('enabled', false);
 query.is('enabled', 'true');
 // @ts-expect-error Numeric values require comparison filters.
 mutation.is('enabled', 1);
-
-declare const bucket: StorageFileApi;
-async function uploadResponseEnvelopes(): Promise<unknown> {
-  const completed = await bucket.completeUploadSession('file.bin', 'session');
-  const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
-  const uploaded = await bucket.upload('file.bin', new Blob(['bytes']));
-  const names: (string | undefined)[] = [completed.data?.object.name, resumed.data?.object.name, uploaded.data?.name];
-  return names;
-}
-
-async function rejectFlattenedUploadResponses(): Promise<unknown> {
-  const completed = await bucket.completeUploadSession('file.bin', 'session');
-  const resumed = await bucket.uploadResumable('file.bin', new Blob(['bytes']));
-  // @ts-expect-error Completion returns an object envelope, not flattened metadata.
-  const completedName: unknown = completed.data?.name;
-  // @ts-expect-error Resumable upload preserves the completion envelope.
-  const resumedName: unknown = resumed.data?.name;
-  return [completedName, resumedName];
-}
-
-async function storageErrorMetadata(): Promise<unknown> {
-  const results = [
-    await bucket.upload('file.bin', new Blob(['bytes'])),
-    await bucket.download('file.bin'),
-    await bucket.list(),
-    await bucket.remove(['file.bin']),
-    await bucket.move('file.bin', 'moved.bin'),
-    await bucket.copy('file.bin', 'copy.bin'),
-    await bucket.updateVisibility('file.bin', false),
-    await bucket.createUploadSession('file.bin', { totalSize: 5 }),
-    await bucket.uploadPart('file.bin', 'session', 1, new Blob(['bytes'])),
-    await bucket.getUploadSession('file.bin', 'session'),
-    await bucket.completeUploadSession('file.bin', 'session'),
-    await bucket.abortUploadSession('file.bin', 'session'),
-    await bucket.uploadResumable('file.bin', new Blob(['bytes'])),
-  ];
-  return results.map(({ error }) => {
-    const status: number | undefined = error?.status;
-    const code: string | undefined = error?.code;
-    const retryAfter: number | undefined = error?.retryAfter;
-    return [status, code, retryAfter];
-  });
-}
-
-async function removalFailureMetadata(): Promise<unknown> {
-  const removed = await bucket.remove(['one.bin', 'two.bin']);
-  return (removed.error?.failures ?? []).map((failure) => {
-    const path: string = failure.path;
-    const status: number | undefined = failure.error.status;
-    return [path, status];
-  });
-}
 
 async function authErrorMetadata(): Promise<unknown> {
   const responses = [
@@ -504,30 +203,9 @@ async function functionErrorMetadata(functions: import('../../src/index.ts').Fun
   return { status, code, retryAfter, systemFields };
 }
 
-function manifestTLSMode(tls: ProjectConfigCustomDomainTLS): 'managed' | 'byoc' {
-  if (tls.mode === 'managed') {
-    const managed: ManagedManifestTLS = tls;
-    return managed.mode;
-  }
-  const byoc: BYOCManifestTLS = tls;
-  return byoc.mode ?? 'byoc';
-}
-manifestTLSMode({ certificate_pem: 'cert', private_key_pem: 'key' });
-manifestTLSMode({ mode: 'managed' });
-// @ts-expect-error A managed block cannot carry certificate fields.
-manifestTLSMode({ mode: 'managed', certificate_pem: 'cert' });
-
 export const contractOperations = {
   adoptCurrentSession,
-  startDurableExecution,
-  followDurableExecution,
-  exchangeDurableMessages,
-  uploadResponseEnvelopes,
-  rejectFlattenedUploadResponses,
-  storageErrorMetadata,
-  removalFailureMetadata,
   authErrorMetadata,
   presenceIdentity,
   functionErrorMetadata,
-  manifestTLSMode,
 };

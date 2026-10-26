@@ -140,7 +140,7 @@ function redirectTarget(stored: string | null, callback: OAuthCallback): string 
 }
 
 function exchangeFailure(value: unknown): unknown {
-  return Boolean(value) ? value : new Error('OAuth code exchange failed');
+  return value ? value : new Error('OAuth code exchange failed');
 }
 
 function providerFailure(callback: OAuthCallback): Error | null {
@@ -197,7 +197,7 @@ export async function consumeOAuthCodeFromUrl(host: OAuthRedirectHost): Promise<
     host._oauthExchangeError = failure;
     return false;
   }
-  return exchangeOAuthCode(host, callback, storedRedirectUrl);
+  return await exchangeOAuthCode(host, callback, storedRedirectUrl);
 }
 
 export async function completeOAuthExchange(host: OAuthRedirectHost): Promise<void> {
