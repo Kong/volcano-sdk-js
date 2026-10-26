@@ -79,8 +79,7 @@ export class DurableMessageStream {
       return Promise.resolve(failure(new Error(ENDED)));
     }
     return this.read(true).then(
-      (page) =>
-        page.error === null && this.closed ? failure<DurableMessageList>(new Error(ENDED)) : page,
+      (page) => (page.error === null && this.closed ? failure<DurableMessageList>(new Error(ENDED)) : page),
       (error: unknown) => failure<DurableMessageList>(toError(error)),
     );
   }
@@ -244,11 +243,8 @@ export function toError(error: unknown): Error {
   if (error instanceof Error) {
     return error;
   }
-  const message: unknown =
-    typeof error === 'object' && error !== null ? Reflect.get(error, 'message') : undefined;
-  return typeof message === 'string'
-    ? new Error(message, { cause: error })
-    : new Error(String(error));
+  const message: unknown = typeof error === 'object' && error !== null ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string' ? new Error(message, { cause: error }) : new Error(String(error));
 }
 
 function bySeq(a: Held, b: Held): number {

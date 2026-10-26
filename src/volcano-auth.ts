@@ -87,24 +87,14 @@ import {
   getSessions as getAccountSessions,
 } from './auth-user-sessions.ts';
 import { MutationBuilder } from './database-mutations.ts';
-import {
-  QueryBuilder as RuntimeQueryBuilder,
-  queryDatabaseSelectTransport,
-} from './database-query.ts';
+import { QueryBuilder as RuntimeQueryBuilder, queryDatabaseSelectTransport } from './database-query.ts';
 import { DurableApprovalsFacade } from './durable-approvals-facade.ts';
 import { DurableFacade } from './durable-facade.ts';
 import { DurableMessagesFacade } from './durable-messages-facade.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
-import {
-  type FunctionInvokeResponse,
-  invokeFunction as invokeFunctionWithClient,
-} from './function-invoke.ts';
-import {
-  isResolutionOutcome,
-  type ResolutionOutcome,
-  resolveFunctionByHttp,
-} from './function-resolution.ts';
+import { type FunctionInvokeResponse, invokeFunction as invokeFunctionWithClient } from './function-invoke.ts';
+import { isResolutionOutcome, type ResolutionOutcome, resolveFunctionByHttp } from './function-resolution.ts';
 import {
   cachedFunctionResolution,
   clearFunctionResolveCache,
@@ -286,9 +276,7 @@ function configApiUrl(config: VolcanoAuthConfig): string {
 }
 
 function configTimeout(value: number | undefined): number {
-  return typeof value === 'number' && value !== 0 && !Number.isNaN(value)
-    ? value
-    : DEFAULT_TIMEOUT_MS;
+  return typeof value === 'number' && value !== 0 && !Number.isNaN(value) ? value : DEFAULT_TIMEOUT_MS;
 }
 
 class VolcanoAuth {
@@ -498,28 +486,18 @@ class VolcanoAuth {
   async searchLogs(
     projectId: string,
     request: import('./sdk-public-types.ts').LogSearchRequest,
-  ): Promise<
-    import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogSearchResponse>
-  > {
+  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogSearchResponse>> {
     const result = await this._postProjectLogRequest(projectId, 'search', request);
-    return result.error === null
-      ? logSearchResult(result.data)
-      : { data: null, error: result.error };
+    return result.error === null ? logSearchResult(result.data) : { data: null, error: result.error };
   }
 
   /** @internal */
   async getLogActivity(
     projectId: string,
     request: import('./sdk-public-types.ts').LogActivityRequest,
-  ): Promise<
-    import('./sdk-public-types.ts').LogsResponse<
-      import('./sdk-public-types.ts').LogActivityResponse
-    >
-  > {
+  ): Promise<import('./sdk-public-types.ts').LogsResponse<import('./sdk-public-types.ts').LogActivityResponse>> {
     const result = await this._postProjectLogRequest(projectId, 'activity', request);
-    return result.error === null
-      ? logActivityResult(result.data)
-      : { data: null, error: result.error };
+    return result.error === null ? logActivityResult(result.data) : { data: null, error: result.error };
   }
 
   /**
@@ -550,10 +528,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  async _authFetchUrl(
-    url: string,
-    fetchOptions: RequestInit = {},
-  ): ReturnType<typeof authFetchUrl> {
+  async _authFetchUrl(url: string, fetchOptions: RequestInit = {}): ReturnType<typeof authFetchUrl> {
     return authFetchUrl(this, url, fetchOptions);
   }
 
@@ -606,10 +581,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  _getFunctionInvokeUrl(
-    functionIdentifier: unknown,
-    resolvedInvokeUrl: unknown,
-  ): ReturnType<typeof functionInvokeUrl> {
+  _getFunctionInvokeUrl(functionIdentifier: unknown, resolvedInvokeUrl: unknown): ReturnType<typeof functionInvokeUrl> {
     return functionInvokeUrl(this.apiUrl, functionIdentifier, resolvedInvokeUrl);
   }
 
@@ -640,9 +612,7 @@ class VolcanoAuth {
   ): Promise<{ functionId: string | null; invokeUrl: unknown; token: string | null }> {
     const hostLabel = sanitizeFunctionIdentifierForHost(functionName);
     if (hostLabel === null) {
-      throw new Error(
-        'functionName must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars',
-      );
+      throw new Error('functionName must be DNS-safe: lowercase letters, numbers, hyphens, 1-63 chars');
     }
     const { authContext, token, useAnonKey } = options;
     this._assertCurrentAuthContext(authContext);
@@ -708,12 +678,7 @@ class VolcanoAuth {
     try {
       const outcome = await this._awaitFunctionResolution(pending, options.authContext);
       if (outcome.error !== null) {
-        return await this._handleFunctionResolutionError(
-          outcome.error,
-          outcome.status,
-          functionName,
-          options,
-        );
+        return await this._handleFunctionResolutionError(outcome.error, outcome.status, functionName, options);
       }
       return { functionId: outcome.functionId, invokeUrl: outcome.invokeUrl, token };
     } finally {
@@ -809,25 +774,13 @@ class VolcanoAuth {
     return this;
   }
 
-  insert<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): PublicMutationBuilder<T>;
-  insert(
-    table: string,
-    values: Record<string, unknown>,
-  ): MutationBuilder | PublicMutationBuilder<unknown> {
+  insert<T = Record<string, JsonValue>>(table: string, values: Record<string, JsonValue>): PublicMutationBuilder<T>;
+  insert(table: string, values: Record<string, unknown>): MutationBuilder | PublicMutationBuilder<unknown> {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'insert', values);
   }
 
-  update<T = Record<string, JsonValue>>(
-    table: string,
-    values: Record<string, JsonValue>,
-  ): PublicMutationBuilder<T>;
-  update(
-    table: string,
-    values: Record<string, unknown>,
-  ): MutationBuilder | PublicMutationBuilder<unknown> {
+  update<T = Record<string, JsonValue>>(table: string, values: Record<string, JsonValue>): PublicMutationBuilder<T>;
+  update(table: string, values: Record<string, unknown>): MutationBuilder | PublicMutationBuilder<unknown> {
     return new MutationBuilder(this, table, this._currentDatabaseName, 'update', values);
   }
 
@@ -852,9 +805,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  setSession(
-    session: Parameters<typeof adoptAccountSession>[1],
-  ): ReturnType<typeof adoptAccountSession> {
+  setSession(session: Parameters<typeof adoptAccountSession>[1]): ReturnType<typeof adoptAccountSession> {
     return adoptAccountSession(this, session);
   }
 
@@ -886,9 +837,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  async updateUser(
-    options: Parameters<typeof updateAccountUser>[1],
-  ): ReturnType<typeof updateAccountUser> {
+  async updateUser(options: Parameters<typeof updateAccountUser>[1]): ReturnType<typeof updateAccountUser> {
     return updateAccountUser(this, options);
   }
 
@@ -898,9 +847,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  async _refreshSessionForContext(
-    context: AuthContext,
-  ): ReturnType<typeof refreshSessionForContext> {
+  async _refreshSessionForContext(context: AuthContext): ReturnType<typeof refreshSessionForContext> {
     return refreshSessionForContext(this, context);
   }
 
@@ -920,23 +867,17 @@ class VolcanoAuth {
    * @returns {Function} Unsubscribe function
    */
   /** @internal */
-  onAuthStateChange(
-    callback: Parameters<typeof subscribeToAuthState>[1],
-  ): ReturnType<typeof subscribeToAuthState> {
+  onAuthStateChange(callback: Parameters<typeof subscribeToAuthState>[1]): ReturnType<typeof subscribeToAuthState> {
     return subscribeToAuthState(this, callback);
   }
 
   /** @internal */
-  async signInAnonymously(
-    metadata: Record<string, unknown> = {},
-  ): ReturnType<typeof signInAnonymousAccount> {
+  async signInAnonymously(metadata: Record<string, unknown> = {}): ReturnType<typeof signInAnonymousAccount> {
     return signInAnonymousAccount(this, metadata);
   }
 
   /** @internal */
-  async signUpAnonymous(
-    metadata: Record<string, unknown> = {},
-  ): ReturnType<typeof signUpAnonymousAccount> {
+  async signUpAnonymous(metadata: Record<string, unknown> = {}): ReturnType<typeof signUpAnonymousAccount> {
     return signUpAnonymousAccount(this, metadata);
   }
 
@@ -968,9 +909,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  async resetPassword(
-    options: Parameters<typeof resetAccountPassword>[1],
-  ): ReturnType<typeof resetAccountPassword> {
+  async resetPassword(options: Parameters<typeof resetAccountPassword>[1]): ReturnType<typeof resetAccountPassword> {
     return resetAccountPassword(this, options);
   }
 
@@ -998,23 +937,17 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  _resolveOAuthRedirectTarget(
-    redirectTo: string | undefined,
-  ): ReturnType<typeof resolveOAuthRedirectTarget> {
+  _resolveOAuthRedirectTarget(redirectTo: string | undefined): ReturnType<typeof resolveOAuthRedirectTarget> {
     return resolveOAuthRedirectTarget(redirectTo);
   }
 
   /** @internal */
-  getHostedAuthUrl(
-    options: Parameters<typeof createHostedAuthUrl>[1] = {},
-  ): ReturnType<typeof createHostedAuthUrl> {
+  getHostedAuthUrl(options: Parameters<typeof createHostedAuthUrl>[1] = {}): ReturnType<typeof createHostedAuthUrl> {
     return createHostedAuthUrl(this, options);
   }
 
   /** @internal */
-  signInWithHostedAuth(
-    options: Parameters<typeof beginHostedAuth>[1] = {},
-  ): ReturnType<typeof beginHostedAuth> {
+  signInWithHostedAuth(options: Parameters<typeof beginHostedAuth>[1] = {}): ReturnType<typeof beginHostedAuth> {
     return beginHostedAuth(this, options);
   }
 
@@ -1076,9 +1009,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  async getSessions(
-    options: Parameters<typeof getAccountSessions>[1] = {},
-  ): ReturnType<typeof getAccountSessions> {
+  async getSessions(options: Parameters<typeof getAccountSessions>[1] = {}): ReturnType<typeof getAccountSessions> {
     return getAccountSessions(this, options);
   }
 
@@ -1093,15 +1024,9 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  invokeFunction<TResult = unknown>(
-    functionName: string,
-    payload?: unknown,
-  ): Promise<FunctionInvokeResponse<TResult>>;
+  invokeFunction<TResult = unknown>(functionName: string, payload?: unknown): Promise<FunctionInvokeResponse<TResult>>;
   /** @internal */
-  async invokeFunction(
-    functionName: string,
-    payload: unknown = {},
-  ): Promise<FunctionInvokeResponse> {
+  async invokeFunction(functionName: string, payload: unknown = {}): Promise<FunctionInvokeResponse> {
     return invokeFunctionWithClient(this, functionName, payload);
   }
 
@@ -1115,11 +1040,7 @@ class VolcanoAuth {
   }
 
   /** @internal */
-  getDurableExecution(
-    projectId: string,
-    functionName: string,
-    executionId: string,
-  ): ReturnType<DurableFacade['get']> {
+  getDurableExecution(projectId: string, functionName: string, executionId: string): ReturnType<DurableFacade['get']> {
     return this._durableFacade.get(projectId, functionName, executionId);
   }
 
@@ -1315,8 +1236,7 @@ class VolcanoAuth {
   /** @internal */
   private _hasStoredSession(): boolean {
     return (
-      (this.accessToken !== null && this.accessToken !== '') ||
-      (this.refreshToken !== null && this.refreshToken !== '')
+      (this.accessToken !== null && this.accessToken !== '') || (this.refreshToken !== null && this.refreshToken !== '')
     );
   }
 

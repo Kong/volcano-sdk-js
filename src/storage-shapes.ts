@@ -23,17 +23,11 @@ function hasStringFields(value: Record<string, unknown>, fields: readonly string
   return fields.every((field) => typeof value[field] === 'string');
 }
 
-function hasOptionalIntegerFields(
-  value: Record<string, unknown>,
-  fields: readonly string[],
-): boolean {
+function hasOptionalIntegerFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
   return fields.every((field) => !Object.hasOwn(value, field) || isInteger(value[field]));
 }
 
-function hasOptionalStringFields(
-  value: Record<string, unknown>,
-  fields: readonly string[],
-): boolean {
+function hasOptionalStringFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
   return fields.every((field) => !Object.hasOwn(value, field) || typeof value[field] === 'string');
 }
 
@@ -55,18 +49,11 @@ function isJsonValue(value: unknown): value is JsonValue {
 }
 
 function hasOptionalMetadata(value: Record<string, unknown>): boolean {
-  return (
-    !Object.hasOwn(value, 'metadata') ||
-    (isRecord(value['metadata']) && isJsonValue(value['metadata']))
-  );
+  return !Object.hasOwn(value, 'metadata') || (isRecord(value['metadata']) && isJsonValue(value['metadata']));
 }
 
 function hasOptionalOwner(value: Record<string, unknown>): boolean {
-  return (
-    !Object.hasOwn(value, 'owner_id') ||
-    value['owner_id'] === null ||
-    typeof value['owner_id'] === 'string'
-  );
+  return !Object.hasOwn(value, 'owner_id') || value['owner_id'] === null || typeof value['owner_id'] === 'string';
 }
 
 function hasStorageObjectCore(value: Record<string, unknown>): boolean {
@@ -97,9 +84,7 @@ export function isBlob(value: unknown): value is Blob {
   return value instanceof Blob;
 }
 
-export function isUploadSession(
-  value: unknown,
-): value is NonNullable<CreateUploadSessionResponse['data']> {
+export function isUploadSession(value: unknown): value is NonNullable<CreateUploadSessionResponse['data']> {
   return (
     isRecord(value) &&
     hasOptionalStringFields(value, ['session_id', 'expires_at']) &&
@@ -115,15 +100,11 @@ export function isUploadPart(value: unknown): value is NonNullable<UploadPartRes
   );
 }
 
-export function isCompletedUpload(
-  value: unknown,
-): value is NonNullable<CompleteUploadSessionResponse['data']> {
+export function isCompletedUpload(value: unknown): value is NonNullable<CompleteUploadSessionResponse['data']> {
   return isRecord(value) && (!Object.hasOwn(value, 'object') || isStorageObject(value['object']));
 }
 
-function isUploadStatus(
-  value: unknown,
-): value is NonNullable<UploadSessionStatusResponse['data']>['status'] {
+function isUploadStatus(value: unknown): value is NonNullable<UploadSessionStatusResponse['data']>['status'] {
   return (
     value === 'pending' ||
     value === 'uploading' ||
@@ -135,31 +116,16 @@ function isUploadStatus(
 
 function hasUploadStatusCore(value: Record<string, unknown>): boolean {
   return (
-    hasOptionalStringFields(value, [
-      'session_id',
-      'path',
-      'content_type',
-      'expires_at',
-      'created_at',
-    ]) &&
-    hasOptionalIntegerFields(value, [
-      'total_size',
-      'part_size',
-      'total_parts',
-      'parts_uploaded',
-      'bytes_uploaded',
-    ]) &&
+    hasOptionalStringFields(value, ['session_id', 'path', 'content_type', 'expires_at', 'created_at']) &&
+    hasOptionalIntegerFields(value, ['total_size', 'part_size', 'total_parts', 'parts_uploaded', 'bytes_uploaded']) &&
     (!Object.hasOwn(value, 'status') || isUploadStatus(value['status']))
   );
 }
 
-export function isUploadSessionStatus(
-  value: unknown,
-): value is NonNullable<UploadSessionStatusResponse['data']> {
+export function isUploadSessionStatus(value: unknown): value is NonNullable<UploadSessionStatusResponse['data']> {
   return (
     isRecord(value) &&
     hasUploadStatusCore(value) &&
-    (!Object.hasOwn(value, 'parts') ||
-      (Array.isArray(value['parts']) && value['parts'].every(isUploadPart)))
+    (!Object.hasOwn(value, 'parts') || (Array.isArray(value['parts']) && value['parts'].every(isUploadPart)))
   );
 }

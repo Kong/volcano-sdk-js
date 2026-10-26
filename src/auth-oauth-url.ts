@@ -55,16 +55,10 @@ function oauthRedirect(host: AuthOAuthUrlHost, redirectTo: unknown, nonce: strin
   return transport.toString();
 }
 
-export function signInWithOAuth(
-  host: AuthOAuthUrlHost,
-  provider: string,
-  options: { redirectTo?: string },
-): string {
+export function signInWithOAuth(host: AuthOAuthUrlHost, provider: string, options: { redirectTo?: string }): string {
   sanitizeProvider(provider);
   if (!isBrowser()) {
-    throw new Error(
-      'OAuth sign-in is only available in browser environment. Use server-side auth flow for SSR.',
-    );
+    throw new Error('OAuth sign-in is only available in browser environment. Use server-side auth flow for SSR.');
   }
   const nonce = host._generateAuthStateNonce();
   const redirect = oauthRedirect(host, options.redirectTo, nonce);
@@ -111,10 +105,7 @@ export function signInWithHostedAuth(host: AuthOAuthUrlHost, options: HostedAuth
   return url;
 }
 
-export function resolveProjectIdForHostedAuth(
-  host: AuthOAuthUrlHost,
-  explicitProjectId: unknown,
-): string {
+export function resolveProjectIdForHostedAuth(host: AuthOAuthUrlHost, explicitProjectId: unknown): string {
   if (typeof explicitProjectId === 'string' && explicitProjectId.trim() !== '') {
     return explicitProjectId.trim();
   }

@@ -30,18 +30,13 @@ test.each([null, undefined, 0, '', {}, { error: '' }, { error: null }])(
 
 test('rejects a non-string JSON error and honors an explicit message', () => {
   expect(apiRequestError({ status: 400 }, { error: 42 }).message).toBe('Request failed');
-  expect(apiRequestError({ status: 401 }, { error: 'No' }, 'Session expired').message).toBe(
-    'Session expired',
-  );
+  expect(apiRequestError({ status: 401 }, { error: 'No' }, 'Session expired').message).toBe('Session expired');
 });
 
-test.each([{}, { code: '' }, { code: 42 }, { code: null }])(
-  'ignores non-string or empty error codes: %p',
-  (data) => {
-    const error = apiRequestError({ status: 400 }, data);
-    expect(Object.hasOwn(error, 'code')).toBe(false);
-  },
-);
+test.each([{}, { code: '' }, { code: 42 }, { code: null }])('ignores non-string or empty error codes: %p', (data) => {
+  const error = apiRequestError({ status: 400 }, data);
+  expect(Object.hasOwn(error, 'code')).toBe(false);
+});
 
 test.each(['not-a-delay', '', 4, null])('ignores invalid retry-after metadata: %p', (header) => {
   const error = apiRequestError({ status: 429, headers: { get: () => header } }, null);

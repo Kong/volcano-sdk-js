@@ -200,9 +200,7 @@ test('OAuth callback reports a provider denial without a description', async () 
   const client = host();
   setWindow({ href: 'https://app.example.com/callback?error=access_denied&state=nonce' });
   expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
-  expect(client._oauthExchangeError).toEqual(
-    new Error('OAuth provider rejected sign-in: access_denied'),
-  );
+  expect(client._oauthExchangeError).toEqual(new Error('OAuth provider rejected sign-in: access_denied'));
   expect(Reflect.get(client, '_anonFetch')).not.toHaveBeenCalled();
 });
 
@@ -240,9 +238,7 @@ test('OAuth exchange rejects malformed successful payloads', async () => {
   client._anonFetch = jest.fn(() => Promise.resolve({ ok: true, data: {}, error: null }));
   setWindow({ href: 'https://app.example.com/callback?code=one&state=nonce' });
   expect(await consumeOAuthCodeFromUrl(client)).toBe(false);
-  expect(client._oauthExchangeError).toEqual(
-    new TypeError('Session access_token must be a non-empty string'),
-  );
+  expect(client._oauthExchangeError).toEqual(new TypeError('Session access_token must be a non-empty string'));
   expect(Reflect.get(client, '_setSession')).not.toHaveBeenCalled();
 });
 

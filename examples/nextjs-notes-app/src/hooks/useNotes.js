@@ -210,9 +210,7 @@ export function useNotes() {
 
       // Optimistically update local state
       setNotes((prev) =>
-        prev.map((note) =>
-          note.id === noteId ? { ...note, ...updates, updated_at: new Date().toISOString() } : note,
-        ),
+        prev.map((note) => (note.id === noteId ? { ...note, ...updates, updated_at: new Date().toISOString() } : note)),
       );
 
       try {

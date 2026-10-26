@@ -32,9 +32,7 @@ function filteredRun(): boolean {
   );
 }
 
-export default async function* completeness(
-  events: AsyncIterable<TestEvent>,
-): AsyncGenerator<string, void> {
+export default async function* completeness(events: AsyncIterable<TestEvent>): AsyncGenerator<string, void> {
   const report: Report = { cases: 0, problems: [] };
   for await (const event of events) {
     acceptEvent(report, event);

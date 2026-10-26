@@ -1,15 +1,5 @@
-import {
-  isDurableApproval,
-  isDurableApprovalPage,
-  isDurableApprovalStats,
-} from './durable-approval-response.ts';
-import {
-  type DurableClient,
-  type DurableResult,
-  durableResult,
-  failure,
-  ownerSession,
-} from './durable-facade.ts';
+import { isDurableApproval, isDurableApprovalPage, isDurableApprovalStats } from './durable-approval-response.ts';
+import { type DurableClient, type DurableResult, durableResult, failure, ownerSession } from './durable-facade.ts';
 import { durablePathSegments } from './durable-paths.ts';
 import type {
   DurableApproval,

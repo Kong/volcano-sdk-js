@@ -2,11 +2,7 @@ import { expect, jest, test } from '@jest/globals';
 import type { RequestResult } from '../src/auth-request.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
-import {
-  type AuthUserSessionsHost,
-  deleteSession,
-  getSessions,
-} from '../src/auth-user-sessions.ts';
+import { type AuthUserSessionsHost, deleteSession, getSessions } from '../src/auth-user-sessions.ts';
 import { AuthSessionChangedError } from '../src/errors.ts';
 
 const sessionId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';

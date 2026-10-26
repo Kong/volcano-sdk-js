@@ -93,9 +93,7 @@ describe('captured-session revocation coordination', () => {
       await replaceAtPhase(current, replace, 'after-refresh-finishes');
       deletion.resolve(reply(204));
       const outcome = await signingOut;
-      expect(outcome.error?.constructor ?? null).toBe(
-        replace === 'none' ? null : AuthSessionChangedError,
-      );
+      expect(outcome.error?.constructor ?? null).toBe(replace === 'none' ? null : AuthSessionChangedError);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(JSON.parse(fetchBody(1))).toEqual({ refresh_token: 'rotated' });
       expect(current.accessToken).toBe(replace === 'none' ? null : replacement.access_token);
@@ -162,10 +160,7 @@ it('revokes a server-issued pair without requiring an access-token refresh', asy
   });
   await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
   expect(await resultError(current.auth.signOut())).toBeNull();
-  expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual([
-    '/auth/signin',
-    '/auth/logout',
-  ]);
+  expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual(['/auth/signin', '/auth/logout']);
 });
 
 it('does not use pair provenance after credentials are explicitly replaced or changed', async () => {
@@ -173,9 +168,7 @@ it('does not use pair provenance after credentials are explicitly replaced or ch
     const current = client();
     fetchMock.mockReset();
     fetchMock.mockImplementation((url) =>
-      fetchUrl(url).endsWith('/auth/signin')
-        ? Promise.resolve(renewed())
-        : Promise.resolve(reply(204)),
+      fetchUrl(url).endsWith('/auth/signin') ? Promise.resolve(renewed()) : Promise.resolve(reply(204)),
     );
     await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
     if (adopt) {
@@ -191,37 +184,34 @@ it('does not use pair provenance after credentials are explicitly replaced or ch
   }
 });
 
-it.each([false, true])(
-  'revokes a verified pair after refresh throttling, joined: %s',
-  async (joined) => {
-    const current = client();
-    const entered = signal();
-    const response = deferred<Response>();
-    fetchMock.mockImplementation((url) => {
-      if (fetchUrl(url).endsWith('/auth/signin')) {
-        return Promise.resolve(renewed());
-      }
-      if (fetchUrl(url).endsWith('/auth/refresh')) {
-        entered.resolve();
-        return response.promise;
-      }
-      return Promise.resolve(reply(fetchUrl(url).endsWith('/auth/logout') ? 204 : 401));
-    });
-    await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
-    const refreshing = current.auth.refreshSession();
-    await within(entered.promise, 'revocation request start');
-    const pendingLogout = joined ? current.auth.signOut() : null;
-    await Promise.resolve();
-    response.resolve(reply(429, { error: 'throttled' }));
-    await within(refreshing, 'session refresh');
-    expect(await resultError(pendingLogout ?? current.auth.signOut())).toBeNull();
-    expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual([
-      '/auth/signin',
-      '/auth/refresh',
-      '/auth/logout',
-    ]);
-  },
-);
+it.each([false, true])('revokes a verified pair after refresh throttling, joined: %s', async (joined) => {
+  const current = client();
+  const entered = signal();
+  const response = deferred<Response>();
+  fetchMock.mockImplementation((url) => {
+    if (fetchUrl(url).endsWith('/auth/signin')) {
+      return Promise.resolve(renewed());
+    }
+    if (fetchUrl(url).endsWith('/auth/refresh')) {
+      entered.resolve();
+      return response.promise;
+    }
+    return Promise.resolve(reply(fetchUrl(url).endsWith('/auth/logout') ? 204 : 401));
+  });
+  await current.auth.signIn({ email: 'user@example.com', password: 'synthetic' });
+  const refreshing = current.auth.refreshSession();
+  await within(entered.promise, 'revocation request start');
+  const pendingLogout = joined ? current.auth.signOut() : null;
+  await Promise.resolve();
+  response.resolve(reply(429, { error: 'throttled' }));
+  await within(refreshing, 'session refresh');
+  expect(await resultError(pendingLogout ?? current.auth.signOut())).toBeNull();
+  expect(fetchMock.mock.calls.map(([url]) => fetchPath(url))).toEqual([
+    '/auth/signin',
+    '/auth/refresh',
+    '/auth/logout',
+  ]);
+});
 
 it.each([204, 503])('forgets captured revocation credentials after status %s', async (status) => {
   const current = client();
@@ -255,29 +245,26 @@ it('shares a pending sign-out failure after its local session is cleared', async
   expect(await resultError(current.auth.signOut())).toBeNull();
 });
 
-it.each([false, true])(
-  'drops retained credentials after deleting the current session, failure: %s',
-  async (fails) => {
-    const current = client();
-    fetchMock.mockImplementation((url) => {
-      if (fetchUrl(url).endsWith('/auth/signin') || fetchUrl(url).endsWith('/auth/refresh')) {
-        return Promise.resolve(renewed());
-      }
-      if (fails) {
-        return Promise.reject(new Error('response lost'));
-      }
-      return Promise.resolve(reply(204));
-    });
-    await current.auth.signIn({ email: 'u@example.com', password: 'synthetic' });
-    await current.auth.refreshSession();
-    const owner = current._sessionOperations;
-    const outcome = await current.auth.deleteSession(SESSION);
-    expect(Boolean(outcome.error)).toBe(fails);
-    expect(current.accessToken).toBeNull();
-    expect(owner.verifiedPair).toBeNull();
-    expect(owner.refreshing).toBeNull();
-  },
-);
+it.each([false, true])('drops retained credentials after deleting the current session, failure: %s', async (fails) => {
+  const current = client();
+  fetchMock.mockImplementation((url) => {
+    if (fetchUrl(url).endsWith('/auth/signin') || fetchUrl(url).endsWith('/auth/refresh')) {
+      return Promise.resolve(renewed());
+    }
+    if (fails) {
+      return Promise.reject(new Error('response lost'));
+    }
+    return Promise.resolve(reply(204));
+  });
+  await current.auth.signIn({ email: 'u@example.com', password: 'synthetic' });
+  await current.auth.refreshSession();
+  const owner = current._sessionOperations;
+  const outcome = await current.auth.deleteSession(SESSION);
+  expect(Boolean(outcome.error)).toBe(fails);
+  expect(current.accessToken).toBeNull();
+  expect(owner.verifiedPair).toBeNull();
+  expect(owner.refreshing).toBeNull();
+});
 
 it('does not retain credentials when refresh finishes after current-session deletion', async () => {
   const current = client();

@@ -56,12 +56,12 @@ interface DashboardStats {
   revenue: number;
 }
 
-const { data, status, headers, version, error } = await volcano.functions.invoke<
-  { timeframe: string },
-  DashboardStats
->('get-dashboard-stats', {
-  timeframe: 'last-30-days',
-});
+const { data, status, headers, version, error } = await volcano.functions.invoke<{ timeframe: string }, DashboardStats>(
+  'get-dashboard-stats',
+  {
+    timeframe: 'last-30-days',
+  },
+);
 
 if (data) {
   console.log('HTTP status:', status);

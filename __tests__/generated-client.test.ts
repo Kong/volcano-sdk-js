@@ -75,21 +75,24 @@ test('the six contract operations preserve generated HTTP requests and response 
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
   const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-contract' });
-  await expect(
-    volcano.auth.signIn({ email: 'contract@example.com', password: 'correct-password' }),
-  ).resolves.toEqual({ user, session, error: null });
+  await expect(volcano.auth.signIn({ email: 'contract@example.com', password: 'correct-password' })).resolves.toEqual({
+    user,
+    session,
+    error: null,
+  });
   volcano.database('contract database');
-  await expect(
-    volcano.from('contract_table').select('*').eq('slug', 'contract-row'),
-  ).resolves.toEqual({ data: [row], count: 1, error: null });
+  await expect(volcano.from('contract_table').select('*').eq('slug', 'contract-row')).resolves.toEqual({
+    data: [row],
+    count: 1,
+    error: null,
+  });
 
   const file = new File([bytes], 'object.bin', { type: 'application/octet-stream' });
-  await expect(
-    volcano.storage.from('contract bucket').upload('contract/object name.bin', file),
-  ).resolves.toEqual({ data: uploaded, error: null });
-  const download = await volcano.storage
-    .from('contract bucket')
-    .download('contract/object name.bin');
+  await expect(volcano.storage.from('contract bucket').upload('contract/object name.bin', file)).resolves.toEqual({
+    data: uploaded,
+    error: null,
+  });
+  const download = await volcano.storage.from('contract bucket').download('contract/object name.bin');
   expect(download.error).toBeNull();
   expect(download.data).toBeInstanceOf(Blob);
   if (!(download.data instanceof Blob)) {
@@ -130,9 +133,7 @@ test('the six contract operations preserve generated HTTP requests and response 
     email: 'contract@example.com',
     password: 'correct-password',
   } satisfies operations['authSignin']['requestBody']['content']['application/json']);
-  expect(new Headers(signInRequest.options.headers).get('Authorization')).toBe(
-    'Bearer ak-contract',
-  );
+  expect(new Headers(signInRequest.options.headers).get('Authorization')).toBe('Bearer ak-contract');
 
   const selectRequest = requestAt(1);
   expect(selectRequest.url).toBe('https://api.test.com/databases/contract%20database/query/select');
@@ -141,18 +142,12 @@ test('the six contract operations preserve generated HTTP requests and response 
     table: 'contract_table',
     filters: [{ column: 'slug', operator: 'eq', value: 'contract-row' }],
   } satisfies operations['queryDatabaseSelect']['requestBody']['content']['application/json']);
-  expect(new Headers(selectRequest.options.headers).get('Authorization')).toBe(
-    'Bearer access-token',
-  );
+  expect(new Headers(selectRequest.options.headers).get('Authorization')).toBe('Bearer access-token');
 
   const uploadRequest = requestAt(2);
-  expect(uploadRequest.url).toBe(
-    'https://api.test.com/storage/contract%20bucket/contract/object%20name.bin',
-  );
+  expect(uploadRequest.url).toBe('https://api.test.com/storage/contract%20bucket/contract/object%20name.bin');
   expect(uploadRequest.options.method).toBe('POST');
-  expect(new Headers(uploadRequest.options.headers).get('Authorization')).toBe(
-    'Bearer access-token',
-  );
+  expect(new Headers(uploadRequest.options.headers).get('Authorization')).toBe('Bearer access-token');
   const uploadBody = uploadRequest.options.body;
   if (!(uploadBody instanceof FormData)) {
     throw new TypeError('Expected a multipart upload');
@@ -162,9 +157,7 @@ test('the six contract operations preserve generated HTTP requests and response 
   const downloadRequest = requestAt(3);
   expect(downloadRequest.url).toBe(uploadRequest.url);
   expect(downloadRequest.options.method).toBe('GET');
-  expect(new Headers(downloadRequest.options.headers).get('Authorization')).toBe(
-    'Bearer access-token',
-  );
+  expect(new Headers(downloadRequest.options.headers).get('Authorization')).toBe('Bearer access-token');
 
   const acquireRequest = requestAt(4);
   expect(acquireRequest.url).toBe('https://api.test.com/locks/contract%3Alock/lease');

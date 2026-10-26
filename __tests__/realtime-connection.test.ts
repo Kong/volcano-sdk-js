@@ -26,15 +26,7 @@ class Client implements RealtimeConnectionClient {
   }
 }
 
-const events = [
-  'connected',
-  'disconnected',
-  'error',
-  'publication',
-  'join',
-  'leave',
-  'subscribed',
-] as const;
+const events = ['connected', 'disconnected', 'error', 'publication', 'join', 'leave', 'subscribed'] as const;
 
 test('connection options preserve token refresh and custom transport', async () => {
   const websocket = Symbol('websocket');

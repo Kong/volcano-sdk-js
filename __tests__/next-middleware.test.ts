@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { describe, expect, jest, test } from '@jest/globals';
-import {
-  createServerClient,
-  type ServerClientConfig,
-  type User,
-  withAuth,
-} from '../src/next/middleware.ts';
+import { createServerClient, type ServerClientConfig, type User, withAuth } from '../src/next/middleware.ts';
 
 const config: ServerClientConfig = {
   apiUrl: 'https://api.test.com',
@@ -142,10 +137,7 @@ describe('Next.js middleware helpers', () => {
   ])('getUser normalizes a rejected %s to an Error', async (_case, failure) => {
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
 
-    const message =
-      typeof failure === 'object' && typeof failure.message !== 'string'
-        ? '[object Object]'
-        : 'offline';
+    const message = typeof failure === 'object' && typeof failure.message !== 'string' ? '[object Object]' : 'offline';
     await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
       user: null,
       error: new Error(message),
@@ -187,9 +179,7 @@ describe('Next.js middleware helpers', () => {
   test('refreshToken sends the current refresh token and returns its replacement', async () => {
     jest
       .mocked(globalThis.fetch)
-      .mockResolvedValueOnce(
-        Response.json({ access_token: 'next-access', refresh_token: 'next-refresh' }),
-      );
+      .mockResolvedValueOnce(Response.json({ access_token: 'next-access', refresh_token: 'next-refresh' }));
 
     await expect(createServerClient(config).refreshToken('current-refresh')).resolves.toEqual({
       accessToken: 'next-access',
@@ -263,10 +253,7 @@ describe('Next.js middleware helpers', () => {
 
     await createServerClient({ anonKey: config.anonKey }).getUser('access-token');
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://api.volcano.dev/auth/user',
-      expect.any(Object),
-    );
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://api.volcano.dev/auth/user', expect.any(Object));
   });
 
   test('defaults to the production API URL when the override is empty', async () => {
@@ -274,10 +261,7 @@ describe('Next.js middleware helpers', () => {
 
     await createServerClient({ anonKey: config.anonKey, apiUrl: '' }).getUser('access-token');
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://api.volcano.dev/auth/user',
-      expect.any(Object),
-    );
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://api.volcano.dev/auth/user', expect.any(Object));
   });
 
   test('withAuth returns null without a request when no token is present', async () => {
@@ -323,9 +307,7 @@ describe('Next.js middleware helpers', () => {
   test('withAuth logs auth failures and returns null', async () => {
     const warning = jest.spyOn(console, 'warn').mockImplementation(jest.fn());
     try {
-      jest
-        .mocked(globalThis.fetch)
-        .mockResolvedValueOnce(Response.json({ error: 'denied' }, { status: 401 }));
+      jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ error: 'denied' }, { status: 401 }));
       const request = new Request('https://app.test.com/dashboard', {
         headers: { authorization: 'Bearer expired-token' },
       });

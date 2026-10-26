@@ -31,11 +31,7 @@ interface FakeContext {
     fn: (context: FakeContext, item: unknown, index: number) => Promise<unknown>,
   ): Promise<unknown>;
   parallel(name: unknown, branches: (Run | { func: Run })[]): Promise<unknown>;
-  waitForCallback?: (
-    name: unknown,
-    submitter: Submitter,
-    config: Record<string, unknown>,
-  ) => Promise<unknown>;
+  waitForCallback?: (name: unknown, submitter: Submitter, config: Record<string, unknown>) => Promise<unknown>;
   executionContext?: { durableExecutionArn?: unknown };
 }
 
@@ -86,9 +82,7 @@ function mockContext(executionContext?: FakeContext['executionContext']): FakeCo
     parallel: async (_name, branches) =>
       batch(
         await Promise.all(
-          branches.map((branch) =>
-            typeof branch === 'function' ? branch(mockContext()) : branch.func(mockContext()),
-          ),
+          branches.map((branch) => (typeof branch === 'function' ? branch(mockContext()) : branch.func(mockContext()))),
         ),
       ),
     async waitForCallback(name, submitter, config) {
@@ -116,15 +110,11 @@ jest.mock(
   { virtual: true },
 );
 
-function run<Result>(
-  handler: DurableHandler<unknown, Result>,
-  event?: Record<string, unknown>,
-): Promise<unknown> {
+function run<Result>(handler: DurableHandler<unknown, Result>, event?: Record<string, unknown>): Promise<unknown> {
   return durable(handler)({ input: {}, ...(event ?? { DurableExecutionArn: EXECUTION_ARN }) }, {});
 }
 
-const askToShip = (ctx: DurableContext) =>
-  ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
+const askToShip = (ctx: DurableContext) => ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
 const shipping: DurableHandler = (_input, ctx) => askToShip(ctx);
 const registered = () => run(shipping);
 
@@ -271,17 +261,13 @@ describe('ctx.waitForApproval()', () => {
   });
 
   it('keeps a null details value and an empty description', async () => {
-    await run((_input, ctx) =>
-      ctx.waitForApproval('ship-order', { title: 'Ship?', description: '', details: null }),
-    );
+    await run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', description: '', details: null }));
 
     expect(bodyAt(0)).toMatchObject({ description: '', details: null });
   });
 
   it('passes the timeout to the callback and leaves retries to the registration', async () => {
-    await run((_input, ctx) =>
-      ctx.waitForApproval('ship-order', { title: 'Ship?', timeout: { hours: 48 } }),
-    );
+    await run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', timeout: { hours: 48 } }));
 
     const { config } = onlyCallbackCall();
     expect(config['timeout']).toEqual({ hours: 48 });
@@ -323,9 +309,9 @@ describe('ctx.waitForApproval()', () => {
     );
 
     expect(fetchMock()).toHaveBeenCalledTimes(1);
-    await expect(
-      run((_input, ctx) => ctx.waitForApproval('ship', { title: '👍'.repeat(201) })),
-    ).rejects.toThrow('ctx.waitForApproval() title must be at most 200 characters');
+    await expect(run((_input, ctx) => ctx.waitForApproval('ship', { title: '👍'.repeat(201) }))).rejects.toThrow(
+      'ctx.waitForApproval() title must be at most 200 characters',
+    );
   });
 
   it('accepts a request of exactly 64 KiB, allowing for the longest callback id', async () => {
@@ -338,21 +324,15 @@ describe('ctx.waitForApproval()', () => {
     });
     const room = 64 * 1024 - empty.length;
 
-    await run((_input, ctx) =>
-      ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room) }),
-    );
+    await run((_input, ctx) => ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room) }));
     expect(fetchMock()).toHaveBeenCalledTimes(1);
 
     await expect(
-      run((_input, ctx) =>
-        ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room + 1) }),
-      ),
+      run((_input, ctx) => ctx.waitForApproval(fields.name, { title: fields.title, details: 'd'.repeat(room + 1) })),
     ).rejects.toThrow('ctx.waitForApproval() request must be at most 64 KiB, details included');
     // Two bytes each in UTF-8, so half as many fit.
     await expect(
-      run((_input, ctx) =>
-        ctx.waitForApproval(fields.name, { title: fields.title, details: 'é'.repeat(room) }),
-      ),
+      run((_input, ctx) => ctx.waitForApproval(fields.name, { title: fields.title, details: 'é'.repeat(room) })),
     ).rejects.toThrow('ctx.waitForApproval() request must be at most 64 KiB, details included');
     expect(callbackCalls).toHaveLength(1);
   });
@@ -399,18 +379,8 @@ describe('ctx.waitForApproval()', () => {
   it.each([
     ['an empty name', '', { title: 'Ship?' }, 'ctx.waitForApproval() requires a non-empty name'],
     ['a blank name', '  ', { title: 'Ship?' }, 'ctx.waitForApproval() requires a non-empty name'],
-    [
-      'a non-string name',
-      42,
-      { title: 'Ship?' },
-      'ctx.waitForApproval() requires a non-empty name',
-    ],
-    [
-      'a long name',
-      'n'.repeat(238),
-      { title: 'Ship?' },
-      'ctx.waitForApproval() name must be at most 237 characters',
-    ],
+    ['a non-string name', 42, { title: 'Ship?' }, 'ctx.waitForApproval() requires a non-empty name'],
+    ['a long name', 'n'.repeat(238), { title: 'Ship?' }, 'ctx.waitForApproval() name must be at most 237 characters'],
     [
       'a name outside ASCII',
       'aprobación-envío',
@@ -423,24 +393,9 @@ describe('ctx.waitForApproval()', () => {
       { title: 'Ship?' },
       'ctx.waitForApproval() name must be printable ASCII',
     ],
-    [
-      'a name with DEL',
-      'ship\u007F',
-      { title: 'Ship?' },
-      'ctx.waitForApproval() name must be printable ASCII',
-    ],
-    [
-      'a name with NUL',
-      'ship\0',
-      { title: 'Ship?' },
-      'ctx.waitForApproval() name must not contain NUL characters',
-    ],
-    [
-      'a title with NUL',
-      'ship',
-      { title: 'Ship\0?' },
-      'ctx.waitForApproval() title must not contain NUL characters',
-    ],
+    ['a name with DEL', 'ship\u007F', { title: 'Ship?' }, 'ctx.waitForApproval() name must be printable ASCII'],
+    ['a name with NUL', 'ship\0', { title: 'Ship?' }, 'ctx.waitForApproval() name must not contain NUL characters'],
+    ['a title with NUL', 'ship', { title: 'Ship\0?' }, 'ctx.waitForApproval() title must not contain NUL characters'],
     [
       'a description with NUL',
       'ship',
@@ -468,18 +423,8 @@ describe('ctx.waitForApproval()', () => {
     ['no options', 'ship', undefined, 'ctx.waitForApproval() requires options with a title'],
     ['null options', 'ship', null, 'ctx.waitForApproval() requires options with a title'],
     ['no title', 'ship', {}, 'ctx.waitForApproval() requires a non-empty title'],
-    [
-      'a blank title',
-      'ship',
-      { title: ' \t\n' },
-      'ctx.waitForApproval() requires a non-empty title',
-    ],
-    [
-      'a long title',
-      'ship',
-      { title: 't'.repeat(201) },
-      'ctx.waitForApproval() title must be at most 200 characters',
-    ],
+    ['a blank title', 'ship', { title: ' \t\n' }, 'ctx.waitForApproval() requires a non-empty title'],
+    ['a long title', 'ship', { title: 't'.repeat(201) }, 'ctx.waitForApproval() title must be at most 200 characters'],
     [
       'a non-string description',
       'ship',
@@ -507,10 +452,7 @@ describe('ctx.waitForApproval()', () => {
   ])('refuses %s before registering anything', async (_case, name, options, message) => {
     await expect(
       run((_input, ctx) => {
-        const result: unknown = Reflect.apply(ctx.waitForApproval.bind(ctx), undefined, [
-          name,
-          options,
-        ]);
+        const result: unknown = Reflect.apply(ctx.waitForApproval.bind(ctx), undefined, [name, options]);
         return result instanceof Promise ? result : Promise.reject(new Error('Expected a promise'));
       }),
     ).rejects.toThrow(new TypeError(message));
@@ -579,10 +521,7 @@ describe('ctx.waitForApproval()', () => {
     await run(async (_input, ctx) => {
       await ctx.child('review', (child) => askToShip(child));
       await ctx.map('orders', [1], (_item, item) => askToShip(item));
-      await ctx.parallel([
-        (branch) => askToShip(branch),
-        { name: 'named', run: (branch) => askToShip(branch) },
-      ]);
+      await ctx.parallel([(branch) => askToShip(branch), { name: 'named', run: (branch) => askToShip(branch) }]);
       await ctx.child((outer) => outer.child((inner) => askToShip(inner)));
     });
 
@@ -606,9 +545,7 @@ describe('ctx.waitForApproval()', () => {
 describe('the decision', () => {
   it('resolves a denial rather than throwing', async () => {
     await expect(
-      decide(() =>
-        Promise.resolve(decided({ status: 'denied', approved: false, comment: 'Wrong address' })),
-      ),
+      decide(() => Promise.resolve(decided({ status: 'denied', approved: false, comment: 'Wrong address' }))),
     ).resolves.toEqual({
       approved: false,
       status: 'denied',
@@ -622,14 +559,12 @@ describe('the decision', () => {
     ['denied', true, false],
     ['approved', false, true],
     ['approved', 'yes', true],
-  ])(
-    'derives approved from a %s status, ignoring approved: %p',
-    async (status, approved, expected) => {
-      await expect(
-        decide(() => Promise.resolve(decided({ status, approved }))),
-      ).resolves.toMatchObject({ approved: expected, status });
-    },
-  );
+  ])('derives approved from a %s status, ignoring approved: %p', async (status, approved, expected) => {
+    await expect(decide(() => Promise.resolve(decided({ status, approved })))).resolves.toMatchObject({
+      approved: expected,
+      status,
+    });
+  });
 
   it('resolves an expired decision when the callback times out', async () => {
     const timeout = Object.assign(new Error('Callback timed out'), {
@@ -673,9 +608,9 @@ describe('the decision', () => {
     ['with a numeric id', { id: 1, email: 'owner@example.com' }],
     ['as text', 'owner@example.com'],
   ])('drops a decider %s', async (_case, decidedBy) => {
-    await expect(
-      decide(() => Promise.resolve(decided({ decided_by: decidedBy }))),
-    ).resolves.toMatchObject({ decidedBy: null });
+    await expect(decide(() => Promise.resolve(decided({ decided_by: decidedBy })))).resolves.toMatchObject({
+      decidedBy: null,
+    });
   });
 
   it.each([
@@ -699,9 +634,10 @@ describe('the decision', () => {
     ['prose', 'Tue Oct 06 2026'],
     ['epoch milliseconds', 1_791_288_300_000],
   ])('drops a decision time given as %s', async (_case, decidedAt) => {
-    await expect(
-      decide(() => Promise.resolve(decided({ decided_at: decidedAt }))),
-    ).resolves.toMatchObject({ approved: true, decidedAt: null });
+    await expect(decide(() => Promise.resolve(decided({ decided_at: decidedAt })))).resolves.toMatchObject({
+      approved: true,
+      decidedAt: null,
+    });
   });
 
   it.each([
@@ -710,15 +646,17 @@ describe('the decision', () => {
     ['the last day of a month', '2026-10-31T12:05:00Z'],
     ['the latest time and widest offset', '2026-10-06T23:59:59-23:59'],
   ])('keeps a decision time with %s', async (_case, decidedAt) => {
-    await expect(
-      decide(() => Promise.resolve(decided({ decided_at: decidedAt }))),
-    ).resolves.toMatchObject({ decidedAt });
+    await expect(decide(() => Promise.resolve(decided({ decided_at: decidedAt })))).resolves.toMatchObject({
+      decidedAt,
+    });
   });
 
   it('accepts a decision the runtime already parsed', async () => {
-    await expect(
-      decide(() => Promise.resolve({ status: 'denied', comment: 'No' })),
-    ).resolves.toMatchObject({ approved: false, status: 'denied', comment: 'No' });
+    await expect(decide(() => Promise.resolve({ status: 'denied', comment: 'No' }))).resolves.toMatchObject({
+      approved: false,
+      status: 'denied',
+      comment: 'No',
+    });
   });
 
   it('keeps the parse error behind a decision that is not JSON', async () => {
@@ -743,9 +681,7 @@ describe('the decision', () => {
   ])('refuses %s', async (_case, result) => {
     const failure = decide(() => Promise.resolve(result));
     await expect(failure).rejects.toBeInstanceOf(TypeError);
-    await expect(failure).rejects.toThrow(
-      'Volcano resumed the approval with a decision this SDK cannot read',
-    );
+    await expect(failure).rejects.toThrow('Volcano resumed the approval with a decision this SDK cannot read');
   });
 });
 
@@ -792,10 +728,7 @@ describe('approval registration', () => {
   it.each([
     [
       'yet to record the execution',
-      () =>
-        Promise.resolve(
-          respond(404, { error: 'no running durable execution matches execution_ref' }),
-        ),
+      () => Promise.resolve(respond(404, { error: 'no running durable execution matches execution_ref' })),
     ],
     ['throttled', () => Promise.resolve(respond(429, { error: 'slow down' }))],
     ['failing', () => Promise.resolve(respond(500, { error: 'internal error' }))],
@@ -816,9 +749,7 @@ describe('approval registration', () => {
   // last 27.5 seconds in, with too little of the 30 seconds left for another.
   it('gives up after about thirty seconds of retrying', async () => {
     jest.useFakeTimers({ timerLimit: 100 });
-    fetchMock().mockImplementation(() =>
-      Promise.resolve(respond(503, { error: 'unavailable', code: 'unavailable' })),
-    );
+    fetchMock().mockImplementation(() => Promise.resolve(respond(503, { error: 'unavailable', code: 'unavailable' })));
 
     const failure = failureOf(registered());
     await jest.advanceTimersByTimeAsync(27_499);
@@ -994,11 +925,7 @@ describe('approval registration', () => {
   it.each([
     [400, { error: 'title is required' }, undefined],
     [409, { error: 'execution has ended', code: 'execution_ended' }, 'execution_ended'],
-    [
-      409,
-      { error: 'too many pending approvals', code: 'too_many_pending_approvals' },
-      'too_many_pending_approvals',
-    ],
+    [409, { error: 'too many pending approvals', code: 'too_many_pending_approvals' }, 'too_many_pending_approvals'],
     // Only a conflict means "not yet" or "closed"; the same code on another
     // status is final.
     [400, { error: 'not ready', code: 'approval_not_ready' }, 'approval_not_ready'],
@@ -1021,8 +948,6 @@ describe('approval registration', () => {
   it('describes a refusal with no readable body', async () => {
     fetchMock().mockResolvedValueOnce(new Response('<html>', { status: 400 }));
 
-    await expect(registered()).rejects.toThrow(
-      'Volcano refused the approval request (400): Request failed',
-    );
+    await expect(registered()).rejects.toThrow('Volcano refused the approval request (400): Request failed');
   });
 });

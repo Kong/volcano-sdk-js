@@ -41,9 +41,7 @@ function hasStrategies(value: Record<string, unknown>): boolean {
 }
 
 function isEngine(value: unknown): value is DurableEngine {
-  return (
-    isRecord(value) && typeof value['withDurableExecution'] === 'function' && hasStrategies(value)
-  );
+  return isRecord(value) && typeof value['withDurableExecution'] === 'function' && hasStrategies(value);
 }
 
 /** Accept both the native ESM namespace and the CommonJS default export. */

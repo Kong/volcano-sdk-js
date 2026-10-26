@@ -35,19 +35,11 @@ function mockBatch(results: unknown[]): EngineBatch<unknown> {
 const mockValidContext = {
   logger: mockLogger,
   configureLogger: jest.fn(),
-  step: jest.fn<
-    (
-      name: unknown,
-      run: (scope: EngineScope) => Promise<unknown>,
-      config: unknown,
-    ) => Promise<unknown>
-  >((_name, run) => run({ logger: mockLogger, attempt: 2 })),
-  wait: jest.fn<(nameOrDuration: unknown, duration?: unknown) => Promise<void>>(() =>
-    Promise.resolve(),
+  step: jest.fn<(name: unknown, run: (scope: EngineScope) => Promise<unknown>, config: unknown) => Promise<unknown>>(
+    (_name, run) => run({ logger: mockLogger, attempt: 2 }),
   ),
-  runInChildContext: jest.fn((_name: unknown, run: (context: unknown) => Promise<unknown>) =>
-    run(mockValidContext),
-  ),
+  wait: jest.fn<(nameOrDuration: unknown, duration?: unknown) => Promise<void>>(() => Promise.resolve()),
+  runInChildContext: jest.fn((_name: unknown, run: (context: unknown) => Promise<unknown>) => run(mockValidContext)),
   waitForCondition: jest.fn(
     (
       _name: unknown,
@@ -65,16 +57,14 @@ const mockValidContext = {
   >(async (_name, items, run): Promise<EngineBatch<unknown>> =>
     mockBatch(await Promise.all(items.map((item, index) => run(mockValidContext, item, index)))),
   ),
-  parallel: jest.fn<
-    (name: unknown, branches: EngineBranch[], config: unknown) => Promise<EngineBatch<unknown>>
-  >((_name, branches) => mockParallel(branches)),
+  parallel: jest.fn<(name: unknown, branches: EngineBranch[], config: unknown) => Promise<EngineBatch<unknown>>>(
+    (_name, branches) => mockParallel(branches),
+  ),
 };
 
 async function mockParallel(branches: EngineBranch[]): Promise<EngineBatch<unknown>> {
   const results = await Promise.all(
-    branches.map((branch) =>
-      typeof branch === 'function' ? branch(mockValidContext) : branch.func(mockValidContext),
-    ),
+    branches.map((branch) => (typeof branch === 'function' ? branch(mockValidContext) : branch.func(mockValidContext))),
   );
   return mockBatch(results);
 }
@@ -213,9 +203,7 @@ describe('typed durable operations', () => {
   });
 
   test('supports an unnamed step and default options', async () => {
-    await expect(
-      contextFor((_input, context) => context.step(() => Promise.resolve('done'))),
-    ).resolves.toBe('done');
+    await expect(contextFor((_input, context) => context.step(() => Promise.resolve('done')))).resolves.toBe('done');
     expect(mockValidContext.step).toHaveBeenCalledWith(undefined, expect.any(Function), {});
   });
 
@@ -232,23 +220,13 @@ describe('typed durable operations', () => {
   test('scopes named and unnamed child operations', async () => {
     await expect(
       contextFor(async (_input, context) => {
-        const named = await context.child('subflow', (child) =>
-          child.step(() => Promise.resolve('a')),
-        );
+        const named = await context.child('subflow', (child) => child.step(() => Promise.resolve('a')));
         const unnamed = await context.child(() => Promise.resolve('b'));
         return named + unnamed;
       }),
     ).resolves.toBe('ab');
-    expect(mockValidContext.runInChildContext).toHaveBeenNthCalledWith(
-      1,
-      'subflow',
-      expect.any(Function),
-    );
-    expect(mockValidContext.runInChildContext).toHaveBeenNthCalledWith(
-      2,
-      undefined,
-      expect.any(Function),
-    );
+    expect(mockValidContext.runInChildContext).toHaveBeenNthCalledWith(1, 'subflow', expect.any(Function));
+    expect(mockValidContext.runInChildContext).toHaveBeenNthCalledWith(2, undefined, expect.any(Function));
   });
 
   test('adapts named and unnamed condition checks', async () => {
@@ -293,13 +271,9 @@ describe('typed durable operations', () => {
         return [named.results, unnamed.results];
       }),
     ).resolves.toEqual([[2, 5], ['A']]);
-    expect(mockValidContext.map).toHaveBeenNthCalledWith(
-      1,
-      'double',
-      [1, 2],
-      expect.any(Function),
-      { maxConcurrency: 2 },
-    );
+    expect(mockValidContext.map).toHaveBeenNthCalledWith(1, 'double', [1, 2], expect.any(Function), {
+      maxConcurrency: 2,
+    });
   });
 
   test('adapts named and unnamed parallel branches', async () => {

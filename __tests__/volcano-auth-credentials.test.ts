@@ -125,16 +125,11 @@ describe('VolcanoAuth credentials', () => {
       expect(result.user).toEqual({ id: 'user-123', email: 'test@example.com', status: 'active' });
       expect(result.session?.access_token).toBe('access-token-123');
       expect(result.error).toBeNull();
-      expect(Reflect.get(localStorage, 'setItem')).toHaveBeenCalledWith(
-        'volcano_access_token',
-        'access-token-123',
-      );
+      expect(Reflect.get(localStorage, 'setItem')).toHaveBeenCalledWith('volcano_access_token', 'access-token-123');
     });
 
     it('does not sign in when confirmation is required, even with signInWhenAllowed', async () => {
-      fetchMock.mockResolvedValueOnce(
-        reply(200, { confirmation_required: true, message: 'check your email' }),
-      );
+      fetchMock.mockResolvedValueOnce(reply(200, { confirmation_required: true, message: 'check your email' }));
 
       const result = await volcano.auth.signUp({
         email: 'test@example.com',
@@ -234,10 +229,7 @@ describe('VolcanoAuth credentials', () => {
 
       const first = volcano.auth.signIn({ email: 'first@example.com', password: 'password123' });
       const second = volcano.auth.signIn({ email: 'second@example.com', password: 'password123' });
-      await within(
-        Promise.all([firstStarted.promise, secondStarted.promise]),
-        'concurrent sign-in requests',
-      );
+      await within(Promise.all([firstStarted.promise, secondStarted.promise]), 'concurrent sign-in requests');
       firstResponse.resolve(
         reply(200, {
           access_token: 'first-access',

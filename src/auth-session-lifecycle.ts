@@ -1,11 +1,7 @@
 import { validateRefreshSource, validateSessionContinuation } from './auth-continuity.ts';
 import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
-import {
-  assertAuthTokenResponse,
-  type AuthTokenFields,
-  type CompleteSessionFields,
-} from './auth-validation.ts';
+import { assertAuthTokenResponse, type AuthTokenFields, type CompleteSessionFields } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
 import type { Session, User } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
@@ -75,9 +71,7 @@ export async function signOut(host: AuthLifecycleHost): Promise<SignOutResult> {
 
 type PrecedingRefresh = RefreshResult | { ok: false; error: unknown } | null;
 
-async function precedingRefresh(
-  refreshing: Promise<RefreshResult> | null,
-): Promise<PrecedingRefresh> {
+async function precedingRefresh(refreshing: Promise<RefreshResult> | null): Promise<PrecedingRefresh> {
   return refreshing === null
     ? null
     : refreshing.catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error }));
@@ -122,15 +116,9 @@ function assertUsablePreceding(preceding: PrecedingRefresh, verified: boolean): 
   }
 }
 
-function finishSignOut(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-  error: Error | null,
-): SignOutResult {
+function finishSignOut(host: AuthLifecycleHost, context: AuthContext, error: Error | null): SignOutResult {
   const hasSessionId = extractSessionIdFromToken(context.accessToken) !== null;
-  const cleared = hasSessionId
-    ? host._clearSessionAtGeneration(context.generation)
-    : host._clearSession(context);
+  const cleared = hasSessionId ? host._clearSessionAtGeneration(context.generation) : host._clearSession(context);
   if (cleared) {
     return { error };
   }
@@ -152,11 +140,7 @@ export async function signOutCaptured(
   } catch (reason) {
     error = normalizedError(reason, 'Session revocation failed');
   }
-  return finishSignOut(
-    host,
-    context,
-    error === null ? null : normalizedError(error, 'Sign out failed'),
-  );
+  return finishSignOut(host, context, error === null ? null : normalizedError(error, 'Sign out failed'));
 }
 
 function removeSession(host: AuthLifecycleHost, path: string, credential: string | null) {
@@ -230,10 +214,7 @@ export async function refreshSessionForContext(
   return performSessionRefresh(host, context);
 }
 
-export async function fetchSessionRefresh(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-): Promise<RefreshResult> {
+export async function fetchSessionRefresh(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {
   const verified = context.operations.hasVerifiedPair(context.accessToken, context.refreshToken);
   context.operations.verifyPair(null);
   const result = await host._anonFetch('/auth/refresh', {
@@ -271,10 +252,7 @@ function expectedUserId(host: AuthLifecycleHost, context: AuthContext): string |
   return host.currentUser?.id ?? null;
 }
 
-async function refreshResult(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-): Promise<RefreshResult> {
+async function refreshResult(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {
   const result = await host._fetchSessionRefresh(context);
   if (context.operations.signingOut === null) {
     if (result.ok === true) {
@@ -286,11 +264,7 @@ async function refreshResult(
   return result;
 }
 
-function settledRefresh(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-  result: RefreshResult,
-): RefreshResponse {
+function settledRefresh(host: AuthLifecycleHost, context: AuthContext, result: RefreshResult): RefreshResponse {
   if (result.ok !== true) {
     return { session: null, error: result.error };
   }
@@ -307,10 +281,7 @@ function settledRefresh(
   };
 }
 
-export async function performSessionRefresh(
-  host: AuthLifecycleHost,
-  context: AuthContext,
-): Promise<RefreshResponse> {
+export async function performSessionRefresh(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResponse> {
   try {
     const refreshing = context.operations.refresh(() => refreshResult(host, context));
     if (refreshing === null) {

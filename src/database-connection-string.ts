@@ -60,9 +60,7 @@ export function databaseConnectionString(
   return `${target}?${parameters.join('&')}`;
 }
 
-function applicationName(
-  value: string | number | bigint | boolean | symbol | null | undefined,
-): string {
+function applicationName(value: string | number | bigint | boolean | symbol | null | undefined): string {
   // Preserve JavaScript callers' historical primitive coercion; public types
   // continue to accept only string or null user IDs.
   const userId = value == null ? '' : String(value);

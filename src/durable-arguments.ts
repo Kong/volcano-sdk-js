@@ -1,9 +1,5 @@
 // Keep a name when supplied; the unnamed form uses its first argument as the operand.
-export function namedArgs(
-  name: unknown,
-  operand: unknown,
-  options?: unknown,
-): [unknown, unknown, unknown] {
+export function namedArgs(name: unknown, operand: unknown, options?: unknown): [unknown, unknown, unknown] {
   if (typeof name === 'string' || name === undefined) {
     return [name, operand, options ?? {}];
   }

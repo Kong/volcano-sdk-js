@@ -9,9 +9,7 @@ function token(payload: unknown): string {
 test.each(['', '.signature.extra'])(
   'retains credentials with valid claims but an invalid segment count: %p',
   (suffix) => {
-    const payload = Buffer.from(JSON.stringify({ project_id: 'project', sub: 'user' })).toString(
-      'base64url',
-    );
+    const payload = Buffer.from(JSON.stringify({ project_id: 'project', sub: 'user' })).toString('base64url');
     const value = `header.${payload}${suffix}`;
     expect(recoveryIdentity(value)).toEqual({ kind: 'credential', token: value });
   },

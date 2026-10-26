@@ -128,10 +128,7 @@ describe('VolcanoAuth session lifecycle', () => {
         }),
       );
 
-      const [firstResult, secondResult] = await within(
-        Promise.all([first, second]),
-        'shared refresh completion',
-      );
+      const [firstResult, secondResult] = await within(Promise.all([first, second]), 'shared refresh completion');
       expect(firstResult).toEqual(secondResult);
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
@@ -412,11 +409,9 @@ describe('VolcanoAuth session lifecycle', () => {
     });
 
     it('should not crash if callback throws error', () => {
-      const consoleError = jest
-        .spyOn(console, 'error')
-        .mockImplementation((...messages: unknown[]) => {
-          expect(messages).not.toHaveLength(0);
-        });
+      const consoleError = jest.spyOn(console, 'error').mockImplementation((...messages: unknown[]) => {
+        expect(messages).not.toHaveLength(0);
+      });
       const badCallback = jest.fn<(user: unknown) => void>(() => {
         throw new Error('Callback error');
       });
@@ -454,11 +449,9 @@ describe('VolcanoAuth session lifecycle', () => {
     });
 
     it('should not crash if callback throws error on initial registration', () => {
-      const consoleError = jest
-        .spyOn(console, 'error')
-        .mockImplementation((...messages: unknown[]) => {
-          expect(messages).not.toHaveLength(0);
-        });
+      const consoleError = jest.spyOn(console, 'error').mockImplementation((...messages: unknown[]) => {
+        expect(messages).not.toHaveLength(0);
+      });
       volcano.currentUser = { id: 'current-user', email: 'fixture@example.com', status: 'active' };
 
       const badCallback = jest.fn<(user: unknown) => void>(() => {
@@ -486,9 +479,7 @@ describe('VolcanoAuth session lifecycle', () => {
       volcano.accessToken = sessionToken();
 
       // Mock backend returning validation error
-      fetchMock.mockResolvedValueOnce(
-        reply(400, { error: 'At least one of password or metadata is required' }),
-      );
+      fetchMock.mockResolvedValueOnce(reply(400, { error: 'At least one of password or metadata is required' }));
 
       const result = await volcano.auth.updateUser({});
 

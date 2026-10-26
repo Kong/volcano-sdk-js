@@ -1,7 +1,6 @@
 import { decodeBase64Url } from './token-claims.ts';
 
-type RecoveryIdentity =
-  { kind: 'user'; projectId: string; subject: string } | { kind: 'credential'; token: unknown };
+type RecoveryIdentity = { kind: 'user'; projectId: string; subject: string } | { kind: 'credential'; token: unknown };
 
 function decodeTokenPayload(token: unknown): { payload: unknown } | null {
   if (typeof token !== 'string') {
@@ -39,12 +38,7 @@ export function recoveryIdentity(token: unknown): RecoveryIdentity {
   const payload = claimsFromToken(token);
   const projectId = claim(payload, 'project_id');
   const subject = claim(payload, 'sub');
-  if (
-    typeof projectId === 'string' &&
-    projectId !== '' &&
-    typeof subject === 'string' &&
-    subject !== ''
-  ) {
+  if (typeof projectId === 'string' && projectId !== '' && typeof subject === 'string' && subject !== '') {
     return { kind: 'user', projectId, subject };
   }
   return { kind: 'credential', token };
@@ -52,9 +46,7 @@ export function recoveryIdentity(token: unknown): RecoveryIdentity {
 
 export function sameRecoveryIdentity(left: RecoveryIdentity, right: RecoveryIdentity): boolean {
   if (left.kind === 'user') {
-    return (
-      right.kind === 'user' && left.projectId === right.projectId && left.subject === right.subject
-    );
+    return right.kind === 'user' && left.projectId === right.projectId && left.subject === right.subject;
   }
   return right.kind === 'credential' && left.token === right.token;
 }

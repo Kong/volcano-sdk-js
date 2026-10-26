@@ -1,10 +1,4 @@
-import {
-  deletePayload,
-  recordsFromQuery,
-  rejectBatch,
-  runBatchQuery,
-  settleBatch,
-} from './realtime-autofetch.ts';
+import { deletePayload, recordsFromQuery, rejectBatch, runBatchQuery, settleBatch } from './realtime-autofetch.ts';
 import {
   activateChannelSubscription,
   disposeChannel,
@@ -79,12 +73,7 @@ class RealtimeChannel {
   _myPresenceState: Record<string, unknown> = {};
 
   /** @internal */
-  constructor(
-    realtime: VolcanoRealtime,
-    name: string,
-    type: InternalChannelType,
-    options: ChannelOptions,
-  ) {
+  constructor(realtime: VolcanoRealtime, name: string, type: InternalChannelType, options: ChannelOptions) {
     this._realtime = realtime;
     this._name = name;
     this._type = type;
@@ -272,9 +261,7 @@ class RealtimeChannel {
     this._pendingFetches.delete(tableKey);
 
     try {
-      const result: unknown = await runBatchQuery(this._realtime, schema, table, [
-        ...batch.ids.keys(),
-      ]);
+      const result: unknown = await runBatchQuery(this._realtime, schema, table, [...batch.ids.keys()]);
       settleBatch(batch.ids, recordsFromQuery(result), table);
     } catch (err) {
       rejectBatch(batch.ids, err);
@@ -306,10 +293,7 @@ class RealtimeChannel {
    * @param {string} event - Event name or '*' for all events
    * @param {Function} callback - Callback function
    */
-  on(
-    event: string,
-    callback: (data: unknown, context?: PublicationContext) => void,
-  ): UnsubscribeFunction {
+  on(event: string, callback: (data: unknown, context?: PublicationContext) => void): UnsubscribeFunction {
     const deliver: ChannelCallback = (data, context) => {
       callback(data, isPublicationContext(context) ? context : undefined);
     };

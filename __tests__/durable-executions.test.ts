@@ -27,12 +27,8 @@ interface DurableTransport {
 
 function clientWithTransport(overrides: Partial<DurableTransport> = {}) {
   const transport = {
-    getDurableExecution: jest
-      .fn<TransportOperation>()
-      .mockResolvedValue({ data: execution, status: 200 }),
-    listDurableExecutions: jest
-      .fn<TransportOperation>()
-      .mockResolvedValue({ data: page, status: 200 }),
+    getDurableExecution: jest.fn<TransportOperation>().mockResolvedValue({ data: execution, status: 200 }),
+    listDurableExecutions: jest.fn<TransportOperation>().mockResolvedValue({ data: page, status: 200 }),
     stopDurableExecution: jest
       .fn<TransportOperation>()
       .mockResolvedValue({ data: { ...execution, status: 'stopped' }, status: 200 }),
@@ -123,11 +119,7 @@ describe('durable.get / durable.list / durable.stop', () => {
   test('stops an execution and hands back what the platform recorded', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    const { data, status, error } = await volcano.durable.stop(
-      'proj-1',
-      'order-pipeline',
-      'exec-1',
-    );
+    const { data, status, error } = await volcano.durable.stop('proj-1', 'order-pipeline', 'exec-1');
 
     expect(error).toBeNull();
     expect(status).toBe(200);
@@ -154,10 +146,7 @@ describe('durable.get / durable.list / durable.stop', () => {
     ];
 
     for (const [args, field] of cases) {
-      for (const operation of [
-        volcano.durable.get.bind(volcano.durable),
-        volcano.durable.stop.bind(volcano.durable),
-      ]) {
+      for (const operation of [volcano.durable.get.bind(volcano.durable), volcano.durable.stop.bind(volcano.durable)]) {
         const result: unknown = Reflect.apply(operation, undefined, args);
         await expect(result).resolves.toMatchObject({
           data: null,
@@ -192,10 +181,7 @@ describe('durable.get / durable.list / durable.stop', () => {
       'order%20pipeline',
       'exec%231',
     ]);
-    expect(transport.listDurableExecutions.mock.calls[0]?.slice(0, 2)).toEqual([
-      'proj%3F1',
-      'order%20pipeline',
-    ]);
+    expect(transport.listDurableExecutions.mock.calls[0]?.slice(0, 2)).toEqual(['proj%3F1', 'order%20pipeline']);
   });
 
   // These routes carry the project's own token. Without a session there is
@@ -250,9 +236,7 @@ describe('durable.get / durable.list / durable.stop', () => {
   test('surfaces a platform refusal with its status', async () => {
     const refusal = Object.assign(new Error('durable function not found'), { status: 404 });
     const { volcano } = clientWithTransport({
-      getDurableExecution: jest
-        .fn<TransportOperation>()
-        .mockImplementation(() => Promise.reject(refusal)),
+      getDurableExecution: jest.fn<TransportOperation>().mockImplementation(() => Promise.reject(refusal)),
     });
 
     await expect(volcano.durable.get('proj-1', 'gone', 'exec-1')).resolves.toEqual({
@@ -278,9 +262,7 @@ describe('durable.get / durable.list / durable.stop', () => {
 
   test('reports a foreign list failure with the operation name', async () => {
     const { volcano } = clientWithTransport({
-      listDurableExecutions: jest
-        .fn<TransportOperation>()
-        .mockImplementation(() => rejectWithForeignValue(null)),
+      listDurableExecutions: jest.fn<TransportOperation>().mockImplementation(() => rejectWithForeignValue(null)),
     });
 
     await expect(volcano.durable.list('proj-1', 'orders')).resolves.toMatchObject({
@@ -292,9 +274,7 @@ describe('durable.get / durable.list / durable.stop', () => {
 
   test('a null rejection preserves its cause and has no status', async () => {
     const { volcano } = clientWithTransport({
-      getDurableExecution: jest
-        .fn<TransportOperation>()
-        .mockImplementation(() => rejectWithForeignValue(null)),
+      getDurableExecution: jest.fn<TransportOperation>().mockImplementation(() => rejectWithForeignValue(null)),
     });
 
     const result = await volcano.durable.get('proj-1', 'orders', 'exec-1');
@@ -361,9 +341,7 @@ describe('durable owner operations over the wire', () => {
     expect(data).toEqual(execution);
 
     const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
-    expect(url).toBe(
-      'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1',
-    );
+    expect(url).toBe('https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1');
     expect(init?.method).toBe('GET');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });
@@ -382,9 +360,7 @@ describe('durable owner operations over the wire', () => {
     await realClient().durable.stop('proj-1', 'order-pipeline', 'exec-1');
 
     const [url, init] = jest.mocked(globalThis.fetch).mock.calls[0] ?? [];
-    expect(url).toBe(
-      'https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop',
-    );
+    expect(url).toBe('https://api.test.com/projects/proj-1/durable-functions/order-pipeline/executions/exec-1/stop');
     expect(init?.method).toBe('POST');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer owner-token');
   });

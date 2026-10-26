@@ -8,12 +8,7 @@ import {
   terminateSandboxSession,
   writeSandboxSessionFile,
 } from './generated/client.ts';
-import type {
-  SandboxCommandOptions,
-  SandboxRequestOptions,
-  SandboxSession,
-  SandboxState,
-} from './index.ts';
+import type { SandboxCommandOptions, SandboxRequestOptions, SandboxSession, SandboxState } from './index.ts';
 import {
   commandRequest,
   executionRequestOptions,
@@ -23,15 +18,7 @@ import {
   type SandboxClient,
   sandboxResult,
 } from './sandbox-request.ts';
-import {
-  accessResult,
-  commandResult,
-  decodeBytes,
-  encodeBytes,
-  record,
-  sessionState,
-  text,
-} from './sandbox-wire.ts';
+import { accessResult, commandResult, decodeBytes, encodeBytes, record, sessionState, text } from './sandbox-wire.ts';
 
 export class SandboxSessionHandle implements SandboxSession {
   readonly id: string;
@@ -63,11 +50,7 @@ export class SandboxSessionHandle implements SandboxSession {
   }
   refresh(options: SandboxRequestOptions = {}): ReturnType<SandboxSession['refresh']> {
     return sandboxResult(async () =>
-      this.update(
-        await responseData(
-          getSandboxSession(pathId(this.id), requestOptions(this.client, options)),
-        ),
-      ),
+      this.update(await responseData(getSandboxSession(pathId(this.id), requestOptions(this.client, options)))),
     );
   }
   exec(command: string, options: SandboxCommandOptions = {}): ReturnType<SandboxSession['exec']> {
@@ -85,41 +68,23 @@ export class SandboxSessionHandle implements SandboxSession {
   }
   suspend(options: SandboxRequestOptions = {}): ReturnType<SandboxSession['suspend']> {
     return sandboxResult(async () =>
-      this.update(
-        await responseData(
-          suspendSandboxSession(pathId(this.id), requestOptions(this.client, options)),
-        ),
-      ),
+      this.update(await responseData(suspendSandboxSession(pathId(this.id), requestOptions(this.client, options)))),
     );
   }
   resume(options: SandboxRequestOptions = {}): ReturnType<SandboxSession['resume']> {
     return sandboxResult(async () =>
-      this.update(
-        await responseData(
-          resumeSandboxSession(pathId(this.id), requestOptions(this.client, options)),
-        ),
-      ),
+      this.update(await responseData(resumeSandboxSession(pathId(this.id), requestOptions(this.client, options)))),
     );
   }
   terminate(options: SandboxRequestOptions = {}): ReturnType<SandboxSession['terminate']> {
     return sandboxResult(async () =>
-      this.update(
-        await responseData(
-          terminateSandboxSession(pathId(this.id), requestOptions(this.client, options)),
-        ),
-      ),
+      this.update(await responseData(terminateSandboxSession(pathId(this.id), requestOptions(this.client, options)))),
     );
   }
   access(port: number, options: SandboxRequestOptions = {}): ReturnType<SandboxSession['access']> {
     return sandboxResult(async () =>
       accessResult(
-        await responseData(
-          createSandboxSessionAccess(
-            pathId(this.id),
-            { port },
-            requestOptions(this.client, options),
-          ),
-        ),
+        await responseData(createSandboxSessionAccess(pathId(this.id), { port }, requestOptions(this.client, options))),
       ),
     );
   }
@@ -135,9 +100,7 @@ export class SandboxSessionHandle implements SandboxSession {
   private read(path: string, options: SandboxRequestOptions = {}) {
     return sandboxResult(async () =>
       decodeBytes(
-        await responseData(
-          readSandboxSessionFile(pathId(this.id), { path }, requestOptions(this.client, options)),
-        ),
+        await responseData(readSandboxSessionFile(pathId(this.id), { path }, requestOptions(this.client, options))),
       ),
     );
   }

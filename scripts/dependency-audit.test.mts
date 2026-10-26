@@ -10,9 +10,7 @@ import { gunzipSync } from 'node:zlib';
 import { record, stringValue } from './values.mts';
 
 const run = promisify(execFile);
-const manifest = record(
-  JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')),
-);
+const manifest = record(JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')));
 const auditScript = await readFile(new URL('audit-dependencies.mjs', import.meta.url), 'utf8');
 const valueScript = await readFile(new URL('values.mjs', import.meta.url), 'utf8');
 interface AuditRequest {
@@ -166,9 +164,7 @@ await test('dependency audit accepts a clean registry result', async (context) =
   assert.ok(request !== undefined);
   assert.equal(request.url, '/-/npm/v1/security/audits/quick');
   assert.deepEqual(
-    record(record(record(record(request.body)['dependencies'])['.'])['dependencies'])[
-      'quality-fixture'
-    ],
+    record(record(record(record(request.body)['dependencies'])['.'])['dependencies'])['quality-fixture'],
     {
       dev: true,
       integrity: 'sha512-fixture',
@@ -225,17 +221,13 @@ await test('dependency audit rejects an approval when the advisory spans version
       },
     },
   };
-  const result = await auditFixture(context, 200, report, [
-    auditException('GHSA-fixture:quality-fixture@1.0.0'),
-  ]);
+  const result = await auditFixture(context, 200, report, [auditException('GHSA-fixture:quality-fixture@1.0.0')]);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /zero advisories at every severity/);
 });
 
 await test('dependency audit rejects an approval it no longer needs', async (context) => {
-  const result = await auditFixture(context, 200, cleanReport, [
-    auditException('GHSA-fixture:quality-fixture@1.0.0'),
-  ]);
+  const result = await auditFixture(context, 200, cleanReport, [auditException('GHSA-fixture:quality-fixture@1.0.0')]);
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /no longer reports: GHSA-fixture:quality-fixture@1\.0\.0/);
 });

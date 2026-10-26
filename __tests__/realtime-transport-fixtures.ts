@@ -1,9 +1,5 @@
 import { jest } from '@jest/globals';
-import type {
-  EventHandler,
-  TransportClient,
-  TransportSubscription,
-} from '../src/realtime-internal-types.ts';
+import type { EventHandler, TransportClient, TransportSubscription } from '../src/realtime-internal-types.ts';
 
 function uninitialized(): never {
   throw new Error('Promise executor did not initialize');
@@ -83,9 +79,7 @@ export class TestTransportClient implements TransportClient {
   readonly disconnect = jest.fn<() => void>();
   readonly on = jest.fn<(event: string, handler: (...args: unknown[]) => void) => void>();
   readonly off = jest.fn<(event: string, handler: (...args: unknown[]) => void) => void>();
-  readonly newSubscription = jest.fn<
-    (name: string, options?: Record<string, unknown>) => TestSubscription
-  >(() => {
+  readonly newSubscription = jest.fn<(name: string, options?: Record<string, unknown>) => TestSubscription>(() => {
     const subscription = new TestSubscription();
     this.subscriptions.push(subscription);
     return subscription;

@@ -38,7 +38,5 @@ async function blobResult(response: Response): Promise<StorageRequestResult> {
 
 async function jsonResult(response: Response): Promise<StorageRequestResult> {
   const data = await safeJsonParse(response);
-  return response.ok
-    ? { data, error: null }
-    : { data: null, error: apiRequestError(response, data) };
+  return response.ok ? { data, error: null } : { data: null, error: apiRequestError(response, data) };
 }

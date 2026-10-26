@@ -42,9 +42,7 @@ const approvedComments = new Map([
 ]);
 
 function trackedFiles(): string[] {
-  return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
-    .split('\0')
-    .filter(Boolean);
+  return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
 }
 
 function handwrittenSource(files: readonly string[]): string[] {
@@ -112,14 +110,10 @@ function requireCompilerOptions(options: ts.CompilerOptions): void {
 function discoveredTests(configPath: string): string[] {
   return array(
     JSON.parse(
-      execFileSync(
-        process.execPath,
-        [jest, '--listTests', '--json', '--runInBand', '--config', configPath],
-        {
-          cwd: root,
-          encoding: 'utf8',
-        },
-      ),
+      execFileSync(process.execPath, [jest, '--listTests', '--json', '--runInBand', '--config', configPath], {
+        cwd: root,
+        encoding: 'utf8',
+      }),
     ),
   ).map((value) => stringValue(value));
 }
@@ -131,20 +125,13 @@ function requireFullCoverage(config: unknown): void {
     lines: 100,
     statements: 100,
   });
-  assert.deepEqual(record(config)['collectCoverageFrom'], [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/generated/**',
-  ]);
+  assert.deepEqual(record(config)['collectCoverageFrom'], ['src/**/*.ts', '!src/**/*.d.ts', '!src/generated/**']);
 }
 
 function requireUnsuppressed(path: string, source: string): void {
   const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
   for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (
-      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
-      token !== ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
+    if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) {
       continue;
     }
     requireAllowedComment(path, scanner.getTokenText());
@@ -159,11 +146,7 @@ function requireAllowedComment(path: string, comment: string): void {
     /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|(?:istanbul|[cv]8|nyc) ignore|Stryker (?:disable|restore)|(?:prettier|oxfmt)-ignore/;
   assert.doesNotMatch(comment, forbidden, `${path} suppresses a quality check`);
   if (path.startsWith('test/types/') && comment.includes('@ts-expect-error')) {
-    assert.match(
-      comment,
-      /^\/\/\s*@ts-expect-error\s+\S/,
-      `${path} needs an expected-error rationale`,
-    );
+    assert.match(comment, /^\/\/\s*@ts-expect-error\s+\S/, `${path} needs an expected-error rationale`);
     return;
   }
   assert.doesNotMatch(comment, /@ts-expect-error/, `${path} suppresses a quality check`);
@@ -216,9 +199,7 @@ function requireNoNestedConfigs(files: readonly string[]): void {
   ];
   assert.deepEqual(
     files.filter(
-      (path) =>
-        path.includes('/') &&
-        names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
+      (path) => path.includes('/') && names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
     ),
     [],
   );
@@ -249,10 +230,7 @@ await test('tracked SDK code remains in native lint, type, test, and coverage ga
   const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
   assert.ok(runtime.length > 0);
   assert.ok(tests.some((path) => path.endsWith('.test.ts')));
-  const typechecked = new Set([
-    ...typecheckedFiles('tsconfig.json'),
-    ...typecheckedFiles('tsconfig.tooling.json'),
-  ]);
+  const typechecked = new Set([...typecheckedFiles('tsconfig.json'), ...typecheckedFiles('tsconfig.tooling.json')]);
   for (const path of [
     ...runtime,
     ...tests,
@@ -262,16 +240,9 @@ await test('tracked SDK code remains in native lint, type, test, and coverage ga
     assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
   }
   requireFullCoverage(coverageConfig);
-  assert.equal(
-    record(manifest['scripts'])['format:check'],
-    'oxfmt --check',
-  );
-  const discovered = new Set(
-    ['jest.config.js', 'jest.typed.config.cjs'].flatMap((config) => discoveredTests(config)),
-  );
-  for (const path of files.filter((item) =>
-    /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item),
-  )) {
+  assert.equal(record(manifest['scripts'])['format:check'], 'oxfmt --check');
+  const discovered = new Set(['jest.config.js', 'jest.typed.config.cjs'].flatMap((config) => discoveredTests(config)));
+  for (const path of files.filter((item) => /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item))) {
     assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
   }
   const checker = new ESLint();
@@ -299,10 +270,7 @@ await test('lowered coverage and suppression comments fail policy validation', (
     requireUnsuppressed('src/new.ts', 'const marker = true; // @ts-expect-error\nmarker;');
   });
   assert.doesNotThrow(() => {
-    requireUnsuppressed(
-      'test/types/invalid.ts',
-      '// @ts-expect-error invalid public call\ninvalid();',
-    );
+    requireUnsuppressed('test/types/invalid.ts', '// @ts-expect-error invalid public call\ninvalid();');
   });
   assert.throws(() => {
     requireUnsuppressed('test/types/invalid.ts', '// @ts-ignore\ninvalid();');
@@ -380,14 +348,10 @@ async function lintFixture(source: string, parent: string): Promise<Record<strin
     const filename = parent === 'scripts' ? 'fixture.test.mts' : 'fixture.ts';
     const path = join(directory, parent === '__tests__' ? 'fixture.test.ts' : filename);
     await writeFile(path, source);
-    const result = spawnSync(
-      process.execPath,
-      [eslint, '--format=json', '--max-warnings=0', path],
-      {
-        encoding: 'utf8',
-        timeout: 30_000,
-      },
-    );
+    const result = spawnSync(process.execPath, [eslint, '--format=json', '--max-warnings=0', path], {
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
     assert.equal(result.error, undefined);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
     return array(JSON.parse(result.stdout)).map((value) => record(value));
@@ -462,9 +426,7 @@ for (const [parent, setup] of contexts) {
   for (const [name, source, rule] of violations) {
     await test(`typed lint rejects ${name} in ${parent}`, async () => {
       const results = await lintFixture(`${setup}${source}`, parent);
-      const rules = results.flatMap((result) =>
-        array(result['messages']).map((message) => record(message)['ruleId']),
-      );
+      const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
       assert.ok(rules.includes(rule), `Missing ${rule}: ${JSON.stringify(results)}`);
     });
   }
@@ -479,17 +441,13 @@ for (const source of [
 ]) {
   await test(`tooling lint rejects incomplete native tests: ${source}`, async () => {
     const results = await lintFixture(source, 'scripts');
-    const rules = results.flatMap((result) =>
-      array(result['messages']).map((message) => record(message)['ruleId']),
-    );
+    const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
     assert.ok(rules.includes('no-restricted-syntax'));
   });
 }
 
 await test('tooling lint rejects an empty native suite file', async () => {
   const results = await lintFixture('export const unusedSuite = true;', 'scripts');
-  const rules = results.flatMap((result) =>
-    array(result['messages']).map((message) => record(message)['ruleId']),
-  );
+  const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
   assert.ok(rules.includes('sonarjs/no-empty-test-file'));
 });

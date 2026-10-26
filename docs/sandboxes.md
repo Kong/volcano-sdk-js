@@ -48,10 +48,7 @@ try {
     const refreshed = await session.refresh();
     if (refreshed.error) throw refreshed.error;
   }
-  const written = await session.files.write(
-    '/workspace/input.txt',
-    new TextEncoder().encode('hello'),
-  );
+  const written = await session.files.write('/workspace/input.txt', new TextEncoder().encode('hello'));
   if (written.error) throw written.error;
   const output = await session.exec('cat /workspace/input.txt');
   if (output.error) throw output.error;

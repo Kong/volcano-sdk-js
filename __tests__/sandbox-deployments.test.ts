@@ -24,9 +24,7 @@ afterEach(() => {
 });
 
 test('uploads raw archive bytes and preserves deployment replay identity', async () => {
-  const fetchMock = jest
-    .fn<typeof fetch>()
-    .mockResolvedValue(Response.json(deployment, { status: 202 }));
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(deployment, { status: 202 }));
   globalThis.fetch = fetchMock;
   const bytes = new Uint8Array([31, 139, 0, 255]);
   const result = await client().sandboxes.deploy(projectId, templateId, bytes, {
@@ -43,9 +41,7 @@ test('uploads raw archive bytes and preserves deployment replay identity', async
     updatedAt: deployment.updated_at,
   });
   const call = firstCall(fetchMock.mock.calls);
-  expect(call[0]).toBe(
-    `https://api.test.com/projects/${projectId}/sandboxes/${templateId}/deployments`,
-  );
+  expect(call[0]).toBe(`https://api.test.com/projects/${projectId}/sandboxes/${templateId}/deployments`);
   expect(new Headers(call[1]?.headers).get('Idempotency-Key')).toBe(requestId);
   const body = call[1]?.body;
   if (!(body instanceof FormData)) {
@@ -73,9 +69,7 @@ test('reads deployment history, detail and exact source bytes', async () => {
       }),
     )
     .mockResolvedValueOnce(Response.json(deployment))
-    .mockResolvedValueOnce(
-      new Response(bytes, { headers: { 'Content-Type': 'application/gzip' } }),
-    );
+    .mockResolvedValueOnce(new Response(bytes, { headers: { 'Content-Type': 'application/gzip' } }));
   globalThis.fetch = fetchMock;
   const sdk = client();
   const history = await sdk.sandboxes.deployments(projectId, templateId, {
@@ -119,9 +113,7 @@ test('reads regional build logs with pagination and preserves failures', async (
         next_cursor: 'next',
       }),
     )
-    .mockResolvedValueOnce(
-      Response.json({ error: 'Forbidden', code: 'forbidden' }, { status: 403 }),
-    );
+    .mockResolvedValueOnce(Response.json({ error: 'Forbidden', code: 'forbidden' }, { status: 403 }));
   globalThis.fetch = fetchMock;
   const sdk = client();
   const logs = await sdk.sandboxes.logs(projectId, templateId, requestId, {
@@ -133,9 +125,7 @@ test('reads regional build logs with pagination and preserves failures', async (
     data: [{ timestamp: deployment.created_at, message: 'Building image' }],
     nextCursor: 'next',
   });
-  expect(firstCall(fetchMock.mock.calls)[0]).toContain(
-    'region=aws-us-east-1&cursor=first&limit=10',
-  );
+  expect(firstCall(fetchMock.mock.calls)[0]).toContain('region=aws-us-east-1&cursor=first&limit=10');
   const failure = await sdk.sandboxes.deployment(projectId, templateId, requestId);
   expect(failure.data).toBeNull();
   expect(failure.error).toMatchObject({ status: 403, code: 'forbidden' });
@@ -146,9 +136,7 @@ test('deletes a custom template through its project scope', async () => {
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.deleteTemplate(projectId, templateId);
   expect(result.error).toBeNull();
-  expect(firstCall(fetchMock.mock.calls)[0]).toBe(
-    `https://api.test.com/projects/${projectId}/sandboxes/${templateId}`,
-  );
+  expect(firstCall(fetchMock.mock.calls)[0]).toBe(`https://api.test.com/projects/${projectId}/sandboxes/${templateId}`);
   expect(firstCall(fetchMock.mock.calls)[1]?.method).toBe('DELETE');
 });
 
@@ -244,14 +232,8 @@ test('reads complete deployment history without optional pagination', async () =
 
 test.each([
   [{ data: {} }, 'Invalid Sandbox deployment page'],
-  [
-    { data: [], pagination: { limit: '10', has_more: false } },
-    'Invalid Sandbox deployment pagination',
-  ],
-  [
-    { data: [], pagination: { limit: 10, has_more: 'false' } },
-    'Invalid Sandbox deployment pagination',
-  ],
+  [{ data: [], pagination: { limit: '10', has_more: false } }, 'Invalid Sandbox deployment pagination'],
+  [{ data: [], pagination: { limit: 10, has_more: 'false' } }, 'Invalid Sandbox deployment pagination'],
 ] as const)('rejects malformed deployment history %j', async (body, message) => {
   globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(body));
   const outcome = await client().sandboxes.deployments(projectId, templateId);

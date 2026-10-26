@@ -41,10 +41,7 @@ export async function fetchWithAuthRetry<Context extends AuthContext>(
   return retryAfterUnauthorized(client, context, response, doFetch);
 }
 
-function authenticatedHeaders(
-  source: HeadersInit | undefined,
-  accessToken: string | null,
-): Record<string, string> {
+function authenticatedHeaders(source: HeadersInit | undefined, accessToken: string | null): Record<string, string> {
   const headers =
     source instanceof Headers || Array.isArray(source)
       ? Object.fromEntries(new Headers(source).entries())

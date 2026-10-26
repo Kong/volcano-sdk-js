@@ -1,8 +1,44 @@
 {
   "name": "@volcano.dev/sdk",
   "version": "2.1.0",
-  "packageManager": "pnpm@10.34.1",
   "description": "Official JavaScript SDK for Volcano - Authentication, Database, Functions, Realtime, and more",
+  "keywords": [
+    "auth",
+    "authentication",
+    "baas",
+    "backend-as-a-service",
+    "database",
+    "functions",
+    "kong",
+    "oauth",
+    "postgresql",
+    "presence",
+    "pubsub",
+    "realtime",
+    "rls",
+    "row-level-security",
+    "serverless",
+    "volcano",
+    "websocket"
+  ],
+  "homepage": "https://github.com/Kong/volcano-sdk-js#readme",
+  "bugs": {
+    "url": "https://github.com/Kong/volcano-sdk-js/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Kong <office@konghq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kong/volcano-sdk-js.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
   "type": "commonjs",
   "main": "dist/index.js",
   "module": "dist/index.esm.mjs",
@@ -49,17 +85,9 @@
       }
     }
   },
-  "engines": {
-    "node": ">=22"
+  "publishConfig": {
+    "access": "public"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md",
-    "CONTRIBUTING.md",
-    "SECURITY.md"
-  ],
   "scripts": {
     "build": "pnpm build:tooling && rollup -c rollup.config.mjs && node .quality-tools/copy-types.mjs",
     "generate:openapi": "pnpm build:tooling && node .quality-tools/clean-openapi.mjs && orval --config orval.config.mjs && openapi-typescript openapi/openapi.yaml --default-non-nullable false -o src/generated/openapi.d.ts && tsc -p tsconfig.generated.json",
@@ -88,49 +116,9 @@
     "quality:policy": "pnpm build:tooling && node --test --test-reporter=tap --test-reporter=./.quality-tools/node-completeness.mjs --test-reporter-destination=stdout --test-reporter-destination=stdout .quality-tools/quality-policy.test.mjs",
     "build:tooling": "tsc -p tsconfig.tooling.json"
   },
-  "keywords": [
-    "volcano",
-    "kong",
-    "auth",
-    "authentication",
-    "database",
-    "postgresql",
-    "serverless",
-    "functions",
-    "oauth",
-    "rls",
-    "row-level-security",
-    "baas",
-    "backend-as-a-service",
-    "realtime",
-    "websocket",
-    "pubsub",
-    "presence"
-  ],
   "dependencies": {
     "centrifuge": "^5.7.4",
     "ws": "^8.21.3"
-  },
-  "peerDependencies": {
-    "@aws/durable-execution-sdk-js": ">=2 <3"
-  },
-  "peerDependenciesMeta": {
-    "@aws/durable-execution-sdk-js": {
-      "optional": true
-    }
-  },
-  "author": "Kong <office@konghq.com>",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Kong/volcano-sdk-js.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Kong/volcano-sdk-js/issues"
-  },
-  "homepage": "https://github.com/Kong/volcano-sdk-js#readme",
-  "publishConfig": {
-    "access": "public"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
@@ -181,5 +169,17 @@
     "rollup": "^4.60.1",
     "tslib": "2.8.1",
     "typescript": "^6.0.2"
-  }
+  },
+  "peerDependencies": {
+    "@aws/durable-execution-sdk-js": ">=2 <3"
+  },
+  "peerDependenciesMeta": {
+    "@aws/durable-execution-sdk-js": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.34.1"
 }

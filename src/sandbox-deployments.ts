@@ -14,13 +14,7 @@ import type {
   SandboxRequestOptions,
 } from './index.ts';
 import { buildConfiguration, cursorOptions, logOptions } from './sandbox-deployment-wire.ts';
-import {
-  pathId,
-  requestOptions,
-  responseData,
-  type SandboxClient,
-  sandboxResult,
-} from './sandbox-request.ts';
+import { pathId, requestOptions, responseData, type SandboxClient, sandboxResult } from './sandbox-request.ts';
 import { record, text } from './sandbox-wire.ts';
 
 function result(value: unknown): SandboxDeployment {
@@ -155,9 +149,7 @@ function pageResult(data: Record<string, unknown>): import('./index.ts').Sandbox
     pagination: {
       limit: pagination['limit'],
       hasMore: pagination['has_more'],
-      ...(pagination['next_cursor'] === undefined
-        ? {}
-        : { nextCursor: text(pagination['next_cursor']) }),
+      ...(pagination['next_cursor'] === undefined ? {} : { nextCursor: text(pagination['next_cursor']) }),
     },
   };
 }

@@ -1,11 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, test } from '@jest/globals';
-import {
-  convertedPathSegment,
-  hasLoneSurrogate,
-  hasUnsafeSegment,
-  pathSegment,
-} from '../src/path-segments.ts';
+import { convertedPathSegment, hasLoneSurrogate, hasUnsafeSegment, pathSegment } from '../src/path-segments.ts';
 
 const UNSAFE = 'field cannot contain "/" or be "." or ".."';
 
@@ -95,12 +90,9 @@ test.each([
   expect(hasLoneSurrogate(value)).toBe(expected);
 });
 
-test.each(['a\uD800', '\uDFFF'])(
-  'reports the lone surrogate in %p instead of throwing URIError',
-  (value) => {
-    expect(pathSegment('field', value)).toEqual({
-      segment: null,
-      error: new Error('field is not well-formed Unicode'),
-    });
-  },
-);
+test.each(['a\uD800', '\uDFFF'])('reports the lone surrogate in %p instead of throwing URIError', (value) => {
+  expect(pathSegment('field', value)).toEqual({
+    segment: null,
+    error: new Error('field is not well-formed Unicode'),
+  });
+});

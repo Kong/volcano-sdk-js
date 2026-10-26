@@ -109,9 +109,7 @@ export function presetsResult(value: unknown): SandboxPreset[] {
   });
 }
 export function decodeBytes(value: unknown): Uint8Array {
-  return Uint8Array.from(atob(text(record(value)['data'])), (character) =>
-    Number(character.codePointAt(0)),
-  );
+  return Uint8Array.from(atob(text(record(value)['data'])), (character) => Number(character.codePointAt(0)));
 }
 export function encodeBytes(data: Uint8Array): string {
   if (data.byteLength > 8 * 1024 * 1024) {
@@ -133,12 +131,8 @@ export function sessionRequest(
 ): import('./generated/model/createSandboxSessionRequest.ts').CreateSandboxSessionRequest {
   return {
     ...createRequest(options),
-    ...(options.maxDurationSeconds === undefined
-      ? {}
-      : { max_duration_seconds: options.maxDurationSeconds }),
-    ...(options.idleTimeoutSeconds === undefined
-      ? {}
-      : { idle_timeout_seconds: options.idleTimeoutSeconds }),
+    ...(options.maxDurationSeconds === undefined ? {} : { max_duration_seconds: options.maxDurationSeconds }),
+    ...(options.idleTimeoutSeconds === undefined ? {} : { idle_timeout_seconds: options.idleTimeoutSeconds }),
   };
 }
 

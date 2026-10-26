@@ -3,9 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { record } from './values.mts';
 
-const manifest = record(
-  JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')),
-);
+const manifest = record(JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')));
 const scripts = record(manifest['scripts']);
 const requiredTasks = {
   build: 'pnpm build:tooling && rollup -c rollup.config.mjs && node .quality-tools/copy-types.mjs',
@@ -17,8 +15,7 @@ const requiredTasks = {
     'knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries',
   lint: 'pnpm build && eslint . --max-warnings=0 && pnpm format:check',
   test: 'pnpm build && jest',
-  'test:types':
-    'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
+  'test:types': 'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
   'test:package':
     'pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz',
   'test:quickstart':

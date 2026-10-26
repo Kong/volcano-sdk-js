@@ -63,9 +63,7 @@ afterEach(() => {
 test('builds a bucket-scoped URL while preserving slash-separated paths', () => {
   const given = fixture();
   expect(given.api.bucketName).toBe('bucket');
-  expect(given.api._buildUrl('one/two words.txt')).toBe(
-    `${apiUrl}/storage/bucket/one/two%20words.txt`,
-  );
+  expect(given.api._buildUrl('one/two words.txt')).toBe(`${apiUrl}/storage/bucket/one/two%20words.txt`);
 });
 
 test('authentication completes OAuth before accepting the access token', async () => {
@@ -154,21 +152,18 @@ test.each([
 test.each([
   ['file.bin', 'file.bin', 'file.bin'],
   ['/file.bin', 'file.bin', 'file.bin'],
-])(
-  'names a Blob uploaded at %s after its last segment with the default type',
-  async (path, encodedPath, name) => {
-    const given = fixture();
-    await given.api.upload(path, new Blob(['data']));
-    const call = given.upload.mock.calls[0];
-    if (call === undefined) {
-      throw new Error('Expected an upload');
-    }
-    expect(call[0]).toBe('bucket');
-    expect(call[1]).toBe(encodedPath);
-    expect(call[2].file.name).toBe(name);
-    expect(call[2].file.type).toBe('application/octet-stream');
-  },
-);
+])('names a Blob uploaded at %s after its last segment with the default type', async (path, encodedPath, name) => {
+  const given = fixture();
+  await given.api.upload(path, new Blob(['data']));
+  const call = given.upload.mock.calls[0];
+  if (call === undefined) {
+    throw new Error('Expected an upload');
+  }
+  expect(call[0]).toBe('bucket');
+  expect(call[1]).toBe(encodedPath);
+  expect(call[2].file.name).toBe(name);
+  expect(call[2].file.type).toBe('application/octet-stream');
+});
 
 test('rejects unsupported upload bodies before transport', async () => {
   const given = fixture();
@@ -178,19 +173,14 @@ test('rejects unsupported upload bodies before transport', async () => {
   expect(given.upload).not.toHaveBeenCalled();
 });
 
-test.each([new Error('upload failed'), 'upload failed'])(
-  'normalizes upload failures',
-  async (failure) => {
-    const given = fixture();
-    given.upload.mockRejectedValue(failure);
-    const result = await given.api.upload('file.bin', new Blob(['data']));
-    expect(result.data).toBeNull();
-    expect(result.error).toBeInstanceOf(Error);
-    expect(result.error?.message).toBe(
-      failure instanceof Error ? failure.message : 'Upload failed',
-    );
-  },
-);
+test.each([new Error('upload failed'), 'upload failed'])('normalizes upload failures', async (failure) => {
+  const given = fixture();
+  given.upload.mockRejectedValue(failure);
+  const result = await given.api.upload('file.bin', new Blob(['data']));
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(Error);
+  expect(result.error?.message).toBe(failure instanceof Error ? failure.message : 'Upload failed');
+});
 
 test('does not upload without a session', async () => {
   const given = fixture(null);
@@ -217,10 +207,7 @@ test('downloads binary data and forwards a range header', async () => {
 
 test('omits a falsy range while preserving JavaScript caller behavior', async () => {
   const given = fixture();
-  const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, [
-    'file.bin',
-    { range: null },
-  ]);
+  const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, ['file.bin', { range: null }]);
   if (!(pending instanceof Promise)) {
     throw new TypeError('Expected a download promise');
   }
@@ -232,24 +219,17 @@ test('omits a falsy range while preserving JavaScript caller behavior', async ()
   });
 });
 
-test.each([new Error('download failed'), 'download failed'])(
-  'normalizes download failures',
-  async (failure) => {
-    const given = fixture();
-    given.download.mockRejectedValue(failure);
-    const result = await given.api.download('file.bin');
-    expect(result.data).toBeNull();
-    expect(result.error?.message).toBe(
-      failure instanceof Error ? 'download failed' : 'Download failed',
-    );
-  },
-);
+test.each([new Error('download failed'), 'download failed'])('normalizes download failures', async (failure) => {
+  const given = fixture();
+  given.download.mockRejectedValue(failure);
+  const result = await given.api.download('file.bin');
+  expect(result.data).toBeNull();
+  expect(result.error?.message).toBe(failure instanceof Error ? 'download failed' : 'Download failed');
+});
 
 test('rejects a malformed binary result from a custom transport', async () => {
   const given = fixture();
-  Reflect.set(given.host._transport, 'downloadStorageObject', () =>
-    Promise.resolve({ data: 'not a Blob' }),
-  );
+  Reflect.set(given.host._transport, 'downloadStorageObject', () => Promise.resolve({ data: 'not a Blob' }));
   await expect(given.api.download('file.bin')).resolves.toEqual({
     data: null,
     error: new TypeError('Invalid storage download response'),
@@ -264,32 +244,25 @@ test('does not download without a session', async () => {
 
 test('lists objects with the same prefix, limit, and cursor query shape', async () => {
   const given = fixture();
-  given.fetch.mockResolvedValue(
-    Response.json({ objects: [storageObject({ name: 'one' })], next_cursor: 'next' }),
-  );
+  given.fetch.mockResolvedValue(Response.json({ objects: [storageObject({ name: 'one' })], next_cursor: 'next' }));
   await expect(given.api.list('photos/', { limit: 2, cursor: 'last' })).resolves.toEqual({
     data: [storageObject({ name: 'one' })],
     error: null,
     nextCursor: 'next',
   });
-  expect(given.fetch.mock.calls[0]?.[0]).toBe(
-    `${apiUrl}/storage/bucket?prefix=photos%2F&limit=2&cursor=last`,
-  );
+  expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket?prefix=photos%2F&limit=2&cursor=last`);
   expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
     method: 'GET',
     headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
   });
 });
 
-test.each([undefined, null, false, 0, Number.NaN, ''])(
-  'omits a falsy list prefix: %s',
-  async (prefix) => {
-    const given = fixture();
-    given.fetch.mockResolvedValue(Response.json({ objects: [] }));
-    await given.api.list(prefix);
-    expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket`);
-  },
-);
+test.each([undefined, null, false, 0, Number.NaN, ''])('omits a falsy list prefix: %s', async (prefix) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({ objects: [] }));
+  await given.api.list(prefix);
+  expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket`);
+});
 
 test('omits falsy list options from the URL', async () => {
   const given = fixture();
@@ -305,14 +278,11 @@ test('omits falsy list options from the URL', async () => {
   expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket`);
 });
 
-test.each([undefined, null, false, 0, ''])(
-  'treats falsy objects %p as an empty final page',
-  async (objects) => {
-    const given = fixture();
-    given.fetch.mockResolvedValue(Response.json({ objects, next_cursor: '' }));
-    await expect(given.api.list()).resolves.toEqual({ data: [], error: null, nextCursor: null });
-  },
-);
+test.each([undefined, null, false, 0, ''])('treats falsy objects %p as an empty final page', async (objects) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json({ objects, next_cursor: '' }));
+  await expect(given.api.list()).resolves.toEqual({ data: [], error: null, nextCursor: null });
+});
 
 test('treats a missing cursor as an empty final page', async () => {
   const given = fixture();
@@ -320,21 +290,18 @@ test('treats a missing cursor as an empty final page', async () => {
   await expect(given.api.list()).resolves.toEqual({ data: [], error: null, nextCursor: null });
 });
 
-test.each([null, 3, { objects: 'not an array' }])(
-  'rejects malformed list responses: %p',
-  async (payload) => {
-    const given = fixture();
-    given.fetch.mockResolvedValue(Response.json(payload));
-    const result = await given.api.list();
-    expect(result.data).toBeNull();
-    expect(result.error?.message).toBe(
-      typeof payload !== 'object' || payload === null
-        ? 'Storage list response is not an object'
-        : 'Storage list response has invalid objects',
-    );
-    expect(result.nextCursor).toBeNull();
-  },
-);
+test.each([null, 3, { objects: 'not an array' }])('rejects malformed list responses: %p', async (payload) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json(payload));
+  const result = await given.api.list();
+  expect(result.data).toBeNull();
+  expect(result.error?.message).toBe(
+    typeof payload !== 'object' || payload === null
+      ? 'Storage list response is not an object'
+      : 'Storage list response has invalid objects',
+  );
+  expect(result.nextCursor).toBeNull();
+});
 
 test('returns a storage HTTP failure without exposing a cursor', async () => {
   const given = fixture();
@@ -377,10 +344,7 @@ test('partial removal preserves the first HTTP error and every failed path', asy
   given.fetch
     .mockResolvedValueOnce(Response.json({ deleted: true }))
     .mockResolvedValueOnce(
-      Response.json(
-        { error: 'denied', code: 'forbidden' },
-        { status: 403, headers: { 'Retry-After': '2' } },
-      ),
+      Response.json({ error: 'denied', code: 'forbidden' }, { status: 403, headers: { 'Retry-After': '2' } }),
     );
   const result = await given.api.remove(['allowed.bin', 'denied.bin']);
   expect(result.data).toEqual({ deleted: ['allowed.bin'] });
@@ -434,23 +398,20 @@ test('remove does not request storage without a session', async () => {
   expect(given.fetch).not.toHaveBeenCalled();
 });
 
-test.each(['move', 'copy'] as const)(
-  '%s sends an authenticated transfer request',
-  async (operation) => {
-    const given = fixture();
-    given.fetch.mockResolvedValue(Response.json(storageObject({ name: 'destination.bin' })));
-    await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toEqual({
-      data: storageObject({ name: 'destination.bin' }),
-      error: null,
-    });
-    expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/${operation}`);
-    expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
-      method: 'POST',
-      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ from: 'source.bin', to: 'destination.bin' }),
-    });
-  },
-);
+test.each(['move', 'copy'] as const)('%s sends an authenticated transfer request', async (operation) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue(Response.json(storageObject({ name: 'destination.bin' })));
+  await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toEqual({
+    data: storageObject({ name: 'destination.bin' }),
+    error: null,
+  });
+  expect(given.fetch.mock.calls[0]?.[0]).toBe(`${apiUrl}/storage/bucket/${operation}`);
+  expect(given.fetch.mock.calls[0]?.[1]).toMatchObject({
+    method: 'POST',
+    headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ from: 'source.bin', to: 'destination.bin' }),
+  });
+});
 
 test.each([
   {
@@ -512,16 +473,13 @@ test.each([
   await expect(run(given.api)).resolves.toEqual({ data: {}, error: null });
 });
 
-test.each(['move', 'copy'] as const)(
-  '%s does not request storage without a session',
-  async (operation) => {
-    const given = fixture(null);
-    await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toMatchObject({
-      error: expect.any(Error),
-    });
-    expect(given.fetch).not.toHaveBeenCalled();
-  },
-);
+test.each(['move', 'copy'] as const)('%s does not request storage without a session', async (operation) => {
+  const given = fixture(null);
+  await expect(given.api[operation]('source.bin', 'destination.bin')).resolves.toMatchObject({
+    error: expect.any(Error),
+  });
+  expect(given.fetch).not.toHaveBeenCalled();
+});
 
 test('returns a bucket-scoped public URL', () => {
   const given = fixture();
@@ -554,22 +512,18 @@ test('does not update visibility without a session', async () => {
   expect(given.fetch).not.toHaveBeenCalled();
 });
 
-test.each([undefined, null, false, 0, Number.NaN, ''])(
-  'rejects falsy upload sizes locally: %s',
-  async (totalSize) => {
-    const given = fixture();
-    const pending: unknown = Reflect.apply(
-      given.api.createUploadSession.bind(given.api),
-      given.api,
-      ['file.bin', { totalSize }],
-    );
-    if (!(pending instanceof Promise)) {
-      throw new TypeError('Expected a session promise');
-    }
-    await expect(pending).resolves.toMatchObject({ error: { message: 'totalSize is required' } });
-    expect(given.fetch).not.toHaveBeenCalled();
-  },
-);
+test.each([undefined, null, false, 0, Number.NaN, ''])('rejects falsy upload sizes locally: %s', async (totalSize) => {
+  const given = fixture();
+  const pending: unknown = Reflect.apply(given.api.createUploadSession.bind(given.api), given.api, [
+    'file.bin',
+    { totalSize },
+  ]);
+  if (!(pending instanceof Promise)) {
+    throw new TypeError('Expected a session promise');
+  }
+  await expect(pending).resolves.toMatchObject({ error: { message: 'totalSize is required' } });
+  expect(given.fetch).not.toHaveBeenCalled();
+});
 
 test.each([null, undefined])('rejects absent session options locally', async (options) => {
   const given = fixture();
@@ -685,22 +639,20 @@ test('aborts a session and returns only its error', async () => {
   });
 });
 
-test.each([
-  'uploadPart',
-  'completeUploadSession',
-  'getUploadSession',
-  'abortUploadSession',
-] as const)('%s stops before storage transport when unauthenticated', async (operation) => {
-  const given = fixture(null);
-  const calls = {
-    uploadPart: () => given.api.uploadPart('file.bin', 'session-1', 1, new Blob()),
-    completeUploadSession: () => given.api.completeUploadSession('file.bin', 'session-1'),
-    getUploadSession: () => given.api.getUploadSession('file.bin', 'session-1'),
-    abortUploadSession: () => given.api.abortUploadSession('file.bin', 'session-1'),
-  };
-  await expect(calls[operation]()).resolves.toMatchObject({ error: expect.any(Error) });
-  expect(given.fetch).not.toHaveBeenCalled();
-});
+test.each(['uploadPart', 'completeUploadSession', 'getUploadSession', 'abortUploadSession'] as const)(
+  '%s stops before storage transport when unauthenticated',
+  async (operation) => {
+    const given = fixture(null);
+    const calls = {
+      uploadPart: () => given.api.uploadPart('file.bin', 'session-1', 1, new Blob()),
+      completeUploadSession: () => given.api.completeUploadSession('file.bin', 'session-1'),
+      getUploadSession: () => given.api.getUploadSession('file.bin', 'session-1'),
+      abortUploadSession: () => given.api.abortUploadSession('file.bin', 'session-1'),
+    };
+    await expect(calls[operation]()).resolves.toMatchObject({ error: expect.any(Error) });
+    expect(given.fetch).not.toHaveBeenCalled();
+  },
+);
 
 test('resumable upload delegates through the typed session facade', async () => {
   const given = fixture();
@@ -786,17 +738,18 @@ function expectNoRequest(given: Fixture): void {
   expect(given.download).not.toHaveBeenCalled();
 }
 
-test.each(
-  pathOperations.flatMap(([name, run]) => unsafePaths.map((path) => [name, path, run] as const)),
-)('%s refuses %p before authentication or any request', async (_name, path, run) => {
-  const given = fixture(null);
-  const exchange = jest.spyOn(given.host, '_completeOAuthExchange');
-  const result = await run(given.api, path);
-  expect(result.error).toEqual(new Error(UNSAFE_PATH));
-  expect(result.data ?? null).toBeNull();
-  expect(exchange).not.toHaveBeenCalled();
-  expectNoRequest(given);
-});
+test.each(pathOperations.flatMap(([name, run]) => unsafePaths.map((path) => [name, path, run] as const)))(
+  '%s refuses %p before authentication or any request',
+  async (_name, path, run) => {
+    const given = fixture(null);
+    const exchange = jest.spyOn(given.host, '_completeOAuthExchange');
+    const result = await run(given.api, path);
+    expect(result.error).toEqual(new Error(UNSAFE_PATH));
+    expect(result.data ?? null).toBeNull();
+    expect(exchange).not.toHaveBeenCalled();
+    expectNoRequest(given);
+  },
+);
 
 test.each(pathOperations)('%s returns an error result for a lone surrogate', async (_name, run) => {
   const given = fixture();
@@ -814,21 +767,18 @@ test.each(pathOperations)('%s refuses a dot segment even with a session', async 
   expectNoRequest(given);
 });
 
-test.each([null, undefined, 4, ''])(
-  'refuses a missing storage path %p before sending it',
-  async (path) => {
-    const given = fixture();
-    const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, [path]);
-    if (!(pending instanceof Promise)) {
-      throw new TypeError('Expected a download promise');
-    }
-    await expect(pending).resolves.toEqual({
-      data: null,
-      error: new Error('Storage path must be a non-empty string'),
-    });
-    expectNoRequest(given);
-  },
-);
+test.each([null, undefined, 4, ''])('refuses a missing storage path %p before sending it', async (path) => {
+  const given = fixture();
+  const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, [path]);
+  if (!(pending instanceof Promise)) {
+    throw new TypeError('Expected a download promise');
+  }
+  await expect(pending).resolves.toEqual({
+    data: null,
+    error: new Error('Storage path must be a non-empty string'),
+  });
+  expectNoRequest(given);
+});
 
 const bucketOperations: [string, Run][] = [
   ...pathOperations,
@@ -838,9 +788,7 @@ const bucketOperations: [string, Run][] = [
 
 test.each(
   bucketOperations.flatMap(([name, run]) =>
-    ['.', '..', 'a/..', '/bucket', 'bucket/', 'team/photos'].map(
-      (bucket) => [name, bucket, run] as const,
-    ),
+    ['.', '..', 'a/..', '/bucket', 'bucket/', 'team/photos'].map((bucket) => [name, bucket, run] as const),
   ),
 )('%s refuses the bucket %p before authentication or any request', async (_name, bucket, run) => {
   const given = fixture(null, bucket);
@@ -908,16 +856,12 @@ test.each([
   await given.api.download(path);
   expect(given.upload.mock.calls[0]?.slice(0, 2)).toEqual(['bucket', encoded]);
   expect(given.download.mock.calls[0]?.slice(0, 2)).toEqual(['bucket', encoded]);
-  expect(given.api.getPublicUrl(path).data?.publicUrl).toBe(
-    `${apiUrl}/public/project-1/bucket/${encoded}`,
-  );
+  expect(given.api.getPublicUrl(path).data?.publicUrl).toBe(`${apiUrl}/public/project-1/bucket/${encoded}`);
 });
 
 test('move and copy send bucket-relative paths in the request body', async () => {
   const given = fixture();
-  given.fetch.mockImplementation(() =>
-    Promise.resolve(Response.json(storageObject({ name: 'to' }))),
-  );
+  given.fetch.mockImplementation(() => Promise.resolve(Response.json(storageObject({ name: 'to' }))));
   await given.api.move('/from/雪.bin', 'to/.hidden');
   await given.api.copy('from/雪.bin', '/to/.hidden');
   expect(given.fetch.mock.calls.map((call) => [call[0], call[1]?.body])).toEqual([

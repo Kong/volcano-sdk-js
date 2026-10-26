@@ -98,10 +98,7 @@ try {
     NPM_CONFIG_USERCONFIG: join(directory, '.npmrc'),
     NPM_CONFIG_GLOBALCONFIG: join(directory, '.global-npmrc'),
   };
-  await writeFile(
-    join(directory, 'package.json'),
-    JSON.stringify({ private: true, type: 'module' }),
-  );
+  await writeFile(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
   await writeFile(join(directory, '.npmrc'), '');
   await writeFile(join(directory, '.global-npmrc'), '');
   await run(
@@ -187,9 +184,7 @@ for (const entrypoint of [{ createServerClient, getTokenFromRequest, withAuth },
       .digest('hex'),
     digest,
   );
-  process.stdout.write(
-    `Documented quickstart passed for package SHA256 ${digest} (synthetic HTTP).\n`,
-  );
+  process.stdout.write(`Documented quickstart passed for package SHA256 ${digest} (synthetic HTTP).\n`);
 } finally {
   server.closeAllConnections();
   if (server.listening) {

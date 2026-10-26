@@ -5,9 +5,7 @@ import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts'
 
 function createTestJwtToken(projectId: string, extraClaims: Record<string, unknown> = {}): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({ project_id: projectId, ...extraClaims })).toString(
-    'base64url',
-  );
+  const payload = Buffer.from(JSON.stringify({ project_id: projectId, ...extraClaims })).toString('base64url');
   return `${header}.${payload}.test-signature`;
 }
 

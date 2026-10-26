@@ -1,8 +1,4 @@
-import type {
-  SandboxBuildLogOptions,
-  SandboxDeploymentListOptions,
-  SandboxDeployOptions,
-} from './index.ts';
+import type { SandboxBuildLogOptions, SandboxDeploymentListOptions, SandboxDeployOptions } from './index.ts';
 
 export function buildConfiguration(options: SandboxDeployOptions): {
   memory_mb?: 1024 | 2048;

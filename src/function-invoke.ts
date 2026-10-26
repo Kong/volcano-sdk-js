@@ -1,9 +1,5 @@
 import type { AuthContext } from './auth-session-lifecycle.ts';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from './errors.ts';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from './errors.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { functionInvokeResult, functionWasDispatched } from './function-invocation-response.ts';
 import type { FunctionError } from './sdk-public-types.ts';
@@ -78,10 +74,9 @@ function snapshotPayload(payload: unknown): { body: string } | { error: Error } 
     return { body: JSON.stringify({ payload }) };
   } catch (reason) {
     return {
-      error: new VolcanoSystemError(
-        reason instanceof Error ? reason.message : 'Invalid function payload',
-        { cause: reason },
-      ),
+      error: new VolcanoSystemError(reason instanceof Error ? reason.message : 'Invalid function payload', {
+        cause: reason,
+      }),
     };
   }
 }
@@ -137,10 +132,7 @@ class FunctionInvocation {
   }
 
   private finalize(result: FunctionInvocationResult): FunctionInvocationResult {
-    if (
-      !this.host._isAuthContextCurrent(this.operationContext) &&
-      !AuthRefreshDiscardedError.is(result.error)
-    ) {
+    if (!this.host._isAuthContextCurrent(this.operationContext) && !AuthRefreshDiscardedError.is(result.error)) {
       return authSessionChangedResult();
     }
     return result;
@@ -235,10 +227,7 @@ class FunctionInvocation {
     return await functionInvokeResult(response, dispatched);
   }
 
-  private async request(
-    url: string,
-    accessToken: string,
-  ): Promise<{ response: Response; dispatched: boolean }> {
+  private async request(url: string, accessToken: string): Promise<{ response: Response; dispatched: boolean }> {
     const response = await fetchWithTimeout(
       url,
       {
@@ -256,10 +245,7 @@ class FunctionInvocation {
     return { response, dispatched };
   }
 
-  private async refreshAndRetry(
-    url: string,
-    context: AuthContext,
-  ): Promise<FunctionInvocationResult | null> {
+  private async refreshAndRetry(url: string, context: AuthContext): Promise<FunctionInvocationResult | null> {
     const refreshed = await this.host._refreshSessionForContext(context);
     if (AuthRefreshDiscardedError.is(refreshed.error)) {
       return failed(refreshed.error, refreshed.error.status);
@@ -275,10 +261,7 @@ class FunctionInvocation {
     return null;
   }
 
-  private async retryWithFreshCredential(
-    url: string,
-    context: AuthContext,
-  ): Promise<FunctionInvocationResult> {
+  private async retryWithFreshCredential(url: string, context: AuthContext): Promise<FunctionInvocationResult> {
     const token = this.host.accessToken;
     if (!hasToken(token) || context.operations.pendingSignOut() !== null) {
       return authSessionChangedResult();
@@ -313,9 +296,7 @@ class FunctionInvocation {
     );
   }
 
-  private async retryDeletedFunction(
-    result: FunctionInvocationResult,
-  ): Promise<FunctionInvocationResult> {
+  private async retryDeletedFunction(result: FunctionInvocationResult): Promise<FunctionInvocationResult> {
     // A function-authored 404 has been dispatched and must not run twice.
     if (result.status !== 404 || this.dispatched === true) {
       return result;
@@ -323,11 +304,7 @@ class FunctionInvocation {
     if (!this.host._isAuthContextCurrent(this.operationContext)) {
       return authSessionChangedResult();
     }
-    this.host._clearFunctionResolveCache(
-      this.functionName.trim(),
-      this.resolutionToken,
-      this.useAnonKey,
-    );
+    this.host._clearFunctionResolveCache(this.functionName.trim(), this.resolutionToken, this.useAnonKey);
     try {
       this.resolutionContext = this.host._captureAuthContext();
       this.resolutionToken = this.credential(this.resolutionContext);

@@ -69,14 +69,8 @@ test('batch config only forwards supplied concurrency and completion threshold',
   });
 });
 
-test.each(['interval', 'maxInterval'] as const)(
-  'condition config identifies invalid %s durations',
-  (field) => {
-    expect(() =>
-      conditionConfig(
-        { until: (): boolean => false, initialState: 0, [field]: 'invalid' },
-        engine(),
-      ),
-    ).toThrow(field);
-  },
-);
+test.each(['interval', 'maxInterval'] as const)('condition config identifies invalid %s durations', (field) => {
+  expect(() => conditionConfig({ until: (): boolean => false, initialState: 0, [field]: 'invalid' }, engine())).toThrow(
+    field,
+  );
+});

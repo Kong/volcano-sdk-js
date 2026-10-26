@@ -111,9 +111,7 @@ test('refresh discards a captured context that no longer owns the client', async
 test('sign-out normalizes a rejected concurrent refresh and still clears the session', async () => {
   const { host, context } = fixture();
   context.operations.verifyPair(null);
-  const failedRefresh = jest
-    .fn<() => Promise<RefreshResult>>()
-    .mockRejectedValue('transport failed');
+  const failedRefresh = jest.fn<() => Promise<RefreshResult>>().mockRejectedValue('transport failed');
 
   expect(await signOutCaptured(host, context, failedRefresh())).toEqual({
     error: new Error('Session revocation failed'),
@@ -130,11 +128,7 @@ test('sign-out accepts a completed preceding refresh even when its old pair is u
   );
 
   await expect(
-    signOutCaptured(
-      host,
-      context,
-      Promise.resolve({ ok: true, status: 200, data: session, error: null }),
-    ),
+    signOutCaptured(host, context, Promise.resolve({ ok: true, status: 200, data: session, error: null })),
   ).resolves.toEqual({ error: null });
   expect(Reflect.get(host, '_anonFetch')).toHaveBeenCalledWith('/auth/logout', {
     method: 'POST',
@@ -289,9 +283,7 @@ test('a refresh completing during sign-out cannot return a usable session', asyn
 
 test('a nonstandard refresh rejection uses a stable error message', async () => {
   const { host, context } = fixture();
-  host._fetchSessionRefresh = jest
-    .fn<() => Promise<RefreshResult>>()
-    .mockRejectedValue('transport failed');
+  host._fetchSessionRefresh = jest.fn<() => Promise<RefreshResult>>().mockRejectedValue('transport failed');
 
   await expect(refreshSessionForContext(host, context)).resolves.toEqual({
     session: null,
@@ -310,9 +302,7 @@ test('refresh rejects a different user while the captured session still owns the
     } satisfies RequestResult),
   );
 
-  await expect(fetchSessionRefresh(host, context)).rejects.toThrow(
-    'Refreshed session belongs to a different user',
-  );
+  await expect(fetchSessionRefresh(host, context)).rejects.toThrow('Refreshed session belongs to a different user');
 });
 
 test('refresh rejects a token response without an integer lifetime', async () => {
@@ -326,9 +316,7 @@ test('refresh rejects a token response without an integer lifetime', async () =>
     } satisfies RequestResult),
   );
 
-  await expect(fetchSessionRefresh(host, context)).rejects.toThrow(
-    'Auth expires_in must be an integer',
-  );
+  await expect(fetchSessionRefresh(host, context)).rejects.toThrow('Auth expires_in must be an integer');
 });
 
 test('access-session revocation reports a failed refresh after an unauthorized delete', async () => {

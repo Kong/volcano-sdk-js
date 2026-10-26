@@ -8,20 +8,10 @@ import type { AuthSession, SessionsResponse } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
 const defaultLimit = 20;
-const sessionProviders = new Set<unknown>([
-  'email',
-  'google',
-  'github',
-  'microsoft',
-  'apple',
-  'anonymous',
-]);
+const sessionProviders = new Set<unknown>(['email', 'google', 'github', 'microsoft', 'apple', 'anonymous']);
 
 export interface AuthUserSessionsHost {
-  _authFetchWithContext(
-    path: string | (() => string),
-    options?: RequestInit,
-  ): Promise<ContextRequest>;
+  _authFetchWithContext(path: string | (() => string), options?: RequestInit): Promise<ContextRequest>;
   _isAuthContextCurrent(context: AuthContext): boolean;
   _clearSessionAtGeneration(generation: number): boolean;
 }
@@ -65,12 +55,7 @@ function hasOptionalSessionFields(value: Record<string, unknown>): boolean {
 }
 
 function isAuthSession(value: unknown): value is AuthSession {
-  return (
-    isRecord(value) &&
-    hasSessionIdentity(value) &&
-    hasSessionState(value) &&
-    hasOptionalSessionFields(value)
-  );
+  return isRecord(value) && hasSessionIdentity(value) && hasSessionState(value) && hasOptionalSessionFields(value);
 }
 
 function sessionsField(value: unknown): AuthSession[] | undefined {
@@ -140,11 +125,7 @@ function isCurrentSession(context: AuthContext, sessionId: string): boolean {
   return sessionIdsEqual(extractSessionIdFromToken(context.accessToken), sessionId);
 }
 
-function shouldClearCurrent(
-  context: AuthContext,
-  sessionId: string,
-  result: RequestResult,
-): boolean {
+function shouldClearCurrent(context: AuthContext, sessionId: string, result: RequestResult): boolean {
   return isCurrentSession(context, sessionId) && (result.ok === true || result.status === null);
 }
 
@@ -167,19 +148,15 @@ function deletedCurrentSession(
   return { error: changed };
 }
 
-export async function deleteSession(
-  host: AuthUserSessionsHost,
-  sessionId: string,
-): Promise<{ error: Error | null }> {
+export async function deleteSession(host: AuthUserSessionsHost, sessionId: string): Promise<{ error: Error | null }> {
   // "" and "." would address "/auth/user/sessions/", which deletes every other session.
   const session = convertedPathSegment('sessionId', sessionId);
   if (session.error !== null) {
     return { error: session.error };
   }
-  const { result, context } = await host._authFetchWithContext(
-    `/auth/user/sessions/${session.segment}`,
-    { method: 'DELETE' },
-  );
+  const { result, context } = await host._authFetchWithContext(`/auth/user/sessions/${session.segment}`, {
+    method: 'DELETE',
+  });
   if (shouldClearCurrent(context, sessionId, result)) {
     return deletedCurrentSession(host, context, result);
   }
@@ -189,9 +166,7 @@ export async function deleteSession(
   return { error: host._isAuthContextCurrent(context) ? null : new AuthSessionChangedError() };
 }
 
-export async function deleteAllOtherSessions(
-  host: AuthUserSessionsHost,
-): Promise<{ error: Error | null }> {
+export async function deleteAllOtherSessions(host: AuthUserSessionsHost): Promise<{ error: Error | null }> {
   const { result, context } = await host._authFetchWithContext('/auth/user/sessions', {
     method: 'DELETE',
   });

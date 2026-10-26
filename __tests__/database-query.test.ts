@@ -1,17 +1,8 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
-import {
-  QueryBuilder,
-  type QueryClient,
-  queryDatabaseSelectTransport,
-  queryError,
-} from '../src/database-query.ts';
+import { QueryBuilder, type QueryClient, queryDatabaseSelectTransport, queryError } from '../src/database-query.ts';
 
-function fixture(
-  payload: unknown,
-  accessToken: string | null = 'session',
-  error: Error | string | null = null,
-) {
+function fixture(payload: unknown, accessToken: string | null = 'session', error: Error | string | null = null) {
   const query = jest
     .fn<(database: string, body: unknown, options: unknown) => Promise<{ data: unknown }>>()
     .mockImplementation(() => Promise.resolve({ data: payload }));
@@ -36,14 +27,7 @@ test.each([undefined, 'application/vnd.volcano+json'])(
       },
     );
     const generatedFetch = jest
-      .fn<
-        (
-          path: string,
-          options: RequestInit,
-          mode: 'anon' | 'session',
-          timeoutMs?: number,
-        ) => Promise<Response>
-      >()
+      .fn<(path: string, options: RequestInit, mode: 'anon' | 'session', timeoutMs?: number) => Promise<Response>>()
       .mockResolvedValue(fetchResponse);
     const client = { _generatedFetch: generatedFetch };
     const date = new Date('2026-09-23T12:00:00.000Z');
@@ -75,9 +59,7 @@ test.each([undefined, 'application/vnd.volcano+json'])(
       undefined,
     );
     const call = generatedFetch.mock.calls[0];
-    expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(
-      contentType ?? 'application/json',
-    );
+    expect(new Headers(call?.[1].headers).get('Content-Type')).toBe(contentType ?? 'application/json');
   },
 );
 
@@ -107,28 +89,16 @@ test('keeps a bare SELECT body and derives its count from rows', async () => {
   const builder = new QueryBuilder(client, 'records', 'db');
   builder.select('*');
   await expect(builder.execute()).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 1 });
-  expect(query).toHaveBeenCalledWith(
-    'db',
-    { table: 'records' },
-    { volcanoAuthorization: 'session' },
-  );
+  expect(query).toHaveBeenCalledWith('db', { table: 'records' }, { volcanoAuthorization: 'session' });
 });
 
 test('a new builder defaults to all columns and a later wildcard clears an earlier projection', async () => {
   const { client, query } = fixture({ data: [] });
   await new QueryBuilder(client, 'records', 'db').execute();
-  expect(query).toHaveBeenLastCalledWith(
-    'db',
-    { table: 'records' },
-    { volcanoAuthorization: 'session' },
-  );
+  expect(query).toHaveBeenLastCalledWith('db', { table: 'records' }, { volcanoAuthorization: 'session' });
 
   await new QueryBuilder(client, 'records', 'db').select('id').select('*').execute();
-  expect(query).toHaveBeenLastCalledWith(
-    'db',
-    { table: 'records' },
-    { volcanoAuthorization: 'session' },
-  );
+  expect(query).toHaveBeenLastCalledWith('db', { table: 'records' }, { volcanoAuthorization: 'session' });
 });
 
 test('accepts an array projection and defaults order to ascending', async () => {
@@ -215,14 +185,11 @@ test.each([
   expect(result.count).toBe(0);
 });
 
-test.each([undefined, 0, 'bad'])(
-  'uses row count for absent or invalid counts: %p',
-  async (count) => {
-    const { client } = fixture({ data: [{ id: 1 }], count });
-    const builder = new QueryBuilder(client, 'records', 'db');
-    await expect(builder.execute()).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 1 });
-  },
-);
+test.each([undefined, 0, 'bad'])('uses row count for absent or invalid counts: %p', async (count) => {
+  const { client } = fixture({ data: [{ id: 1 }], count });
+  const builder = new QueryBuilder(client, 'records', 'db');
+  await expect(builder.execute()).resolves.toEqual({ data: [{ id: 1 }], error: null, count: 1 });
+});
 
 test('reports transport errors and preserves their identity', async () => {
   const failure = new Error('offline');

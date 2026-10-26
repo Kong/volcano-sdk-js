@@ -25,8 +25,7 @@ function hostWith(data: unknown): AuthUserSessionsHost {
   return {
     _isAuthContextCurrent: () => true,
     _clearSessionAtGeneration: () => false,
-    _authFetchWithContext: () =>
-      Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context }),
+    _authFetchWithContext: () => Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context }),
   };
 }
 
@@ -92,9 +91,7 @@ test.each([
   ['total_pages', 1.5],
 ] as const)('rejects invalid pagination %s: %p', async (name, value) => {
   const data = { ...response([session]), [name]: value };
-  await expect(getSessions(hostWith(data), {})).rejects.toThrow(
-    `Auth sessions ${name} must be an integer`,
-  );
+  await expect(getSessions(hostWith(data), {})).rejects.toThrow(`Auth sessions ${name} must be an integer`);
 });
 
 test('preserves omitted optional session-list fields without inventing defaults', async () => {

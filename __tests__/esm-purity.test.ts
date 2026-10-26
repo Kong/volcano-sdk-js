@@ -55,21 +55,11 @@ function isAmdDefinition(node: ts.Node): boolean {
     return false;
   }
   const firstArgument = node.arguments[0];
-  return (
-    node.expression.text === 'define' &&
-    firstArgument !== undefined &&
-    ts.isArrayLiteralExpression(firstArgument)
-  );
+  return node.expression.text === 'define' && firstArgument !== undefined && ts.isArrayLiteralExpression(firstArgument);
 }
 
 function forbiddenExports(code: string, fileName: string): string[] {
-  const source = ts.createSourceFile(
-    fileName,
-    code,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.JS,
-  );
+  const source = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const findings: string[] = [];
 
   function visit(node: ts.Node): void {
@@ -91,8 +81,7 @@ test.each(['module.exports = sdk;', 'window.Volcano = sdk;', 'define([], factory
 );
 
 test('ignores export-like text inside comments and strings', () => {
-  const code =
-    '// module.exports = sdk\nconst note = "window.Volcano = sdk; define([], factory);";';
+  const code = '// module.exports = sdk\nconst note = "window.Volcano = sdk; define([], factory);";';
   expect(forbiddenExports(code, 'probe.js')).toEqual([]);
 });
 

@@ -17,11 +17,7 @@ import { validateLease, validateLockKey, validateLockOptions } from './lock-vali
 export interface LockClient {
   readonly accessToken: string | null;
   readonly _transport: {
-    acquireProjectLock(
-      key: string,
-      request: { ttl_seconds: number },
-      options: unknown,
-    ): Promise<{ data: unknown }>;
+    acquireProjectLock(key: string, request: { ttl_seconds: number }, options: unknown): Promise<{ data: unknown }>;
     releaseProjectLock(key: string, options: unknown): Promise<unknown>;
   };
   _completeOAuthExchange(): Promise<unknown>;
@@ -38,16 +34,12 @@ export interface LockClient {
 }
 
 const CONTENTION_CODES: ReadonlySet<unknown> = new Set(['lock_held', 'lock_ownership_lost']);
-type LockAttempt =
-  { response: { data: unknown }; error: null } | { response: null; error: ProjectLockError };
+type LockAttempt = { response: { data: unknown }; error: null } | { response: null; error: ProjectLockError };
 
 export class ProjectLocksApi implements ProjectLocks {
   constructor(private readonly client: LockClient) {}
 
-  async acquire(
-    key: string,
-    options: ProjectLockAcquireOptions,
-  ): Promise<ProjectLockAcquireResult> {
+  async acquire(key: string, options: ProjectLockAcquireOptions): Promise<ProjectLockAcquireResult> {
     const ttl = validateLockOptions(key, options);
     const token = lockId(options.token);
     const requestId = lockId(options.requestId);
@@ -71,11 +63,7 @@ export class ProjectLocksApi implements ProjectLocks {
     return { acquired: false, lease, error: attempted.error };
   }
 
-  private async tryAcquire(
-    key: string,
-    ttl: number,
-    requestOptions: unknown,
-  ): Promise<LockAttempt> {
+  private async tryAcquire(key: string, ttl: number, requestOptions: unknown): Promise<LockAttempt> {
     const first = await this.acquireAttempt(key, ttl, requestOptions);
     if (first.response !== null || !retryable(first.error)) {
       return first;
@@ -83,11 +71,7 @@ export class ProjectLocksApi implements ProjectLocks {
     return this.acquireAttempt(key, ttl, requestOptions);
   }
 
-  private async acquireAttempt(
-    key: string,
-    ttl: number,
-    requestOptions: unknown,
-  ): Promise<LockAttempt> {
+  private async acquireAttempt(key: string, ttl: number, requestOptions: unknown): Promise<LockAttempt> {
     try {
       const response = await this.client._transport.acquireProjectLock(
         encodeURIComponent(key),
@@ -220,10 +204,7 @@ function leaseFields(value: unknown): { expiresAt: string; fencingToken: number 
   }
   return {
     expiresAt,
-    fencingToken: optionalNumber(
-      value['fencing_token'],
-      'Lock response has an invalid fencing token',
-    ),
+    fencingToken: optionalNumber(value['fencing_token'], 'Lock response has an invalid fencing token'),
   };
 }
 

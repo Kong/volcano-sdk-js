@@ -55,9 +55,7 @@ test('drops a single leading slash from the public URL path', () => {
     token({ project_id: 'project-1' }),
     '/images/photo.png',
   );
-  expect(result.data?.publicUrl).toBe(
-    'https://api.volcano.dev/public/project-1/bucket/images/photo.png',
-  );
+  expect(result.data?.publicUrl).toBe('https://api.volcano.dev/public/project-1/bucket/images/photo.png');
 });
 
 test('encodes the anon-key project ID as one path segment', () => {
@@ -67,9 +65,7 @@ test('encodes the anon-key project ID as one path segment', () => {
     token({ project_id: 'team project?x#y' }),
     'file.txt',
   );
-  expect(result.data?.publicUrl).toBe(
-    'https://api.volcano.dev/public/team%20project%3Fx%23y/bucket/file.txt',
-  );
+  expect(result.data?.publicUrl).toBe('https://api.volcano.dev/public/team%20project%3Fx%23y/bucket/file.txt');
 });
 
 test.each([
@@ -78,12 +74,7 @@ test.each([
   ['team/..', 'Project ID in anon key cannot contain "/" or be "." or ".."'],
   [' ', 'Project ID in anon key must be a non-empty string'],
 ])('rejects the anon-key project ID %p', (projectId, message) => {
-  const result = storagePublicUrl(
-    'https://api.volcano.dev',
-    'bucket',
-    token({ project_id: projectId }),
-    'file.txt',
-  );
+  const result = storagePublicUrl('https://api.volcano.dev', 'bucket', token({ project_id: projectId }), 'file.txt');
   expect(result).toEqual({ data: null, error: new Error(message) });
 });
 
@@ -95,12 +86,7 @@ test('rejects an anon key without exactly three parts', () => {
 test.each([null, 'value', {}, { project_id: null }, { project_id: 42 }, { project_id: '' }])(
   'rejects an anon key without a string project ID: %p',
   (payload) => {
-    const result = storagePublicUrl(
-      'https://api.volcano.dev',
-      'bucket',
-      token(payload),
-      'file.txt',
-    );
+    const result = storagePublicUrl('https://api.volcano.dev', 'bucket', token(payload), 'file.txt');
     expect(result).toEqual({ data: null, error: new Error('Project ID not found in anon key') });
   },
 );
@@ -112,12 +98,7 @@ test('reports malformed anon-key JSON', () => {
 });
 
 test('reports a path that cannot be encoded as the path, not the anon key', () => {
-  const result = storagePublicUrl(
-    'https://api.volcano.dev',
-    'bucket',
-    token({ project_id: 'project-1' }),
-    '\uD800',
-  );
+  const result = storagePublicUrl('https://api.volcano.dev', 'bucket', token({ project_id: 'project-1' }), '\uD800');
   expect(result).toEqual({
     data: null,
     error: new Error('Storage path is not well-formed Unicode'),

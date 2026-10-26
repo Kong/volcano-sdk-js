@@ -123,9 +123,7 @@ describe('realtime channel facade', () => {
     const clear = jest.spyOn(globalThis, 'clearTimeout');
     const rejected: unknown[] = [];
     channel._pendingFetches.set('public.tasks', {
-      ids: new Map<string, PendingRow>([
-        ['1', { resolve: jest.fn(), reject: (error) => rejected.push(error) }],
-      ]),
+      ids: new Map<string, PendingRow>([['1', { resolve: jest.fn(), reject: (error) => rejected.push(error) }]]),
       timer,
       schema: 'public',
       table: 'tasks',
@@ -160,9 +158,7 @@ describe('realtime channel facade', () => {
     });
     await channel._deliverFetchedNotification(notification, { data: notification }, 0);
     expect(delivered).toEqual([notification]);
-    expect(warnings).toEqual([
-      ['[Realtime] Failed to fetch record for public.tasks:1:', 'offline'],
-    ]);
+    expect(warnings).toEqual([['[Realtime] Failed to fetch record for public.tasks:1:', 'offline']]);
   });
 
   test('removes event callbacks even if their registry was cleared', () => {

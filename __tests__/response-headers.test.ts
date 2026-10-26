@@ -4,13 +4,10 @@ import { array, assert, constantFrom, property, stringMatching, tuple } from 'fa
 import { getHeaderValue, responseHeadersToObject } from '../src/response-headers.ts';
 import { propertyOptions } from './support/property-options.ts';
 
-test.each([undefined, null, {}, { headers: null }])(
-  'handles a response without headers: %p',
-  (response) => {
-    expect(responseHeadersToObject(response)).toEqual({});
-    expect(getHeaderValue(response, 'content-type')).toBeNull();
-  },
-);
+test.each([undefined, null, {}, { headers: null }])('handles a response without headers: %p', (response) => {
+  expect(responseHeadersToObject(response)).toEqual({});
+  expect(getHeaderValue(response, 'content-type')).toBeNull();
+});
 
 test('creates separate header snapshots', () => {
   expect(responseHeadersToObject(null)).not.toBe(responseHeadersToObject(null));

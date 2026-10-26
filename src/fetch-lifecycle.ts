@@ -1,15 +1,8 @@
 const defaultTimeoutMs = 60000;
 
-type ResponseConsumer<Result> = (
-  response: Response,
-  signal: AbortSignal,
-) => Result | Promise<Result>;
+type ResponseConsumer<Result> = (response: Response, signal: AbortSignal) => Result | Promise<Result>;
 
-export function fetchWithTimeout(
-  url: string,
-  options?: RequestInit,
-  timeoutMs?: number,
-): Promise<Response>;
+export function fetchWithTimeout(url: string, options?: RequestInit, timeoutMs?: number): Promise<Response>;
 export function fetchWithTimeout<Result>(
   url: string,
   options: RequestInit,
@@ -54,10 +47,7 @@ async function performFetch(
   }
 }
 
-function followCaller(
-  signal: AbortSignal | null | undefined,
-  controller: AbortController,
-): (() => void) | undefined {
+function followCaller(signal: AbortSignal | null | undefined, controller: AbortController): (() => void) | undefined {
   if (signal == null) {
     return undefined;
   }
@@ -75,11 +65,7 @@ function followCaller(
   };
 }
 
-function isRequestTimeout(
-  error: unknown,
-  timedOut: boolean,
-  caller: AbortSignal | null | undefined,
-): boolean {
+function isRequestTimeout(error: unknown, timedOut: boolean, caller: AbortSignal | null | undefined): boolean {
   return hasAbortName(error) && timedOut && caller?.aborted !== true;
 }
 

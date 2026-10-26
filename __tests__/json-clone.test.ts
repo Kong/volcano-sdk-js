@@ -19,12 +19,7 @@ test('preserves binary and date values with native structuredClone', () => {
   const copied = cloneJsonValue(original);
   expect(copied).toEqual(original);
   expect(copied).not.toBe(original);
-  if (
-    typeof copied !== 'object' ||
-    copied === null ||
-    !('bytes' in copied) ||
-    !('expiresAt' in copied)
-  ) {
+  if (typeof copied !== 'object' || copied === null || !('bytes' in copied) || !('expiresAt' in copied)) {
     throw new TypeError('Expected a cloned object with binary and date data');
   }
   expect(copied.bytes).toBeInstanceOf(Uint8Array);

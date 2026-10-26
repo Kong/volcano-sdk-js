@@ -1,17 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 import { durablePathSegments } from '../src/durable-paths.ts';
 
-const invalidIdentifiers: readonly unknown[] = [
-  null,
-  undefined,
-  false,
-  0,
-  {},
-  [],
-  Symbol('identifier'),
-  '',
-  ' \n\t ',
-];
+const invalidIdentifiers: readonly unknown[] = [null, undefined, false, 0, {}, [], Symbol('identifier'), '', ' \n\t '];
 
 describe('durable route identifiers', () => {
   test.each(invalidIdentifiers)('rejects an unusable identifier: %p', (functionName) => {
@@ -30,9 +20,9 @@ describe('durable route identifiers', () => {
   );
 
   test('names the field that is a dot segment', () => {
-    expect(
-      durablePathSegments({ projectId: 'project', approvalId: '..', functionName: 'f' }),
-    ).toEqual({ error: new Error('approvalId cannot contain "/" or be "." or ".."') });
+    expect(durablePathSegments({ projectId: 'project', approvalId: '..', functionName: 'f' })).toEqual({
+      error: new Error('approvalId cannot contain "/" or be "." or ".."'),
+    });
   });
 
   test.each([
@@ -45,9 +35,9 @@ describe('durable route identifiers', () => {
   });
 
   test('names the first invalid field without returning a partial route', () => {
-    expect(
-      durablePathSegments({ projectId: 'project', functionName: '', executionId: null }),
-    ).toEqual({ error: new Error('functionName must be a non-empty string') });
+    expect(durablePathSegments({ projectId: 'project', functionName: '', executionId: null })).toEqual({
+      error: new Error('functionName must be a non-empty string'),
+    });
   });
 
   test.each([

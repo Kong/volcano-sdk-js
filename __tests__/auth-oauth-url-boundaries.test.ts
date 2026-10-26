@@ -126,9 +126,7 @@ test('navigation prefers an Error message over a custom string representation', 
   });
   const { host } = fixture();
 
-  expect(signInWithHostedAuth(host, {})).toBe(
-    'https://api.example.test/projects/project-1/auth/hosted',
-  );
+  expect(signInWithHostedAuth(host, {})).toBe('https://api.example.test/projects/project-1/auth/hosted');
 });
 
 test('navigation falls back to the Error string when its message is not a string', () => {
@@ -140,9 +138,7 @@ test('navigation falls back to the Error string when its message is not a string
   });
   const { host } = fixture();
 
-  expect(signInWithHostedAuth(host, {})).toBe(
-    'https://api.example.test/projects/project-1/auth/hosted',
-  );
+  expect(signInWithHostedAuth(host, {})).toBe('https://api.example.test/projects/project-1/auth/hosted');
 });
 
 test('hosted auth includes an action only when requested and returns its URL', () => {
@@ -169,12 +165,8 @@ test('hosted auth uses an explicit project ID and rejects an opaque key without 
   const { host } = fixture();
 
   expect(resolveProjectIdForHostedAuth(host, '  explicit-project  ')).toBe('explicit-project');
-  expect(() => resolveProjectIdForHostedAuth(host, '  ')).toThrow(
-    'Unable to determine project id for hosted auth',
-  );
-  expect(() => resolveProjectIdForHostedAuth(host, null)).toThrow(
-    'Unable to determine project id for hosted auth',
-  );
+  expect(() => resolveProjectIdForHostedAuth(host, '  ')).toThrow('Unable to determine project id for hosted auth');
+  expect(() => resolveProjectIdForHostedAuth(host, null)).toThrow('Unable to determine project id for hosted auth');
 });
 
 test('OAuth redirect defaults on blank input and adds one nonce parameter', () => {
@@ -188,9 +180,7 @@ test('OAuth redirect defaults on blank input and adds one nonce parameter', () =
 
   expect(stored).toHaveBeenCalledWith('nonce-1', 'https://app.example.test/callback');
   expect(redirect.search).toBe('?vh_state=nonce-1');
-  expect(resolveOAuthRedirectTarget('  https://app.example.test/other  ')).toBe(
-    'https://app.example.test/other',
-  );
+  expect(resolveOAuthRedirectTarget('  https://app.example.test/other  ')).toBe('https://app.example.test/other');
 });
 
 test('hosted auth encodes the project ID as one path segment', () => {
@@ -212,9 +202,7 @@ test.each(['.', '..', '../x', 'team/project'])(
     const { host, stored } = fixture();
     host._resolveProjectIdForHostedAuth = () => projectId;
 
-    expect(() => getHostedAuthUrl(host, {})).toThrow(
-      new Error('projectId cannot contain "/" or be "." or ".."'),
-    );
+    expect(() => getHostedAuthUrl(host, {})).toThrow(new Error('projectId cannot contain "/" or be "." or ".."'));
     expect(stored).not.toHaveBeenCalled();
   },
 );

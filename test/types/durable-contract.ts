@@ -85,11 +85,11 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
     await ctx.wait('settle', '30s');
     await ctx.wait({ minutes: 1, seconds: 30 });
 
-    const approved = await ctx.waitUntil(
-      'approval',
-      (state: { approved: boolean }) => Promise.resolve(state),
-      { initialState: { approved: false }, until: (state) => state.approved, interval: 15 },
-    );
+    const approved = await ctx.waitUntil('approval', (state: { approved: boolean }) => Promise.resolve(state), {
+      initialState: { approved: false },
+      until: (state) => state.approved,
+      interval: 15,
+    });
 
     const request: WaitForApprovalOptions = {
       title: `Ship order ${String(input.order_id)}?`,
@@ -116,8 +116,7 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
     // The stable parts of a batch result, which is all the facade exposes: the
     // in-flight items and the count the live run observed are not on it,
     // because a replay is not obliged to reproduce them.
-    const completed =
-      shipped.completionReason === 'min_successful_reached' ? shipped.completed : undefined;
+    const completed = shipped.completionReason === 'min_successful_reached' ? shipped.completed : undefined;
     const failures = shipped.errors.map((failure) => `${failure.name}: ${failure.message}`);
 
     const checks = await ctx.parallel([

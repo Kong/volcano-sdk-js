@@ -49,9 +49,7 @@ describe('untrusted realtime payloads', () => {
     expect(hasChangeLocation({ ...location, table: 1 })).toBe(false);
     expect(hasChangeLocation({ ...location, timestamp: 1 })).toBe(false);
     expect(isLightweightNotification({ ...location, type: 'INSERT' })).toBe(false);
-    expect(isLightweightNotification({ ...location, mode: 'lightweight', type: 'UPSERT' })).toBe(
-      false,
-    );
+    expect(isLightweightNotification({ ...location, mode: 'lightweight', type: 'UPSERT' })).toBe(false);
     expect(
       isLightweightNotification({
         ...location,
@@ -111,9 +109,7 @@ describe('untrusted realtime payloads', () => {
       message: 'connection refused',
       code: 7,
     });
-    expect(
-      errorContext({ error: { code: 7, message: 'nested' }, message: 'outer', code: 8 }),
-    ).toEqual({
+    expect(errorContext({ error: { code: 7, message: 'nested' }, message: 'outer', code: 8 })).toEqual({
       error: { code: 7, message: 'nested' },
       message: 'outer',
       code: 8,

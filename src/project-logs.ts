@@ -18,12 +18,7 @@ function optionalString(value: unknown): boolean {
 }
 
 function isJsonScalar(value: unknown): boolean {
-  return (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  );
+  return value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
 function isJsonValue(value: unknown): value is JsonValue {
@@ -42,9 +37,7 @@ function isLogResource(value: unknown): value is LogResource {
   }
   const resourceTypes: readonly unknown[] = ['function', 'frontend', 'database'];
   const type = value['type'];
-  return (
-    resourceTypes.includes(type) && typeof value['id'] === 'string' && optionalString(value['name'])
-  );
+  return resourceTypes.includes(type) && typeof value['id'] === 'string' && optionalString(value['name']);
 }
 
 function isLogDeployment(value: unknown): value is LogDeployment {
@@ -88,18 +81,13 @@ function isLogSearchEvent(value: unknown): value is LogSearchEvent {
 
 function isLogSearchResponse(value: unknown): value is LogSearchResponse {
   return (
-    isRecord(value) &&
-    Array.isArray(value['data']) &&
-    value['data'].every(isLogSearchEvent) &&
-    isSearchPage(value)
+    isRecord(value) && Array.isArray(value['data']) && value['data'].every(isLogSearchEvent) && isSearchPage(value)
   );
 }
 
 function isSearchPage(value: Record<string, unknown>): boolean {
   return (
-    typeof value['limit'] === 'number' &&
-    typeof value['has_more'] === 'boolean' &&
-    optionalString(value['next_cursor'])
+    typeof value['limit'] === 'number' && typeof value['has_more'] === 'boolean' && optionalString(value['next_cursor'])
   );
 }
 

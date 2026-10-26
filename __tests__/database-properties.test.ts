@@ -31,9 +31,7 @@ test('changing arbitrary user IDs removes the previous scope and stays idempoten
       const replaced = databaseConnectionString(scoped, { userId: second });
       expect(replaced).toBe(databaseConnectionString(base, { userId: second }));
       expect(databaseConnectionString(replaced, { userId: second })).toBe(replaced);
-      expect(databaseConnectionString(replaced)).toBe(
-        `${base}&application_name=volcano_full_access`,
-      );
+      expect(databaseConnectionString(replaced)).toBe(`${base}&application_name=volcano_full_access`);
     }),
     propertyOptions(),
   );

@@ -69,10 +69,7 @@ function messagesTransport(overrides: Partial<MessagesTransport> = {}): Messages
   };
 }
 
-function clientWithTransport(
-  overrides: Partial<MessagesTransport> = {},
-  credentials: { accessToken?: string } = {},
-) {
+function clientWithTransport(overrides: Partial<MessagesTransport> = {}, credentials: { accessToken?: string } = {}) {
   const transport = messagesTransport(overrides);
   const config = {
     apiUrl: 'https://api.test.com',
@@ -83,11 +80,8 @@ function clientWithTransport(
   return { volcano: new VolcanoClient(config), transport };
 }
 
-const options = (
-  volcano: VolcanoClient,
-  mode: 'anon' | 'session',
-  headers: Record<string, string>,
-) => expect.objectContaining({ volcanoAuthorization: mode, volcanoClient: volcano, headers });
+const options = (volcano: VolcanoClient, mode: 'anon' | 'session', headers: Record<string, string>) =>
+  expect.objectContaining({ volcanoAuthorization: mode, volcanoClient: volcano, headers });
 
 const refused = (message: string) => ({ data: null, status: null, error: new Error(message) });
 
@@ -163,12 +157,12 @@ describe('durable.messages.send', () => {
   test('refuses the project route without a session', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    await expect(
-      volcano.durable.messages.send({ ...target, projectId: 'proj-1' }, 'go'),
-    ).resolves.toEqual(refused('No active session'));
-    await expect(
-      volcano.durable.messages.list({ ...target, projectId: 'proj-1' }),
-    ).resolves.toEqual(refused('No active session'));
+    await expect(volcano.durable.messages.send({ ...target, projectId: 'proj-1' }, 'go')).resolves.toEqual(
+      refused('No active session'),
+    );
+    await expect(volcano.durable.messages.list({ ...target, projectId: 'proj-1' })).resolves.toEqual(
+      refused('No active session'),
+    );
     for (const mock of Object.values(transport)) {
       expect(mock).not.toHaveBeenCalled();
     }
@@ -184,11 +178,7 @@ describe('durable.messages.send', () => {
       [{ functionName: 'checkout', executionId: ' ' }, 'go'],
       'executionId must be a non-empty string',
     ],
-    [
-      'an empty project',
-      [{ ...target, projectId: '' }, 'go'],
-      'projectId must be a non-empty string',
-    ],
+    ['an empty project', [{ ...target, projectId: '' }, 'go'], 'projectId must be a non-empty string'],
     [
       'an empty client token',
       [{ ...target, clientToken: '' }, 'go'],
@@ -212,11 +202,7 @@ describe('durable.messages.send', () => {
     ['no name', [target], 'name must be a non-empty string'],
     ['a blank name', [target, '  '], 'name must be a non-empty string'],
     ['a name that is not text', [target, 7], 'name must be a non-empty string'],
-    [
-      'a long name',
-      [target, 'n'.repeat(238)],
-      'name must be at most 237 printable ASCII characters',
-    ],
+    ['a long name', [target, 'n'.repeat(238)], 'name must be at most 237 printable ASCII characters'],
     ['a name with a tab', [target, 'g\to'], 'name must be at most 237 printable ASCII characters'],
     [
       'an empty idempotency key',
@@ -284,16 +270,9 @@ describe('durable.messages.send', () => {
     await volcano.durable.messages.send({ ...escaped, projectId: 'proj/1' }, 'go');
     await volcano.durable.messages.list({ ...escaped, projectId: 'proj 1' });
 
-    expect(transport.sendDurableMessageFromApplication.mock.calls[0]?.slice(0, 2)).toEqual([
-      'check%3Fout',
-      'exec%231',
-    ]);
+    expect(transport.sendDurableMessageFromApplication.mock.calls[0]?.slice(0, 2)).toEqual(['check%3Fout', 'exec%231']);
     expect(transport.sendDurableMessage).not.toHaveBeenCalled();
-    expect(transport.listDurableMessages.mock.calls[0]?.slice(0, 3)).toEqual([
-      'proj%201',
-      'check%3Fout',
-      'exec%231',
-    ]);
+    expect(transport.listDurableMessages.mock.calls[0]?.slice(0, 3)).toEqual(['proj%201', 'check%3Fout', 'exec%231']);
   });
 
   test('refuses a message the platform answered with a malformed body', async () => {
@@ -374,19 +353,15 @@ describe('durable.messages.list', () => {
   test('refuses an invalid target before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    await expect(
-      volcano.durable.messages.list({ functionName: '', executionId: 'exec-1' }),
-    ).resolves.toEqual(refused('functionName must be a non-empty string'));
+    await expect(volcano.durable.messages.list({ functionName: '', executionId: 'exec-1' })).resolves.toEqual(
+      refused('functionName must be a non-empty string'),
+    );
     expect(transport.listDurableMessagesFromApplication).not.toHaveBeenCalled();
   });
 
   test.each<[string, Record<string, unknown>, string]>([
     ['an unknown direction', { direction: 'both' }, "direction must be 'in' or 'out'"],
-    [
-      'a name with a tab',
-      { name: 'pro\tgress' },
-      'name must be at most 237 printable ASCII characters',
-    ],
+    ['a name with a tab', { name: 'pro\tgress' }, 'name must be at most 237 printable ASCII characters'],
     ['a negative after', { after: -1 }, 'after must be a non-negative integer'],
     ['a fractional after', { after: 1.5 }, 'after must be a non-negative integer'],
     ['an after that is text', { after: '3' }, 'after must be a non-negative integer'],
@@ -437,10 +412,7 @@ describe('durable.messages.list', () => {
     ['no has_more', { data: [] }],
     ['a has_more that is text', { data: [], has_more: 'no' }],
     ['an entry that is not an object', { data: ['msg-1'], has_more: false }],
-    [
-      'an entry with a list for a sender',
-      { data: [{ ...message(1), sender: [] }], has_more: false },
-    ],
+    ['an entry with a list for a sender', { data: [{ ...message(1), sender: [] }], has_more: false }],
     ...(
       [
         ['an id', { id: 1 }],
@@ -512,10 +484,7 @@ describe('durable.messages over the wire', () => {
       accessToken: 'owner-token',
     });
 
-    await volcano.durable.messages.list(
-      { ...target, projectId: 'proj-1' },
-      { direction: 'out', after: 3, limit: 5 },
-    );
+    await volcano.durable.messages.list({ ...target, projectId: 'proj-1' }, { direction: 'out', after: 3, limit: 5 });
 
     expect(lastRequest()).toMatchObject({
       url: 'https://api.test.com/projects/proj-1/durable-functions/checkout/executions/exec-1/messages?direction=out&after=3&limit=5',
@@ -737,11 +706,9 @@ describe('durable.messages.subscribe', () => {
     });
     const received: number[] = [];
 
-    const result = await volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const result = await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
 
     expect(result).toEqual({
       data: { unsubscribe: expect.any(Function) },
@@ -758,9 +725,7 @@ describe('durable.messages.subscribe', () => {
       { direction: 'out', after: 0 },
       { direction: 'out', after: 2 },
     ]);
-    expect(list.mock.calls[0]?.[3]).toEqual(
-      options(volcano, 'anon', { 'X-Volcano-Client-Token': 'ct-1' }),
-    );
+    expect(list.mock.calls[0]?.[3]).toEqual(options(volcano, 'anon', { 'X-Volcano-Client-Token': 'ct-1' }));
 
     const live = latestTransport();
     live.publication(message(3));
@@ -835,11 +800,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => list.mock.calls.length > 0);
     latestTransport().publication({ seq: 2 });
     latestTransport().publication({ seq: 3 });
@@ -916,17 +879,13 @@ describe('durable.messages.subscribe', () => {
     const realtime = await connectedRealtime();
     const ready = signal();
     nextReady = ready.promise;
-    const list = jest
-      .fn<TransportOperation>()
-      .mockImplementationOnce(() => listed(page([message(1), message(2)])));
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([message(1), message(2)])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => latestTransport().subscriptions.length > 0);
     latestTransport().publication(message(2));
     ready.resolve();
@@ -1146,11 +1105,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => list.mock.calls.length > 0);
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     jest.useFakeTimers({ timerLimit: 100 });
@@ -1178,11 +1135,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => list.mock.calls.length > 0);
     const live = latestTransport();
     live.publication({ ...message(131), prev_seq: 130 });
@@ -1331,11 +1286,9 @@ describe('durable.messages.subscribe', () => {
     const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const thrown = new Error('handler failed');
-    const then = jest.fn(
-      (_resolve: (value: unknown) => void, reject: (reason: unknown) => void) => {
-        reject(thrown);
-      },
-    );
+    const then = jest.fn((_resolve: (value: unknown) => void, reject: (reason: unknown) => void) => {
+      reject(thrown);
+    });
     await volcano.durable.messages.subscribe(target, () => ({ then }), { realtime });
     const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
 
@@ -1349,9 +1302,7 @@ describe('durable.messages.subscribe', () => {
 
   test('reports an async handler that rejects while subscribe catches up, without ending it', async () => {
     const realtime = await connectedRealtime();
-    const list = jest
-      .fn<TransportOperation>()
-      .mockImplementationOnce(() => listed(page([message(1), message(2)])));
+    const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([message(1), message(2)])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
     const thrown = new Error('handler failed');
@@ -1401,11 +1352,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const { error } = await volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const { error } = await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
 
     expect(error).toBeNull();
     expect(received).toEqual([1]);
@@ -1549,11 +1498,9 @@ describe('durable.messages.subscribe', () => {
       .mockImplementationOnce(() => reread.promise);
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
-    const { data } = await volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const { data } = await volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     jest.useFakeTimers({ timerLimit: 100 });
 
     latestSubscription().move('subscribing');
@@ -1607,11 +1554,7 @@ describe('durable.messages.subscribe', () => {
     );
 
     expect(received).toEqual([1]);
-    expect(transport.listDurableMessages.mock.calls[0]?.slice(0, 3)).toEqual([
-      'proj-1',
-      'checkout',
-      'exec-1',
-    ]);
+    expect(transport.listDurableMessages.mock.calls[0]?.slice(0, 3)).toEqual(['proj-1', 'checkout', 'exec-1']);
     realtime.disconnect();
   });
 
@@ -1620,16 +1563,14 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport();
     const first = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
 
-    await expect(
-      volcano.durable.messages.subscribe(target, jest.fn(), { realtime }),
-    ).resolves.toEqual(
+    await expect(volcano.durable.messages.subscribe(target, jest.fn(), { realtime })).resolves.toEqual(
       refused('This realtime client already subscribes to the execution; unsubscribe first'),
     );
     await first.data?.unsubscribe();
     await first.data?.unsubscribe();
-    await expect(
-      volcano.durable.messages.subscribe(target, jest.fn(), { realtime }),
-    ).resolves.toMatchObject({ error: null });
+    await expect(volcano.durable.messages.subscribe(target, jest.fn(), { realtime })).resolves.toMatchObject({
+      error: null,
+    });
     realtime.disconnect();
   });
 
@@ -1641,9 +1582,11 @@ describe('durable.messages.subscribe', () => {
         .mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 })),
     });
 
-    await expect(
-      volcano.durable.messages.subscribe(target, jest.fn(), { realtime }),
-    ).resolves.toEqual({ data: null, status: 403, error: new Error('forbidden') });
+    await expect(volcano.durable.messages.subscribe(target, jest.fn(), { realtime })).resolves.toEqual({
+      data: null,
+      status: 403,
+      error: new Error('forbidden'),
+    });
     expect(realtime._channels.has('durable:exec-1')).toBe(false);
     realtime.disconnect();
   });
@@ -1651,27 +1594,24 @@ describe('durable.messages.subscribe', () => {
   test.each<[string, unknown]>([
     ['an error', new Error('handler failed')],
     ['a value that is not an error', 'handler failed'],
-  ])(
-    'ends the subscription when the handler throws %s during the catch-up',
-    async (_case, thrown) => {
-      const realtime = await connectedRealtime();
-      const { volcano } = clientWithTransport({
-        listDurableMessagesFromApplication: resolving(page([message(1)])),
-      });
+  ])('ends the subscription when the handler throws %s during the catch-up', async (_case, thrown) => {
+    const realtime = await connectedRealtime();
+    const { volcano } = clientWithTransport({
+      listDurableMessagesFromApplication: resolving(page([message(1)])),
+    });
 
-      await expect(
-        volcano.durable.messages.subscribe(
-          target,
-          () => {
-            throw thrown;
-          },
-          { realtime },
-        ),
-      ).resolves.toEqual({ data: null, status: null, error: new Error('handler failed') });
-      expect(realtime._channels.has('durable:exec-1')).toBe(false);
-      realtime.disconnect();
-    },
-  );
+    await expect(
+      volcano.durable.messages.subscribe(
+        target,
+        () => {
+          throw thrown;
+        },
+        { realtime },
+      ),
+    ).resolves.toEqual({ data: null, status: null, error: new Error('handler failed') });
+    expect(realtime._channels.has('durable:exec-1')).toBe(false);
+    realtime.disconnect();
+  });
 
   test('delivers nothing it held once the handler throws during the first catch-up', async () => {
     const realtime = await connectedRealtime();
@@ -1704,11 +1644,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => list.mock.calls.length > 0);
     realtime.removeAllChannels();
     first.resolve({ data: page([message(1)]), status: 200 });
@@ -1741,9 +1679,7 @@ describe('durable.messages.subscribe', () => {
   test('reports a subscription the server ends and lets the execution be subscribed to again', async () => {
     const realtime = await connectedRealtime();
     const { volcano } = clientWithTransport({
-      listDurableMessagesFromApplication: jest
-        .fn<TransportOperation>()
-        .mockImplementation(() => listed(page([]))),
+      listDurableMessagesFromApplication: jest.fn<TransportOperation>().mockImplementation(() => listed(page([]))),
     });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
@@ -1762,9 +1698,7 @@ describe('durable.messages.subscribe', () => {
   test('reports nothing when the client ends the subscription', async () => {
     const realtime = await connectedRealtime();
     const { volcano } = clientWithTransport({
-      listDurableMessagesFromApplication: jest
-        .fn<TransportOperation>()
-        .mockImplementation(() => listed(page([]))),
+      listDurableMessagesFromApplication: jest.fn<TransportOperation>().mockImplementation(() => listed(page([]))),
     });
     const subscription = await volcano.durable.messages.subscribe(target, jest.fn(), {
       realtime,
@@ -1787,11 +1721,9 @@ describe('durable.messages.subscribe', () => {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const received: number[] = [];
 
-    const pending = volcano.durable.messages.subscribe(
-      target,
-      (delivered) => received.push(delivered.seq),
-      { realtime },
-    );
+    const pending = volcano.durable.messages.subscribe(target, (delivered) => received.push(delivered.seq), {
+      realtime,
+    });
     await until(() => list.mock.calls.length > 0);
     latestTransport().publication({ ...message(1), prev_seq: 0 });
     answer.resolve();
@@ -1862,17 +1794,9 @@ describe('durable.messages.subscribe', () => {
   });
 
   test.each([
-    [
-      'an invalid target',
-      [{ functionName: 'checkout' }, jest.fn(), {}],
-      'executionId must be a non-empty string',
-    ],
+    ['an invalid target', [{ functionName: 'checkout' }, jest.fn(), {}], 'executionId must be a non-empty string'],
     ['no handler', [target, 'handler', {}], 'subscribe requires a handler function'],
-    [
-      'no options',
-      [target, jest.fn()],
-      'subscribe requires options.realtime, a connected VolcanoRealtime',
-    ],
+    ['no options', [target, jest.fn()], 'subscribe requires options.realtime, a connected VolcanoRealtime'],
     [
       'a realtime without durable channels',
       [target, jest.fn(), { realtime: { _durableChannel: () => null } }],

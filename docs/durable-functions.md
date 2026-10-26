@@ -675,16 +675,12 @@ exports.handler = durable(async (input, ctx) => {
   );
   packed.throwIfFailed();
 
-  const review = await ctx.waitUntil(
-    'await-review',
-    async () => withDb((db) => reviewStatus(db, order.id)),
-    {
-      initialState: 'pending',
-      until: (status) => status !== 'pending',
-      interval: '1m',
-      maxAttempts: 500,
-    },
-  );
+  const review = await ctx.waitUntil('await-review', async () => withDb((db) => reviewStatus(db, order.id)), {
+    initialState: 'pending',
+    until: (status) => status !== 'pending',
+    interval: '1m',
+    maxAttempts: 500,
+  });
 
   if (review === 'rejected') {
     await ctx.step('refund', () => refundCharge(charge.id), { atMostOnce: true, retry: false });

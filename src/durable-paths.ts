@@ -1,7 +1,6 @@
 import { pathSegment } from './path-segments.ts';
 
-type DurablePathResult<Segments> =
-  { segments: Segments; error?: never } | { error: Error; segments?: never };
+type DurablePathResult<Segments> = { segments: Segments; error?: never } | { error: Error; segments?: never };
 
 // Empty identifiers would address a collection instead of its execution.
 export function durablePathSegments(fields: {
@@ -17,16 +16,12 @@ export function durablePathSegments(fields: {
   functionName: unknown;
   executionId: unknown;
 }): DurablePathResult<{ functionName: string; executionId: string }>;
-export function durablePathSegments(fields: {
-  functionName: unknown;
-}): DurablePathResult<{ functionName: string }>;
+export function durablePathSegments(fields: { functionName: unknown }): DurablePathResult<{ functionName: string }>;
 export function durablePathSegments(fields: {
   projectId: unknown;
   approvalId: unknown;
 }): DurablePathResult<{ projectId: string; approvalId: string }>;
-export function durablePathSegments(fields: {
-  projectId: unknown;
-}): DurablePathResult<{ projectId: string }>;
+export function durablePathSegments(fields: { projectId: unknown }): DurablePathResult<{ projectId: string }>;
 export function durablePathSegments(
   fields: Readonly<Record<string, unknown>>,
 ): DurablePathResult<Record<string, string>>;

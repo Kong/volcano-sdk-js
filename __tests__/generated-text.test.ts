@@ -6,9 +6,7 @@ test('generated fetch preserves text responses as strings', async () => {
   const html = '<!doctype html><title>Preview</title>';
   const volcanoClient = {
     _generatedFetch: jest.fn(() =>
-      Promise.resolve(
-        new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
-      ),
+      Promise.resolve(new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })),
     ),
   };
 
@@ -25,9 +23,7 @@ test('storage downloads preserve HTML bytes as a Blob', async () => {
   const html = '<!doctype html><title>Stored file</title>';
   const volcanoClient = {
     _generatedFetch: jest.fn(() =>
-      Promise.resolve(
-        new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
-      ),
+      Promise.resolve(new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })),
     ),
   };
 

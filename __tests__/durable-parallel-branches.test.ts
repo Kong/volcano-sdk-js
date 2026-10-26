@@ -2,9 +2,7 @@ import { expect, jest, test } from '@jest/globals';
 import { parallelBranches } from '../src/durable-parallel-branches.ts';
 
 test('parallel branches require an array', () => {
-  expect(() => parallelBranches({}, (context) => context)).toThrow(
-    'ctx.parallel() requires an array of branches',
-  );
+  expect(() => parallelBranches({}, (context) => context)).toThrow('ctx.parallel() requires an array of branches');
 });
 
 test.each<readonly [unknown, string]>([

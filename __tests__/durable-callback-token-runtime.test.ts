@@ -1,14 +1,5 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { CallbackFailedError, durable } from '../src/durable.ts';
 import { callbackOperationId } from '../src/durable-callback-token.ts';
 import type { CallbackSubmitter, DurableHandler } from '../src/durable-types.ts';
@@ -58,18 +49,14 @@ function isRunnerClass(value: unknown): value is RunnerClass {
 function localRunner(): RunnerClass {
   const testing = jest.requireActual(require.resolve('@aws/durable-execution-sdk-js-testing'));
   const runner: unknown =
-    typeof testing === 'object' && testing !== null
-      ? Reflect.get(testing, 'LocalDurableTestRunner')
-      : undefined;
+    typeof testing === 'object' && testing !== null ? Reflect.get(testing, 'LocalDurableTestRunner') : undefined;
   if (!isRunnerClass(runner)) {
     throw new TypeError('The durable test runner does not expose LocalDurableTestRunner');
   }
   return runner;
 }
 
-type WithDurableExecution = (
-  handler: (input: unknown, context: unknown) => Promise<unknown>,
-) => LambdaHandler;
+type WithDurableExecution = (handler: (input: unknown, context: unknown) => Promise<unknown>) => LambdaHandler;
 
 function isWithDurableExecution(value: unknown): value is WithDurableExecution {
   return typeof value === 'function';
@@ -79,9 +66,7 @@ function isWithDurableExecution(value: unknown): value is WithDurableExecution {
 function withDurableExecution(): WithDurableExecution {
   const runtime = jest.requireActual(require.resolve('@aws/durable-execution-sdk-js'));
   const wrap: unknown =
-    typeof runtime === 'object' && runtime !== null
-      ? Reflect.get(runtime, 'withDurableExecution')
-      : undefined;
+    typeof runtime === 'object' && runtime !== null ? Reflect.get(runtime, 'withDurableExecution') : undefined;
   if (!isWithDurableExecution(wrap)) {
     throw new TypeError('The durable runtime does not expose withDurableExecution');
   }
@@ -113,10 +98,7 @@ async function settlePayment(
   runner: Runner,
   settle: (operation: Operation) => Promise<unknown>,
 ): Promise<{ getResult(): unknown }> {
-  return settledRun(
-    runner.run({ payload: {} }),
-    runner.getOperation('payment').waitForData('SUBMITTED').then(settle),
-  );
+  return settledRun(runner.run({ payload: {} }), runner.getOperation('payment').waitForData('SUBMITTED').then(settle));
 }
 
 const fetchMock = () => jest.mocked(globalThis.fetch);
@@ -203,9 +185,7 @@ describe('durable callbacks on the durable runtime', () => {
       const failure = await ctx.waitForCallback('payment', record).then(
         () => null,
         (error: unknown) =>
-          error instanceof CallbackFailedError
-            ? { type: error.type, message: error.message }
-            : String(error),
+          error instanceof CallbackFailedError ? { type: error.type, message: error.message } : String(error),
       );
       await ctx.wait('1s');
       return failure;
@@ -224,9 +204,7 @@ describe('durable callbacks on the durable runtime', () => {
   });
 
   it('keeps waiting through heartbeats', async () => {
-    const runner = runnerFor((_input, ctx) =>
-      ctx.waitForCallback('payment', record, { heartbeatTimeout: '1m' }),
-    );
+    const runner = runnerFor((_input, ctx) => ctx.waitForCallback('payment', record, { heartbeatTimeout: '1m' }));
 
     const result = await settlePayment(runner, async (operation) => {
       await operation.sendCallbackHeartbeat();
@@ -239,9 +217,7 @@ describe('durable callbacks on the durable runtime', () => {
   // The checkpoint service keeps callback timers in its own worker, out of
   // reach of skipTime, so these wait out the shortest timeout for real.
   it('resolves null when the callback times out', async () => {
-    const runner = runnerFor((_input, ctx) =>
-      ctx.waitForCallback('payment', record, { timeout: '1s' }),
-    );
+    const runner = runnerFor((_input, ctx) => ctx.waitForCallback('payment', record, { timeout: '1s' }));
 
     const result = await runner.run({ payload: {} });
 

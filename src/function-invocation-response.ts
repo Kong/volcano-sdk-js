@@ -1,11 +1,7 @@
 import { apiRequestError } from './api-errors.ts';
 import { VolcanoSystemError } from './errors.ts';
 import { parseResponseBody } from './response-body.ts';
-import {
-  getHeaderValue,
-  type HeaderResponse,
-  responseHeadersToObject,
-} from './response-headers.ts';
+import { getHeaderValue, type HeaderResponse, responseHeadersToObject } from './response-headers.ts';
 
 const FUNCTION_INVOKED_HEADER = 'x-volcano-function-invoked';
 
@@ -36,8 +32,7 @@ export async function functionInvokeResult(
   const versionHeader = getHeaderValue(response, 'x-volcano-version');
   const data = await parseResponseBody(response);
   const headers = responseHeadersToObject(response);
-  const version =
-    typeof versionHeader === 'string' && versionHeader.length > 0 ? versionHeader : null;
+  const version = typeof versionHeader === 'string' && versionHeader.length > 0 ? versionHeader : null;
 
   if (!response.ok && !dispatched) {
     const message = platformErrorMessage(data, response.status);

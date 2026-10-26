@@ -91,9 +91,7 @@ await test('allows test-name selection without counting filtered tests as skips'
 });
 
 await test('rejects an explicitly skipped test that matches the name selection', async () => {
-  const result = await runFixture(`${passing} test.skip('selected', () => {});`, [
-    '--testNamePattern=selected',
-  ]);
+  const result = await runFixture(`${passing} test.skip('selected', () => {});`, ['--testNamePattern=selected']);
   assert.equal(result.error, undefined);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /Incomplete test run:/);
@@ -108,10 +106,7 @@ await test('rejects a name selection that runs no tests', async () => {
 
 const forbiddenSources: [string, string][] = [
   ["test.only('focused', () => expect(1).toBe(1));", 'jest/no-focused-tests'],
-  [
-    "describe.only('focused', () => { test('works', () => expect(1).toBe(1)); });",
-    'jest/no-focused-tests',
-  ],
+  ["describe.only('focused', () => { test('works', () => expect(1).toBe(1)); });", 'jest/no-focused-tests'],
   ["test.skip('skipped', () => expect(1).toBe(1));", 'jest/no-disabled-tests'],
   ["test.todo('pending');", 'no-restricted-properties'],
   ['jest.retryTimes(1);', 'no-restricted-properties'],

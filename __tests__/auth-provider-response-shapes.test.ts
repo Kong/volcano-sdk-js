@@ -19,8 +19,7 @@ const context: AuthContext = {
 function hostWith(data: unknown): AuthProviderHost {
   return {
     _isAuthContextCurrent: () => true,
-    _authFetchWithContext: () =>
-      Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context }),
+    _authFetchWithContext: () => Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context }),
   };
 }
 
@@ -61,24 +60,21 @@ test.each([
   );
 });
 
-test.each([
-  [[{}]],
-  [[{ provider: 'google' }]],
-  [[{ provider: 'custom-provider', linked_at: '2026-09-23T00:00:00Z' }]],
-])('preserves valid linked provider wire shapes: %p', async (providers) => {
-  await expect(getLinkedOAuthProviders(hostWith({ providers }))).resolves.toEqual({
-    providers,
-    error: null,
-  });
-});
+test.each([[[{}]], [[{ provider: 'google' }]], [[{ provider: 'custom-provider', linked_at: '2026-09-23T00:00:00Z' }]]])(
+  'preserves valid linked provider wire shapes: %p',
+  async (providers) => {
+    await expect(getLinkedOAuthProviders(hostWith({ providers }))).resolves.toEqual({
+      providers,
+      error: null,
+    });
+  },
+);
 
 test.each([
   [{ message: 12, provider: 'google', expires_in: 120 }, 'message'],
   [{ message: 'ready', provider: 12, expires_in: 120 }, 'provider'],
 ])('rejects non-string OAuth token %s fields', async (data, name) => {
-  await expect(getOAuthProviderToken(hostWith(data), 'google')).rejects.toThrow(
-    `OAuth token ${name} must be a string`,
-  );
+  await expect(getOAuthProviderToken(hostWith(data), 'google')).rejects.toThrow(`OAuth token ${name} must be a string`);
 });
 
 test.each([null, 3.5, '120'])('rejects non-integer OAuth token expiry: %p', async (expiresIn) => {

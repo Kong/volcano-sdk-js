@@ -2,12 +2,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { CallbackFailedError, durable } from '../src/durable.ts';
-import type {
-  CallbackSubmitter,
-  DurableContext,
-  DurableHandler,
-  DurableLog,
-} from '../src/durable-types.ts';
+import type { CallbackSubmitter, DurableContext, DurableHandler, DurableLog } from '../src/durable-types.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
 // As in durable-message.test.ts, a double stands in for the optional runtime.
@@ -31,11 +26,7 @@ interface FakeContext {
   waitForCondition(): Promise<unknown>;
   map(): Promise<unknown>;
   parallel(): Promise<unknown>;
-  waitForCallback?: (
-    name: unknown,
-    submitter: Submitter,
-    config: Record<string, unknown>,
-  ) => Promise<unknown>;
+  waitForCallback?: (name: unknown, submitter: Submitter, config: Record<string, unknown>) => Promise<unknown>;
   executionContext?: { durableExecutionArn?: unknown };
   peekStepId?: () => string;
   _executionContext?: { getStepData(stepId: string): unknown };
@@ -48,8 +39,7 @@ interface RuntimeSteps {
   checkpointed?: string[];
 }
 
-const EXECUTION_ARN =
-  'arn:aws:lambda:us-east-1:123456789012:function:payments:$LATEST/durable-execution/exec-1/abc';
+const EXECUTION_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:payments:$LATEST/durable-execution/exec-1/abc';
 const API_URL = 'https://api.test.com';
 const TOKEN = 'vcb_Zm9yIHRoZSBwYXltZW50IHdvcmtmbG93IHRvIGNvbXBsZXRl';
 
@@ -66,15 +56,12 @@ const record: CallbackSubmitter = (token) => {
 function runtimeInternals({ next, checkpointed }: RuntimeSteps): Partial<FakeContext> {
   return {
     // The runtime's takes no arguments.
-    ...(next === undefined
-      ? {}
-      : { peekStepId: (...args: unknown[]) => (args.length === 0 ? next : 'unexpected') }),
+    ...(next === undefined ? {} : { peekStepId: (...args: unknown[]) => (args.length === 0 ? next : 'unexpected') }),
     ...(checkpointed === undefined
       ? {}
       : {
           _executionContext: {
-            getStepData: (stepId: string) =>
-              checkpointed.includes(stepId) ? { Id: stepId } : undefined,
+            getStepData: (stepId: string) => (checkpointed.includes(stepId) ? { Id: stepId } : undefined),
           },
         }),
   };
@@ -319,11 +306,7 @@ describe('ctx.waitForCallback()', () => {
   it('keeps an empty failure message empty', async () => {
     callbackOutcome = () =>
       Promise.reject(
-        runtimeError(
-          'CallbackExternalError',
-          'Callback failed',
-          JSON.stringify({ type: 'Cancelled', message: '' }),
-        ),
+        runtimeError('CallbackExternalError', 'Callback failed', JSON.stringify({ type: 'Cancelled', message: '' })),
       );
 
     const error = await failureOf(run(awaitPayment(record)));
@@ -336,9 +319,7 @@ describe('ctx.waitForCallback()', () => {
     ['a message that is not text', { type: 'Cancelled', message: 42 }],
   ])('reads %s as an empty one', async (_case, data) => {
     callbackOutcome = () =>
-      Promise.reject(
-        runtimeError('CallbackExternalError', 'Callback failed', JSON.stringify(data)),
-      );
+      Promise.reject(runtimeError('CallbackExternalError', 'Callback failed', JSON.stringify(data)));
 
     const error = await failureOf(run(awaitPayment(record)));
 
@@ -388,10 +369,7 @@ describe('ctx.waitForCallback()', () => {
 
   it('skips the submitter when the callback closed before it registered', async () => {
     fetchMock().mockResolvedValueOnce(
-      Response.json(
-        { error: 'callback is no longer open', code: 'callback_closed' },
-        { status: 409 },
-      ),
+      Response.json({ error: 'callback is no longer open', code: 'callback_closed' }, { status: 409 }),
     );
     callbackOutcome = () => Promise.reject(timedOut());
     const submitter = jest.fn<CallbackSubmitter>();
@@ -484,16 +462,8 @@ describe('ctx.waitForCallback()', () => {
   it.each([
     ['an empty name', [' ', record], 'ctx.waitForCallback() requires a non-empty name'],
     ['a non-string name', [42, record], 'ctx.waitForCallback() requires a non-empty name'],
-    [
-      'a long name',
-      ['n'.repeat(238), record],
-      'ctx.waitForCallback() name must be at most 237 characters',
-    ],
-    [
-      'a name outside ASCII',
-      ['paiement-réglé', record],
-      'ctx.waitForCallback() name must be printable ASCII',
-    ],
+    ['a long name', ['n'.repeat(238), record], 'ctx.waitForCallback() name must be at most 237 characters'],
+    ['a name outside ASCII', ['paiement-réglé', record], 'ctx.waitForCallback() name must be printable ASCII'],
     ['no submitter', ['payment'], 'ctx.waitForCallback() requires a submitter function'],
     [
       'a submitter that is not a function',
@@ -512,9 +482,9 @@ describe('ctx.waitForCallback()', () => {
       'timeout must be at most 31622400 seconds (366 days)',
     ],
   ])('refuses %s before registering anything', async (_case, args, message) => {
-    await expect(
-      run(callWith((ctx) => Reflect.apply(ctx.waitForCallback.bind(ctx), undefined, args))),
-    ).rejects.toThrow(message);
+    await expect(run(callWith((ctx) => Reflect.apply(ctx.waitForCallback.bind(ctx), undefined, args)))).rejects.toThrow(
+      message,
+    );
     expect(callbackCalls).toHaveLength(0);
     expect(fetchMock()).not.toHaveBeenCalled();
   });

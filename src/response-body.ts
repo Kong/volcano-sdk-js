@@ -5,9 +5,7 @@ interface BodyResponse extends HeaderResponse {
   json?: () => Promise<unknown>;
 }
 
-export async function parseResponseBody(
-  response: BodyResponse | null | undefined,
-): Promise<unknown> {
+export async function parseResponseBody(response: BodyResponse | null | undefined): Promise<unknown> {
   if (response == null) {
     return null;
   }

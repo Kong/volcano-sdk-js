@@ -101,10 +101,7 @@ const { error: signInError } = await volcano.auth.signIn({
 });
 if (signInError) throw signInError;
 
-const { data, status, error } = await volcano.functions.invoke(
-  'orders-api',
-  JSON.parse(process.argv[2]),
-);
+const { data, status, error } = await volcano.functions.invoke('orders-api', JSON.parse(process.argv[2]));
 if (error) throw error;
 console.log(status, data);
 ```

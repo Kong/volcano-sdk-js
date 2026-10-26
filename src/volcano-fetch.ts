@@ -77,17 +77,11 @@ function errorMessage(status: number, data: unknown): string {
 }
 
 export async function volcanoFetch<T>(path: string, options: VolcanoRequestInit): Promise<T> {
-  const { volcanoAuthorization, volcanoClient, volcanoResponseType, volcanoTimeoutMs, ...request } =
-    options;
+  const { volcanoAuthorization, volcanoClient, volcanoResponseType, volcanoTimeoutMs, ...request } = options;
   if (volcanoClient === undefined || volcanoAuthorization === undefined) {
     throw new Error('Generated transport requires a Volcano client and authorization mode');
   }
-  const response = await volcanoClient._generatedFetch(
-    path,
-    request,
-    volcanoAuthorization,
-    volcanoTimeoutMs,
-  );
+  const response = await volcanoClient._generatedFetch(path, request, volcanoAuthorization, volcanoTimeoutMs);
   const data = await responseData(response, volcanoResponseType);
 
   if (!response.ok) {

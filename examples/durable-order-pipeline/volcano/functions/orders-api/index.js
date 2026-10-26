@@ -71,9 +71,7 @@ async function submitOrder(auth, input) {
   }
 
   const volcano = client(auth.access_token);
-  const [order] = unwrap(
-    await volcano.insert('orders', { user_id: auth.user_id, status: 'submitted' }),
-  );
+  const [order] = unwrap(await volcano.insert('orders', { user_id: auth.user_id, status: 'submitted' }));
   for (const item of items) {
     unwrap(await insertOrderItem(volcano, order, item));
   }
@@ -82,11 +80,7 @@ async function submitOrder(auth, input) {
   // Which execution is working an order is the pipeline's bookkeeping, not the
   // customer's, so it is written with the service key: `orders` gives a
   // signed-in user select and insert on their own rows and nothing more.
-  unwrap(
-    await client(VOLCANO_SERVICE_KEY)
-      .update('orders', { execution_id: execution.id })
-      .eq('id', order.id),
-  );
+  unwrap(await client(VOLCANO_SERVICE_KEY).update('orders', { execution_id: execution.id }).eq('id', order.id));
 
   return { order_id: order.id, execution_id: execution.id, status: execution.status };
 }
@@ -124,12 +118,7 @@ function starter() {
 async function orderStatus(auth, input) {
   const volcano = client(VOLCANO_SERVICE_KEY);
   const [order] = unwrap(
-    await volcano
-      .from('orders')
-      .select('*')
-      .eq('id', input.order_id)
-      .eq('user_id', auth.user_id)
-      .limit(1),
+    await volcano.from('orders').select('*').eq('id', input.order_id).eq('user_id', auth.user_id).limit(1),
   );
   if (!order) {
     throw withStatus(new Error('order not found'), 404);

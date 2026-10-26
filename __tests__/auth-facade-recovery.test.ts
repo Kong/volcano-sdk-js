@@ -20,12 +20,7 @@ const replacement = {
   refresh_token: 'other-refresh',
   user: { id: 'other', email: 'other@example.com', status: 'active' },
 } as const;
-const cases: readonly [
-  string,
-  (client: VolcanoAuth) => Promise<{ error: unknown }>,
-  number,
-  unknown,
-][] = [
+const cases: readonly [string, (client: VolcanoAuth) => Promise<{ error: unknown }>, number, unknown][] = [
   ['request email', (c) => c.auth.requestEmailChange('new@example.com'), 200, {}],
   ['cancel email', (c) => c.auth.cancelEmailChange(), 200, {}],
   [
@@ -37,12 +32,7 @@ const cases: readonly [
   ['delete others', (c) => c.auth.deleteAllOtherSessions(), 204, {}],
   ['delete session', (c) => c.auth.deleteSession(OTHER), 204, {}],
   ['providers', (c) => c.auth.getLinkedOAuthProviders(), 200, { providers: [] }],
-  [
-    'link',
-    (c) => c.auth.linkOAuthProvider('github'),
-    200,
-    { authorization_url: 'https://provider.example' },
-  ],
+  ['link', (c) => c.auth.linkOAuthProvider('github'), 200, { authorization_url: 'https://provider.example' }],
   ['unlink', (c) => c.auth.unlinkOAuthProvider('github'), 204, {}],
   [
     'token',
@@ -78,38 +68,25 @@ function client() {
 }
 
 describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
-  it.each(['json', 'empty', 'html'])(
-    'replays the captured request after %s401',
-    async (rejection) => {
-      const denied = reply(401, { error: 'expired' });
-      if (rejection !== 'json') {
-        jest.spyOn(denied, 'json').mockRejectedValue(new SyntaxError(rejection));
-      }
-      fetchMock
-        .mockResolvedValueOnce(denied)
-        .mockResolvedValueOnce(renewed())
-        .mockResolvedValueOnce(reply(status, body));
-      const current = client();
-      expect(await resultError(invoke(current))).toBeNull();
-      expect(
-        fetchMock.mock.calls.map(([, options]) =>
-          new Headers(options?.headers).get('Authorization'),
-        ),
-      ).toEqual([
-        `Bearer ${sessionToken(SESSION)}`,
-        'Bearer anon',
-        `Bearer ${sessionToken(SESSION, true)}`,
-      ]);
-      expect(fetchCall(0)[0]).toBe(fetchCall(2)[0]);
-      expect(fetchCall(0)[1]?.body).toBe(fetchCall(2)[1]?.body);
-    },
-  );
+  it.each(['json', 'empty', 'html'])('replays the captured request after %s401', async (rejection) => {
+    const denied = reply(401, { error: 'expired' });
+    if (rejection !== 'json') {
+      jest.spyOn(denied, 'json').mockRejectedValue(new SyntaxError(rejection));
+    }
+    fetchMock.mockResolvedValueOnce(denied).mockResolvedValueOnce(renewed()).mockResolvedValueOnce(reply(status, body));
+    const current = client();
+    expect(await resultError(invoke(current))).toBeNull();
+    expect(fetchMock.mock.calls.map(([, options]) => new Headers(options?.headers).get('Authorization'))).toEqual([
+      `Bearer ${sessionToken(SESSION)}`,
+      'Bearer anon',
+      `Bearer ${sessionToken(SESSION, true)}`,
+    ]);
+    expect(fetchCall(0)[0]).toBe(fetchCall(2)[0]);
+    expect(fetchCall(0)[1]?.body).toBe(fetchCall(2)[1]?.body);
+  });
 
   it('bounds repeated401 to one refresh', async () => {
-    fetchMock
-      .mockResolvedValueOnce(reply(401))
-      .mockResolvedValueOnce(renewed())
-      .mockResolvedValueOnce(reply(401));
+    fetchMock.mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(renewed()).mockResolvedValueOnce(reply(401));
     expect(await resultError(invoke(client()))).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -142,9 +119,7 @@ describe.each(cases)('%s recovery', (_name, invoke, status, body) => {
     await current.auth.setSession(replacement);
     expect(await resultError(request)).toBeInstanceOf(AuthSessionChangedError);
     for (const [, options] of fetchMock.mock.calls) {
-      expect(new Headers(options?.headers).get('Authorization')).toBe(
-        `Bearer ${sessionToken(SESSION)}`,
-      );
+      expect(new Headers(options?.headers).get('Authorization')).toBe(`Bearer ${sessionToken(SESSION)}`);
     }
   });
 });
@@ -248,9 +223,7 @@ it('captures ownership after an OAuth exchange settles without another auth call
     await current.auth.setSession(replacement);
     expect(await resultError(request)).toBeInstanceOf(AuthSessionChangedError);
     for (const [, options] of fetchMock.mock.calls.slice(1)) {
-      expect(new Headers(options?.headers).get('Authorization')).toBe(
-        `Bearer ${sessionToken(SESSION, true)}`,
-      );
+      expect(new Headers(options?.headers).get('Authorization')).toBe(`Bearer ${sessionToken(SESSION, true)}`);
     }
   } finally {
     if (originalWindow === undefined) {
@@ -271,18 +244,13 @@ it('replays a provider API body snapshot after refresh', async () => {
     })
     .mockResolvedValueOnce(renewed())
     .mockResolvedValueOnce(reply(200, { data: {} }));
-  expect(
-    await resultError(current.auth.callOAuthAPI('github', { endpoint: '/user', body })),
-  ).toBeNull();
+  expect(await resultError(current.auth.callOAuthAPI('github', { endpoint: '/user', body }))).toBeNull();
   expect(jsonField(fetchCall(2)[1], 'body')).toEqual({ names: ['original'] });
 });
 
 it('clears the current session after refreshing an authenticated deletion', async () => {
   const current = client();
-  fetchMock
-    .mockResolvedValueOnce(reply(401))
-    .mockResolvedValueOnce(renewed())
-    .mockResolvedValueOnce(reply(204));
+  fetchMock.mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(renewed()).mockResolvedValueOnce(reply(204));
   expect(await resultError(current.auth.deleteSession(SESSION))).toBeNull();
   expect(current.accessToken).toBeNull();
 });
@@ -311,15 +279,11 @@ it.each(['sign out', 'rejected refresh'])(
         return reply(401, { error: 'expired refresh' });
       }
       if (fetchUrl(url).endsWith(OTHER)) {
-        clearingResult = await (clearing === 'sign out'
-          ? current.auth.signOut()
-          : current.auth.refreshSession());
+        clearingResult = await (clearing === 'sign out' ? current.auth.signOut() : current.auth.refreshSession());
       }
       return reply(204);
     });
-    expect(await resultError(current.auth.deleteSession(OTHER))).toBeInstanceOf(
-      AuthSessionChangedError,
-    );
+    expect(await resultError(current.auth.deleteSession(OTHER))).toBeInstanceOf(AuthSessionChangedError);
     expect(clearingResult?.error?.status ?? null).toBe(clearing === 'sign out' ? null : 401);
     expect(current.accessToken).toBeNull();
   },

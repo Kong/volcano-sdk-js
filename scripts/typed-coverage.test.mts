@@ -55,9 +55,7 @@ async function runCoverage(
     );
     assert.equal(result.error, undefined);
     assert.ok(result.status === 0 || result.status === 1, result.stderr);
-    const coverage = record(
-      JSON.parse(await readFile(join(directory, 'coverage/coverage-final.json'), 'utf8')),
-    );
+    const coverage = record(JSON.parse(await readFile(join(directory, 'coverage/coverage-final.json'), 'utf8')));
     return { ...result, coverage };
   } finally {
     await rm(directory, { recursive: true, force: true });

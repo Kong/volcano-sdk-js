@@ -14,9 +14,7 @@ function authClient() {
     accessToken: 'original',
     _completeOAuthExchange: jest.fn(() => Promise.resolve()),
     _captureAuthContext: jest.fn(() => context),
-    _refreshSessionForContext: jest.fn((): Promise<{ error: Error | null }> =>
-      Promise.resolve({ error: null }),
-    ),
+    _refreshSessionForContext: jest.fn((): Promise<{ error: Error | null }> => Promise.resolve({ error: null })),
     _isAuthContextCurrent: jest.fn(() => true),
   };
 }
@@ -33,17 +31,12 @@ test('sends the captured token and leaves a successful response alone', async ()
   ).toBe(response);
   expect(client._completeOAuthExchange).toHaveBeenCalledTimes(1);
   expect(client._refreshSessionForContext).not.toHaveBeenCalled();
-  expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe(
-    'Bearer original',
-  );
+  expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer original');
   expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('X-Request-Id')).toBe('request-1');
 });
 
 const headerCases: [HeadersInit, string][] = [
-  [
-    new Headers({ authorization: 'Bearer unrelated', 'X-Request-Id': 'header-object' }),
-    'header-object',
-  ],
+  [new Headers({ authorization: 'Bearer unrelated', 'X-Request-Id': 'header-object' }), 'header-object'],
   [
     [
       ['authorization', 'Bearer unrelated'],
@@ -56,9 +49,7 @@ const headerCases: [HeadersInit, string][] = [
 test.each(headerCases)(
   'normalizes non-record headers while retaining the captured token',
   async (headers, expectedRequestId) => {
-    const fetchMock = jest
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('ok', { status: 200 }));
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }));
 
     await fetchWithAuthRetry(authClient(), 'https://api.example.com/item', { headers });
 
@@ -76,19 +67,12 @@ test('retries one 401 with the refreshed token on the same session', async () =>
   });
   const first = new Response(null, { status: 401 });
   const second = new Response('ok', { status: 200 });
-  const fetchMock = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(first)
-    .mockResolvedValueOnce(second);
+  const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(first).mockResolvedValueOnce(second);
 
   expect(await fetchWithAuthRetry(client, 'https://api.example.com/item')).toBe(second);
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe(
-    'Bearer original',
-  );
-  expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Authorization')).toBe(
-    'Bearer renewed',
-  );
+  expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer original');
+  expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Authorization')).toBe('Bearer renewed');
 });
 
 test('returns the original 401 when refresh fails without replacing the session', async () => {
@@ -105,9 +89,7 @@ test('propagates a discarded refresh without retrying the request', async () => 
   const client = authClient();
   const discarded = new AuthRefreshDiscardedError();
   client._refreshSessionForContext.mockResolvedValue({ error: discarded });
-  const fetchMock = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
 
   await expect(fetchWithAuthRetry(client, 'https://api.example.com/item')).rejects.toBe(discarded);
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -116,9 +98,7 @@ test('propagates a discarded refresh without retrying the request', async () => 
 test('refuses a successful refresh after the captured session changes', async () => {
   const client = authClient();
   client._isAuthContextCurrent.mockReturnValue(false);
-  const fetchMock = jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 401 }));
+  const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
 
   await expect(fetchWithAuthRetry(client, 'https://api.example.com/item')).rejects.toBeInstanceOf(
     AuthRefreshDiscardedError,

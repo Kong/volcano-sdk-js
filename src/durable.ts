@@ -73,10 +73,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isLogger(value: unknown): value is DurableLog {
-  return (
-    isRecord(value) &&
-    ['info', 'warn', 'error', 'debug'].every((method) => typeof value[method] === 'function')
-  );
+  return isRecord(value) && ['info', 'warn', 'error', 'debug'].every((method) => typeof value[method] === 'function');
 }
 
 /** The optional engine's callbacks are checked before the authoring facade uses them. */
@@ -84,18 +81,8 @@ function isEngineContext(value: unknown): value is EngineContext {
   if (!isRecord(value)) {
     return false;
   }
-  const methods = [
-    'configureLogger',
-    'step',
-    'wait',
-    'runInChildContext',
-    'waitForCondition',
-    'map',
-    'parallel',
-  ];
-  return (
-    isLogger(value['logger']) && methods.every((method) => typeof value[method] === 'function')
-  );
+  const methods = ['configureLogger', 'step', 'wait', 'runInChildContext', 'waitForCondition', 'map', 'parallel'];
+  return isLogger(value['logger']) && methods.every((method) => typeof value[method] === 'function');
 }
 
 function engineContext(value: unknown): EngineContext {
@@ -187,11 +174,7 @@ function executionRef(context: EngineContext): string | undefined {
 }
 
 /** Expose only Volcano's supported checkpoint operations to a handler. */
-function durableContext(
-  context: EngineContext,
-  engine: Engine,
-  ref: string | undefined,
-): DurableContext {
+function durableContext(context: EngineContext, engine: Engine, ref: string | undefined): DurableContext {
   const publisher = messagePublisher(context, ref);
   return {
     log: context.logger,
@@ -202,11 +185,7 @@ function durableContext(
       options?: StepOptions,
     ): Promise<Result> {
       const call = namedFunction(nameOrRun, runOrOptions, options, 'step');
-      return context.step(
-        call.name,
-        (scope) => call.run(stepScope(scope)),
-        stepConfig(call.options, engine),
-      );
+      return context.step(call.name, (scope) => call.run(stepScope(scope)), stepConfig(call.options, engine));
     },
 
     wait(nameOrDuration: string | DurableDuration, duration?: DurableDuration): Promise<void> {
@@ -219,10 +198,7 @@ function durableContext(
       return context.wait(nameOrDuration, waitDuration(duration));
     },
 
-    child<Result>(
-      nameOrRun: string | ChildOperation<Result>,
-      maybeRun?: ChildOperation<Result>,
-    ): Promise<Result> {
+    child<Result>(nameOrRun: string | ChildOperation<Result>, maybeRun?: ChildOperation<Result>): Promise<Result> {
       const name = typeof nameOrRun === 'string' ? nameOrRun : undefined;
       const run = typeof nameOrRun === 'string' ? maybeRun : nameOrRun;
       if (typeof run !== 'function') {

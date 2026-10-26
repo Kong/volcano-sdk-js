@@ -1,10 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
-import {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from '../src/errors.ts';
+import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from '../src/errors.ts';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -21,25 +17,22 @@ test.each([
     code: 'auth_session_changed',
     message: 'Auth operation discarded because the session changed',
   },
-])(
-  '$code preserves auth error identity and hidden immutable metadata',
-  ({ ErrorType, code, message }) => {
-    const error = new ErrorType();
-    expect(error).toBeInstanceOf(Error);
-    expect(error.name).toBe(ErrorType.name);
-    expect(error.status).toBe(409);
-    expect(error.message).toBe(message);
-    expect(error.code).toBe(code);
-    expect(ErrorType.is(error)).toBe(true);
-    expect(Object.getOwnPropertyDescriptor(error, 'code')).toEqual({
-      value: error.code,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
-    expect(JSON.stringify(error)).toBe('{}');
-  },
-);
+])('$code preserves auth error identity and hidden immutable metadata', ({ ErrorType, code, message }) => {
+  const error = new ErrorType();
+  expect(error).toBeInstanceOf(Error);
+  expect(error.name).toBe(ErrorType.name);
+  expect(error.status).toBe(409);
+  expect(error.message).toBe(message);
+  expect(error.code).toBe(code);
+  expect(ErrorType.is(error)).toBe(true);
+  expect(Object.getOwnPropertyDescriptor(error, 'code')).toEqual({
+    value: error.code,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  });
+  expect(JSON.stringify(error)).toBe('{}');
+});
 
 test.each([AuthRefreshDiscardedError, AuthSessionChangedError])(
   '%p keeps the inherited constructor signature without adopting its arguments',
@@ -63,25 +56,14 @@ test.each([AuthRefreshDiscardedError, AuthSessionChangedError])(
   },
 );
 
-test.each([
-  undefined,
-  null,
-  false,
-  true,
-  0,
-  1,
-  '',
-  'error',
-  0n,
-  1n,
-  Symbol('error'),
-  {},
-  new Error('plain'),
-])('rejects unrelated values without throwing: %p', (value) => {
-  expect(AuthRefreshDiscardedError.is(value)).toBe(false);
-  expect(AuthSessionChangedError.is(value)).toBe(false);
-  expect(VolcanoSystemError.is(value)).toBe(false);
-});
+test.each([undefined, null, false, true, 0, 1, '', 'error', 0n, 1n, Symbol('error'), {}, new Error('plain')])(
+  'rejects unrelated values without throwing: %p',
+  (value) => {
+    expect(AuthRefreshDiscardedError.is(value)).toBe(false);
+    expect(AuthSessionChangedError.is(value)).toBe(false);
+    expect(VolcanoSystemError.is(value)).toBe(false);
+  },
+);
 
 test('creates a system error without optional metadata', () => {
   const error = new VolcanoSystemError('gateway failed');

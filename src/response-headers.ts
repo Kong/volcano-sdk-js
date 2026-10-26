@@ -8,9 +8,7 @@ export interface HeaderResponse {
   headers?: HeaderMethods | Readonly<Record<string, string>> | null;
 }
 
-export function responseHeadersToObject(
-  response: HeaderResponse | null | undefined,
-): Record<string, string> {
+export function responseHeadersToObject(response: HeaderResponse | null | undefined): Record<string, string> {
   const result: Record<string, string> = {};
   const headers = response?.headers;
   if (headers == null) {
@@ -28,19 +26,13 @@ export function responseHeadersToObject(
   return result;
 }
 
-function copyHeaderEntries(
-  entries: Iterable<readonly [string, string]>,
-  target: Record<string, string>,
-): void {
+function copyHeaderEntries(entries: Iterable<readonly [string, string]>, target: Record<string, string>): void {
   for (const [key, value] of entries) {
     target[key] = value;
   }
 }
 
-export function getHeaderValue(
-  response: HeaderResponse | null | undefined,
-  headerName: string,
-): unknown {
+export function getHeaderValue(response: HeaderResponse | null | undefined, headerName: string): unknown {
   const headers = response?.headers;
   if (headers == null) {
     return null;

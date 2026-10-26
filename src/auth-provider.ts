@@ -3,11 +3,7 @@ import { optionalField, requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { sanitizeProvider } from './auth-validation.ts';
 import { AuthSessionChangedError } from './errors.ts';
-import type {
-  LinkProviderResponse,
-  OAuthProvider,
-  OAuthTokenResponse,
-} from './sdk-public-types.ts';
+import type { LinkProviderResponse, OAuthProvider, OAuthTokenResponse } from './sdk-public-types.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -47,10 +43,7 @@ function linkedProviders(value: unknown): OAuthProvider[] {
 }
 
 export interface AuthProviderHost {
-  _authFetchWithContext(
-    path: string,
-    options?: RequestInit | (() => RequestInit),
-  ): Promise<ContextRequest>;
+  _authFetchWithContext(path: string, options?: RequestInit | (() => RequestInit)): Promise<ContextRequest>;
   _isAuthContextCurrent(context: AuthContext): boolean;
 }
 
@@ -72,10 +65,7 @@ export async function linkOAuthProvider(
   return { data: result.data, error: null };
 }
 
-export async function unlinkOAuthProvider(
-  host: AuthProviderHost,
-  provider: string,
-): Promise<{ error: Error | null }> {
+export async function unlinkOAuthProvider(host: AuthProviderHost, provider: string): Promise<{ error: Error | null }> {
   sanitizeProvider(provider);
   const { result, context } = await host._authFetchWithContext(`/auth/oauth/${provider}/unlink`, {
     method: 'DELETE',
@@ -141,10 +131,7 @@ function tokenStatus(host: AuthProviderHost, response: ContextRequest): OAuthTok
   };
 }
 
-export async function refreshOAuthToken(
-  host: AuthProviderHost,
-  provider: string,
-): Promise<OAuthTokenResponse> {
+export async function refreshOAuthToken(host: AuthProviderHost, provider: string): Promise<OAuthTokenResponse> {
   sanitizeProvider(provider);
   return tokenStatus(
     host,
@@ -152,10 +139,7 @@ export async function refreshOAuthToken(
   );
 }
 
-export async function getOAuthProviderToken(
-  host: AuthProviderHost,
-  provider: string,
-): Promise<OAuthTokenResponse> {
+export async function getOAuthProviderToken(host: AuthProviderHost, provider: string): Promise<OAuthTokenResponse> {
   sanitizeProvider(provider);
   return tokenStatus(host, await host._authFetchWithContext(`/auth/oauth/${provider}/token`));
 }
@@ -166,13 +150,10 @@ export async function callOAuthAPI(
   params: { endpoint: string; method?: string; body?: unknown },
 ): Promise<{ data: unknown; error: Error | null }> {
   sanitizeProvider(provider);
-  const { result, context } = await host._authFetchWithContext(
-    `/auth/oauth/${provider}/call-api`,
-    () => {
-      const { endpoint, method = 'GET', body = null } = params;
-      return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
-    },
-  );
+  const { result, context } = await host._authFetchWithContext(`/auth/oauth/${provider}/call-api`, () => {
+    const { endpoint, method = 'GET', body = null } = params;
+    return { method: 'POST', body: JSON.stringify({ endpoint, method, body }) };
+  });
   if (!host._isAuthContextCurrent(context)) {
     return { data: null, error: new AuthSessionChangedError() };
   }

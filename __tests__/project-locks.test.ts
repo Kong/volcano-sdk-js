@@ -110,21 +110,16 @@ test('acquire preserves a 503 retry and a final transport error', async () => {
   expect(result.lease?.expiresAt).toBeNull();
 });
 
-test.each(['lock_held', 'lock_ownership_lost'])(
-  'maps contention code %s to an unavailable lock',
-  async (code) => {
-    const given = fixture();
-    given.acquire.mockRejectedValue(
-      Object.assign(new Error('held'), { status: 409, info: { code } }),
-    );
-    await expect(given.locks.acquire('leader', { ttl: 5 })).resolves.toEqual({
-      acquired: false,
-      lease: null,
-      error: null,
-    });
-    expect(given.acquire).toHaveBeenCalledTimes(1);
-  },
-);
+test.each(['lock_held', 'lock_ownership_lost'])('maps contention code %s to an unavailable lock', async (code) => {
+  const given = fixture();
+  given.acquire.mockRejectedValue(Object.assign(new Error('held'), { status: 409, info: { code } }));
+  await expect(given.locks.acquire('leader', { ttl: 5 })).resolves.toEqual({
+    acquired: false,
+    lease: null,
+    error: null,
+  });
+  expect(given.acquire).toHaveBeenCalledTimes(1);
+});
 
 test.each([
   Object.assign(new Error('bad request'), { status: 400 }),
@@ -206,9 +201,7 @@ test('renewal returns a server error without changing the lease', async () => {
 test('release carries the ownership token and preserves transport errors', async () => {
   const given = fixture();
   const previous = lease();
-  await expect(
-    given.locks.release('leader', previous, { requestId: 'release-id' }),
-  ).resolves.toEqual({
+  await expect(given.locks.release('leader', previous, { requestId: 'release-id' })).resolves.toEqual({
     error: null,
   });
   expect(given.release).toHaveBeenCalledWith('leader', {
@@ -249,14 +242,11 @@ test('get validates lock state and reports a failed request', async () => {
   await expect(given.locks.get('leader')).resolves.toEqual({ state: null, error: failure });
 });
 
-test.each([null, { expires_at: 42 }, { fencing_token: 'bad' }])(
-  'rejects a malformed lock state: %p',
-  async (data) => {
-    const given = fixture();
-    given.fetch.mockResolvedValue({ ok: true, status: 200, data, error: null });
-    await expect(given.locks.get('leader')).rejects.toThrow(TypeError);
-  },
-);
+test.each([null, { expires_at: 42 }, { fencing_token: 'bad' }])('rejects a malformed lock state: %p', async (data) => {
+  const given = fixture();
+  given.fetch.mockResolvedValue({ ok: true, status: 200, data, error: null });
+  await expect(given.locks.get('leader')).rejects.toThrow(TypeError);
+});
 
 test('force release preserves a success or failure result', async () => {
   const given = fixture();
@@ -285,9 +275,7 @@ test('withLock releases after the callback and returns its data', async () => {
 
 test('withLock returns an unavailable result without running a callback', async () => {
   const given = fixture();
-  given.acquire.mockRejectedValue(
-    Object.assign(new Error('held'), { status: 409, info: { code: 'lock_held' } }),
-  );
+  given.acquire.mockRejectedValue(Object.assign(new Error('held'), { status: 409, info: { code: 'lock_held' } }));
   const callback = jest.fn<() => string>();
   await expect(given.locks.withLock('leader', { ttl: 5 }, callback)).resolves.toEqual({
     acquired: false,

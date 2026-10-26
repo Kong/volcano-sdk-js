@@ -101,9 +101,7 @@ test('accepts absent optional state fields while preserving explicit nulls', asy
 test('a successful renewal validates the returned lease fields', async () => {
   const { api, authFetch } = fixture();
   authFetch.mockResolvedValue({ ok: true, status: 200, data: null, error: null });
-  await expect(api.renew('leader', { ...lease }, { ttl: 10 })).rejects.toThrow(
-    'Lock response has no expiration',
-  );
+  await expect(api.renew('leader', { ...lease }, { ttl: 10 })).rejects.toThrow('Lock response has no expiration');
 });
 
 test('renew and release validate the key and lease before sending a request', async () => {
@@ -111,9 +109,7 @@ test('renew and release validate the key and lease before sending a request', as
   await expect(api.renew('leader', { ...lease, key: 'follower' }, { ttl: 10 })).rejects.toThrow(
     'lease must belong to the requested lock and include its token',
   );
-  await expect(api.release('../leader', { ...lease, key: '../leader' })).rejects.toThrow(
-    'lock key must match',
-  );
+  await expect(api.release('../leader', { ...lease, key: '../leader' })).rejects.toThrow('lock key must match');
   expect(authFetch).not.toHaveBeenCalled();
   expect(release).not.toHaveBeenCalled();
 });

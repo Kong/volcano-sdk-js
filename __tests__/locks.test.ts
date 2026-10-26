@@ -4,9 +4,7 @@ import { VolcanoAuth } from '../src/index.ts';
 import { LeaseClock } from '../src/lock-session.ts';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}): Response {
-  return status === 204
-    ? new Response(null, { status, headers })
-    : Response.json(body, { status, headers });
+  return status === 204 ? new Response(null, { status, headers }) : Response.json(body, { status, headers });
 }
 
 let fetchMock: jest.MockedFunction<typeof fetch>;
@@ -83,12 +81,8 @@ describe('project locks', () => {
 
   test('acquires, renews, and releases with the ownership token', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 4 }),
-      )
-      .mockResolvedValueOnce(
-        response(200, { expires_at: '2026-07-20T12:00:20Z', fencing_token: 4 }),
-      )
+      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 4 }))
+      .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:00:20Z', fencing_token: 4 }))
       .mockResolvedValueOnce(response(204, {}));
 
     const acquired = await volcano.locks.acquire('leader', {
@@ -125,9 +119,7 @@ describe('project locks', () => {
     expect(headerAt(0, 'X-Volcano-Lock-Token')).toBe(acquired.lease.token);
     expect(methodAt(1)).toBe('PATCH');
     expect(methodAt(2)).toBe('DELETE');
-    const requestIDs = fetchMock.mock.calls.map((_call, index) =>
-      headerAt(index, 'X-Volcano-Request-Id'),
-    );
+    const requestIDs = fetchMock.mock.calls.map((_call, index) => headerAt(index, 'X-Volcano-Request-Id'));
     expect(requestIDs).toEqual([
       '10000000-0000-4000-8000-000000000001',
       '10000000-0000-4000-8000-000000000002',
@@ -177,9 +169,7 @@ describe('project locks', () => {
   // A lapsed lease of our own is still just an unavailable lock, so an election
   // loop must see it as "not leader" rather than as a failed request.
   test('maps a lapsed own lease to acquired false without an error', async () => {
-    fetchMock.mockResolvedValue(
-      response(409, { error: 'Lock ownership lost', code: 'lock_ownership_lost' }),
-    );
+    fetchMock.mockResolvedValue(response(409, { error: 'Lock ownership lost', code: 'lock_ownership_lost' }));
 
     const result = await volcano.locks.acquire('leader', {
       ttl: 10,
@@ -204,11 +194,7 @@ describe('project locks', () => {
 
   test('exposes lock rate-limit recovery metadata', async () => {
     fetchMock.mockResolvedValue(
-      response(
-        429,
-        { error: 'lock request limit exceeded', code: 'lock_rate_limited' },
-        { 'retry-after': '42' },
-      ),
+      response(429, { error: 'lock request limit exceeded', code: 'lock_rate_limited' }, { 'retry-after': '42' }),
     );
 
     const result = await volcano.locks.acquire('leader', {
@@ -252,14 +238,10 @@ describe('project locks', () => {
     expect(success).toEqual({ acquired: true, data: 42, error: null });
 
     const failure = new Error('callback failed');
-    const failed = await volcano.locks.withLock('leader', { ttl: 10 }, () =>
-      Promise.reject(failure),
-    );
+    const failed = await volcano.locks.withLock('leader', { ttl: 10 }, () => Promise.reject(failure));
     expect(failed.error).toBe(failure);
     expect(methodsSeen().filter((method) => method === 'DELETE')).toHaveLength(2);
-    const leaseTimerDelays = timers.mock.calls
-      .map((call) => call[1])
-      .filter((delay) => delay !== 60000);
+    const leaseTimerDelays = timers.mock.calls.map((call) => call[1]).filter((delay) => delay !== 60000);
     expect(leaseTimerDelays).not.toHaveLength(0);
     for (const delay of leaseTimerDelays) {
       expect(delay).toBeGreaterThan(1000);
@@ -593,9 +575,7 @@ describe('project locks', () => {
         }),
     );
     await jest.advanceTimersByTimeAsync(0);
-    const leaseTimerDelays = timers.mock.calls
-      .map((call) => call[1])
-      .filter((delay) => delay !== 60000);
+    const leaseTimerDelays = timers.mock.calls.map((call) => call[1]).filter((delay) => delay !== 60000);
     expect(leaseTimerDelays).not.toHaveLength(0);
     for (const delay of leaseTimerDelays) {
       expect(delay).toBeGreaterThan(60 * 60 * 1000);
@@ -628,9 +608,7 @@ describe('project locks', () => {
   // start rejecting writes from the holder that still owns the lease.
   test('keeps the fencing token when a renewal omits it', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 11 }),
-      )
+      .mockResolvedValueOnce(response(201, { expires_at: '2026-07-20T12:00:10Z', fencing_token: 11 }))
       .mockResolvedValueOnce(response(200, { expires_at: '2026-07-20T12:00:20Z' }));
 
     const acquired = await volcano.locks.acquire('leader', {
@@ -702,11 +680,10 @@ describe('project locks', () => {
     await expect(volcano.locks.acquire('../leader', { ttl: 10 })).rejects.toThrow('lock key');
     await expect(volcano.locks.acquire('leader', { ttl: 4 })).rejects.toThrow('ttl');
     await expect(volcano.locks.acquire('leader', { ttl: 7_776_001 })).rejects.toThrow('ttl');
-    const invalidRelease: unknown = Reflect.apply(
-      volcano.locks.release.bind(volcano.locks),
-      undefined,
-      ['leader', { key: 'other', token: 'token' }],
-    );
+    const invalidRelease: unknown = Reflect.apply(volcano.locks.release.bind(volcano.locks), undefined, [
+      'leader',
+      { key: 'other', token: 'token' },
+    ]);
     await expect(invalidRelease).rejects.toThrow('lease must belong');
     await expect(volcano.locks.get('../leader')).rejects.toThrow('lock key');
     await expect(volcano.locks.forceRelease('../leader')).rejects.toThrow('lock key');

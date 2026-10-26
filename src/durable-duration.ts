@@ -35,10 +35,7 @@ export function waitDuration(value: unknown, field = 'wait'): Duration {
 
 function durationSeconds(duration: Duration): number {
   return (
-    (duration.days ?? 0) * 86400 +
-    (duration.hours ?? 0) * 3600 +
-    (duration.minutes ?? 0) * 60 +
-    (duration.seconds ?? 0)
+    (duration.days ?? 0) * 86400 + (duration.hours ?? 0) * 3600 + (duration.minutes ?? 0) * 60 + (duration.seconds ?? 0)
   );
 }
 
@@ -58,9 +55,7 @@ function toDuration(value: unknown, field: string): Duration {
 function checkedDurationObject(value: Record<string, unknown>, field: string): Duration {
   const unknown = Object.keys(value).filter((key) => !durationFields.includes(key));
   if (unknown.length > 0) {
-    throw new TypeError(
-      `${field} duration takes ${durationFields.join(', ')} (got ${unknown.join(', ')})`,
-    );
+    throw new TypeError(`${field} duration takes ${durationFields.join(', ')} (got ${unknown.join(', ')})`);
   }
   if (!durationFields.some((key) => value[key] !== undefined)) {
     throw new TypeError(`${field} duration needs one of ${durationFields.join(', ')}`);
@@ -93,9 +88,7 @@ function toSeconds(value: unknown, field: string): number {
     return value;
   }
   if (typeof value !== 'string') {
-    throw new TypeError(
-      `${field} must be a duration string, a number of seconds, or a duration object`,
-    );
+    throw new TypeError(`${field} must be a duration string, a number of seconds, or a duration object`);
   }
   return parseDurationText(value.trim(), field);
 }

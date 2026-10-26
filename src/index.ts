@@ -18,11 +18,7 @@ export async function loadRealtime(): Promise<RealtimeModule> {
   };
 }
 
-export {
-  VolcanoAuth as default,
-  VolcanoAuth,
-  VolcanoAuth as VolcanoClient,
-} from './volcano-auth.ts';
+export { VolcanoAuth as default, VolcanoAuth, VolcanoAuth as VolcanoClient } from './volcano-auth.ts';
 export const QueryBuilder = RuntimeQueryBuilder;
 export type QueryBuilder<T = Record<string, JsonValue>> = PublicQueryBuilder<T>;
 export { isBrowser } from './next/request.ts';
@@ -30,8 +26,4 @@ export const StorageFileApi = RuntimeStorageFileApi;
 export type StorageFileApi = PublicStorageFileApi;
 export type { DatabaseConnectionStringOptions } from './database-connection-string.ts';
 export { databaseConnectionString } from './database-connection-string.ts';
-export {
-  AuthRefreshDiscardedError,
-  AuthSessionChangedError,
-  VolcanoSystemError,
-} from './errors.ts';
+export { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from './errors.ts';

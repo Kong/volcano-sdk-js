@@ -86,13 +86,10 @@ test.each([new Error('read failed'), new DOMException('cancelled', 'AbortError')
   },
 );
 
-test.each([undefined, null, false, 0, '', Number.NaN])(
-  'treats a falsy content type as absent: %p',
-  async (value) => {
-    const response = { text: () => Promise.resolve('false'), headers: { get: () => value } };
-    await expect(parseResponseBody(response)).resolves.toBe('false');
-  },
-);
+test.each([undefined, null, false, 0, '', Number.NaN])('treats a falsy content type as absent: %p', async (value) => {
+  const response = { text: () => Promise.resolve('false'), headers: { get: () => value } };
+  await expect(parseResponseBody(response)).resolves.toBe('false');
+});
 
 test.each([true, 1, {}, []])('rejects a truthy non-string content type: %p', async (value) => {
   const response = { text: () => Promise.resolve('payload'), headers: { get: () => value } };

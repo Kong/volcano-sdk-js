@@ -1,11 +1,7 @@
 import { waitDuration } from './durable-duration.ts';
 
 export type Submitter = (callbackId: string) => Promise<void>;
-type WaitForCallback = (
-  name: string,
-  submitter: Submitter,
-  config: Record<string, unknown>,
-) => Promise<unknown>;
+type WaitForCallback = (name: string, submitter: Submitter, config: Record<string, unknown>) => Promise<unknown>;
 
 export interface CallbackContext {
   waitForCallback?: WaitForCallback;
@@ -42,8 +38,7 @@ export function callbacks(context: CallbackContext, feature: string): WaitForCal
       `The durable runtime does not support ${feature}; redeploy the function so Volcano installs a current one`,
     );
   }
-  return (name, submitter, config) =>
-    Reflect.apply(waitForCallback, context, [name, submitter, config]);
+  return (name, submitter, config) => Reflect.apply(waitForCallback, context, [name, submitter, config]);
 }
 
 // The submitter retries what is worth retrying. Left unset, the engine would
@@ -68,9 +63,7 @@ export function platformApiUrl(operation: string, purpose: string): string {
 
 export function requiredExecutionRef(operation: string, executionRef: string | undefined): string {
   if (executionRef === undefined) {
-    throw new Error(
-      `${operation} cannot tell which execution is running: the durable runtime did not report it`,
-    );
+    throw new Error(`${operation} cannot tell which execution is running: the durable runtime did not report it`);
   }
   return executionRef;
 }
@@ -82,10 +75,7 @@ export function isCallbackTimeout(error: unknown): boolean {
 }
 
 /** A callback result, which the runtime hands back as JSON text or already parsed. */
-export function callbackResult(
-  result: unknown,
-  unreadable: (options?: ErrorOptions) => Error,
-): unknown {
+export function callbackResult(result: unknown, unreadable: (options?: ErrorOptions) => Error): unknown {
   if (typeof result !== 'string') {
     return result;
   }

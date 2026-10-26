@@ -151,9 +151,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
     });
 
     it('should reject invocation when JWT is missing project_id claim', async () => {
-      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString(
-        'base64url',
-      );
+      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
       const payload = Buffer.from(JSON.stringify({ sub: 'user-123' })).toString('base64url');
       volcano.accessToken = `${header}.${payload}.test-signature`;
 
@@ -246,10 +244,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
         ),
       );
 
-      const { data, status, headers, version, error } = await volcano.functions.invoke(
-        'my-function',
-        {},
-      );
+      const { data, status, headers, version, error } = await volcano.functions.invoke('my-function', {});
 
       expect(error).toBeNull();
       expect(status).toBe(402);
@@ -377,9 +372,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
             cache_ttl_seconds: 300,
           }),
         )
-        .mockResolvedValueOnce(
-          reply(404, { error: 'function not found' }, { 'x-volcano-version': 'v1' }),
-        )
+        .mockResolvedValueOnce(reply(404, { error: 'function not found' }, { 'x-volcano-version': 'v1' }))
         .mockResolvedValueOnce(
           reply(200, {
             name: 'my-function',
@@ -729,10 +722,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
         user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
       });
       resolveGate.resolve();
-      const [resultA, resultB] = await within(
-        Promise.all([invokeA, invokeB]),
-        'shared function invocations',
-      );
+      const [resultA, resultB] = await within(Promise.all([invokeA, invokeB]), 'shared function invocations');
 
       expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
       expect(resultB.error).toBeNull();
@@ -771,10 +761,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
         user: { id: 'user-b', email: 'fixture@example.com', status: 'active' },
       });
       resolveGate.resolve();
-      const [resultA, resultB] = await within(
-        Promise.all([invokeA, invokeB]),
-        'shared function invocations',
-      );
+      const [resultA, resultB] = await within(Promise.all([invokeA, invokeB]), 'shared function invocations');
 
       expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
       expect(resultB.error).toEqual(expect.objectContaining({ message: 'Function not found' }));
@@ -847,10 +834,7 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
         user: { id: 'replacement-user', email: 'fixture@example.com', status: 'active' },
       });
       resolveGate.resolve();
-      const [resultA, resultB] = await within(
-        Promise.all([invokeA, invokeB]),
-        'shared function invocations',
-      );
+      const [resultA, resultB] = await within(Promise.all([invokeA, invokeB]), 'shared function invocations');
 
       expect(AuthSessionChangedError.is(resultA.error)).toBe(true);
       expect(resultB).toEqual(expect.objectContaining({ data: { result: 'ok' }, error: null }));

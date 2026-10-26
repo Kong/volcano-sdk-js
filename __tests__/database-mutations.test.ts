@@ -2,10 +2,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { MutationBuilder, type MutationClient, mutationError } from '../src/database-mutations.ts';
 
-function client(
-  accessToken: string | null = 'session',
-  error: Error | string | null = null,
-): MutationClient {
+function client(accessToken: string | null = 'session', error: Error | string | null = null): MutationClient {
   return {
     apiUrl: 'https://api.test',
     timeout: 1_000,
@@ -55,21 +52,9 @@ test('omits values and filters for deletes', async () => {
 test('rejects missing credentials before requesting a mutation', async () => {
   const noSession = new MutationBuilder(client(null), 'records', 'db', 'insert', {});
   const emptySession = new MutationBuilder(client('', ''), 'records', 'db', 'insert', {});
-  const messageFailure = new MutationBuilder(
-    client(null, 'exchange refused'),
-    'records',
-    'db',
-    'insert',
-    {},
-  );
+  const messageFailure = new MutationBuilder(client(null, 'exchange refused'), 'records', 'db', 'insert', {});
   const exchangeFailure = new Error('exchange refused');
-  const failedExchange = new MutationBuilder(
-    client(null, exchangeFailure),
-    'records',
-    'db',
-    'insert',
-    {},
-  );
+  const failedExchange = new MutationBuilder(client(null, exchangeFailure), 'records', 'db', 'insert', {});
   await expect(noSession.execute()).resolves.toMatchObject({
     data: null,
     error: new Error('No active session. Please sign in first.'),

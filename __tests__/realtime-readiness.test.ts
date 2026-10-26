@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { RealtimeChannel, VolcanoRealtime } from '../src/realtime.ts';
-import {
-  deferredVoid,
-  TestSubscription,
-  TestTransportClient,
-} from './realtime-transport-fixtures.ts';
+import { deferredVoid, TestSubscription, TestTransportClient } from './realtime-transport-fixtures.ts';
 
 describe('channel subscription readiness', () => {
   let client: TestTransportClient;

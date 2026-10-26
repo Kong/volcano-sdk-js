@@ -39,20 +39,14 @@ describe('databaseConnectionString', () => {
     // Switching to admin drops the user id.
     expect(appNameOf(databaseConnectionString(userBase))).toBe('volcano_full_access');
     // Switching to a different user replaces it.
-    expect(appNameOf(databaseConnectionString(userBase, { userId: 'new-user' }))).toBe(
-      'volcano_user_access:new-user',
-    );
+    expect(appNameOf(databaseConnectionString(userBase, { userId: 'new-user' }))).toBe('volcano_user_access:new-user');
   });
 
   it('treats null/undefined/empty userId as full access', () => {
     expect(appNameOf(invokeUntyped(BASE_URL, null))).toBe('volcano_full_access');
-    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: null }))).toBe(
-      'volcano_full_access',
-    );
+    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: null }))).toBe('volcano_full_access');
     expect(appNameOf(invokeUntyped(BASE_URL, { userId: undefined }))).toBe('volcano_full_access');
-    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: '' }))).toBe(
-      'volcano_full_access',
-    );
+    expect(appNameOf(databaseConnectionString(BASE_URL, { userId: '' }))).toBe('volcano_full_access');
   });
 
   it('coerces a non-string userId to string', () => {
@@ -69,9 +63,7 @@ describe('databaseConnectionString', () => {
     expect(() => invokeUntyped(null)).toThrow(/required/);
     expect(() => databaseConnectionString('not a url')).toThrow(/not a valid connection URL/);
     expect(() => databaseConnectionString('https://host/db')).toThrow(/not a valid connection URL/);
-    expect(() => databaseConnectionString('prefix-postgres://host/db')).toThrow(
-      /not a valid connection URL/,
-    );
+    expect(() => databaseConnectionString('prefix-postgres://host/db')).toThrow(/not a valid connection URL/);
   });
 
   it('preserves unrelated query parameters (e.g. connect_timeout, channel_binding)', () => {
@@ -135,9 +127,7 @@ describe('databaseConnectionString', () => {
   });
 
   it('drops all trailing separators while preserving interior empty query fields', () => {
-    expect(
-      databaseConnectionString('postgresql://host/db?sslmode=require&&connect_timeout=10&&'),
-    ).toBe(
+    expect(databaseConnectionString('postgresql://host/db?sslmode=require&&connect_timeout=10&&')).toBe(
       'postgresql://host/db?sslmode=require&&connect_timeout=10&application_name=volcano_full_access',
     );
   });
@@ -149,12 +139,8 @@ describe('databaseConnectionString', () => {
   });
 
   it('rejects malformed percent encoding', () => {
-    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(
-      /not a valid connection URL/,
-    );
-    expect(() => databaseConnectionString('postgresql:///app?options=%a')).toThrow(
-      /not a valid connection URL/,
-    );
+    expect(() => databaseConnectionString('postgresql:///app?options=%')).toThrow(/not a valid connection URL/);
+    expect(() => databaseConnectionString('postgresql:///app?options=%a')).toThrow(/not a valid connection URL/);
   });
 
   it('round-trips a userId containing characters that must be URL-encoded', () => {

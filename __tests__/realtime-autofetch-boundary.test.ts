@@ -1,20 +1,9 @@
 import { describe, expect, test } from '@jest/globals';
-import {
-  deletePayload,
-  recordsFromQuery,
-  rejectBatch,
-  runBatchQuery,
-  settleBatch,
-} from '../src/realtime-autofetch.ts';
+import { deletePayload, recordsFromQuery, rejectBatch, runBatchQuery, settleBatch } from '../src/realtime-autofetch.ts';
 import type { PendingRow } from '../src/realtime-internal-types.ts';
 
 function fetchFrom(client: unknown, name: string | null = null, schema = 'public'): unknown {
-  return runBatchQuery(
-    { getVolcanoClient: () => client, getDatabaseName: () => name },
-    schema,
-    'tasks',
-    ['1', '2'],
-  );
+  return runBatchQuery({ getVolcanoClient: () => client, getDatabaseName: () => name }, schema, 'tasks', ['1', '2']);
 }
 
 describe('auto-fetch database boundary', () => {
@@ -54,9 +43,7 @@ describe('auto-fetch database boundary', () => {
         return { select: () => ({ in: () => ({ data: [] }) }) };
       },
     };
-    expect(() => fetchFrom({ ...db, _currentDatabaseName: '', database: () => db })).toThrow(
-      'Database name not set',
-    );
+    expect(() => fetchFrom({ ...db, _currentDatabaseName: '', database: () => db })).toThrow('Database name not set');
   });
 
   test('queries clients that directly expose from without a database selector', () => {
@@ -70,9 +57,7 @@ describe('auto-fetch database boundary', () => {
     };
     expect(fetchFrom(client)).toEqual({ data: [] });
     expect(tables).toEqual(['tasks']);
-    expect(
-      fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client }),
-    ).toEqual({ data: [] });
+    expect(fetchFrom({ ...client, _currentDatabaseName: 'chosen', database: () => client })).toEqual({ data: [] });
     expect(
       fetchFrom(
         {
@@ -94,16 +79,12 @@ describe('auto-fetch database boundary', () => {
     expect(() => fetchFrom({ database: () => ({ from: () => ({}) }) }, 'db')).toThrow(
       'volcanoClient.from not available',
     );
-    expect(() => fetchFrom({ from: () => null }, 'db')).toThrow(
-      'volcanoClient.database not available',
-    );
+    expect(() => fetchFrom({ from: () => null }, 'db')).toThrow('volcanoClient.database not available');
     expect(() => fetchFrom({ from: () => null, database: () => ({}) }, 'db')).toThrow(
       'volcanoClient.from not available',
     );
     expect(() => fetchFrom({ from: () => ({}) })).toThrow('Database query does not support select');
-    expect(() => fetchFrom({ from: () => ({ select: () => ({}) }) })).toThrow(
-      'Database query does not support in',
-    );
+    expect(() => fetchFrom({ from: () => ({ select: () => ({}) }) })).toThrow('Database query does not support in');
   });
 
   test('validates query rows and returns clear database errors', () => {

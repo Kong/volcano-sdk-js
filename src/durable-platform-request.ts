@@ -69,11 +69,7 @@ export async function postToPlatform(apiUrl: string, request: PlatformRequest): 
 
 // Waits out the delay and answers how long the next attempt may take, or null
 // when the failure is final or no time would be left for another attempt.
-async function retryTimeout(
-  failure: Failure,
-  delay: number,
-  deadline: number,
-): Promise<number | null> {
+async function retryTimeout(failure: Failure, delay: number, deadline: number): Promise<number | null> {
   if (!failure.retryable || deadline - Date.now() <= delay) {
     return null;
   }

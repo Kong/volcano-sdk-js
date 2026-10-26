@@ -256,11 +256,7 @@ describe('QueryBuilder', () => {
         }),
       );
 
-      const result = await volcano
-        .from('posts')
-        .select('id, title')
-        .eq('status', 'published')
-        .execute();
+      const result = await volcano.from('posts').select('id, title').eq('status', 'published').execute();
 
       expect(result.data).toHaveLength(2);
       expect(result.error).toBeNull();
@@ -459,9 +455,7 @@ describe('QueryBuilder', () => {
         }),
       );
 
-      await expect(volcano.from('posts').then((result) => result.data)).resolves.toEqual([
-        { id: 1 },
-      ]);
+      await expect(volcano.from('posts').then((result) => result.data)).resolves.toEqual([{ id: 1 }]);
     });
   });
 });
@@ -567,10 +561,7 @@ describe('MutationBuilder', () => {
 
       expect(result.error).toBeNull();
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.test.com/databases/test_db/query/delete',
-        expect.any(Object),
-      );
+      expect(fetchMock).toHaveBeenCalledWith('https://api.test.com/databases/test_db/query/delete', expect.any(Object));
     });
   });
 
@@ -681,18 +672,7 @@ describe('MutationBuilder', () => {
       builder.in('category', ['tech', 'news']);
 
       expect(Reflect.get(builder, 'filters')).toHaveLength(10);
-      expect(filterOperators(builder)).toEqual([
-        'eq',
-        'neq',
-        'gt',
-        'gte',
-        'lt',
-        'lte',
-        'like',
-        'ilike',
-        'is',
-        'in',
-      ]);
+      expect(filterOperators(builder)).toEqual(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is', 'in']);
     });
 
     it('should support all filter methods on delete', () => {

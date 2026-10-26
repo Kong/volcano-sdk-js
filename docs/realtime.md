@@ -482,11 +482,7 @@ Load initial data, then subscribe for updates:
 
 ```javascript
 // Fetch initial data
-const { data: posts } = await volcano
-  .from('posts')
-  .select('*')
-  .order('created_at', { ascending: false })
-  .limit(50);
+const { data: posts } = await volcano.from('posts').select('*').order('created_at', { ascending: false }).limit(50);
 
 setPosts(posts);
 

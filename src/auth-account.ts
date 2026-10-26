@@ -120,10 +120,7 @@ export async function signIn(
   const expectedGeneration = host._sessionGeneration;
   let response: Awaited<ReturnType<typeof authSignin>>;
   try {
-    response = await host._transport.authSignin(
-      { email, password },
-      host._generatedOptions('anon'),
-    );
+    response = await host._transport.authSignin({ email, password }, host._generatedOptions('anon'));
   } catch (error) {
     return {
       user: null,
@@ -194,10 +191,7 @@ function isUserResponseCurrent(host: AuthAccountHost, context: AuthContext, user
   return host._isAuthContextCurrent(context) && (!Boolean(currentId) || user.id === currentId);
 }
 
-export function onAuthStateChange(
-  host: AuthAccountHost,
-  callback: (user: User | null) => void,
-): () => void {
+export function onAuthStateChange(host: AuthAccountHost, callback: (user: User | null) => void): () => void {
   host._authCallbacks.push(callback);
   try {
     callback(host.currentUser);
@@ -209,9 +203,7 @@ export function onAuthStateChange(
   };
 }
 
-export async function getUser(
-  host: AuthAccountHost,
-): Promise<{ user: User | null; error: Error | null }> {
+export async function getUser(host: AuthAccountHost): Promise<{ user: User | null; error: Error | null }> {
   const adoptedFromUrl = host._consumeSessionFromUrl();
   const { result, context } = await host._authFetchWithContext('/auth/user');
   if (result.ok !== true) {
@@ -250,10 +242,7 @@ export async function updateUser(
   return { user, error: null };
 }
 
-export async function signInAnonymously(
-  host: AuthAccountHost,
-  metadata: Record<string, unknown>,
-): Promise<AuthResult> {
+export async function signInAnonymously(host: AuthAccountHost, metadata: Record<string, unknown>): Promise<AuthResult> {
   const expectedGeneration = host._sessionGeneration;
   const result = await host._anonFetch('/auth/signup-anonymous', {
     method: 'POST',
@@ -278,10 +267,7 @@ export async function signInAnonymously(
   };
 }
 
-export function signUpAnonymous(
-  host: AuthAccountHost,
-  metadata: Record<string, unknown>,
-): Promise<AuthResult> {
+export function signUpAnonymous(host: AuthAccountHost, metadata: Record<string, unknown>): Promise<AuthResult> {
   return host.signInAnonymously(metadata);
 }
 
@@ -289,16 +275,13 @@ export async function convertAnonymous(
   host: AuthAccountHost,
   options: { email: string; password: string; metadata?: Record<string, unknown> },
 ): Promise<{ user: User | null; error: Error | null }> {
-  const { result, context } = await host._authFetchWithContext(
-    '/auth/user/convert-anonymous',
-    () => {
-      const { email, password, metadata = {} } = options;
-      return {
-        method: 'POST',
-        body: JSON.stringify({ email, password, user_metadata: metadata }),
-      };
-    },
-  );
+  const { result, context } = await host._authFetchWithContext('/auth/user/convert-anonymous', () => {
+    const { email, password, metadata = {} } = options;
+    return {
+      method: 'POST',
+      body: JSON.stringify({ email, password, user_metadata: metadata }),
+    };
+  });
   return adoptedUser(host, context, result);
 }
 
@@ -342,10 +325,7 @@ export function forgotPassword(host: AuthAccountHost, email: string): Promise<Me
   return messageRequest(host, '/auth/forgot-password', { email });
 }
 
-export function resetPasswordForEmail(
-  host: AuthAccountHost,
-  email: string,
-): Promise<MessageResult> {
+export function resetPasswordForEmail(host: AuthAccountHost, email: string): Promise<MessageResult> {
   return host.forgotPassword(email);
 }
 
@@ -363,10 +343,7 @@ interface EmailChangeResult {
   error: Error | null;
 }
 
-export async function requestEmailChange(
-  host: AuthAccountHost,
-  newEmail: string,
-): Promise<EmailChangeResult> {
+export async function requestEmailChange(host: AuthAccountHost, newEmail: string): Promise<EmailChangeResult> {
   const { result, context } = await host._authFetchWithContext('/auth/user/change-email', () => ({
     method: 'POST',
     body: JSON.stringify({ new_email: newEmail }),
@@ -389,13 +366,10 @@ export async function confirmEmailChange(
   host: AuthAccountHost,
   emailChangeToken: string,
 ): Promise<{ user: User | null; error: Error | null }> {
-  const { result, context } = await host._authFetchWithContext(
-    '/auth/user/confirm-email-change',
-    () => ({
-      method: 'POST',
-      body: JSON.stringify({ email_change_token: emailChangeToken }),
-    }),
-  );
+  const { result, context } = await host._authFetchWithContext('/auth/user/confirm-email-change', () => ({
+    method: 'POST',
+    body: JSON.stringify({ email_change_token: emailChangeToken }),
+  }));
   return adoptedUser(host, context, result);
 }
 

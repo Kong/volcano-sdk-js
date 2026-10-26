@@ -24,12 +24,10 @@ cjs.channel('room').on('message', receive);
 esm.channel('room').on('message', receive);
 void cjsChannel.subscribe();
 void esmChannel.subscribe();
-export const cjsAuth: NonNullable<
-  ConstructorParameters<typeof CjsRealtime>[0]['volcanoClient']
-> | null = cjs.getVolcanoClient();
-export const esmAuth: NonNullable<
-  ConstructorParameters<typeof EsmRealtime>[0]['volcanoClient']
-> | null = esm.getVolcanoClient();
+export const cjsAuth: NonNullable<ConstructorParameters<typeof CjsRealtime>[0]['volcanoClient']> | null =
+  cjs.getVolcanoClient();
+export const esmAuth: NonNullable<ConstructorParameters<typeof EsmRealtime>[0]['volcanoClient']> | null =
+  esm.getVolcanoClient();
 
 export function cjsErrorMessage(context: CjsErrorContext): string | undefined {
   return context.error instanceof Error ? context.error.message : context.message;

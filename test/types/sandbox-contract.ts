@@ -1,9 +1,4 @@
-import type {
-  SandboxCreateOptions,
-  Sandboxes,
-  SandboxExecOptions,
-  SandboxSession,
-} from '../../src/index.ts';
+import type { SandboxCreateOptions, Sandboxes, SandboxExecOptions, SandboxSession } from '../../src/index.ts';
 
 export const sessionOptions: SandboxCreateOptions = {
   preset: 'python3.12',

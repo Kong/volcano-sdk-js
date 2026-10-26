@@ -179,9 +179,7 @@ test('failed abort is reported while preserving the part error', async () => {
     data: null,
     error,
   });
-  expect(warnings).toEqual([
-    ['[Storage] Failed to abort upload session session-1:', 'abort refused'],
-  ]);
+  expect(warnings).toEqual([['[Storage] Failed to abort upload session session-1:', 'abort refused']]);
 });
 
 test('normalizes thrown non-Error values during an upload', async () => {

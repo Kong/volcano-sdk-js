@@ -271,9 +271,7 @@ describe('Realtime Auto-Fetch', () => {
 
   describe('_handleLightweightNotification', () => {
     test('converts lightweight INSERT to full payload', async () => {
-      const { client: mockClient } = createMockVolcanoClient([
-        { id: 1, name: 'Alice', email: 'alice@test.com' },
-      ]);
+      const { client: mockClient } = createMockVolcanoClient([{ id: 1, name: 'Alice', email: 'alice@test.com' }]);
       realtime.setVolcanoClient(mockClient);
 
       const channel = realtime.channel('public:users', { type: 'postgres' });

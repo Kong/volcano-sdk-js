@@ -9,10 +9,7 @@ import { fileURLToPath } from 'node:url';
 const reporter = fileURLToPath(new URL('node-completeness.mjs', import.meta.url));
 const passing = "await test('passes', () => assert.equal(1, 1));";
 
-async function runFixture(
-  source?: string,
-  extra: readonly string[] = [],
-): Promise<SpawnSyncReturns<string>> {
+async function runFixture(source?: string, extra: readonly string[] = []): Promise<SpawnSyncReturns<string>> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-native-tests-'));
   try {
     if (source !== undefined) {
@@ -50,11 +47,7 @@ const incomplete: [string, string, string[]][] = [
   ['skipped case', `${passing} await test.skip('skipped', () => {});`, []],
   ['pending case', `${passing} await test.todo('pending');`, []],
   ['empty suite file', '', []],
-  [
-    'name-filtered case',
-    `${passing} await test('filtered', () => {});`,
-    ['--test-name-pattern=passes'],
-  ],
+  ['name-filtered case', `${passing} await test('filtered', () => {});`, ['--test-name-pattern=passes']],
   ['focused case', `${passing} await test.only('focused', () => {});`, ['--test-only']],
 ];
 for (const [name, source, arguments_] of incomplete) {
