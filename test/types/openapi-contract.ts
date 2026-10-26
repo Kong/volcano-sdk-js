@@ -178,6 +178,23 @@ async function followDurableExecution(): Promise<unknown> {
 
 type _DurableMessageComesOffTheWire = Assert<Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>>;
 
+// ctx.waitForCallback() registers its step with POST /durable-callbacks, which
+// hosting#1966 adds. A sync from a hosting main without that route fails here
+// instead of dropping it.
+type RegisterDurableCallback = OpenAPIOperations['registerDurableCallback'];
+type _WaitForCallbackSendsTheRegistration = Assert<
+  Equal<
+    keyof RegisterDurableCallback['requestBody']['content']['application/json'],
+    'name' | 'execution_ref' | 'callback_id' | 'operation_id'
+  >
+>;
+type _WaitForCallbackReadsItsToken = Assert<
+  Equal<
+    keyof RegisterDurableCallback['responses'][201]['content']['application/json'],
+    'token' | 'expires_at'
+  >
+>;
+
 declare const realtime: VolcanoRealtime;
 
 // Messages answer the same envelope, a page reads on from the last `seq`, and
@@ -339,6 +356,8 @@ export type OpenApiContractChecks = [
   _DurableStartHandleMatchesHosting,
   _DurableExecutionComesOffTheWire,
   _DurableMessageComesOffTheWire,
+  _WaitForCallbackSendsTheRegistration,
+  _WaitForCallbackReadsItsToken,
   _LogSearchEventIsUsable,
   _LogSearchEventBodyKeepsJsonTypes,
   _CustomDomainTLSMatchesHosting,
