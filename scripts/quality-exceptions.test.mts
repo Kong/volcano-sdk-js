@@ -68,13 +68,13 @@ await test('Orval boundary exceptions apply only to its generic response express
   }
 });
 
-await test('dependency audit exceptions name one advisory at one version', async () => {
+await test('the dependency audit has no exceptions', async () => {
   const exceptions = array(JSON.parse(await readFile('quality-exceptions.json', 'utf8'))).map(
     (value) => record(value),
   );
   assert.deepEqual(
     exceptions.filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
-    ['GHSA-vfj7-8cjw-p6xm:braces@3.0.3'],
+    [],
   );
 });
 

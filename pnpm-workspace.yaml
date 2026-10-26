@@ -19,7 +19,11 @@ overrides:
   # Stryker's HTTP client resolves a qs release with DoS advisories.
   'typed-rest-client>qs': 6.16.0
   # Patch URI parsing and Markdown denial-of-service advisories in tooling.
-  'fast-uri@>=3.0.0 <3.1.8': ^3.1.8
+  'fast-uri@>=3.0.0 <3.1.9': ^3.1.9
+  # Orval's spec loader resolves an undici release with fetch advisories.
+  'undici@>=7.0.0 <7.30.1': ^7.30.1
+  # Stryker's mutation server protocol resolves a zod release with an advisory.
+  'zod@>=4.0.0 <4.6.6': ^4.6.6
   'markdown-it@>=14.0.0 <14.3.1': ^14.3.1
   # js-yaml 3 pulls sprintf-js through argparse 1, and sprintf-js has no fixed
   # release. load-nyc-config only calls load(), which js-yaml 4 keeps.
