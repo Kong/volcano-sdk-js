@@ -11,6 +11,7 @@ import {
   validateCompleteSession,
 } from './auth-validation.ts';
 import { AuthSessionChangedError } from './errors.ts';
+import { isFalsy } from './falsy.ts';
 import type { authSignin } from './generated/client.ts';
 import { cloneJsonValue } from './json-clone.ts';
 import type { Session, User } from './sdk-public-types.ts';
@@ -195,7 +196,7 @@ export function setSession(host: AuthAccountHost, session: unknown): Promise<Cur
 
 function isUserResponseCurrent(host: AuthAccountHost, context: AuthContext, user: User): boolean {
   const currentId = host.currentUser?.id;
-  return host._isAuthContextCurrent(context) && (currentId === undefined || currentId === '' || user.id === currentId);
+  return host._isAuthContextCurrent(context) && (isFalsy(currentId) || user.id === currentId);
 }
 
 export function onAuthStateChange(host: AuthAccountHost, callback: (user: User | null) => void): () => void {
