@@ -48,9 +48,11 @@ A finding that cannot be fixed without changing behavior, such as a loop whose
 iterations must run in order, can be approved in `quality-exceptions.json` with
 the rule, a declaration scope, a rationale, and evidence. Its exact
 `// oxlint-disable-next-line <rule> -- <reason>` directive must be listed for
-that file in `scripts/suppression-policy.mts`, and
-`scripts/quality-exceptions.test.mts` fails once the rule no longer fires
-without it. Every other suppression comment fails the tracked-file policy.
+that file in `scripts/suppression-policy.mts`, once per place it is approved,
+and must sit alone on its line. One directive may name several rules approved
+for the same line. `scripts/quality-exceptions.test.mts` fails once a rule no
+longer fires without its directive. Every other suppression comment fails the
+tracked-file policy.
 
 ## Dependency audit exceptions
 

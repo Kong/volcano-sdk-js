@@ -5,13 +5,13 @@ import { basename, dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { lint } from './oxlint-report.mts';
+import { sourceComments } from './suppression-policy.mts';
 import { array, record, stringValue } from './values.mts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const auditRule = 'pnpm audit';
-const directive = '// oxlint-disable';
-// Each approved lint exception and the declaration its directive must precede.
-const declarations = new Map([
+// Each approved lint exception, in quality-exceptions.json's order, and the declaration its directive must precede.
+const declarations: [string, string][] = [
   ['src/index.ts:QueryBuilder', 'export const QueryBuilder ='],
   ['src/index.ts:StorageFileApi', 'export const StorageFileApi ='],
   ['src/volcano-fetch.ts:retryAfterSeconds', 'const seconds = Number.parseInt('],
@@ -92,22 +92,53 @@ const declarations = new Map([
     'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.DeleteBuilder',
     'Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>',
   ],
-]);
+];
+
+interface Exception {
+  rule: string;
+  scope: string;
+  declaration: string;
+  rationale: string;
+  evidence: string;
+}
+
+interface Directive {
+  // Zero-based line the directive sits on.
+  line: number;
+  rules: string[];
+}
 
 async function exceptions(): Promise<Record<string, unknown>[]> {
   const content = await readFile(join(root, 'quality-exceptions.json'), 'utf8');
   return array(JSON.parse(content)).map((value) => record(value));
 }
 
-function directiveLines(lines: readonly string[]): number[] {
-  return lines.flatMap((line, index) => (line.trim().startsWith(directive) ? [index] : []));
+// The rules a directive names in its exact `-next-line <rule>, <rule> -- <reason>` form.
+function directiveRules(text: string): string[] {
+  const match = /^\/\/ oxlint-disable-next-line (?<rules>[\w/-]+(?:, [\w/-]+)*) -- \S/u.exec(text);
+  assert.ok(match?.groups !== undefined, `${text} is not an exact directive`);
+  return stringValue(match.groups['rules']).split(', ');
 }
 
-async function lintWithoutDirectives(path: string, lines: readonly string[]): Promise<Set<string>> {
+// Counts the comments the scanner finds rather than line prefixes, so no directive hides in a trailing comment.
+function directives(path: string, source: string): Directive[] {
+  return sourceComments(path, source)
+    .filter(({ text }) => text.includes('oxlint-disable'))
+    .map(({ text, line, alone }) => {
+      assert.ok(alone, `${path}:${String(line + 1)} shares its line with a directive`);
+      return { line, rules: directiveRules(text) };
+    });
+}
+
+async function lintWithoutDirectives(
+  path: string,
+  lines: readonly string[],
+  found: readonly Directive[],
+): Promise<Set<string>> {
   // Lint a copy beside the original so its relative imports, type information, ignore patterns, and scope still apply.
   const copy = join(root, dirname(path), `quality-fixture-${randomUUID()}-${basename(path)}`);
   try {
-    const stripped = lines.map((line) => (line.trim().startsWith(directive) ? '//' : line));
+    const stripped = lines.map((line, index) => (found.some((item) => item.line === index) ? '//' : line));
     await writeFile(copy, stripped.join('\n'));
     return new Set(lint([copy]).findings.map(({ code, line }) => `${code}:${String(line)}`));
   } finally {
@@ -120,39 +151,43 @@ function oxlintCode(rule: string): string {
   return `${stringValue(plugin)}(${stringValue(name)})`;
 }
 
-// Checks every exception approved in `path` and answers how many directives the file holds.
-async function checkedDirectives(path: string, approved: readonly Record<string, unknown>[]): Promise<number> {
-  const lines = (await readFile(join(root, path), 'utf8')).split('\n');
-  const findings = await lintWithoutDirectives(path, lines);
-  for (const item of approved.filter((entry) => stringValue(entry['scope']).startsWith(`${path}:`))) {
-    const scope = stringValue(item['scope']);
-    const rule = stringValue(item['rule']);
-    const declaration = stringValue(declarations.get(scope));
+// Checks every exception approved in `path` and answers how many rules the file's directives name.
+async function checkedDirectives(path: string, approved: readonly Exception[]): Promise<number> {
+  const source = await readFile(join(root, path), 'utf8');
+  const lines = source.split('\n');
+  const found = directives(path, source);
+  const findings = await lintWithoutDirectives(path, lines, found);
+  for (const { rule, scope, declaration, rationale, evidence } of approved.filter((item) =>
+    item.scope.startsWith(`${path}:`),
+  )) {
     const target = lines.findIndex((line) => line.trim().startsWith(declaration));
-    assert.ok(
-      stringValue(lines[target - 1])
-        .trim()
-        .startsWith(`${directive}-next-line ${rule} -- `),
-      scope,
-    );
+    const covering = found.find((item) => item.line === target - 1);
+    assert.ok(covering?.rules.includes(rule) === true, `${scope} needs its ${rule} directive on the line before it`);
     assert.ok(findings.has(`${oxlintCode(rule)}:${String(target + 1)}`), `${scope} no longer needs ${rule}`);
-    assert.ok(stringValue(item['rationale']).length > 30);
-    assert.ok(stringValue(item['evidence']).length > 30);
+    assert.ok(rationale.length > 30);
+    assert.ok(evidence.length > 30);
   }
-  return directiveLines(lines).length;
+  return found.reduce((sum, item) => sum + item.rules.length, 0);
 }
 
 await test('every lint exception is approved, exact, and still needed', async () => {
-  const approved = (await exceptions()).filter((item) => item['rule'] !== auditRule);
+  const entries = (await exceptions()).filter((item) => item['rule'] !== auditRule);
   assert.deepEqual(
-    approved.map((item) => item['scope']),
-    [...declarations.keys()],
+    entries.map((item) => item['scope']),
+    declarations.map(([scope]) => scope),
   );
-  const paths = new Set(approved.map((item) => stringValue(stringValue(item['scope']).split(':')[0])));
+  const approved = entries.map((item, index) => ({
+    rule: stringValue(item['rule']),
+    scope: stringValue(item['scope']),
+    declaration: stringValue(declarations[index]?.[1]),
+    rationale: stringValue(item['rationale']),
+    evidence: stringValue(item['evidence']),
+  }));
+  const paths = new Set(approved.map(({ scope }) => stringValue(scope.split(':')[0])));
   // Each file's copy is linted on its own.
   const counts = await Promise.all([...paths].map((path) => checkedDirectives(path, approved)));
   const total = counts.reduce((sum, count) => sum + count, 0);
-  assert.equal(total, approved.length, 'Each lint exception covers exactly one directive');
+  assert.equal(total, approved.length, 'Each lint exception covers exactly one rule in one directive');
 });
 
 await test('the dependency audit has no exceptions', async () => {
