@@ -65,7 +65,6 @@ function exchangesCallbackCodes(): void {
   it('keeps the exchanged session in memory when browser storage is unavailable', async () => {
     seedOAuthCallback('/auth/callback?code=one-time-code&state=oauth-nonce');
     const storageSetItem = jest.spyOn(localStorage, 'setItem');
-    expect(jest.isMockFunction(storageSetItem)).toBe(true);
     storageSetItem.mockImplementationOnce(() => {
       throw new DOMException('Storage is unavailable', 'SecurityError');
     });
@@ -74,6 +73,7 @@ function exchangesCallbackCodes(): void {
     const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
     const result = await v.initialize();
 
+    expect(storageSetItem).toHaveBeenCalled();
     expect(result.user).toEqual(expect.objectContaining({ id: 'oauth-user' }));
     expect(result.error).toBeNull();
     expect(v.accessToken).toBe('oauth-access');
