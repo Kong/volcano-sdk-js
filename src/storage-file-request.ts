@@ -41,7 +41,7 @@ export function invalidTarget(bucketName: string, paths: readonly unknown[]): St
 /** Refuse a request without a session, once any pending OAuth exchange settles. */
 export async function sessionRefusal(host: StorageFileApi): Promise<StorageResult<never> | null> {
   await host.volcanoAuth._completeOAuthExchange();
-  if (host.volcanoAuth.accessToken === null || host.volcanoAuth.accessToken === '') {
+  if (isFalsy(host.volcanoAuth.accessToken)) {
     const exchangeError = host.volcanoAuth._oauthExchangeError;
     return errorResult(
       exchangeError instanceof Error
