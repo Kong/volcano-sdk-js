@@ -2,6 +2,7 @@ import type * as Expected from './published-api';
 import type * as Actual from '@volcano.dev/sdk';
 import type * as ESM from '../../dist/index.esm.mjs';
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Each generic signature compares one type exactly.
 export type Exact<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type AllTrue<T extends true[]> = T;
 
@@ -100,8 +101,11 @@ export type PublishedTypes = AllTrue<
     Exact<Expected.QueryResult, Actual.QueryResult>,
     Exact<Expected.QueryBuilder, Actual.QueryBuilder>,
     Exact<Expected.MutationBuilder, Actual.MutationBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.InsertBuilder, Actual.InsertBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.UpdateBuilder, Actual.UpdateBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.DeleteBuilder, Actual.DeleteBuilder>,
     Exact<Expected.ProjectLockLease, Actual.ProjectLockLease>,
     Exact<Expected.ProjectLockRequestOptions, Actual.ProjectLockRequestOptions>,
@@ -228,8 +232,11 @@ export type EsmPublishedTypes = AllTrue<
     Exact<Expected.QueryResult, ESM.QueryResult>,
     Exact<Expected.QueryBuilder, ESM.QueryBuilder>,
     Exact<Expected.MutationBuilder, ESM.MutationBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.InsertBuilder, ESM.InsertBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.UpdateBuilder, ESM.UpdateBuilder>,
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.
     Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>,
     Exact<Expected.ProjectLockLease, ESM.ProjectLockLease>,
     Exact<Expected.ProjectLockRequestOptions, ESM.ProjectLockRequestOptions>,

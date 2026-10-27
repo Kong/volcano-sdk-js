@@ -1,4 +1,5 @@
 import { errorResult } from './api-errors.ts';
+import { isFalsy } from './falsy.ts';
 import type {
   CompleteUploadSessionResponse,
   CreateUploadSessionOptions,
@@ -30,7 +31,7 @@ export async function createSession(
     return rejected;
   }
 
-  if (options === null || options === undefined || !options.totalSize) {
+  if (options === null || options === undefined || isFalsy(options.totalSize)) {
     return errorResult('totalSize is required');
   }
 

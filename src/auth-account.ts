@@ -195,7 +195,7 @@ export function setSession(host: AuthAccountHost, session: unknown): Promise<Cur
 
 function isUserResponseCurrent(host: AuthAccountHost, context: AuthContext, user: User): boolean {
   const currentId = host.currentUser?.id;
-  return host._isAuthContextCurrent(context) && (!currentId || user.id === currentId);
+  return host._isAuthContextCurrent(context) && (currentId === undefined || currentId === '' || user.id === currentId);
 }
 
 export function onAuthStateChange(host: AuthAccountHost, callback: (user: User | null) => void): () => void {

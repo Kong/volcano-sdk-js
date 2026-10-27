@@ -15,18 +15,34 @@ and the Next.js example also get their framework's rules.
 override change fails until the policy test changes with it, and lints fixtures
 to show the categories and framework rules apply where that code lives.
 
-Two rules are off:
+Type-aware mode (`options.typeAware`) runs the typed rules, such as
+`no-floating-promises`, `strict-boolean-expressions`, the `no-unsafe-*` family,
+`return-await`, and `no-deprecated`, through the pinned `oxlint-tsgolint`
+binary. It reads types from the compiler projects that own each file: the root
+`tsconfig.json`, which references `tsconfig.tooling.json` for scripts, the Next.js
+example's `tsconfig.json`, and the durable example's `jsconfig.json`. Type
+tests, fixtures, and both examples import `dist`, so `pnpm lint` builds first.
+
+Four rules are off:
 
 - `eslint/no-underscore-dangle`: a leading underscore is how JavaScript
   consumers recognise the SDK's `@internal` members, which the published types
   strip. Renaming them would make internals look public.
 - `react/react-in-jsx-scope`: it predates React 17's automatic JSX runtime,
   which Next.js uses, so it only demands unused imports.
+- `eslint/require-await`: `typescript/require-await` replaces it. The base rule
+  also reports an async function that returns a promise without awaiting it,
+  which `return-await` requires, so the pair would make such functions
+  synchronous and throw instead of reject.
+- `typescript/prefer-readonly-parameter-types`: it demands deeply readonly types
+  for every parameter, DOM and library types included, and no recommended or
+  strict type-checked preset enables it.
 
 The `style` and `restriction` categories are not enabled: they hold opinions and
-feature bans meant to be adopted rule by rule. `nursery` is not enabled because
-its rules are unstable. TypeScript's strict compiler options are the type-safety
-gate; oxlint adds no type-aware rules.
+feature bans meant to be adopted rule by rule. Two restriction rules the ESLint
+configuration enforced are on: `typescript/no-explicit-any` and
+`eslint/complexity` with a limit of 5. `nursery` is not enabled because its
+rules are unstable.
 
 A finding that cannot be fixed without changing behavior, such as a loop whose
 iterations must run in order, can be approved in `quality-exceptions.json` with

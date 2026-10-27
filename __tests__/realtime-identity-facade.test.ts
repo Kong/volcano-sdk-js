@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { deferredVoid, subscriptionAt, TestTransportClient } from './realtime-transport-fixtures.ts';
+import type { ChannelListener } from './support/realtime-listeners.ts';
 import { TestSubscription } from './support/realtime-test-subscription.ts';
 
 function token(projectId: string, subject: string, expires = 1): string {
@@ -45,7 +46,7 @@ function comparesRefreshedIdentities(): void {
   ])('resets subscriptions for a %s without dropping handlers', async (_case, original, next) => {
     const { realtime, client } = createRealtime(original);
     const channel = realtime.channel('room');
-    const onMessage = jest.fn();
+    const onMessage = jest.fn<ChannelListener>();
     channel.on('message', onMessage);
     await channel.subscribe();
     const previous = subscriptionAt(client, 0);
@@ -99,7 +100,7 @@ function resumesAfterServerAcceptance(): void {
     const channel = realtime.channel('lobby', { type: 'presence' });
     await channel.subscribe();
     realtime._adoptAccessToken('new');
-    const onMessage = jest.fn();
+    const onMessage = jest.fn<ChannelListener>();
     channel.on('message', onMessage);
     const ready = deferredVoid();
     const subscription = new TestSubscription();

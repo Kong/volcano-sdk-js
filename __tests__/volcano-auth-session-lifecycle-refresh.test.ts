@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { AuthRefreshDiscardedError, VolcanoAuth } from '../src/index.ts';
+import { AuthRefreshDiscardedError, type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { reply, within } from './auth-concurrency-fixtures.ts';
 import { sessionToken } from './session-fixtures.ts';
 import { installWindow, pendingFetch, restoreWindow } from './support/volcano-auth-sessions-fixtures.ts';
@@ -28,7 +28,7 @@ function clearStorageSpies(): void {
 
 /** Replaces the session while a refresh is in flight, then settles the refresh with `stale`. */
 async function refreshAcrossReplacement(stale: Response, [startLabel, settleLabel]: readonly [string, string]) {
-  const callback = jest.fn();
+  const callback = jest.fn<AuthStateCallback>();
   volcano._setSession({
     access_token: 'old-access',
     refresh_token: 'old-refresh',

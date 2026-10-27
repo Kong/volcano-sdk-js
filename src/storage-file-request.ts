@@ -1,4 +1,5 @@
 import { errorResult } from './api-errors.ts';
+import { isFalsy } from './falsy.ts';
 import type { StorageError } from './index.js';
 import type { StorageFileApi } from './storage-file.ts';
 import { storageTargetError } from './storage-paths.ts';
@@ -24,11 +25,11 @@ export function validatedResult<T>(
 }
 
 export function legacyStringDefault(value: unknown, fallback: string): string {
-  return value ? String(value) : fallback;
+  return isFalsy(value) ? fallback : String(value);
 }
 
 export function legacyValueDefault(value: unknown, fallback: unknown): unknown {
-  return value ? value : fallback;
+  return isFalsy(value) ? fallback : value;
 }
 
 /** Refuse a bucket or path before a URL parser can resolve it outside the bucket route. */
@@ -40,7 +41,7 @@ export function invalidTarget(bucketName: string, paths: readonly unknown[]): St
 /** Refuse a request without a session, once any pending OAuth exchange settles. */
 export async function sessionRefusal(host: StorageFileApi): Promise<StorageResult<never> | null> {
   await host.volcanoAuth._completeOAuthExchange();
-  if (!host.volcanoAuth.accessToken) {
+  if (host.volcanoAuth.accessToken === null || host.volcanoAuth.accessToken === '') {
     const exchangeError = host.volcanoAuth._oauthExchangeError;
     return errorResult(
       exchangeError instanceof Error

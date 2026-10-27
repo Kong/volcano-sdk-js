@@ -1,6 +1,7 @@
 import { expect, jest } from '@jest/globals';
 import { durable } from '../../src/durable.ts';
 import type { CallbackSubmitter, DurableContext, DurableHandler, DurableLog } from '../../src/durable-types.ts';
+import { mockDurableLog } from './durable-log.ts';
 
 // As in durable-message.test.ts, a double stands in for the optional runtime.
 // Its waitForCallback runs the submitter once and then settles the way the
@@ -74,15 +75,10 @@ function runtimeInternals({ next, checkpointed }: RuntimeSteps): Partial<FakeCon
 }
 
 function mockContext(executionContext?: FakeContext['executionContext']): FakeContext {
-  const logger: DurableLog = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-  };
+  const logger = mockDurableLog();
   const context: FakeContext = {
     logger,
-    configureLogger: jest.fn(),
+    configureLogger: jest.fn<FakeContext['configureLogger']>(),
     step: jest.fn(),
     wait: () => Promise.resolve(),
     runInChildContext: () => Promise.resolve(),

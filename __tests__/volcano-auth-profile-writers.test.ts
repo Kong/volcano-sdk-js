@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
+import { AuthSessionChangedError, type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -30,7 +30,7 @@ function discardsStaleWriterResponses(): void {
   it.each(STALE_WRITERS)('discards a stale %s response', async (_name, invoke, pendingRedirectNotification) => {
     const response = deferred<Response>();
     const requestStarted = signal();
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     volcano._setSession({
       access_token: 'access-a',
       refresh_token: 'refresh-a',

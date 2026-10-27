@@ -1,3 +1,5 @@
+import { isFalsy } from './falsy.ts';
+
 type CentrifugeConstructor = new (...args: never[]) => unknown;
 
 let centrifugeConstructor: CentrifugeConstructor | undefined;
@@ -12,7 +14,7 @@ export function centrifugeFrom(loaded: unknown): CentrifugeConstructor {
     throw new TypeError('Centrifuge does not export a client constructor');
   }
   const named: unknown = Reflect.get(loaded, 'Centrifuge');
-  const candidate: unknown = named ? named : Reflect.get(loaded, 'default');
+  const candidate: unknown = isFalsy(named) ? Reflect.get(loaded, 'default') : named;
   if (!isConstructor(candidate)) {
     throw new TypeError('Centrifuge does not export a client constructor');
   }

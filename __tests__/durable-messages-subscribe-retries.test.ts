@@ -71,7 +71,7 @@ function retriesFailedCatchUpsPastAGap(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestTransport().publication({ ...message(3), prev_seq: 2 });
@@ -103,7 +103,7 @@ function reportsFailedCatchUpsWithNothingHeld(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
@@ -136,7 +136,7 @@ function catchesUpAtOncePastAGap(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
@@ -164,7 +164,7 @@ function releasesFollowingMessagesOnFailure(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestTransport().publication({ ...message(2), prev_seq: 1 });
@@ -187,7 +187,7 @@ function backsOffBetweenRetries(): void {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
@@ -222,7 +222,7 @@ function restartsTheBackoff(): void {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');

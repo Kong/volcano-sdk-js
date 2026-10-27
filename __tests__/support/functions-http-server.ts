@@ -66,7 +66,9 @@ export async function startServer(respond: Respond): Promise<TestServer> {
   const requests: RecordedRequest[] = [];
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
-    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
     request.on('end', () => {
       const body = Buffer.concat(chunks).toString();
       void respondToRequest(request, response, body, { requests, respond }).catch((error: unknown) => {

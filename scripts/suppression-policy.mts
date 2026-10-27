@@ -13,6 +13,7 @@ const approvedComments = new Map([
     'src/volcano-fetch.ts',
     new Set([
       "// oxlint-disable-next-line unicorn/prefer-number-coercion -- Retry-After keeps parseInt's leading-integer parsing.",
+      "// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Orval's generated callers name the response type.",
     ]),
   ],
   [
@@ -116,26 +117,76 @@ const approvedComments = new Map([
     ]),
   ],
   [
-    'examples/nextjs-notes-app/src/app/layout.js',
+    'examples/nextjs-notes-app/src/app/layout.tsx',
     new Set([
       '// oxlint-disable-next-line import/no-unassigned-import -- Next.js loads global CSS only by a side-effect import.',
     ]),
   ],
   [
-    'examples/nextjs-notes-app/src/components/NoteCardEditor.js',
+    'examples/nextjs-notes-app/src/components/NoteCardEditor.tsx',
     new Set([
       '// oxlint-disable-next-line jsx-a11y/no-autofocus -- The Edit button that had focus unmounts as this opens.',
     ]),
   ],
   [
-    'examples/nextjs-notes-app/src/components/NoteEditorForm.js',
+    'examples/nextjs-notes-app/src/components/NoteEditorForm.tsx',
     new Set([
       '// oxlint-disable-next-line jsx-a11y/no-autofocus -- The button that had focus unmounts as this form opens.',
     ]),
   ],
   [
-    'examples/nextjs-notes-app/src/components/useNoteEditor.js',
+    'examples/nextjs-notes-app/src/components/useNoteEditor.ts',
     new Set(['// oxlint-disable-next-line react/memo-dependencies -- The rule misses onCreate inside try/finally.']),
+  ],
+  [
+    'src/sdk-public-types-functions.ts',
+    new Set([
+      '// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers may name the payload type they send.',
+    ]),
+  ],
+  [
+    'src/sdk-public-types-durable.ts',
+    new Set([
+      '// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers may name the input type they send.',
+    ]),
+  ],
+  [
+    'src/volcano-auth-facades.ts',
+    new Set([
+      '// oxlint-disable-next-line typescript/no-deprecated -- Auth publishes this alias until the next major release.',
+      '// oxlint-disable-next-line typescript/strict-void-return -- JavaScript callers still receive the redirect URL.',
+    ]),
+  ],
+  [
+    'scripts/audit-dependencies.mts',
+    new Set([
+      "// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.",
+    ]),
+  ],
+  [
+    'scripts/dependency-audit.test.mts',
+    new Set([
+      "// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.",
+    ]),
+  ],
+  [
+    'scripts/test-package-quickstart.mts',
+    new Set([
+      "// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.",
+    ]),
+  ],
+  [
+    'test/fixtures/published-api/durable.d.ts',
+    new Set([
+      '// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- The published signature lets callers name these types.',
+    ]),
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts',
+    new Set([
+      '// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Each generic signature compares one type exactly.',
+      '// oxlint-disable-next-line typescript/no-deprecated -- The deprecated builder aliases stay published until the next major release.',
+    ]),
   ],
 ]);
 

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { VolcanoAuth } from '../src/index.ts';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { mockVolcanoClientFactory } from './support/realtime-autofetch-fixtures.ts';
+import type { ChannelListener } from './support/realtime-listeners.ts';
 
 const createMockVolcanoClient = mockVolcanoClientFactory(VolcanoAuth);
 
@@ -133,8 +134,8 @@ function deliversToMatchingCallbacks(): void {
   test('delivers to event-specific callbacks', () => {
     const channel = realtime.channel('test', { type: 'postgres' });
 
-    const insertCallback = jest.fn();
-    const updateCallback = jest.fn();
+    const insertCallback = jest.fn<ChannelListener>();
+    const updateCallback = jest.fn<ChannelListener>();
 
     channel.on('INSERT', insertCallback);
     channel.on('UPDATE', updateCallback);
@@ -148,7 +149,7 @@ function deliversToMatchingCallbacks(): void {
   test('delivers to wildcard callbacks', () => {
     const channel = realtime.channel('test', { type: 'postgres' });
 
-    const wildcardCallback = jest.fn();
+    const wildcardCallback = jest.fn<ChannelListener>();
     channel.on('*', wildcardCallback);
 
     channel._deliverPayload({ type: 'INSERT', record: { id: 1 } }, {});
@@ -161,7 +162,7 @@ function deliversToMatchingCallbacks(): void {
   test('uses event field when present', () => {
     const channel = realtime.channel('test');
 
-    const customCallback = jest.fn();
+    const customCallback = jest.fn<ChannelListener>();
     channel.on('custom_event', customCallback);
 
     channel._deliverPayload({ event: 'custom_event', data: 'test' }, {});

@@ -34,12 +34,12 @@ export class VolcanoAuthSession extends VolcanoAuthState {
     path: string | (() => string),
     options: RequestInit | (() => RequestInit) = {},
   ): ReturnType<typeof authFetchWithContext> {
-    return await authFetchWithContext(this, path, options);
+    return authFetchWithContext(this, path, options);
   }
 
   /** @internal */
   async _authFetchUrl(url: string, fetchOptions: RequestInit = {}): ReturnType<typeof authFetchUrl> {
-    return await authFetchUrl(this, url, fetchOptions);
+    return authFetchUrl(this, url, fetchOptions);
   }
 
   /** @internal */
@@ -55,7 +55,7 @@ export class VolcanoAuthSession extends VolcanoAuthState {
       if (!headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${this.anonKey}`);
       }
-      return await fetchWithTimeout(
+      return fetchWithTimeout(
         url,
         {
           ...options,
@@ -65,17 +65,17 @@ export class VolcanoAuthSession extends VolcanoAuthState {
       );
     }
 
-    return await fetchWithAuthRetry(this, url, options, timeoutMs);
+    return fetchWithAuthRetry(this, url, options, timeoutMs);
   }
 
   /** @internal */
   async _anonFetch(path: string, options: RequestInit = {}): ReturnType<typeof anonFetch> {
-    return await anonFetch(this, path, options);
+    return anonFetch(this, path, options);
   }
 
   /** @internal */
   async signOut(): ReturnType<typeof signOut> {
-    return await signOut(this);
+    return signOut(this);
   }
 
   /** @internal */
@@ -83,7 +83,7 @@ export class VolcanoAuthSession extends VolcanoAuthState {
     context: Parameters<typeof signOutCaptured>[1],
     refreshing: Parameters<typeof signOutCaptured>[2],
   ): ReturnType<typeof signOutCaptured> {
-    return await signOutCaptured(this, context, refreshing);
+    return signOutCaptured(this, context, refreshing);
   }
 
   /** @internal */
@@ -92,27 +92,27 @@ export class VolcanoAuthSession extends VolcanoAuthState {
     sessionId: string,
     preceding: Parameters<typeof revokeAccessSession>[3],
   ): ReturnType<typeof revokeAccessSession> {
-    return await revokeAccessSession(this, context, sessionId, preceding);
+    return revokeAccessSession(this, context, sessionId, preceding);
   }
 
   /** @internal */
   async refreshSession(): ReturnType<typeof refreshSession> {
-    return await refreshSession(this);
+    return refreshSession(this);
   }
 
   /** @internal */
   async _refreshSessionForContext(context: AuthContext): ReturnType<typeof refreshSessionForContext> {
-    return await refreshSessionForContext(this, context);
+    return refreshSessionForContext(this, context);
   }
 
   /** @internal */
   async _fetchSessionRefresh(context: AuthContext): ReturnType<typeof fetchSessionRefresh> {
-    return await fetchSessionRefresh(this, context);
+    return fetchSessionRefresh(this, context);
   }
 
   /** @internal */
   async _performSessionRefresh(context: AuthContext): ReturnType<typeof performSessionRefresh> {
-    return await performSessionRefresh(this, context);
+    return performSessionRefresh(this, context);
   }
 
   /** @internal */

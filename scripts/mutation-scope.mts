@@ -221,7 +221,7 @@ export function changedShardPatterns(patterns: readonly string[], shardIndex: nu
   return mutationShards(patterns, shardCount)[shardIndex] ?? [];
 }
 
-function lines(output: string): string[] {
+function outputLines(output: string): string[] {
   return output.split('\n').filter(Boolean);
 }
 
@@ -240,7 +240,7 @@ export function selectMutationPatterns(
   const listed =
     base === undefined ? git('ls-files', '--cached', '--', 'src') : git('diff', '--name-only', base, '--', 'src');
   const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src');
-  const scope = mutationPatterns([...lines(listed), ...lines(untracked)]);
+  const scope = mutationPatterns([...outputLines(listed), ...outputLines(untracked)]);
   if (shard === undefined) {
     return scope;
   }

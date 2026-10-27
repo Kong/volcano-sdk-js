@@ -34,42 +34,42 @@ import { VolcanoAuthSession } from './volcano-auth-session.ts';
 export class VolcanoAuthIdentity extends VolcanoAuthSession {
   /** @internal */
   async confirmEmail(token: string): ReturnType<typeof confirmAccountEmail> {
-    return await confirmAccountEmail(this, token);
+    return confirmAccountEmail(this, token);
   }
 
   /** @internal */
   async resendConfirmation(email: string): ReturnType<typeof resendAccountConfirmation> {
-    return await resendAccountConfirmation(this, email);
+    return resendAccountConfirmation(this, email);
   }
 
   /** @internal */
   async forgotPassword(email: string): ReturnType<typeof forgotAccountPassword> {
-    return await forgotAccountPassword(this, email);
+    return forgotAccountPassword(this, email);
   }
 
   /** @internal */
   async resetPasswordForEmail(email: string): ReturnType<typeof resetAccountPasswordForEmail> {
-    return await resetAccountPasswordForEmail(this, email);
+    return resetAccountPasswordForEmail(this, email);
   }
 
   /** @internal */
   async resetPassword(options: Parameters<typeof resetAccountPassword>[1]): ReturnType<typeof resetAccountPassword> {
-    return await resetAccountPassword(this, options);
+    return resetAccountPassword(this, options);
   }
 
   /** @internal */
   async requestEmailChange(newEmail: string): ReturnType<typeof requestAccountEmailChange> {
-    return await requestAccountEmailChange(this, newEmail);
+    return requestAccountEmailChange(this, newEmail);
   }
 
   /** @internal */
   async confirmEmailChange(emailChangeToken: string): ReturnType<typeof confirmAccountEmailChange> {
-    return await confirmAccountEmailChange(this, emailChangeToken);
+    return confirmAccountEmailChange(this, emailChangeToken);
   }
 
   /** @internal */
   async cancelEmailChange(): ReturnType<typeof cancelAccountEmailChange> {
-    return await cancelAccountEmailChange(this);
+    return cancelAccountEmailChange(this);
   }
 
   /** @internal */
@@ -121,27 +121,27 @@ export class VolcanoAuthIdentity extends VolcanoAuthSession {
 
   /** @internal */
   async linkOAuthProvider(provider: string): ReturnType<typeof linkAccountProvider> {
-    return await linkAccountProvider(this, provider);
+    return linkAccountProvider(this, provider);
   }
 
   /** @internal */
   async unlinkOAuthProvider(provider: string): ReturnType<typeof unlinkAccountProvider> {
-    return await unlinkAccountProvider(this, provider);
+    return unlinkAccountProvider(this, provider);
   }
 
   /** @internal */
   async getLinkedOAuthProviders(): ReturnType<typeof getAccountLinkedProviders> {
-    return await getAccountLinkedProviders(this);
+    return getAccountLinkedProviders(this);
   }
 
   /** @internal */
   async refreshOAuthToken(provider: string): ReturnType<typeof refreshAccountProviderToken> {
-    return await refreshAccountProviderToken(this, provider);
+    return refreshAccountProviderToken(this, provider);
   }
 
   /** @internal */
   async getOAuthProviderToken(provider: string): ReturnType<typeof getAccountProviderToken> {
-    return await getAccountProviderToken(this, provider);
+    return getAccountProviderToken(this, provider);
   }
 
   /** @internal */
@@ -149,21 +149,21 @@ export class VolcanoAuthIdentity extends VolcanoAuthSession {
     provider: string,
     params: Parameters<typeof callProviderAPI>[2],
   ): ReturnType<typeof callProviderAPI> {
-    return await callProviderAPI(this, provider, params);
+    return callProviderAPI(this, provider, params);
   }
 
   /** @internal */
   async getSessions(options: Parameters<typeof getAccountSessions>[1] = {}): ReturnType<typeof getAccountSessions> {
-    return await getAccountSessions(this, options);
+    return getAccountSessions(this, options);
   }
 
   /** @internal */
   async deleteSession(sessionId: string): ReturnType<typeof deleteAccountSession> {
-    return await deleteAccountSession(this, sessionId);
+    return deleteAccountSession(this, sessionId);
   }
 
   /** @internal */
   async deleteAllOtherSessions(): ReturnType<typeof deleteAccountOtherSessions> {
-    return await deleteAccountOtherSessions(this);
+    return deleteAccountOtherSessions(this);
   }
 }

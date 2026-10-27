@@ -113,7 +113,7 @@ async function handleFunctionResolutionError(
   options: ResolveOptions,
 ): Promise<FunctionResolution> {
   if (status === 401 && !options.useAnonKey && options.allowRefresh !== false) {
-    return await retryFunctionResolution(host, functionName, options, error);
+    return retryFunctionResolution(host, functionName, options, error);
   }
   throw error;
 }
@@ -137,7 +137,7 @@ async function retryFunctionResolution(
     throw new AuthRefreshDiscardedError();
   }
   const refreshedContext = host._captureAuthContext();
-  return await host._resolveFunctionIdByName(functionName, {
+  return host._resolveFunctionIdByName(functionName, {
     authContext: refreshedContext,
     token: refreshedContext.accessToken,
     useAnonKey: options.useAnonKey,

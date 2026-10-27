@@ -37,6 +37,7 @@ export interface Durable {
    * }
    * ```
    */
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers may name the input type they send.
   start<TInput = JsonValue>(
     functionName: string,
     input?: TInput,

@@ -1,3 +1,5 @@
+import { isFalsy } from './falsy.ts';
+
 export async function safeJsonParse(response: Response, signal?: AbortSignal): Promise<unknown> {
   try {
     const value: unknown = await response.json();
@@ -15,7 +17,7 @@ export async function safeJsonParse(response: Response, signal?: AbortSignal): P
 
 function cancellationReason(signal: AbortSignal, fallback: unknown): unknown {
   const reason: unknown = signal.reason;
-  return reason ? reason : fallback;
+  return isFalsy(reason) ? fallback : reason;
 }
 
 function hasAbortName(value: unknown): boolean {

@@ -3,6 +3,7 @@ import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { assertAuthTokenResponse, type AuthTokenFields, type CompleteSessionFields } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
+import { isFalsy } from './falsy.ts';
 import type { Session, User } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
@@ -72,9 +73,9 @@ export async function signOut(host: AuthLifecycleHost): Promise<SignOutResult> {
 type PrecedingRefresh = RefreshResult | { ok: false; error: unknown } | null;
 
 async function precedingRefresh(refreshing: Promise<RefreshResult> | null): Promise<PrecedingRefresh> {
-  return await (refreshing === null
+  return refreshing === null
     ? null
-    : refreshing.catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error })));
+    : refreshing.catch((error: unknown): { ok: false; error: unknown } => ({ ok: false, error }));
 }
 
 function credentialsForSignOut(
@@ -175,7 +176,7 @@ export async function revokeAccessSession(
 }
 
 function previousFailure(preceding: Exclude<PrecedingRefresh, null>, fallback: unknown): unknown {
-  return preceding.error ? preceding.error : fallback;
+  return isFalsy(preceding.error) ? fallback : preceding.error;
 }
 
 export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshResponse> {
@@ -211,7 +212,7 @@ export async function refreshSessionForContext(
   } catch (error) {
     return { session: null, error: normalizedError(error, 'Refresh failed') };
   }
-  return await performSessionRefresh(host, context);
+  return performSessionRefresh(host, context);
 }
 
 export async function fetchSessionRefresh(host: AuthLifecycleHost, context: AuthContext): Promise<RefreshResult> {

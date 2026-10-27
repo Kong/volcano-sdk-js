@@ -1,6 +1,7 @@
 import { expect, jest } from '@jest/globals';
 import { durable } from '../../src/durable.ts';
 import type { DurableContext, DurableHandler, DurableLog, ReceivedMessage } from '../../src/durable-types.ts';
+import { mockDurableLog } from './durable-log.ts';
 
 // As in support/durable-approval-double.ts, a double stands in for the optional runtime.
 // Its waitForCallback runs the submitter once and then resolves the way the
@@ -97,15 +98,10 @@ const batch = (results: unknown[]) => ({
 });
 
 function mockContext(executionContext?: FakeContext['executionContext']): FakeContext {
-  const logger: DurableLog = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-  };
+  const logger = mockDurableLog();
   return {
     logger,
-    configureLogger: jest.fn(),
+    configureLogger: jest.fn<FakeContext['configureLogger']>(),
     step: (_name, fn) => fn({ logger, attempt: 1 }),
     wait: () => Promise.resolve(),
     runInChildContext(name, fn) {

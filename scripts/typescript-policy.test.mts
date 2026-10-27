@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -17,6 +17,11 @@ const oxfmt = join(root, 'node_modules/oxfmt/bin/oxfmt');
 const require = createRequire(import.meta.url);
 const coverageConfig = record(require('../jest.typed.config.cjs'));
 const manifest = record(require('../package.json'));
+const nextExample = 'examples/nextjs-notes-app';
+const durableExample = 'examples/durable-order-pipeline';
+// Each example's own compiler project: Next.js reads only the app's tsconfig.json, and the durable functions'
+// directories deploy as they are.
+const exampleProjects = new Set([`${nextExample}/tsconfig.json`, `${durableExample}/jsconfig.json`]);
 function trackedFiles(): string[] {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
 }
@@ -36,13 +41,15 @@ function handwrittenTests(files: readonly string[]): string[] {
   return files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
 }
 
-// Every tracked TypeScript file one of the compiler projects must check.
+// Every tracked file one of the compiler projects must check.
 function typedFiles(files: readonly string[]): string[] {
   return [
     ...handwrittenSource(files),
     ...handwrittenTests(files),
     ...files.filter((path) => path.startsWith('test/') && path.endsWith('.ts')),
     ...files.filter((path) => path.startsWith('scripts/') && /\.[cm]ts$/u.test(path)),
+    ...files.filter((path) => path.startsWith(`${nextExample}/`) && /\.tsx?$/u.test(path)),
+    ...files.filter((path) => path.startsWith(`${durableExample}/volcano/functions/`) && path.endsWith('.js')),
   ];
 }
 
@@ -63,20 +70,20 @@ function untypedHandwrittenFile(path: string): boolean {
   if (nativeLoaders.includes(path)) {
     return false;
   }
-  return ['src/', 'scripts/', '__tests__/'].some((prefix) => path.startsWith(prefix));
+  return ['src/', 'scripts/', '__tests__/', `${nextExample}/src/`].some((prefix) => path.startsWith(prefix));
 }
 
-function typecheckedFiles(configPath: string): Set<string> {
+function typecheckedFiles(configPath: string, relaxed: readonly string[] = []): Set<string> {
   const path = join(root, configPath);
   const config = ts.readConfigFile(path, (filename) => ts.sys.readFile(filename));
   assert.equal(config.error, undefined, `${configPath} is invalid`);
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, path);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path), undefined, path);
   assert.deepEqual(parsed.errors, [], `${configPath} has configuration errors`);
-  requireCompilerOptions(parsed.options);
+  requireCompilerOptions(parsed.options, relaxed);
   return new Set(parsed.fileNames);
 }
 
-function requireCompilerOptions(options: ts.CompilerOptions): void {
+function requireCompilerOptions(options: ts.CompilerOptions, relaxed: readonly string[] = []): void {
   const required = {
     strict: true,
     noUncheckedIndexedAccess: true,
@@ -92,7 +99,7 @@ function requireCompilerOptions(options: ts.CompilerOptions): void {
     skipLibCheck: false,
     noEmitOnError: true,
   };
-  for (const [name, value] of Object.entries(required)) {
+  for (const [name, value] of Object.entries(required).filter(([option]) => !relaxed.includes(option))) {
     assert.equal(options[name], value, `${name} weakens TypeScript checking`);
   }
 }
@@ -139,10 +146,14 @@ function requireNoNestedConfigs(files: readonly string[]): void {
     '.c8rc',
     'jest.',
     'tsconfig.',
+    'jsconfig.',
   ];
   assert.deepEqual(
     files.filter(
-      (path) => path.includes('/') && names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
+      (path) =>
+        path.includes('/') &&
+        !exampleProjects.has(path) &&
+        names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
     ),
     [],
   );
@@ -174,7 +185,15 @@ await test('tracked SDK code remains in native lint, format, type, test, and cov
   const files = trackedFiles();
   assert.ok(handwrittenSource(files).length > 0);
   assert.ok(handwrittenTests(files).some((path) => path.endsWith('.test.ts')));
-  const typechecked = new Set([...typecheckedFiles('tsconfig.json'), ...typecheckedFiles('tsconfig.tooling.json')]);
+  const typechecked = new Set([
+    ...typecheckedFiles('tsconfig.json'),
+    ...typecheckedFiles('tsconfig.tooling.json'),
+    // Next.js generates route declarations under both .next/types and .next/dev/types; after `next dev`
+    // they declare the same globals, and checking them fails the build.
+    ...typecheckedFiles(`${nextExample}/tsconfig.json`, ['skipLibCheck']),
+    // JavaScript cannot omit an optional SDK option it holds as possibly undefined without a conditional spread.
+    ...typecheckedFiles(`${durableExample}/jsconfig.json`, ['exactOptionalPropertyTypes']),
+  ]);
   for (const path of typedFiles(files)) {
     assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
   }

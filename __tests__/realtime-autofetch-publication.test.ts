@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { VolcanoAuth } from '../src/index.ts';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { mockVolcanoClientFactory } from './support/realtime-autofetch-fixtures.ts';
+import type { ChannelListener } from './support/realtime-listeners.ts';
 
 const createMockVolcanoClient = mockVolcanoClientFactory(VolcanoAuth);
 
@@ -12,7 +13,7 @@ function deliversFullPayloads(): void {
   test('full payloads delivered immediately', () => {
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('INSERT', callback);
 
     // Simulate full payload
@@ -40,7 +41,7 @@ function deliversLightweightDeletes(): void {
   test('DELETE delivers without fetch (old_record optional)', () => {
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('DELETE', callback);
 
     // Simulate lightweight DELETE
@@ -73,7 +74,7 @@ function deliversLightweightWithoutAutoFetch(): void {
       autoFetch: false,
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     // Simulate lightweight INSERT
@@ -103,7 +104,7 @@ function deliversLightweightWithoutClient(): void {
     // No volcanoClient set
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     // Simulate lightweight INSERT
@@ -135,7 +136,7 @@ function fetchesLightweightInserts(): void {
 
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('INSERT', callback);
 
     // Simulate lightweight INSERT
@@ -174,7 +175,7 @@ function fetchesLightweightUpdates(): void {
 
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('UPDATE', callback);
 
     // Simulate lightweight UPDATE

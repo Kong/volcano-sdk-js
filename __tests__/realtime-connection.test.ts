@@ -9,7 +9,7 @@ import {
 
 class Client implements RealtimeConnectionClient {
   readonly listeners = new Map<string, Set<(context: unknown) => void>>();
-  readonly connect = jest.fn();
+  readonly connect = jest.fn<void, []>();
   readonly on = jest.fn((event: string, listener: (context: unknown) => void): void => {
     const listeners = this.listeners.get(event) ?? new Set<(context: unknown) => void>();
     listeners.add(listener);
@@ -30,7 +30,7 @@ const events = ['connected', 'disconnected', 'error', 'publication', 'join', 'le
 
 test('connection options preserve token refresh and custom transport', async () => {
   const websocket = Symbol('websocket');
-  const adopt = jest.fn();
+  const adopt = jest.fn<void, [string]>();
   const getter = jest.fn().mockResolvedValue('fresh');
   const options = connectionOptions('initial', getter, adopt, websocket);
   expect(options.token).toBe('initial');

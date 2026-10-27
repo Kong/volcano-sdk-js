@@ -1,5 +1,6 @@
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import type { DurableFacade } from './durable-facade.ts';
+import { isFalsy } from './falsy.ts';
 import { type FunctionInvokeResponse, invokeFunction as invokeFunctionWithClient } from './function-invoke.ts';
 import {
   clearFunctionResolveCache,
@@ -32,7 +33,7 @@ export class VolcanoAuthServices extends VolcanoAuthIdentity {
 
     const result = await this._authFetch(`/projects/${project.segment}/logs/${endpoint}`, {
       method: 'POST',
-      body: JSON.stringify(request ? request : {}),
+      body: JSON.stringify(isFalsy(request) ? {} : request),
     });
 
     if (result.ok !== true) {
@@ -104,14 +105,14 @@ export class VolcanoAuthServices extends VolcanoAuthIdentity {
     if (cached !== null) {
       return cached;
     }
-    return await resolveUncachedFunction(this, hostLabel, functionName, cacheKey, token, options);
+    return resolveUncachedFunction(this, hostLabel, functionName, cacheKey, token, options);
   }
 
   /** @internal */
   invokeFunction<TResult = unknown>(functionName: string, payload?: unknown): Promise<FunctionInvokeResponse<TResult>>;
   /** @internal */
   async invokeFunction(functionName: string, payload: unknown = {}): Promise<FunctionInvokeResponse> {
-    return await invokeFunctionWithClient(this, functionName, payload);
+    return invokeFunctionWithClient(this, functionName, payload);
   }
 
   /** @internal */

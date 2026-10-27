@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -48,12 +49,48 @@ const declarations = new Map([
     '__tests__/errors.test.ts:preservesInheritedBrandReceiver',
     "Object.defineProperty(String.prototype, 'isSystemError'",
   ],
-  ['examples/nextjs-notes-app/src/app/layout.js:RootLayout', "import './globals.css'"],
-  ['examples/nextjs-notes-app/src/components/NoteCardEditor.js:NoteCardEditor', 'autoFocus'],
-  ['examples/nextjs-notes-app/src/components/NoteEditorForm.js:NoteEditorForm', 'autoFocus'],
+  ['examples/nextjs-notes-app/src/app/layout.tsx:RootLayout', "import './globals.css'"],
+  ['examples/nextjs-notes-app/src/components/NoteCardEditor.tsx:NoteCardEditor', 'autoFocus'],
+  ['examples/nextjs-notes-app/src/components/NoteEditorForm.tsx:NoteEditorForm', 'autoFocus'],
   [
-    'examples/nextjs-notes-app/src/components/useNoteEditor.js:useNoteEditor.handleSubmit',
+    'examples/nextjs-notes-app/src/components/useNoteEditor.ts:useNoteEditor.handleSubmit',
     '[title, content, onCreate]',
+  ],
+  ['src/volcano-fetch.ts:volcanoFetch', 'return { data, status: response.status, headers: response.headers } as T'],
+  ['src/sdk-public-types-functions.ts:Functions.invoke', 'invoke<TPayload = JsonValue, TResult = unknown>('],
+  ['src/sdk-public-types-durable.ts:Durable.start', 'start<TInput = JsonValue>('],
+  ['src/volcano-auth-facades.ts:authApi.signUpAnonymous', 'signUpAnonymous: client.signUpAnonymous.bind(client)'],
+  ['src/volcano-auth-facades.ts:authApi.forgotPassword', 'forgotPassword: client.forgotPassword.bind(client)'],
+  ['src/volcano-auth-facades.ts:providerRedirect', 'return start;'],
+  ['scripts/audit-dependencies.mts:run', 'const run = promisify(execFile);'],
+  ['scripts/dependency-audit.test.mts:run', 'const run = promisify(execFile);'],
+  ['scripts/test-package-quickstart.mts:run', 'const run = promisify(execFile);'],
+  ['test/fixtures/published-api/durable.d.ts:Functions.invoke', 'invoke<TPayload = JsonValue, TResult = unknown>('],
+  ['test/fixtures/published-api/durable.d.ts:Durable.start', 'start<TInput = JsonValue>('],
+  ['test/fixtures/public-api-compatibility.d.ts:Exact', 'export type Exact<A, B> ='],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.InsertBuilder',
+    'Exact<Expected.InsertBuilder, Actual.InsertBuilder>',
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.UpdateBuilder',
+    'Exact<Expected.UpdateBuilder, Actual.UpdateBuilder>',
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.DeleteBuilder',
+    'Exact<Expected.DeleteBuilder, Actual.DeleteBuilder>',
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.InsertBuilder',
+    'Exact<Expected.InsertBuilder, ESM.InsertBuilder>',
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.UpdateBuilder',
+    'Exact<Expected.UpdateBuilder, ESM.UpdateBuilder>',
+  ],
+  [
+    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.DeleteBuilder',
+    'Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>',
   ],
 ]);
 
@@ -67,15 +104,14 @@ function directiveLines(lines: readonly string[]): number[] {
 }
 
 async function lintWithoutDirectives(path: string, lines: readonly string[]): Promise<Set<string>> {
-  // Lint a sibling copy so the repository's ignore patterns and scope still apply.
-  const directory = await mkdtemp(join(root, dirname(path), 'quality-fixture-'));
+  // Lint a copy beside the original so its relative imports, type information, ignore patterns, and scope still apply.
+  const copy = join(root, dirname(path), `quality-fixture-${randomUUID()}-${basename(path)}`);
   try {
-    const copy = join(directory, basename(path));
     const stripped = lines.map((line) => (line.trim().startsWith(directive) ? '//' : line));
     await writeFile(copy, stripped.join('\n'));
     return new Set(lint([copy]).findings.map(({ code, line }) => `${code}:${String(line)}`));
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await rm(copy, { force: true });
   }
 }
 
@@ -113,7 +149,7 @@ await test('every lint exception is approved, exact, and still needed', async ()
     [...declarations.keys()],
   );
   const paths = new Set(approved.map((item) => stringValue(stringValue(item['scope']).split(':')[0])));
-  // Each file's copy is linted in its own temporary directory.
+  // Each file's copy is linted on its own.
   const counts = await Promise.all([...paths].map((path) => checkedDirectives(path, approved)));
   const total = counts.reduce((sum, count) => sum + count, 0);
   assert.equal(total, approved.length, 'Each lint exception covers exactly one directive');

@@ -39,7 +39,7 @@ export async function queryDatabaseSelectTransport(
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  return await volcanoFetch<{ data: unknown }>(getQueryDatabaseSelectUrl(databaseName), {
+  return volcanoFetch<{ data: unknown }>(getQueryDatabaseSelectUrl(databaseName), {
     ...options,
     method: 'POST',
     headers,

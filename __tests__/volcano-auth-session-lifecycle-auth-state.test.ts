@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.ts';
+import { type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
 import { installWindow, restoreWindow } from './support/volcano-auth-sessions-fixtures.ts';
 
@@ -18,7 +18,7 @@ afterEach(restoreWindow);
 function notifiesCallbacks(): void {
   it('should call callback with current user', () => {
     volcano.currentUser = { id: 'user-123', email: 'fixture@example.com', status: 'active' };
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
 
     volcano.auth.onAuthStateChange(callback);
 
@@ -30,7 +30,7 @@ function notifiesCallbacks(): void {
   });
 
   it('should call callback on session change', async () => {
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     volcano.auth.onAuthStateChange(callback);
 
     // Clear initial call
@@ -58,7 +58,7 @@ function notifiesCallbacks(): void {
 
 function unsubscribesCallbacks(): void {
   it('should return unsubscribe function', () => {
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     const unsubscribe = volcano.auth.onAuthStateChange(callback);
 
     expect(typeof unsubscribe).toBe('function');
@@ -83,8 +83,8 @@ function unsubscribesCallbacks(): void {
 
 function notifiesMultipleCallbacks(): void {
   it('should support multiple callbacks', () => {
-    const callback1 = jest.fn();
-    const callback2 = jest.fn();
+    const callback1 = jest.fn<AuthStateCallback>();
+    const callback2 = jest.fn<AuthStateCallback>();
 
     volcano.auth.onAuthStateChange(callback1);
     volcano.auth.onAuthStateChange(callback2);
@@ -121,7 +121,7 @@ function isolatesFailingCallbacks(): void {
     const badCallback = jest.fn<(user: unknown) => void>(() => {
       throw new Error('Callback error');
     });
-    const goodCallback = jest.fn();
+    const goodCallback = jest.fn<AuthStateCallback>();
 
     // Register both callbacks
     volcano.auth.onAuthStateChange(badCallback);

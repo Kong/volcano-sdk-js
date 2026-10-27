@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.ts';
+import { type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { expectInstanceOf } from './support/assertions.ts';
 import {
   completeSession,
@@ -120,7 +120,7 @@ function rejectsInvalidSessions(): void {
   });
 
   it('does not fetch, persist, remove storage, or notify listeners', async () => {
-    const listener = jest.fn();
+    const listener = jest.fn<AuthStateCallback>();
     volcano.auth.onAuthStateChange(listener);
     listener.mockClear();
 

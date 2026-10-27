@@ -9,11 +9,15 @@ export interface HeaderResponse {
 }
 
 export function responseHeadersToObject(response: HeaderResponse | null | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
   const headers = response?.headers;
   if (headers === null || headers === undefined) {
-    return result;
+    return {};
   }
+  return headerRecord(headers);
+}
+
+function headerRecord(headers: HeaderMethods | Readonly<Record<string, string>>): Record<string, string> {
+  const result: Record<string, string> = {};
   if (typeof headers.forEach === 'function') {
     headers.forEach((value, key) => {
       result[key] = value;

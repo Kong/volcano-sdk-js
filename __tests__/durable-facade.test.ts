@@ -28,7 +28,7 @@ function mockBatch(results: unknown[]): EngineBatch<unknown> {
     successCount: results.length,
     failureCount: 0,
     completionReason: 'ALL_COMPLETED',
-    throwIfError: jest.fn(),
+    throwIfError: jest.fn<EngineBatch<unknown>['throwIfError']>(),
   };
 }
 

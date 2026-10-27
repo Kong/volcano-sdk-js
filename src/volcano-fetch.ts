@@ -19,12 +19,12 @@ export interface VolcanoRequestInit extends RequestInit {
 async function readBody(response: Response): Promise<unknown> {
   const contentType = response.headers.get('content-type')?.toLowerCase();
   if (isJsonContentType(contentType) || typeof response.blob !== 'function') {
-    return await response.json();
+    return response.json();
   }
   if (isTextContentType(contentType)) {
-    return await response.text();
+    return response.text();
   }
-  return await response.blob();
+  return response.blob();
 }
 
 function isJsonContentType(contentType: string | undefined): boolean {
@@ -41,10 +41,10 @@ async function responseData(response: Response, responseType?: 'blob'): Promise<
   }
 
   if (response.ok && responseType === 'blob') {
-    return await response.blob();
+    return response.blob();
   }
 
-  return await readBody(response);
+  return readBody(response);
 }
 
 function responseError(response: Response, data: unknown): Error {
@@ -83,6 +83,7 @@ export async function volcanoFetch<T>(path: string, options: VolcanoRequestInit)
     throw responseError(response, data);
   }
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Orval's generated callers name the response type.
   return { data, status: response.status, headers: response.headers } as T;
 }
 

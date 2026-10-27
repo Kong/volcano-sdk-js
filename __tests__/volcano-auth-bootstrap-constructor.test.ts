@@ -60,8 +60,8 @@ const UNTYPED_AUTH_ALIASES = ['signUpAnonymous', 'forgotPassword'] as const;
 
 function authMethodTypes(auth: VolcanoAuth['auth']): Record<string, string> {
   return Object.fromEntries([
-    ...AUTH_METHODS.map((name) => [name, typeof auth[name]]),
-    ...UNTYPED_AUTH_ALIASES.map((name) => [name, typeof Reflect.get(auth, name)]),
+    ...AUTH_METHODS.map((name): [string, string] => [name, typeof auth[name]]),
+    ...UNTYPED_AUTH_ALIASES.map((name): [string, string] => [name, typeof Reflect.get(auth, name)]),
   ]);
 }
 

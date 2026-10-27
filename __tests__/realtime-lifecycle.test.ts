@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { deferred, subscriptionAt, TestTransportClient } from './realtime-transport-fixtures.ts';
+import type { PostgresChangesListener, PresenceSyncListener } from './support/realtime-listeners.ts';
 
 function createRealtime() {
   const realtime = new VolcanoRealtime({
@@ -26,7 +27,7 @@ function preservesPresenceIdentity(): void {
   ])('preserves full client identity from %s events', async (event, context) => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('lobby', { type: 'presence' });
-    const onSync = jest.fn();
+    const onSync = jest.fn<PresenceSyncListener>();
     channel.onPresenceSync(onSync);
     await channel.subscribe();
     subscriptionAt(client, 0).emit(event, context);
@@ -40,8 +41,18 @@ type RowFetch = ReturnType<typeof deferred<unknown>>;
 
 function ignoresStaleRowFetches(): void {
   test.each([
-    ['resolve', (fetch: RowFetch) => fetch.resolve({ id: 1 })],
-    ['reject', (fetch: RowFetch) => fetch.reject(new Error('stale failure'))],
+    [
+      'resolve',
+      (fetch: RowFetch) => {
+        fetch.resolve({ id: 1 });
+      },
+    ],
+    [
+      'reject',
+      (fetch: RowFetch) => {
+        fetch.reject(new Error('stale failure'));
+      },
+    ],
   ] as const)('ignores a stale row fetch that will %s after resubscribing', async (_outcome, settle) => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('public:items', { type: 'postgres' });
@@ -60,7 +71,7 @@ function ignoresStaleRowFetches(): void {
       {},
     );
     channel.unsubscribe();
-    const onInsert = jest.fn();
+    const onInsert = jest.fn<PostgresChangesListener>();
     channel.onPostgresChanges('INSERT', 'public', 'items', onInsert);
     await channel.subscribe();
     settle(fetch);
@@ -82,7 +93,7 @@ function ignoresStalePresenceSnapshots(): void {
       await jest.advanceTimersByTimeAsync(150);
       expect(client.presence).toHaveBeenCalledTimes(1);
       channel.unsubscribe();
-      const onSync = jest.fn();
+      const onSync = jest.fn<PresenceSyncListener>();
       channel.onPresenceSync(onSync);
       await channel.subscribe();
       snapshot.resolve({ clients: { stale: { data: { online: true } } } });

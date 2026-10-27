@@ -57,7 +57,7 @@ function validatesTheBearerToken(): void {
   });
 
   test('withAuth logs auth failures and returns null', async () => {
-    const warning = jest.spyOn(console, 'warn').mockImplementation(jest.fn());
+    const warning = jest.spyOn(console, 'warn').mockImplementation(jest.fn<typeof console.warn>());
     try {
       jest.mocked(globalThis.fetch).mockResolvedValueOnce(Response.json({ error: 'denied' }, { status: 401 }));
       const request = new Request('https://app.test.com/dashboard', {

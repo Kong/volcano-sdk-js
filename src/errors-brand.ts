@@ -1,3 +1,5 @@
+import { isFalsy } from './falsy.ts';
+
 export interface AuthErrorOptions {
   cause?: unknown;
 }
@@ -7,7 +9,7 @@ export interface AuthErrorOptions {
 const BoxValue: new (value: unknown) => object = Object;
 
 export function hasValue(value: unknown, key: string, expected: unknown): boolean {
-  if (!value) {
+  if (isFalsy(value)) {
     return false;
   }
   const property: unknown = Reflect.get(new BoxValue(value), key, value);

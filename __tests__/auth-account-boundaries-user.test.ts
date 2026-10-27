@@ -33,7 +33,7 @@ test('getUser rejects a malformed successful response before adopting a user', a
       result: { ok: true, status: 200, data: null, error: null },
       context,
     });
-  const notify = jest.fn();
+  const notify = jest.fn<AuthAccountHost['_notifyAuthCallbacks']>();
   host._notifyAuthCallbacks = notify;
 
   await expect(getUser(host)).rejects.toThrow('Auth response must be an object');

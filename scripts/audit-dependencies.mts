@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { array, isRecord, record, stringValue } from './values.mts';
 
+// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.
 const run = promisify(execFile);
 const exceptionRule = 'pnpm audit';
 

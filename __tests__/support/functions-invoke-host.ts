@@ -43,7 +43,7 @@ export function hostFixture(oauthExchangePromise: Promise<unknown> | null = null
       }),
     _getFunctionInvokeUrl: () => 'https://function.test/invoke',
     _refreshSessionForContext: () => Promise.resolve({ error: null }),
-    _clearFunctionResolveCache: jest.fn(),
+    _clearFunctionResolveCache: jest.fn<FunctionInvocationHost['_clearFunctionResolveCache']>(),
   };
   return {
     host,

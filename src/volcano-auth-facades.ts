@@ -32,10 +32,17 @@ export function durableApi(client: VolcanoAuth): Durable {
   };
 }
 
+// Auth declares the provider shortcuts void, but they have always returned the redirect URL.
+function providerRedirect(start: () => string): () => void {
+  // oxlint-disable-next-line typescript/strict-void-return -- JavaScript callers still receive the redirect URL.
+  return start;
+}
+
 export function authApi(client: VolcanoAuth): Auth {
   return {
-    // Deprecated aliases, kept until the next major release.
+    // oxlint-disable-next-line typescript/no-deprecated -- Auth publishes this alias until the next major release.
     signUpAnonymous: client.signUpAnonymous.bind(client),
+    // oxlint-disable-next-line typescript/no-deprecated -- Auth publishes this alias until the next major release.
     forgotPassword: client.forgotPassword.bind(client),
     signUp: client.signUp.bind(client),
     signIn: client.signIn.bind(client),
@@ -65,10 +72,10 @@ export function authApi(client: VolcanoAuth): Auth {
     signInWithHostedAuth: client.signInWithHostedAuth.bind(client),
     // OAuth methods
     signInWithOAuth: client.signInWithOAuth.bind(client),
-    signInWithGoogle: client.signInWithGoogle.bind(client),
-    signInWithGitHub: client.signInWithGitHub.bind(client),
-    signInWithMicrosoft: client.signInWithMicrosoft.bind(client),
-    signInWithApple: client.signInWithApple.bind(client),
+    signInWithGoogle: providerRedirect(client.signInWithGoogle.bind(client)),
+    signInWithGitHub: providerRedirect(client.signInWithGitHub.bind(client)),
+    signInWithMicrosoft: providerRedirect(client.signInWithMicrosoft.bind(client)),
+    signInWithApple: providerRedirect(client.signInWithApple.bind(client)),
     linkOAuthProvider: client.linkOAuthProvider.bind(client),
     unlinkOAuthProvider: client.unlinkOAuthProvider.bind(client),
     getLinkedOAuthProviders: client.getLinkedOAuthProviders.bind(client),

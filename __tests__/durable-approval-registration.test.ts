@@ -135,7 +135,7 @@ function handlesRefusals(): void {
       `Volcano refused the approval request (${[status, code].filter(Boolean).join(' ')}): ${body.error}`,
     );
     // The error's own fields; toEqual reads a missing code as undefined.
-    expect({ ...failure }).toEqual({ status, code });
+    expect(Object.fromEntries(Object.entries(failure))).toEqual({ status, code });
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 

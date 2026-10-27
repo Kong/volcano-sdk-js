@@ -92,7 +92,9 @@ function preservesRejectionMetadata(): void {
     async (_mode, refreshToken, replies, code, requests) => {
       volcano.accessToken = sessionToken();
       volcano.refreshToken = refreshToken;
-      replies().forEach((response) => fetchMock.mockResolvedValueOnce(response));
+      replies().forEach((response) => {
+        fetchMock.mockResolvedValueOnce(response);
+      });
 
       const result = await volcano.auth.getUser();
       expect(result.user).toBeNull();

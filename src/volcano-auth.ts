@@ -180,12 +180,12 @@ class VolcanoAuth extends VolcanoAuthServices {
 
   /** @internal */
   async signUp(options: Parameters<typeof signUpAccount>[1]): ReturnType<typeof signUpAccount> {
-    return await signUpAccount(this, options);
+    return signUpAccount(this, options);
   }
 
   /** @internal */
   async signIn(options: Parameters<typeof signInAccount>[1]): ReturnType<typeof signInAccount> {
-    return await signInAccount(this, options);
+    return signInAccount(this, options);
   }
 
   /** @internal */
@@ -200,12 +200,12 @@ class VolcanoAuth extends VolcanoAuthServices {
 
   /** @internal */
   async getUser(): ReturnType<typeof getAccountUser> {
-    return await getAccountUser(this);
+    return getAccountUser(this);
   }
 
   /** @internal */
   async updateUser(options: Parameters<typeof updateAccountUser>[1]): ReturnType<typeof updateAccountUser> {
-    return await updateAccountUser(this, options);
+    return updateAccountUser(this, options);
   }
 
   /**
@@ -220,19 +220,19 @@ class VolcanoAuth extends VolcanoAuthServices {
 
   /** @internal */
   async signInAnonymously(metadata: Record<string, unknown> = {}): ReturnType<typeof signInAnonymousAccount> {
-    return await signInAnonymousAccount(this, metadata);
+    return signInAnonymousAccount(this, metadata);
   }
 
   /** @internal */
   async signUpAnonymous(metadata: Record<string, unknown> = {}): ReturnType<typeof signUpAnonymousAccount> {
-    return await signUpAnonymousAccount(this, metadata);
+    return signUpAnonymousAccount(this, metadata);
   }
 
   /** @internal */
   async convertAnonymous(
     options: Parameters<typeof convertAnonymousAccount>[1],
   ): ReturnType<typeof convertAnonymousAccount> {
-    return await convertAnonymousAccount(this, options);
+    return convertAnonymousAccount(this, options);
   }
 
   async initialize(): Promise<UserResponse> {
@@ -245,7 +245,7 @@ class VolcanoAuth extends VolcanoAuthServices {
       this._oauthExchangeError = null;
       return { user: null, error };
     }
-    return await this.getUser();
+    return this.getUser();
   }
 }
 

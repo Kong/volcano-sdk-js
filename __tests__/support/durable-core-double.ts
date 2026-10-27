@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { durable } from '../../src/durable.ts';
 import type { EngineBatch } from '../../src/durable-batch-result.ts';
 import type { BatchResult, DurableContext, DurableHandler, DurableLog } from '../../src/durable-types.ts';
+import { mockDurableLog } from './durable-log.ts';
 
 // The durable runtime is an optional peer dependency, so the durable-core tests
 // stand a recording double in its place and assert on what the facade hands it. That is the contract worth pinning here: the
@@ -113,7 +114,7 @@ export const engineDouble: { contextTransform: ((context: RecordingContext) => u
 
 const fakeContext = (): RecordingContext => {
   const context: RecordingContext = {
-    logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+    logger: mockDurableLog(),
     configureLogger: jest.fn<(config: unknown) => void>(),
 
     step(name, fn, config) {

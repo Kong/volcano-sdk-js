@@ -15,9 +15,21 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
   const client = state.client;
   expectPresent(client);
   const received: unknown[] = [];
-  state._callbacks.set('message', [(data) => received.push(data)]);
-  state._callbacks.set('custom', [(data) => received.push(data)]);
-  state._callbacks.set('*', [(data) => received.push(data)]);
+  state._callbacks.set('message', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
+  state._callbacks.set('custom', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
+  state._callbacks.set('*', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
   await subscribeChannel(state);
   expect(client.created).toEqual([{ name: 'broadcast:room', joinLeave: false }]);
   expect(client.subscription.readyTimeouts).toEqual([10_000]);
@@ -52,7 +64,9 @@ test('subscribes with the channel data and reports each state of the current sub
   state._type = 'durable';
   state._subscribeData = { client_token: 'token' };
   const states: string[] = [];
-  state._onSubscriptionState = (newState) => states.push(newState);
+  state._onSubscriptionState = (newState) => {
+    states.push(newState);
+  };
   await subscribeChannel(state);
   expect(client.created).toEqual([{ name: 'durable:execution', joinLeave: false, data: { client_token: 'token' } }]);
   expect(client.created.map((created) => Object.keys(created))).toEqual([['name', 'joinLeave', 'data']]);

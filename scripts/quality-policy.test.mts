@@ -13,9 +13,10 @@ const requiredTasks = {
   'format:check': 'oxfmt --check',
   'check:unused':
     'knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries',
-  lint: 'oxlint && pnpm format:check',
+  lint: 'pnpm build && oxlint && pnpm format:check',
   test: 'pnpm build && jest',
-  'test:types': 'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
+  'test:types':
+    'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json && tsc --noEmit -p examples/durable-order-pipeline/jsconfig.json',
   'test:package':
     'pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz',
   'test:quickstart':

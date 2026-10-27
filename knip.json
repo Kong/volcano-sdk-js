@@ -36,7 +36,7 @@
       "ignoreDependencies": ["@types/convert-source-map"]
     },
     "examples/nextjs-notes-app": {
-      "project": ["src/**/*.{js,css}!", "*.config.js"],
+      "project": ["src/**/*.{ts,tsx,css}!", "*.config.{js,ts}"],
       "paths": {
         "@/*": ["./src/*"]
       }

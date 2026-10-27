@@ -82,10 +82,7 @@ const payloadBoundaries: readonly [string, (read: () => string) => object][] = [
 ];
 
 function cachedStringError(value: unknown): string {
-  if (typeof value !== 'object' || value === null) {
-    throw new Error('Expected a cached string error');
-  }
-  if (!('error' in value) || typeof value.error !== 'string') {
+  if (typeof value !== 'object' || value === null || !('error' in value) || typeof value.error !== 'string') {
     throw new Error('Expected a cached string error');
   }
   return value.error;
@@ -125,7 +122,9 @@ test.each(refreshOutcomes)(
   async (_refreshStatus, refreshToken, refreshStatuses, refreshes) => {
     const target = client(refreshToken);
     fetchMock.mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
-    refreshStatuses.forEach((status) => fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' })));
+    refreshStatuses.forEach((status) => {
+      fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' }));
+    });
     const result = await target.functions.invoke('echo');
     expect(result.error).toMatchObject({
       message: 'Session expired',
@@ -159,7 +158,9 @@ test.each(refreshOutcomes)(
     fetchMock
       .mockResolvedValueOnce(resolved())
       .mockResolvedValueOnce(reply(401, { error: 'denied', code: 'original' }, { 'retry-after': '7' }));
-    refreshStatuses.forEach((status) => fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' })));
+    refreshStatuses.forEach((status) => {
+      fetchMock.mockResolvedValueOnce(reply(status, { error: 'refresh failed' }));
+    });
     const result = await target.functions.invoke('echo');
     expect(VolcanoSystemError.is(result.error)).toBe(true);
     expect(result.error).toMatchObject({

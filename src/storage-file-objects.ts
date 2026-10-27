@@ -1,4 +1,5 @@
 import { errorResult } from './api-errors.ts';
+import { isFalsy } from './falsy.ts';
 import type {
   StorageDownloadOptions,
   StorageListOptions,
@@ -28,18 +29,18 @@ function uploadFileBody(path: string, fileBody: unknown, options: StorageUploadO
 
 export function downloadHeaders(options: StorageDownloadOptions): { Range: string } | undefined {
   const range: unknown = options.range;
-  return range ? { Range: String(range) } : undefined;
+  return isFalsy(range) ? undefined : { Range: String(range) };
 }
 
 export function listUrl(host: StorageFileApi, prefix: unknown, options: StorageListOptions): string {
   const params = new URLSearchParams();
-  if (prefix) {
+  if (!isFalsy(prefix)) {
     params.set('prefix', String(prefix));
   }
-  if (options.limit) {
+  if (!isFalsy(options.limit)) {
     params.set('limit', String(options.limit));
   }
-  if (options.cursor) {
+  if (!isFalsy(options.cursor)) {
     params.set('cursor', String(options.cursor));
   }
   const query = params.toString();
@@ -53,7 +54,7 @@ function listFailure(error: Error): StorageListResponse {
 
 function listObjects(value: object): StorageObject[] | null {
   const objects: unknown = Reflect.get(value, 'objects');
-  if (!objects) {
+  if (isFalsy(objects)) {
     return [];
   }
   return isStorageObjects(objects) ? objects : null;

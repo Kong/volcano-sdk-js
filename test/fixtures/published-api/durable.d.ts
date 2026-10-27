@@ -16,6 +16,7 @@ export interface FunctionError extends Error {
   retryAfter?: number;
 }
 export interface Functions {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- The published signature lets callers name these types.
   invoke<TPayload = JsonValue, TResult = unknown>(
     functionName: string,
     payload?: TPayload,
@@ -28,6 +29,7 @@ export interface Functions {
   }>;
 }
 export interface Durable {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- The published signature lets callers name these types.
   start<TInput = JsonValue>(
     functionName: string,
     input?: TInput,

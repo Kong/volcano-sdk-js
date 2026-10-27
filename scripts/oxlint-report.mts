@@ -14,8 +14,10 @@ const oxlint = join(root, 'node_modules/oxlint/bin/oxlint');
 
 function finding(value: unknown): OxlintReport['findings'][number] {
   const diagnostic = record(value);
-  const [label] = array(diagnostic['labels']);
-  const line = record(record(label)['span'])['line'];
+  const labels = array(diagnostic['labels']).map((label) => record(label));
+  // Type-aware diagnostics list their annotated spans first; the unannotated span is the one reported.
+  const reported = labels.find((label) => label['label'] === undefined) ?? labels[0];
+  const line = record(reported?.['span'])['line'];
   assert.ok(typeof line === 'number', 'Expected a line number');
   return { code: stringValue(diagnostic['code']), filename: stringValue(diagnostic['filename']), line };
 }

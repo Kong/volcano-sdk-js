@@ -1,5 +1,6 @@
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from './errors.ts';
+import { isFalsy } from './falsy.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { functionInvokeResult, functionWasDispatched } from './function-invocation-response.ts';
 import type { FunctionInvocationHost, FunctionInvocationResult } from './function-invoke-types.ts';
@@ -53,7 +54,7 @@ export async function invokeFunction(
   if ('error' in snapshot) {
     return failed(snapshot.error);
   }
-  return await new FunctionInvocation(host, functionName, context, snapshot.body).run();
+  return new FunctionInvocation(host, functionName, context, snapshot.body).run();
 }
 
 class FunctionInvocation {
@@ -73,7 +74,7 @@ class FunctionInvocation {
   ) {
     this.operationContext = context;
     this.resolutionContext = context;
-    this.useAnonKey = !context.accessToken;
+    this.useAnonKey = !hasToken(context.accessToken);
   }
 
   async run(): Promise<FunctionInvocationResult> {
@@ -108,7 +109,7 @@ class FunctionInvocation {
     if (this.host._oauthExchangePromise !== null) {
       await this.host._completeOAuthExchange();
       this.operationContext = this.host._captureAuthContext();
-      this.useAnonKey = !this.operationContext.accessToken;
+      this.useAnonKey = !hasToken(this.operationContext.accessToken);
     }
     this.resolutionContext = this.operationContext;
     this.resolutionToken = this.credential(this.resolutionContext);
@@ -151,7 +152,7 @@ class FunctionInvocation {
     if (!this.host._isAuthContextCurrent(this.operationContext)) {
       return authSessionChangedResult();
     }
-    return await this.invokeOnce(url, !this.useAnonKey, context, this.credential(context));
+    return this.invokeOnce(url, !this.useAnonKey, context, this.credential(context));
   }
 
   private async invokeOnce(
@@ -183,7 +184,7 @@ class FunctionInvocation {
         return retry;
       }
     }
-    return await functionInvokeResult(response, dispatched);
+    return functionInvokeResult(response, dispatched);
   }
 
   private async request(url: string, accessToken: string): Promise<{ response: Response; dispatched: boolean }> {
@@ -209,7 +210,7 @@ class FunctionInvocation {
     if (AuthRefreshDiscardedError.is(refreshed.error)) {
       return failed(refreshed.error, refreshed.error.status);
     }
-    if (!refreshed.error) {
+    if (isFalsy(refreshed.error)) {
       if (!this.host._isAuthContextCurrent(context)) {
         const error = new AuthRefreshDiscardedError();
         return failed(error, error.status);

@@ -22,7 +22,7 @@ type _SetSessionRejectsNullUser = Assert<null extends SetSessionParameter['user'
 declare const sourceAuth: Auth;
 declare const targetAuth: Auth;
 
-async function adoptCurrentSession(): Promise<unknown> {
+async function adoptCurrentSession(): Promise<void> {
   const {
     data: { session },
   } = await sourceAuth.getSession();
@@ -32,7 +32,7 @@ async function adoptCurrentSession(): Promise<unknown> {
   if (session.refresh_token === null || session.refresh_token === '' || session.user === null) {
     return;
   }
-  return targetAuth.setSession({
+  await targetAuth.setSession({
     ...session,
     refresh_token: session.refresh_token,
     user: session.user,
@@ -183,7 +183,9 @@ function presenceIdentity(state: PresenceState): unknown {
     return [id, user, connection, subscription, same];
   });
 }
-presenceChannel.onPresenceSync(presenceIdentity);
+presenceChannel.onPresenceSync((state) => {
+  presenceIdentity(state);
+});
 presenceIdentity(presenceChannel.getPresenceState());
 
 declare const postgresChange: PostgresChange;

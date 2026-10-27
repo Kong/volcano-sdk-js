@@ -9,10 +9,11 @@ import { record } from './values.mts';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const manifest = record(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')));
 
-// oxlint's correctness, suspicious, pedantic, and perf categories with the plugins for the SDK's
-// languages, test runner, and example frameworks. Only two rules are off; no override changes.
+// oxlint's correctness, suspicious, pedantic, and perf categories, type-aware, with the plugins for the
+// SDK's languages, test runner, and example frameworks. Each rule entry says why; no override changes.
 const defaultConfig = {
   $schema: './node_modules/oxlint/configuration_schema.json',
+  options: { typeAware: true },
   plugins: [
     'typescript',
     'unicorn',
@@ -33,6 +34,16 @@ const defaultConfig = {
     'eslint/no-underscore-dangle': 'off',
     // The rule predates React 17's automatic JSX runtime, which Next.js uses, so it only demands unused imports.
     'react/react-in-jsx-scope': 'off',
+    // typescript/require-await replaces it. The base rule also reports an async function that returns a promise
+    // without awaiting it, which return-await requires, so it would force such functions to become synchronous
+    // and throw their errors instead of rejecting with them.
+    'eslint/require-await': 'off',
+    // It requires deeply readonly types on every parameter, DOM and library types included;
+    // no recommended or strict type-checked preset enables it.
+    'typescript/prefer-readonly-parameter-types': 'off',
+    // Restriction-category rules the ESLint configuration enforced; that category stays off as a whole.
+    'typescript/no-explicit-any': 'error',
+    'eslint/complexity': ['error', 5],
   },
   ignorePatterns: ['src/generated/**', 'src/generated-runtime/**'],
 };
@@ -42,13 +53,24 @@ const contexts: [string, string][] = [
   ['scripts', 'fixture.test.mts'],
   ['__tests__', 'fixture.test.ts'],
   ['test/types', 'fixture.ts'],
-  ['examples/nextjs-notes-app/src', 'fixture.js'],
+  ['examples/nextjs-notes-app/src', 'fixture.tsx'],
 ];
 
 const violations: [string, string, string][] = [
   ['a debugger statement', 'export function pause() {\n  debugger;\n}\n', 'eslint(no-debugger)'],
   ['loose equality', 'export function same(left, right) {\n  return left == right;\n}\n', 'eslint(eqeqeq)'],
-  ['an async function without await', 'export async function value() {\n  return 1;\n}\n', 'eslint(require-await)'],
+  ['an async function without await', 'export async function value() {\n  return 1;\n}\n', 'typescript(require-await)'],
+  [
+    'a promise nobody handles',
+    "export function start() {\n  Promise.reject(new Error('lost'));\n}\n",
+    'typescript(no-floating-promises)',
+  ],
+  ['an explicit any', 'export const value: any = 1;\n', 'typescript(no-explicit-any)'],
+  [
+    'a function above complexity 5',
+    'export function pick(a, b, c, d, e) {\n  return a || b || c || d || e ? 1 : 0;\n}\n',
+    'eslint(complexity)',
+  ],
   [
     'a native prototype extension',
     'export function extend() {\n  Array.prototype.extra = true;\n}\n',
@@ -73,7 +95,7 @@ const frameworkViolations: [string, string, string, string, string][] = [
   [
     'a JSX list item without a key',
     'examples/nextjs-notes-app/src',
-    'fixture.js',
+    'fixture.tsx',
     'export function List({ items }) {\n  return <ul>{items.map((item) => <li>{item}</li>)}</ul>;\n}\n',
     'react(jsx-key)',
   ],
@@ -94,7 +116,8 @@ async function lintFixture(parent: string, filename: string, source: string): Pr
 
 await test('oxlint runs the correctness, suspicious, pedantic, and perf categories with framework plugins', async () => {
   assert.deepEqual(JSON.parse(await readFile(join(root, '.oxlintrc.json'), 'utf8')), defaultConfig);
-  assert.equal(record(manifest['scripts'])['lint'], 'oxlint && pnpm format:check');
+  // Type-aware rules read the built declarations that test/types and the examples import.
+  assert.equal(record(manifest['scripts'])['lint'], 'pnpm build && oxlint && pnpm format:check');
 });
 
 await test('generated code is outside lint scope and fails the coverage check', () => {

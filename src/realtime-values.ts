@@ -1,3 +1,4 @@
+import { isFalsy } from './falsy.ts';
 import type {
   ConnectContext,
   DisconnectContext,
@@ -153,11 +154,11 @@ function optionalDatabaseName(value: string | undefined): string | null {
 
 function payloadEvent(data: unknown): unknown {
   const event = property(data, 'event');
-  if (event) {
+  if (!isFalsy(event)) {
     return event;
   }
   const type = property(data, 'type');
-  return type ? type : 'message';
+  return isFalsy(type) ? 'message' : type;
 }
 
 function matchesPostgresChange(

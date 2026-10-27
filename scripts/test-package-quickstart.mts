@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
+// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.
 const run = promisify(execFile);
 const [artifact, ...extra] = process.argv.slice(2);
 assert.ok(

@@ -287,6 +287,10 @@ test('withLock returns an unavailable result without running a callback', async 
 
 test('withLock rejects a callback that is not a function', async () => {
   const given = fixture();
-  const outcome: unknown = Reflect.apply(given.locks.withLock, given.locks, ['leader', { ttl: 5 }, null]);
+  const outcome: unknown = Reflect.apply(given.locks.withLock.bind(given.locks), undefined, [
+    'leader',
+    { ttl: 5 },
+    null,
+  ]);
   await expect(outcome).rejects.toThrow('callback must be a function');
 });

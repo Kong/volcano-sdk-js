@@ -44,7 +44,7 @@ function reportsHandlersThatThrowDuringCatchUps(): void {
       });
     await volcano.durable.messages.subscribe(target, handler, { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication({ ...message(5), prev_seq: 4 });
     await jest.advanceTimersByTimeAsync(0);
@@ -78,7 +78,7 @@ function reportsHandlersThatThrowOnReleasedMessages(): void {
       });
     await volcano.durable.messages.subscribe(target, handler, { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     latestTransport().publication({ ...message(4), prev_seq: 3 });
@@ -104,7 +104,7 @@ function reportsHandlersThatThrowOnLiveMessages(): void {
       throw thrown;
     });
     await volcano.durable.messages.subscribe(target, handler, { realtime });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication(message(1));
     latestTransport().publication(message(2));
@@ -128,7 +128,7 @@ function reportsRejectingAsyncHandlers(): void {
       throw thrown;
     });
     await volcano.durable.messages.subscribe(target, handler, { realtime });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication(message(1));
     latestTransport().publication(message(2));
@@ -153,7 +153,7 @@ function runsReturnedThenables(): void {
     // oxlint-disable-next-line unicorn/no-thenable -- Delivery must adopt a handler's non-Promise thenable.
     const thenable = { then };
     await volcano.durable.messages.subscribe(target, () => thenable, { realtime });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication(message(1));
     await until(() => reported.mock.calls.length > 0);
@@ -170,7 +170,7 @@ function reportsRejectionsDuringTheFirstCatchUp(): void {
     const list = jest.fn<TransportOperation>().mockImplementationOnce(() => listed(page([message(1), message(2)])));
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const thrown = new Error('handler failed');
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
     const handler = jest.fn<Handler>(settled).mockImplementationOnce(async () => {
       await settled();
       throw thrown;

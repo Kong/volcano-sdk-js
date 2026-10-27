@@ -97,7 +97,7 @@ export class DurableMessagesFacade {
     if (query instanceof Error) {
       return failure(query);
     }
-    return await this.listTarget(addressed, query);
+    return this.listTarget(addressed, query);
   }
 
   async subscribe(
@@ -117,7 +117,7 @@ export class DurableMessagesFacade {
     if (channel === null) {
       return failure(new Error('This realtime client already subscribes to the execution; unsubscribe first'));
     }
-    return await this.follow(addressed, subscriber, channel);
+    return this.follow(addressed, subscriber, channel);
   }
 
   private async follow(

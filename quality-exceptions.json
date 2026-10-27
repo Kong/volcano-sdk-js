@@ -133,26 +133,134 @@
   },
   {
     "rule": "import/no-unassigned-import",
-    "scope": "examples/nextjs-notes-app/src/app/layout.js:RootLayout",
+    "scope": "examples/nextjs-notes-app/src/app/layout.tsx:RootLayout",
     "rationale": "The Next.js App Router loads global CSS only through a side-effect import in a layout; the stylesheet exports nothing to assign, and the root layout is where the example applies its Tailwind styles.",
     "evidence": "https://nextjs.org/docs/app/getting-started/css documents global styles as import './global.css' in app/layout. The rule's allow option for CSS would change the pinned .oxlintrc.json."
   },
   {
     "rule": "jsx-a11y/no-autofocus",
-    "scope": "examples/nextjs-notes-app/src/components/NoteCardEditor.js:NoteCardEditor",
+    "scope": "examples/nextjs-notes-app/src/components/NoteCardEditor.tsx:NoteCardEditor",
     "rationale": "The editor replaces the note's view when the user clicks Edit. That Edit button had focus and unmounts, so without autoFocus keyboard focus falls back to the document body instead of moving into the editor the user opened.",
     "evidence": "NoteCard renders NoteCardEditor in place of NoteCardView once editor.isEditing is set by the Edit button's handler; the editor never appears on page load."
   },
   {
     "rule": "jsx-a11y/no-autofocus",
-    "scope": "examples/nextjs-notes-app/src/components/NoteEditorForm.js:NoteEditorForm",
+    "scope": "examples/nextjs-notes-app/src/components/NoteEditorForm.tsx:NoteEditorForm",
     "rationale": "The form replaces the collapsed Create a new note button when the user clicks it. That button had focus and unmounts, so without autoFocus keyboard focus falls back to the document body instead of moving into the form the user opened.",
     "evidence": "NoteEditor renders NoteEditorForm in place of the collapsed button once its click handler sets isExpanded; the form never appears on page load."
   },
   {
     "rule": "react/memo-dependencies",
-    "scope": "examples/nextjs-notes-app/src/components/useNoteEditor.js:useNoteEditor.handleSubmit",
+    "scope": "examples/nextjs-notes-app/src/components/useNoteEditor.ts:useNoteEditor.handleSubmit",
     "rationale": "handleSubmit calls onCreate inside a try block whose finally clears isSubmitting, so onCreate is a real dependency. Dropping it would create notes through a stale onCreate after useNotes replaces it for a new user.",
     "evidence": "oxlint 1.88.0 reports any identifier used only inside try { } finally { } as an extra dependency: useCallback(async () => { try { await save(); } finally { setBusy(false); } }, [save, setBusy]) is flagged for save."
+  },
+  {
+    "rule": "typescript/no-unsafe-type-assertion",
+    "scope": "src/volcano-fetch.ts:volcanoFetch",
+    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
+    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+  },
+  {
+    "rule": "typescript/no-unnecessary-type-parameters",
+    "scope": "src/sdk-public-types-functions.ts:Functions.invoke",
+    "rationale": "Preserves existing caller-specified payload and result type parameters for source-compatible SDK upgrades.",
+    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options. Sean Keever approved this declaration-scoped compatibility exception on 2026-09-24."
+  },
+  {
+    "rule": "typescript/no-unnecessary-type-parameters",
+    "scope": "src/sdk-public-types-durable.ts:Durable.start",
+    "rationale": "Preserves the published caller-specified durable input type parameter.",
+    "evidence": "https://typescript-eslint.io/rules/no-unnecessary-type-parameters/ documents that this rule has no configuration options. Sean Keever approved this declaration-scoped compatibility exception on 2026-09-24."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "src/volcano-auth-facades.ts:authApi.signUpAnonymous",
+    "rationale": "Auth publishes the deprecated signUpAnonymous alias until the next major release, so the facade must bind the deprecated client method.",
+    "evidence": "test/fixtures/published-api/auth.d.ts publishes signUpAnonymous on Auth, and src/sdk-public-types-auth-methods.ts marks it @deprecated in favour of signInAnonymously. Removing it is a breaking change."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "src/volcano-auth-facades.ts:authApi.forgotPassword",
+    "rationale": "Auth publishes the deprecated forgotPassword alias until the next major release, so the facade must bind the deprecated client method.",
+    "evidence": "test/fixtures/published-api/auth.d.ts publishes forgotPassword on Auth, and src/sdk-public-types-auth-methods.ts marks it @deprecated in favour of resetPasswordForEmail. Removing it is a breaking change."
+  },
+  {
+    "rule": "typescript/strict-void-return",
+    "scope": "src/volcano-auth-facades.ts:providerRedirect",
+    "rationale": "Auth declares signInWithGoogle, signInWithGitHub, signInWithMicrosoft, and signInWithApple as void, but the bound client methods return the redirect URL, which JavaScript callers have always received. Discarding it would change the runtime result.",
+    "evidence": "test/fixtures/published-api/auth.d.ts declares the four shortcuts as returning void, and signInWithProvider in src/auth-oauth-url.ts returns the URL from signInWithOAuth. Returning string from Auth would change the published API."
+  },
+  {
+    "rule": "typescript/strict-void-return",
+    "scope": "scripts/audit-dependencies.mts:run",
+    "rationale": "util.promisify(execFile) resolves with { stdout, stderr } and rejects with an error that carries both, which this script reads. The rule treats promisify's custom-promisify overload, which takes no callback, as a void callback context.",
+    "evidence": "https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback documents the promisified result. @types/node declares promisify<TCustom>(fn: CustomPromisify<TCustom>): TCustom; the rule fires even when that overload is selected explicitly."
+  },
+  {
+    "rule": "typescript/strict-void-return",
+    "scope": "scripts/dependency-audit.test.mts:run",
+    "rationale": "util.promisify(execFile) resolves with { stdout, stderr } and rejects with an error that carries both, which this script reads. The rule treats promisify's custom-promisify overload, which takes no callback, as a void callback context.",
+    "evidence": "https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback documents the promisified result. @types/node declares promisify<TCustom>(fn: CustomPromisify<TCustom>): TCustom; the rule fires even when that overload is selected explicitly."
+  },
+  {
+    "rule": "typescript/strict-void-return",
+    "scope": "scripts/test-package-quickstart.mts:run",
+    "rationale": "util.promisify(execFile) resolves with { stdout, stderr } and rejects with an error that carries both, which this script reads. The rule treats promisify's custom-promisify overload, which takes no callback, as a void callback context.",
+    "evidence": "https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback documents the promisified result. @types/node declares promisify<TCustom>(fn: CustomPromisify<TCustom>): TCustom; the rule fires even when that overload is selected explicitly."
+  },
+  {
+    "rule": "typescript/no-unnecessary-type-parameters",
+    "scope": "test/fixtures/published-api/durable.d.ts:Functions.invoke",
+    "rationale": "The fixture records the published declarations, and removing the type parameter would break the public API that lets callers name it.",
+    "evidence": "maintainers/type-compatibility.md describes test/fixtures/published-api.d.ts as the frozen consumer regression fixture. public-api-compatibility.d.ts requires dist to match it exactly, so dropping a type parameter here fails that comparison."
+  },
+  {
+    "rule": "typescript/no-unnecessary-type-parameters",
+    "scope": "test/fixtures/published-api/durable.d.ts:Durable.start",
+    "rationale": "The fixture records the published declarations, and removing the type parameter would break the public API that lets callers name it.",
+    "evidence": "maintainers/type-compatibility.md describes test/fixtures/published-api.d.ts as the frozen consumer regression fixture. public-api-compatibility.d.ts requires dist to match it exactly, so dropping a type parameter here fails that comparison."
+  },
+  {
+    "rule": "typescript/no-unnecessary-type-parameters",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:Exact",
+    "rationale": "Exact compares two types by asking whether two generic signatures, each using its own type parameter once, are identical. That single use is what makes the check exact for optionality and readonly modifiers.",
+    "evidence": "https://github.com/microsoft/TypeScript/issues/27024#issuecomment-421529650 describes this equality check. Mutual assignability accepts the optionality changes that maintainers/type-compatibility.md says this fixture must reject."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:PublishedTypes.InsertBuilder",
+    "rationale": "The fixture checks that the deprecated InsertBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks InsertBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:PublishedTypes.UpdateBuilder",
+    "rationale": "The fixture checks that the deprecated UpdateBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks UpdateBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:PublishedTypes.DeleteBuilder",
+    "rationale": "The fixture checks that the deprecated DeleteBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks DeleteBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.InsertBuilder",
+    "rationale": "The fixture checks that the deprecated InsertBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks InsertBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.UpdateBuilder",
+    "rationale": "The fixture checks that the deprecated UpdateBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks UpdateBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
+  },
+  {
+    "rule": "typescript/no-deprecated",
+    "scope": "test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.DeleteBuilder",
+    "rationale": "The fixture checks that the deprecated DeleteBuilder alias is still published unchanged, which it can only do by naming the alias.",
+    "evidence": "src/sdk-public-types-database.ts marks DeleteBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
   }
 ]

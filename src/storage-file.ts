@@ -105,7 +105,7 @@ export class StorageFileApi {
    * @private
    */
   async _storageRequest(url: string, options: StorageRequestOptions = {}): Promise<StorageRequestResult> {
-    return await storageRequest(
+    return storageRequest(
       (requestUrl, requestOptions) => fetchWithAuthRetry(this.volcanoAuth, requestUrl, requestOptions),
       url,
       options,

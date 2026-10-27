@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": { "typeAware": true },
   "plugins": [
     "typescript",
     "unicorn",
@@ -14,6 +15,13 @@
     "nextjs"
   ],
   "categories": { "correctness": "error", "suspicious": "error", "pedantic": "error", "perf": "error" },
-  "rules": { "eslint/no-underscore-dangle": "off", "react/react-in-jsx-scope": "off" },
+  "rules": {
+    "eslint/no-underscore-dangle": "off",
+    "react/react-in-jsx-scope": "off",
+    "eslint/require-await": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/no-explicit-any": "error",
+    "eslint/complexity": ["error", 5]
+  },
   "ignorePatterns": ["src/generated/**", "src/generated-runtime/**"]
 }

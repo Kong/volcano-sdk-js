@@ -29,6 +29,7 @@ export interface Functions {
    * }
    * ```
    */
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Callers may name the payload type they send.
   invoke<TPayload = JsonValue, TResult = unknown>(
     functionName: string,
     payload?: TPayload,

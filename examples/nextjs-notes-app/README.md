@@ -1,6 +1,6 @@
 # Volcano Notes - Next.js Example Application
 
-A full-featured notes application demonstrating the **Volcano SDK** capabilities:
+A full-featured TypeScript notes application demonstrating the **Volcano SDK** capabilities:
 
 - **Authentication** - Email/password signup, signin, and anonymous users
 - **Password Recovery** - Forgot password flow with email verification
@@ -111,43 +111,44 @@ Open [http://localhost:3000](http://localhost:3000)
 nextjs-notes-app/
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── layout.js           # Root layout with providers
-│   │   ├── page.js             # Landing page
+│   │   ├── layout.tsx          # Root layout with providers
+│   │   ├── page.tsx            # Landing page
 │   │   ├── auth/
 │   │   │   ├── signin/         # Sign in page
 │   │   │   ├── signup/         # Sign up page
 │   │   │   └── forgot-password/# Password reset page
 │   │   └── dashboard/
-│   │       └── page.js         # Protected dashboard with notes
+│   │       └── page.tsx        # Protected dashboard with notes
 │   │
 │   ├── components/             # Reusable UI components
-│   │   ├── AuthForm.js         # Authentication form
-│   │   ├── NoteCard.js         # Individual note display
-│   │   ├── NoteEditor.js       # Note create/edit form
-│   │   ├── NotesList.js        # Notes grid/list
-│   │   └── Navbar.js           # Navigation bar
+│   │   ├── AuthForm.tsx        # Authentication form
+│   │   ├── NoteCard.tsx        # Individual note display
+│   │   ├── NoteEditor.tsx      # Note create/edit form
+│   │   ├── NotesList.tsx       # Notes grid/list
+│   │   └── Navbar.tsx          # Navigation bar
 │   │
 │   ├── hooks/                  # Custom React hooks
-│   │   ├── useAuth.js          # Authentication state & methods
-│   │   └── useNotes.js         # Notes CRUD operations
+│   │   ├── useNotes.ts         # Notes state and CRUD methods
+│   │   └── noteRequests.ts     # Notes queries and Note type
 │   │
 │   ├── lib/
-│   │   └── volcano.js          # SDK initialization
+│   │   └── volcano.ts          # SDK initialization
 │   │
 │   └── context/
-│       └── AuthContext.js      # Auth state provider
+│       └── AuthContext.tsx     # Auth state provider and useAuth hook
 │
 ├── .env.example                # Environment template
 ├── package.json
-├── tailwind.config.js
+├── tsconfig.json               # Strict TypeScript settings
+├── tailwind.config.ts
 └── README.md
 ```
 
 ## Code Patterns
 
-### SDK Initialization (`src/lib/volcano.js`)
+### SDK Initialization (`src/lib/volcano.ts`)
 
-```javascript
+```typescript
 import { VolcanoAuth } from '@volcano.dev/sdk';
 
 // Create a singleton instance
@@ -160,9 +161,9 @@ export const volcano = new VolcanoAuth({
 volcano.database(process.env.NEXT_PUBLIC_VOLCANO_DATABASE_NAME);
 ```
 
-### Authentication Hook (`src/hooks/useAuth.js`)
+### Authentication Hook (`src/context/AuthContext.tsx`)
 
-```javascript
+```typescript
 // Get current user
 const { user, loading, error } = useAuth();
 
@@ -179,9 +180,9 @@ await signInAnonymously();
 await signOut();
 ```
 
-### Notes Hook (`src/hooks/useNotes.js`)
+### Notes Hook (`src/hooks/useNotes.ts`)
 
-```javascript
+```typescript
 // Fetch all notes
 const { notes, loading, error, refresh } = useNotes();
 
@@ -201,7 +202,7 @@ await deleteNote(noteId);
 
 Notes are automatically filtered by user. When you query:
 
-```javascript
+```typescript
 const { data } = await volcano.from('notes').select('*');
 ```
 
@@ -213,8 +214,8 @@ You only see YOUR notes. No extra code needed!
 
 Sessions are automatically saved to `localStorage`. When the app loads:
 
-```javascript
-// In context/useAuthSession.js, which AuthProvider calls
+```typescript
+// In context/useAuthSession.ts, which AuthProvider calls
 useEffect(() => {
   volcano.initialize().then(({ user }) => {
     setUser(user);
@@ -226,7 +227,7 @@ useEffect(() => {
 
 Anonymous users get a temporary account:
 
-```javascript
+```typescript
 await volcano.auth.signInAnonymously();
 // User can create notes immediately
 // Later, they can "upgrade" to a full account
@@ -245,7 +246,7 @@ ALTER TABLE notes ADD COLUMN pinned BOOLEAN DEFAULT false;
 
 2. Update the SDK queries:
 
-```javascript
+```typescript
 const { data } = await volcano
   .from('notes')
   .select('id, title, content, color, pinned, created_at')
@@ -255,7 +256,7 @@ const { data } = await volcano
 
 ### Adding Real-time Updates
 
-```javascript
+```typescript
 import { VolcanoRealtime } from '@volcano.dev/sdk/realtime';
 
 const realtime = new VolcanoRealtime({
@@ -280,7 +281,7 @@ await channel.subscribe();
 
 Make sure you're signed in before querying the database:
 
-```javascript
+```typescript
 const { user } = await volcano.auth.getUser();
 if (!user) {
   // Redirect to login
@@ -292,7 +293,7 @@ if (!user) {
 1. Check RLS policies are created correctly
 2. Verify `user_id` is set when inserting:
 
-```javascript
+```typescript
 // The SDK automatically sets user context
 // But if using raw SQL, ensure user_id matches auth.uid()
 ```
@@ -301,7 +302,7 @@ if (!user) {
 
 The SDK automatically refreshes tokens. If issues persist:
 
-```javascript
+```typescript
 await volcano.auth.refreshSession();
 ```
 

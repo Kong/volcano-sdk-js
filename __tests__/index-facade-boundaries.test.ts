@@ -4,7 +4,7 @@ import {
   clearSharedFunctionResolveStateForTests,
   getSharedFunctionResolveState,
 } from '../src/function-resolve-cache.ts';
-import { loadRealtime, VolcanoAuth } from '../src/index.ts';
+import { type AuthStateCallback, loadRealtime, VolcanoAuth } from '../src/index.ts';
 import { within } from './auth-concurrency-fixtures.ts';
 
 beforeEach(clearSharedFunctionResolveStateForTests);
@@ -75,7 +75,7 @@ describe('facade configuration boundaries', () => {
 
   test('does not report a URL adoption for an explicit server credential', async () => {
     const sdk = client();
-    const onChange = jest.fn();
+    const onChange = jest.fn<AuthStateCallback>();
     sdk.auth.onAuthStateChange(onChange);
     jest
       .spyOn(globalThis, 'fetch')

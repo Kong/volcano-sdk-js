@@ -64,7 +64,7 @@ function exchangesCallbackCodes(): void {
 
   it('keeps the exchanged session in memory when browser storage is unavailable', async () => {
     seedOAuthCallback('/auth/callback?code=one-time-code&state=oauth-nonce');
-    const storageSetItem = jest.mocked(localStorage).setItem;
+    const storageSetItem = jest.spyOn(localStorage, 'setItem');
     expect(jest.isMockFunction(storageSetItem)).toBe(true);
     storageSetItem.mockImplementationOnce(() => {
       throw new DOMException('Storage is unavailable', 'SecurityError');

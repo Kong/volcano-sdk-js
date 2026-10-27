@@ -3,7 +3,7 @@ import { expect, jest, test } from '@jest/globals';
 import { batchResult, type EngineBatch } from '../src/durable-batch-result.ts';
 
 test('keeps completed results stable across early-completion replay', () => {
-  const throwIfError = jest.fn();
+  const throwIfError = jest.fn<EngineBatch<string>['throwIfError']>();
   const batch: EngineBatch<string> = {
     all: [
       { index: 0, status: 'SUCCEEDED', result: 'a' },
@@ -45,7 +45,7 @@ test('omits a non-string completion reason', () => {
     successCount: 0,
     failureCount: 0,
     completionReason: null,
-    throwIfError: jest.fn(),
+    throwIfError: jest.fn<EngineBatch<never>['throwIfError']>(),
   };
 
   expect(batchResult(batch).completionReason).toBeUndefined();
@@ -66,7 +66,7 @@ test.each([
     successCount: 0,
     failureCount: 0,
     completionReason,
-    throwIfError: jest.fn(),
+    throwIfError: jest.fn<EngineBatch<never>['throwIfError']>(),
   };
 
   expect(batchResult(batch).completionReason).toBe(expected);

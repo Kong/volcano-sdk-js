@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 import { record, stringValue } from './values.mts';
 
+// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.
 const run = promisify(execFile);
 const manifest = record(JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')));
 const auditScript = await readFile(new URL('audit-dependencies.mjs', import.meta.url), 'utf8');
@@ -173,7 +174,7 @@ async function auditFixture(
   await writeAuditProject(directory, exceptions);
   const requests: AuditRequest[] = [];
   const port = await startRegistry(context, status, report, requests);
-  return await runAudit(directory, port, requests);
+  return runAudit(directory, port, requests);
 }
 
 await test('dependency audit accepts a clean registry result', async (context) => {

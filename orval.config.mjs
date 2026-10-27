@@ -47,14 +47,21 @@ const sdkOperations = new Set([
 
 const runtimeTag = 'Volcano SDK Runtime';
 
-function markRuntimeOperation(operation) {
-  if (!sdkOperations.has(operation?.operationId)) {
-    return false;
-  }
-  operation.tags = [runtimeTag];
-  return true;
+/**
+ * @param {unknown} value A path item field: an operation, or another field such as `parameters`.
+ * @returns {value is import('orval').OpenApiOperationObject & { operationId: string }}
+ */
+function isRuntimeOperation(value) {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'operationId' in value &&
+    typeof value.operationId === 'string' &&
+    sdkOperations.has(value.operationId)
+  );
 }
 
+/** @param {import('orval').OpenApiDocument} document */
 function runtimePathItems(document) {
   return Object.values(document.paths ?? {});
 }
@@ -65,7 +72,8 @@ const selectRuntimeOperations = defineTransformer((document) => {
   const found = new Set();
   for (const pathItem of runtimePathItems(document)) {
     for (const operation of Object.values(pathItem)) {
-      if (markRuntimeOperation(operation)) {
+      if (isRuntimeOperation(operation)) {
+        operation.tags = [runtimeTag];
         found.add(operation.operationId);
       }
     }

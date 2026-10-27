@@ -1,3 +1,4 @@
+import { isFalsy } from './falsy.ts';
 import { getHeaderValue, type HeaderResponse } from './response-headers.ts';
 
 interface BodyResponse extends HeaderResponse {
@@ -31,7 +32,7 @@ async function parseJsonResponse(response: BodyResponse): Promise<unknown> {
 
 function hasJsonContentType(response: HeaderResponse): boolean {
   const value = getHeaderValue(response, 'content-type');
-  if (!value) {
+  if (isFalsy(value)) {
     return false;
   }
   if (typeof value !== 'string') {

@@ -2,6 +2,7 @@ import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
 import { databaseSegment } from './database-name.ts';
+import { isFalsy } from './falsy.ts';
 import { safeJsonParse } from './response-json.ts';
 
 type Operation = 'insert' | 'update' | 'delete';
@@ -107,7 +108,7 @@ function responseError(result: unknown, operation: Operation): Error {
   if (value instanceof Error) {
     return value;
   }
-  return new Error(value ? String(value) : `${operation} failed`);
+  return new Error(isFalsy(value) ? `${operation} failed` : String(value));
 }
 
 function sessionError(error: Error | string | null): Error {

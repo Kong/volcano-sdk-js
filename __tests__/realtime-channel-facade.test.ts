@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoRealtime } from '../src/realtime.ts';
-import type { PendingRow } from '../src/realtime-internal-types.ts';
+import type { PendingRow, TransportSubscription } from '../src/realtime-internal-types.ts';
 
 function realtime(): VolcanoRealtime {
   return new VolcanoRealtime({ apiUrl: 'https://api.example.com', anonKey: 'key' });
@@ -34,10 +34,10 @@ function deliversOnActiveChannels(): void {
     channel._subscription = {
       state: 'subscribed',
       publish,
-      on: jest.fn(),
-      off: jest.fn(),
-      subscribe: jest.fn(),
-      unsubscribe: jest.fn(),
+      on: jest.fn<TransportSubscription['on']>(),
+      off: jest.fn<TransportSubscription['off']>(),
+      subscribe: jest.fn<TransportSubscription['subscribe']>(),
+      unsubscribe: jest.fn<TransportSubscription['unsubscribe']>(),
       ready: jest.fn(() => Promise.resolve()),
     };
     await channel.send({ text: 'hello' });
@@ -120,7 +120,7 @@ function flushesPendingRows(): void {
   });
 }
 
-function recoversFromBatchFailures(): void {
+function cancelsEarlyBatchFlushes(): void {
   test('cancels a scheduled batch flush when it flushes early', async () => {
     const channel = realtime().channel('public:tasks', { type: 'postgres' });
     const timer = setTimeout(() => {
@@ -128,8 +128,14 @@ function recoversFromBatchFailures(): void {
     }, 10_000);
     const clear = jest.spyOn(globalThis, 'clearTimeout');
     const rejected: unknown[] = [];
+    const row: PendingRow = {
+      resolve: jest.fn<PendingRow['resolve']>(),
+      reject: (error) => {
+        rejected.push(error);
+      },
+    };
     channel._pendingFetches.set('public.tasks', {
-      ids: new Map<string, PendingRow>([['1', { resolve: jest.fn(), reject: (error) => rejected.push(error) }]]),
+      ids: new Map<string, PendingRow>([['1', row]]),
       timer,
       schema: 'public',
       table: 'tasks',
@@ -142,7 +148,9 @@ function recoversFromBatchFailures(): void {
       clearTimeout(timer);
     }
   });
+}
 
+function recoversFromBatchFailures(): void {
   test('falls back to lightweight delivery for non-Error query failures', async () => {
     const channel = realtime().channel('public:tasks', { type: 'postgres' });
     const delivered: unknown[] = [];
@@ -215,6 +223,7 @@ describe('realtime channel facade', () => {
   deliversOnActiveChannels();
   tracksValidatedPresence();
   flushesPendingRows();
+  cancelsEarlyBatchFlushes();
   recoversFromBatchFailures();
   removesCallbacksAndMalformedPresence();
 });
