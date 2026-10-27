@@ -203,9 +203,11 @@ await test('tracked SDK code remains in native lint, format, type, test, and cov
   for (const path of files.filter((item) => /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/u.test(item))) {
     assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
   }
+  const maintained = maintainedCode(files);
+  // One run: each type-aware oxlint process loads the TypeScript projects again.
+  requireLinted(maintained);
   await Promise.all(
-    maintainedCode(files).map(async (path) => {
-      requireLinted(path);
+    maintained.map(async (path) => {
       requireRootFormatting(path);
       requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
     }),

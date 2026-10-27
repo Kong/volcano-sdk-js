@@ -122,7 +122,7 @@ await test('oxlint runs the correctness, suspicious, pedantic, and perf categori
 
 await test('generated code is outside lint scope and fails the coverage check', () => {
   assert.throws(() => {
-    requireLinted('src/generated/client.ts');
+    requireLinted(['src/generated/client.ts']);
   }, /ignored by oxlint/u);
 });
 

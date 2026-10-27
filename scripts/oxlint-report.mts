@@ -40,6 +40,15 @@ export function lint(paths: readonly string[]): OxlintReport {
   return { files, findings: array(report['diagnostics']).map((value) => finding(value)) };
 }
 
-export function requireLinted(path: string, report: (paths: readonly string[]) => OxlintReport = lint): void {
-  assert.equal(report([path]).files, 1, `${path} is ignored by oxlint`);
+// Lints `paths` in one run and requires oxlint to have linted every one of them.
+export function requireLinted(
+  paths: readonly string[],
+  report: (paths: readonly string[]) => OxlintReport = lint,
+): void {
+  const { files } = report(paths);
+  assert.equal(
+    files,
+    paths.length,
+    `${String(paths.length - files)} of ${String(paths.length)} files are ignored by oxlint`,
+  );
 }
