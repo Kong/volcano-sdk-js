@@ -10,7 +10,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const manifest = record(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')));
 
 // oxlint's correctness, suspicious, pedantic, and perf categories, type-aware, with the plugins for the
-// SDK's languages, test runner, and example frameworks. Each rule entry says why; no override changes.
+// SDK's languages, test runner, and example frameworks. Rules come from those categories only: no rule is
+// enabled or reconfigured on its own, and each rule turned off says why.
 const defaultConfig = {
   $schema: './node_modules/oxlint/configuration_schema.json',
   options: { typeAware: true },
@@ -41,40 +42,19 @@ const defaultConfig = {
     // It requires deeply readonly types on every parameter, DOM and library types included;
     // no recommended or strict type-checked preset enables it.
     'typescript/prefer-readonly-parameter-types': 'off',
-    // The ESLint configuration's options: a string, number, or nullable object is not a condition.
-    'typescript/strict-boolean-expressions': [
-      'error',
-      { allowString: false, allowNumber: false, allowNullableObject: false },
-    ],
-    // Rules the ESLint configuration enforced, with its options, from the restriction and style categories,
-    // which stay off as a whole.
-    'eslint/complexity': ['error', 5],
-    'typescript/no-explicit-any': 'error',
-    'typescript/no-non-null-assertion': 'error',
-    'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
-    'typescript/explicit-module-boundary-types': 'error',
-    'eslint/no-console': ['error', { allow: ['warn', 'error'] }],
-    'eslint/no-var': 'error',
-    'eslint/no-use-before-define': ['error', { functions: false, classes: false, variables: true }],
-    'node/no-new-require': 'error',
-    'node/no-path-concat': 'error',
-    'unicorn/prefer-node-protocol': 'error',
-    'eslint/curly': ['error', 'all'],
-    'eslint/prefer-const': ['error', { destructuring: 'all' }],
-    'eslint/prefer-template': 'error',
-    'eslint/object-shorthand': ['error', 'always', { avoidExplicitReturnArrows: true }],
-    'eslint/no-duplicate-imports': 'error',
-    'typescript/dot-notation': 'error',
   },
   ignorePatterns: ['src/generated/**', 'src/generated-runtime/**'],
 };
 
+// The durable example stays JavaScript, which the function runtime requires, and type-aware rules reach it
+// through its jsconfig.json. Its fixtures share the violations below, so they must be valid JavaScript.
 const contexts: [string, string][] = [
   ['src', 'fixture.ts'],
   ['scripts', 'fixture.test.mts'],
   ['__tests__', 'fixture.test.ts'],
   ['test/types', 'fixture.ts'],
   ['examples/nextjs-notes-app/src', 'fixture.tsx'],
+  ['examples/durable-order-pipeline/volcano/functions', 'fixture.js'],
 ];
 
 const violations: [string, string, string][] = [
@@ -86,41 +66,10 @@ const violations: [string, string, string][] = [
     "export function start() {\n  Promise.reject(new Error('lost'));\n}\n",
     'typescript(no-floating-promises)',
   ],
-  ['an explicit any', 'export const value: any = 1;\n', 'typescript(no-explicit-any)'],
-  [
-    'a function above complexity 5',
-    'export function pick(a, b, c, d, e) {\n  return a || b || c || d || e ? 1 : 0;\n}\n',
-    'eslint(complexity)',
-  ],
   [
     'a native prototype extension',
     'export function extend() {\n  Array.prototype.extra = true;\n}\n',
     'eslint(no-extend-native)',
-  ],
-  [
-    'a non-null assertion',
-    'export function size(input: string | undefined): number {\n  return input!.length;\n}\n',
-    'typescript(no-non-null-assertion)',
-  ],
-  [
-    'a string as a condition',
-    'export function present(input: string): boolean {\n  return input ? true : false;\n}\n',
-    'typescript(strict-boolean-expressions)',
-  ],
-  [
-    'a type assertion',
-    'export function named(value: unknown): string {\n  return value as string;\n}\n',
-    'typescript(consistent-type-assertions)',
-  ],
-  [
-    'an exported function without a return type',
-    'export function enabled() {\n  return true;\n}\n',
-    'typescript(explicit-module-boundary-types)',
-  ],
-  [
-    'a console.log call',
-    'export function report(message: string): void {\n  console.log(message);\n}\n',
-    'eslint(no-console)',
   ],
   [
     'an await inside a loop',

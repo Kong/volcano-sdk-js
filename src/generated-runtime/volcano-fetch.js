@@ -54,7 +54,7 @@ export async function volcanoFetch(path, options) {
     if (!response.ok) {
         throw responseError(response, data);
     }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- Orval's generated callers name the response type.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Orval's generated callers name the response type.
     return { data, status: response.status, headers: response.headers };
 }
 /** Seconds from a Retry-After header value, or undefined when it has no leading integer. */

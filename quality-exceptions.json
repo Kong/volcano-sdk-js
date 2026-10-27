@@ -264,12 +264,6 @@
     "evidence": "src/sdk-public-types-database.ts marks DeleteBuilder @deprecated in favour of MutationBuilder, and test/fixtures/published-api/database.d.ts still publishes it. Without this comparison the alias could change unnoticed before the next major release."
   },
   {
-    "rule": "typescript/consistent-type-assertions",
-    "scope": "src/volcano-fetch.ts:volcanoFetch",
-    "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
-    "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
-  },
-  {
     "rule": "eslint/no-await-in-loop",
     "scope": "examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder",
     "rationale": "Order items are inserted one at a time so the first failed insert stops the order there, and the items after it are never written.",

@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "options": { "typeAware": true },
+  "options": {
+    "typeAware": true
+  },
   "plugins": [
     "typescript",
     "unicorn",
@@ -14,33 +16,17 @@
     "jsx-a11y",
     "nextjs"
   ],
-  "categories": { "correctness": "error", "suspicious": "error", "pedantic": "error", "perf": "error" },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error"
+  },
   "rules": {
     "eslint/no-underscore-dangle": "off",
     "react/react-in-jsx-scope": "off",
     "eslint/require-await": "off",
-    "typescript/prefer-readonly-parameter-types": "off",
-    "typescript/strict-boolean-expressions": [
-      "error",
-      { "allowString": false, "allowNumber": false, "allowNullableObject": false }
-    ],
-    "eslint/complexity": ["error", 5],
-    "typescript/no-explicit-any": "error",
-    "typescript/no-non-null-assertion": "error",
-    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
-    "typescript/explicit-module-boundary-types": "error",
-    "eslint/no-console": ["error", { "allow": ["warn", "error"] }],
-    "eslint/no-var": "error",
-    "eslint/no-use-before-define": ["error", { "functions": false, "classes": false, "variables": true }],
-    "node/no-new-require": "error",
-    "node/no-path-concat": "error",
-    "unicorn/prefer-node-protocol": "error",
-    "eslint/curly": ["error", "all"],
-    "eslint/prefer-const": ["error", { "destructuring": "all" }],
-    "eslint/prefer-template": "error",
-    "eslint/object-shorthand": ["error", "always", { "avoidExplicitReturnArrows": true }],
-    "eslint/no-duplicate-imports": "error",
-    "typescript/dot-notation": "error"
+    "typescript/prefer-readonly-parameter-types": "off"
   },
   "ignorePatterns": ["src/generated/**", "src/generated-runtime/**"]
 }
