@@ -92,7 +92,6 @@ const declarations: [string, string][] = [
     'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.DeleteBuilder',
     'Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>',
   ],
-  ['src/volcano-fetch.ts:volcanoFetch', 'return { data, status: response.status, headers: response.headers } as T'],
   [
     'examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder',
     'unwrap(await insertOrderItem(volcano, order, item));',

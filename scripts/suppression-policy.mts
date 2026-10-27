@@ -15,7 +15,7 @@ const approvedComments = new Map<string, readonly string[]>([
     'src/volcano-fetch.ts',
     [
       "// oxlint-disable-next-line unicorn/prefer-number-coercion -- Retry-After keeps parseInt's leading-integer parsing.",
-      "// oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/consistent-type-assertions -- Orval's generated callers name the response type.",
+      "// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Orval's generated callers name the response type.",
     ],
   ],
   [
