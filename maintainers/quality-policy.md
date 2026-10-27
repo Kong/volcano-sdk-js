@@ -49,6 +49,15 @@ configuration enabled individually, such as `no-explicit-any`,
 `no-console`, are not carried over. Strict `tsc`, the type-aware `no-unsafe-*`
 rules, 100% coverage, and the mutation gate still apply.
 
+The ESLint `security` rules map as follows:
+
+- `detect-eval-with-expression`: the categories run `no-eval`, `no-implied-eval`,
+  and `typescript/no-implied-eval`, which reject every `eval`.
+- `detect-child-process`: no oxlint rule matches. Only tooling scripts and tests
+  start processes, with `execFile` or `spawnSync` argument arrays and no shell.
+- `detect-bidi-characters`: no oxlint rule matches. GitHub marks hidden and
+  bidirectional Unicode in every pull request diff.
+
 A finding that cannot be fixed without changing behavior, such as a loop whose
 iterations must run in order, can be approved in `quality-exceptions.json` with
 the rule, a declaration scope, a rationale, and evidence. Its exact
