@@ -6,7 +6,9 @@
  * What NotesList shows while loading, after a failed load, and with no notes.
  */
 
-export function NotesListSkeleton() {
+import type { JSX } from 'react';
+
+export function NotesListSkeleton(): JSX.Element {
   return (
     <div className="space-y-4">
       {/* Skeleton loader */}
@@ -24,7 +26,7 @@ export function NotesListSkeleton() {
   );
 }
 
-export function NotesListError({ error }: { error: Error }) {
+export function NotesListError({ error }: { error: Error }): JSX.Element {
   return (
     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
       <div className="flex items-start">
@@ -38,14 +40,16 @@ export function NotesListError({ error }: { error: Error }) {
         </svg>
         <div className="ml-3">
           <h3 className="text-sm font-medium text-red-800">Failed to load notes</h3>
-          <p className="mt-1 text-sm text-red-700">{error.message || 'An error occurred while loading your notes.'}</p>
+          <p className="mt-1 text-sm text-red-700">
+            {error.message === '' ? 'An error occurred while loading your notes.' : error.message}
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-export function NotesEmptyState() {
+export function NotesEmptyState(): JSX.Element {
   return (
     <div className="text-center py-12">
       <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">

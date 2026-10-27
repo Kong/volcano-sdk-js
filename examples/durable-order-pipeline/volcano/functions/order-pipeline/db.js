@@ -79,7 +79,7 @@ function databaseSettings() {
 }
 
 function volcano() {
-  if (!client) {
+  if (client === null) {
     const { VOLCANO_API_URL, VOLCANO_ANON_KEY, VOLCANO_SERVICE_KEY, VOLCANO_DATABASE } = databaseSettings();
     client = new VolcanoClient({
       apiUrl: VOLCANO_API_URL,
@@ -96,7 +96,7 @@ function volcano() {
  * @returns {Row[]}
  */
 function unwrap({ data, error }) {
-  if (error) {
+  if (error !== null) {
     throw new Error(error.message);
   }
   return data ?? [];
@@ -113,7 +113,7 @@ const db = {
     /** @type {QueryBuilder<OrderRow>} */
     const orders = volcano().from('orders');
     const [order] = unwrap(await orders.select('*').eq('id', orderId).limit(1));
-    if (!order) {
+    if (order === undefined) {
       return null;
     }
     /** @type {QueryBuilder<OrderItemRow>} */
@@ -137,7 +137,7 @@ const db = {
       status: 'captured',
     });
     const [charge] = unwrap(await insert);
-    if (!charge) {
+    if (charge === undefined) {
       throw new Error(`the charge for order ${order.id} returned no row`);
     }
     return charge;

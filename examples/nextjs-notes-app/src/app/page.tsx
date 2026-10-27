@@ -9,17 +9,17 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { type JSX, useEffect } from 'react';
 import { HomeFeatures, HomeFooter, HomeHero } from '@/components/HomeSections';
 import { useAuth } from '@/context/AuthContext';
 
-export default function HomePage() {
+export default function HomePage(): JSX.Element {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user !== null) {
       router.push('/dashboard');
     }
   }, [user, loading, router]);

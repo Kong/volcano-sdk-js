@@ -8,10 +8,11 @@
  */
 
 import Link from 'next/link';
+import type { JSX } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { NavbarGuestLinks, NavbarUserLinks } from './NavbarLinks';
 
-export function Navbar() {
+export function Navbar(): JSX.Element {
   const { user, isAnonymous, signOut, loading } = useAuth();
 
   return (
@@ -31,12 +32,12 @@ export function Navbar() {
             {loading ? (
               // Loading skeleton
               <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
-            ) : user ? (
-              // Authenticated user
-              <NavbarUserLinks user={user} isAnonymous={isAnonymous} signOut={signOut} />
-            ) : (
+            ) : user === null ? (
               // Not authenticated
               <NavbarGuestLinks />
+            ) : (
+              // Authenticated user
+              <NavbarUserLinks user={user} isAnonymous={isAnonymous} signOut={signOut} />
             )}
           </div>
         </div>

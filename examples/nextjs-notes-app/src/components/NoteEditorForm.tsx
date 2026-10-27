@@ -6,7 +6,7 @@
  * NoteEditor once expanded: title and content inputs with save and cancel.
  */
 
-import { type KeyboardEvent, useCallback } from 'react';
+import { type JSX, type KeyboardEvent, useCallback } from 'react';
 import { useAsyncHandler, useInputChange } from '@/hooks/eventHandlers';
 import type { NoteEditorState } from './useNoteEditor';
 
@@ -15,7 +15,7 @@ interface NoteEditorFormProps {
   editor: NoteEditorState;
 }
 
-export function NoteEditorForm({ editor }: NoteEditorFormProps) {
+export function NoteEditorForm({ editor }: NoteEditorFormProps): JSX.Element {
   const { title, setTitle, content, setContent, isSubmitting, handleSubmit, handleCancel } = editor;
 
   const handleTitleChange = useInputChange(setTitle);
@@ -80,7 +80,7 @@ function NoteEditorActions({ title, isSubmitting, onCancel }: NoteEditorActionsP
         </button>
         <button
           type="submit"
-          disabled={!title.trim() || isSubmitting}
+          disabled={title.trim() === '' || isSubmitting}
           className="px-4 py-1.5 text-sm bg-volcano-600 text-white rounded-md hover:bg-volcano-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
         >
           {isSubmitting ? (

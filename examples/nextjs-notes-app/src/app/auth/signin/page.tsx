@@ -10,18 +10,18 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { type JSX, useEffect } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import { useAuth } from '@/context/AuthContext';
 import { useDashboardRedirect } from '@/hooks/useDashboardRedirect';
 
-export default function SignInPage() {
+export default function SignInPage(): JSX.Element | null {
   const { user, loading, error, signIn, signInAnonymously } = useAuth();
   const router = useRouter();
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user !== null) {
       router.push('/dashboard');
     }
   }, [user, loading, router]);
@@ -33,7 +33,7 @@ export default function SignInPage() {
   const handleAnonymousSignIn = useDashboardRedirect(signInAnonymously);
 
   // Don't render form if already authenticated
-  if (user) {
+  if (user !== null) {
     return null;
   }
 

@@ -7,8 +7,9 @@
  */
 
 import Link from 'next/link';
+import type { JSX } from 'react';
 
-export function GuestAccountBanner() {
+export function GuestAccountBanner(): JSX.Element {
   return (
     <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div className="flex items-start">
@@ -35,7 +36,7 @@ export function GuestAccountBanner() {
   );
 }
 
-export function QuickTips() {
+export function QuickTips(): JSX.Element {
   return (
     <div className="mt-12 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Tips</h2>
@@ -61,7 +62,7 @@ export function QuickTips() {
   );
 }
 
-export function SdkCodeReference() {
+export function SdkCodeReference(): JSX.Element {
   return (
     <div className="mt-8 bg-gray-900 rounded-lg p-6 text-white">
       <h2 className="text-lg font-semibold mb-4 flex items-center">

@@ -41,9 +41,30 @@ const defaultConfig = {
     // It requires deeply readonly types on every parameter, DOM and library types included;
     // no recommended or strict type-checked preset enables it.
     'typescript/prefer-readonly-parameter-types': 'off',
-    // Restriction-category rules the ESLint configuration enforced; that category stays off as a whole.
-    'typescript/no-explicit-any': 'error',
+    // The ESLint configuration's options: a string, number, or nullable object is not a condition.
+    'typescript/strict-boolean-expressions': [
+      'error',
+      { allowString: false, allowNumber: false, allowNullableObject: false },
+    ],
+    // Rules the ESLint configuration enforced, with its options, from the restriction and style categories,
+    // which stay off as a whole.
     'eslint/complexity': ['error', 5],
+    'typescript/no-explicit-any': 'error',
+    'typescript/no-non-null-assertion': 'error',
+    'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+    'typescript/explicit-module-boundary-types': 'error',
+    'eslint/no-console': ['error', { allow: ['warn', 'error'] }],
+    'eslint/no-var': 'error',
+    'eslint/no-use-before-define': ['error', { functions: false, classes: false, variables: true }],
+    'node/no-new-require': 'error',
+    'node/no-path-concat': 'error',
+    'unicorn/prefer-node-protocol': 'error',
+    'eslint/curly': ['error', 'all'],
+    'eslint/prefer-const': ['error', { destructuring: 'all' }],
+    'eslint/prefer-template': 'error',
+    'eslint/object-shorthand': ['error', 'always', { avoidExplicitReturnArrows: true }],
+    'eslint/no-duplicate-imports': 'error',
+    'typescript/dot-notation': 'error',
   },
   ignorePatterns: ['src/generated/**', 'src/generated-runtime/**'],
 };
@@ -75,6 +96,31 @@ const violations: [string, string, string][] = [
     'a native prototype extension',
     'export function extend() {\n  Array.prototype.extra = true;\n}\n',
     'eslint(no-extend-native)',
+  ],
+  [
+    'a non-null assertion',
+    'export function size(input: string | undefined): number {\n  return input!.length;\n}\n',
+    'typescript(no-non-null-assertion)',
+  ],
+  [
+    'a string as a condition',
+    'export function present(input: string): boolean {\n  return input ? true : false;\n}\n',
+    'typescript(strict-boolean-expressions)',
+  ],
+  [
+    'a type assertion',
+    'export function named(value: unknown): string {\n  return value as string;\n}\n',
+    'typescript(consistent-type-assertions)',
+  ],
+  [
+    'an exported function without a return type',
+    'export function enabled() {\n  return true;\n}\n',
+    'typescript(explicit-module-boundary-types)',
+  ],
+  [
+    'a console.log call',
+    'export function report(message: string): void {\n  console.log(message);\n}\n',
+    'eslint(no-console)',
   ],
   [
     'an await inside a loop',

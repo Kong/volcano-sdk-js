@@ -124,7 +124,7 @@ function finishSignOut(host: AuthLifecycleHost, context: AuthContext, error: Err
     return { error };
   }
   const changed = new AuthSessionChangedError();
-  if (error) {
+  if (error !== null) {
     Object.defineProperty(changed, 'cause', { configurable: true, value: error, writable: true });
   }
   return { error: changed };

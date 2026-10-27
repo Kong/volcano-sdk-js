@@ -10,6 +10,7 @@
  * <NotesList />
  */
 
+import type { JSX } from 'react';
 import { useNotes } from '@/hooks/useNotes';
 import { NoteCard } from './NoteCard';
 import { NoteEditor } from './NoteEditor';
@@ -26,7 +27,7 @@ function NotesCount({ count }: { count: number }) {
   );
 }
 
-export function NotesList() {
+export function NotesList(): JSX.Element {
   // ---------------------------------------------------------------------------
   // DATA
   // ---------------------------------------------------------------------------
@@ -43,7 +44,7 @@ export function NotesList() {
   }
 
   // Error state
-  if (error) {
+  if (error !== null) {
     return <NotesListError error={error} />;
   }
 

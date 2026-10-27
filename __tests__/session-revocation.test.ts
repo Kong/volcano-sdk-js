@@ -67,11 +67,11 @@ function retainsARunningRefreshForRevocation(): void {
       const deletion = deferred<Response>();
       fetchMock.mockImplementation(
         fetchRoutes({
-          '/auth/refresh': () => {
+          '/auth/refresh'() {
             entered.resolve();
             return response.promise;
           },
-          '/auth/logout': () => {
+          '/auth/logout'() {
             deleting.resolve();
             return deletion.promise;
           },
@@ -106,7 +106,7 @@ function sharesConcurrentRevocationOutcomes(): void {
       const response = deferred<Response>();
       fetchMock.mockImplementation(
         fetchRoutes({
-          '/auth/refresh': () => {
+          '/auth/refresh'() {
             entered.resolve();
             return response.promise;
           },
@@ -196,7 +196,7 @@ it.each([
   fetchMock.mockImplementation(
     fetchRoutes({
       '/auth/signin': () => Promise.resolve(renewed()),
-      '/auth/refresh': () => {
+      '/auth/refresh'() {
         entered.resolve();
         return response.promise;
       },
@@ -281,7 +281,7 @@ it('does not retain credentials when refresh finishes after current-session dele
   const response = deferred<Response>();
   fetchMock.mockImplementation(
     fetchRoutes({
-      '/auth/refresh': () => {
+      '/auth/refresh'() {
         entered.resolve();
         return response.promise;
       },

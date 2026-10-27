@@ -130,7 +130,7 @@ function cancelsEarlyBatchFlushes(): void {
     const rejected: unknown[] = [];
     const row: PendingRow = {
       resolve: jest.fn<PendingRow['resolve']>(),
-      reject: (error) => {
+      reject(error) {
         rejected.push(error);
       },
     };

@@ -71,7 +71,7 @@ function rejectsRefreshesForOtherUsers(): void {
       fetchMock.mockImplementation(
         fetchRoutes({
           '/auth/user': () => Promise.resolve(reply(200, { user: profile })),
-          '/auth/refresh': async () => {
+          async '/auth/refresh'() {
             await duringRefresh(client);
             return reply(200, {
               access_token: testAccessToken('project-id', { session_id: SESSION_ID }),

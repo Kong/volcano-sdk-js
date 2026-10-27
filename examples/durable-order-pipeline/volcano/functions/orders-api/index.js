@@ -60,7 +60,7 @@ const DURABLE_FUNCTION = 'order-pipeline';
 exports.handler = async (event) => {
   const input = requestInput(event);
   const auth = input.__volcano_auth;
-  if (!auth) {
+  if (auth === undefined) {
     return json(401, { error: 'sign in first' });
   }
 
@@ -138,7 +138,7 @@ async function submitOrder(auth, input) {
   /** @type {MutationBuilder<OrderRow>} */
   const insertOrder = volcano.insert('orders', { user_id: auth.user_id, status: 'submitted' });
   const [order] = unwrap(await insertOrder);
-  if (!order) {
+  if (order === undefined) {
     throw new Error('the order insert returned no row');
   }
   const inserted = await Promise.all(items.map((item) => insertOrderItem(volcano, order, item)));
@@ -169,7 +169,7 @@ async function startExecution(orderId) {
     { executionName: `order-${orderId}` },
   );
 
-  if (error) {
+  if (error !== null) {
     // 429 is the project's concurrent-execution cap: the order is recorded, so
     // the caller can submit it again later.
     throw withStatus(error, status === 429 ? 429 : 502);
@@ -197,7 +197,7 @@ async function orderStatus(auth, input) {
   /** @type {QueryBuilder<OrderRow>} */
   const orders = volcano.from('orders');
   const [order] = unwrap(await orders.select('*').eq('id', input.order_id).eq('user_id', auth.user_id).limit(1));
-  if (!order) {
+  if (order === undefined) {
     throw withStatus(new Error('order not found'), 404);
   }
   return {
@@ -231,7 +231,7 @@ async function review(auth, input) {
   /** @type {MutationBuilder<OrderRow>} */
   const setReview = volcano.update('orders', { review_status: input.decision });
   const [order] = unwrap(await setReview.eq('id', input.order_id).eq('user_id', auth.user_id));
-  if (!order) {
+  if (order === undefined) {
     throw withStatus(new Error('order not found'), 404);
   }
   return { order_id: order.id, review_status: order.review_status };

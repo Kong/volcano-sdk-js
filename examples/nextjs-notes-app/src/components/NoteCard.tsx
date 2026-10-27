@@ -14,7 +14,7 @@
  * />
  */
 
-import { useCallback, useState } from 'react';
+import { type JSX, useCallback, useState } from 'react';
 import type { Note } from '@/hooks/noteRequests';
 import { NoteCardEditor } from './NoteCardEditor';
 import { NoteCardView } from './NoteCardView';
@@ -28,7 +28,7 @@ interface NoteCardProps {
   onDelete: (noteId: string) => Promise<unknown>;
 }
 
-export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
+export function NoteCard({ note, onEdit, onDelete }: NoteCardProps): JSX.Element {
   // ---------------------------------------------------------------------------
   // STATE
   // ---------------------------------------------------------------------------

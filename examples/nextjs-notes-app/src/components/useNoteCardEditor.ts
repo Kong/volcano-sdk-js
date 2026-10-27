@@ -33,7 +33,7 @@ export function useNoteCardEditor(note: Note, onEdit: NoteEditHandler): NoteCard
   const [editContent, setEditContent] = useState(note.content ?? '');
 
   const handleSave = useCallback(async () => {
-    if (!editTitle.trim()) {
+    if (editTitle.trim() === '') {
       return;
     }
 

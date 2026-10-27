@@ -30,7 +30,7 @@ export function useAuthSession({ setUser, setLoading }: SessionSetters): void {
         // volcano.initialize() restores session from localStorage
         const { user: restoredUser, error: initError } = await volcano.initialize();
 
-        if (initError) {
+        if (initError !== null) {
           console.warn('Session restore failed:', initError.message);
           // Don't set error state - just means no valid session
         }

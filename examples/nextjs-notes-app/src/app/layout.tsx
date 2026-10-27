@@ -12,7 +12,7 @@
 import './globals.css';
 
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { AuthProvider } from '@/context/AuthContext';
 
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 // LAYOUT COMPONENT
 // ---------------------------------------------------------------------------
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50">

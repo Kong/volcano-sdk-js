@@ -16,7 +16,7 @@
  */
 
 import type { User } from '@volcano.dev/sdk';
-import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
+import { createContext, type JSX, type ReactNode, useContext, useMemo, useState } from 'react';
 import { type AuthMethods, useAuthMethods } from './useAuthMethods';
 import { useAuthSession } from './useAuthSession';
 
@@ -57,7 +57,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  *   );
  * }
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
   // ---------------------------------------------------------------------------
   // STATE
   // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   // Check if user is anonymous (has no email)
-  const isAnonymous = user !== null && !user.email;
+  const isAnonymous = user !== null && user.email === '';
 
   // ---------------------------------------------------------------------------
   // CONTEXT VALUE
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
 
-  if (!context) {
+  if (context === null) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 

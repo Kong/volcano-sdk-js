@@ -72,7 +72,7 @@ function firstRow(data: Note[] | null): Note | null {
 
 function addCreatedNote(data: Note[] | null, setNotes: NotesState['setNotes']): Note | null {
   const newNote = firstRow(data);
-  if (newNote) {
+  if (newNote !== null) {
     setNotes((previous) => [newNote, ...previous]);
   }
   return newNote;
@@ -86,7 +86,7 @@ function addCreatedNote(data: Note[] | null, setNotes: NotesState['setNotes']): 
  */
 export async function fetchNotes({ user, setNotes, setLoading, setError }: FetchNotesState): Promise<void> {
   // Don't fetch if not authenticated
-  if (!user) {
+  if (user === null) {
     setNotes([]);
     setLoading(false);
     return;
@@ -103,7 +103,7 @@ export async function fetchNotes({ user, setNotes, setLoading, setError }: Fetch
       .select('id, title, content, created_at, updated_at')
       .order('created_at', { ascending: false });
 
-    if (queryError) {
+    if (queryError !== null) {
       setError(queryError);
       console.error('Failed to fetch notes:', queryError);
       return;
@@ -131,7 +131,7 @@ export async function createNote(
   { user, setNotes, setError }: NotesState,
   { title, content = '' }: NoteInput,
 ): Promise<NoteResult> {
-  if (!user) {
+  if (user === null) {
     return { note: null, error: new Error('Must be signed in to create notes') };
   }
 
@@ -147,7 +147,7 @@ export async function createNote(
       user_id: user.id,
     });
 
-    if (insertError) {
+    if (insertError !== null) {
       setError(insertError);
       return { note: null, error: insertError };
     }
@@ -177,7 +177,7 @@ export async function updateNote(
   noteId: string,
   updates: Partial<NoteInput>,
 ): Promise<NoteResult> {
-  if (!user) {
+  if (user === null) {
     return { note: null, error: new Error('Must be signed in to update notes') };
   }
 
@@ -201,7 +201,7 @@ export async function updateNote(
       })
       .eq('id', noteId);
 
-    if (updateError) {
+    if (updateError !== null) {
       // Rollback on error
       setNotes(originalNotes);
       setError(updateError);
@@ -232,7 +232,7 @@ export async function deleteNote(
   { user, notes, setNotes, setError }: ChangeNotesState,
   noteId: string,
 ): Promise<DeleteNoteResult> {
-  if (!user) {
+  if (user === null) {
     return { error: new Error('Must be signed in to delete notes') };
   }
 
@@ -249,7 +249,7 @@ export async function deleteNote(
     // RLS ensures you can only delete YOUR notes
     const { error: deleteError } = await volcano.delete<Note>('notes').eq('id', noteId);
 
-    if (deleteError) {
+    if (deleteError !== null) {
       // Rollback on error
       setNotes(originalNotes);
       setError(deleteError);

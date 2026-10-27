@@ -230,11 +230,11 @@ test.each([401, 403])('does not confuse concurrent deletion with refresh %s clea
     fetchRoutes({
       '/functions/resolve': () => Promise.resolve(resolved()),
       [`/functions/${FUNCTION_ID}/invoke`]: () => Promise.resolve(reply(401, { error: 'denied', code: 'original' })),
-      '/auth/refresh': () => {
+      '/auth/refresh'() {
         refreshing.resolve();
         return finishRefresh.promise;
       },
-      [`/auth/user/sessions/${SESSION_ID}`]: (options) => {
+      [`/auth/user/sessions/${SESSION_ID}`](options) {
         expect(options?.method).toBe('DELETE');
         return Promise.resolve(reply(204, {}));
       },

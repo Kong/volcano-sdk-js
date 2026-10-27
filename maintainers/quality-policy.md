@@ -39,10 +39,34 @@ Four rules are off:
   strict type-checked preset enables it.
 
 The `style` and `restriction` categories are not enabled: they hold opinions and
-feature bans meant to be adopted rule by rule. Two restriction rules the ESLint
-configuration enforced are on: `typescript/no-explicit-any` and
-`eslint/complexity` with a limit of 5. `nursery` is not enabled because its
-rules are unstable.
+feature bans meant to be adopted rule by rule. `nursery` is not enabled because
+its rules are unstable. The rules the ESLint configuration set explicitly are on
+with its options wherever oxlint has them: `strict-boolean-expressions` with no
+string, number, or nullable-object conditions, `no-explicit-any`,
+`no-non-null-assertion`, `consistent-type-assertions` allowing no assertions,
+`explicit-module-boundary-types`, `no-console` except `warn` and `error`,
+`complexity` 5, `no-var`, `no-use-before-define`, `no-new-require`,
+`no-path-concat`, `prefer-node-protocol`, `curly`, `prefer-const`,
+`prefer-template`, `object-shorthand`, `no-duplicate-imports`, and
+`dot-notation`. The categories already run `no-eval` and `no-implied-eval`.
+
+These ESLint rules have no oxlint equivalent:
+
+- `security/detect-child-process`: only tooling scripts and tests start
+  processes, with `execFile` or `spawnSync` argument arrays and no shell; the
+  SDK source imports no `child_process`.
+- `security/detect-eval-with-expression`: `no-eval`, `no-implied-eval`, and
+  `typescript/no-implied-eval` reject every `eval`, not only one given an
+  expression.
+- `security/detect-bidi-characters`: GitHub marks hidden and bidirectional
+  Unicode text in every pull request diff.
+- `sonarjs/cognitive-complexity` (10): `complexity` 5, `max-depth`,
+  `max-nested-callbacks`, and `max-lines-per-function` bound branching,
+  nesting, and length instead.
+
+The `sonarjs`, `regexp`, and `unicorn` recommended presets and
+`simple-import-sort` have no oxlint counterpart as sets; the enabled categories
+run the oxlint ports of some of their rules.
 
 A finding that cannot be fixed without changing behavior, such as a loop whose
 iterations must run in order, can be approved in `quality-exceptions.json` with

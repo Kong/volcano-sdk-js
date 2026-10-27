@@ -37,7 +37,7 @@ export function useNoteEditor(onCreate: NoteCreateHandler): NoteEditorState {
       e.preventDefault();
 
       const note = { title: title.trim(), content: content.trim() };
-      if (!note.title) {
+      if (note.title === '') {
         return;
       }
 

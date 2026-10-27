@@ -8,18 +8,18 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
+import { type JSX, useCallback, useEffect } from 'react';
 import { AuthForm } from '@/components/AuthForm';
 import type { AuthFormValues } from '@/components/useAuthForm';
 import { useAuth } from '@/context/AuthContext';
 
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage(): JSX.Element | null {
   const { user, loading, error, resetPassword } = useAuth();
   const router = useRouter();
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user !== null) {
       router.push('/dashboard');
     }
   }, [user, loading, router]);
@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
   const handleResetPassword = useCallback(async ({ email }: AuthFormValues) => resetPassword(email), [resetPassword]);
 
   // Don't render form if already authenticated
-  if (user) {
+  if (user !== null) {
     return null;
   }
 

@@ -26,7 +26,7 @@ export function recordAuthRequests(answer: ContextRequest): {
   const requests: AuthRequest[] = [];
   return {
     requests,
-    authFetchWithContext: (path, options) => {
+    authFetchWithContext(path, options) {
       requests.push({ path: resolvePath(path), options: resolveOptions(options) });
       return Promise.resolve(answer);
     },

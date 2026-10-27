@@ -260,7 +260,7 @@ it.each(localClearings)(
       fetchRoutes({
         '/auth/refresh': () => Promise.resolve(reply(401, { error: 'expired refresh' })),
         [`/auth/user/sessions/${SESSION}`]: () => Promise.resolve(reply(204)),
-        [`/auth/user/sessions/${OTHER}`]: async () => {
+        async [`/auth/user/sessions/${OTHER}`]() {
           clearingResults.push(await clear(current));
           return reply(204);
         },

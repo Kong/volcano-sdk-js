@@ -70,7 +70,7 @@ function dedupesResolveAcrossContexts(): void {
 
     fetchMock.mockImplementation(
       fetchRoutes({
-        '/functions/resolve': async () => {
+        async '/functions/resolve'() {
           resolveCalls += 1;
           resolveStarted.resolve();
           await within(resolveGate.promise, 'shared resolver release');

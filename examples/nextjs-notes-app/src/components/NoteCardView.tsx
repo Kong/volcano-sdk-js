@@ -6,6 +6,7 @@
  * NoteCard in view mode: the note with its edit and delete actions.
  */
 
+import type { JSX } from 'react';
 import type { Note } from '@/hooks/noteRequests';
 
 /**
@@ -53,7 +54,7 @@ interface NoteCardViewProps {
   onDelete: () => void;
 }
 
-export function NoteCardView({ note, isDeleting, onEdit, onDelete }: NoteCardViewProps) {
+export function NoteCardView({ note, isDeleting, onEdit, onDelete }: NoteCardViewProps): JSX.Element {
   return (
     <div
       className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow ${

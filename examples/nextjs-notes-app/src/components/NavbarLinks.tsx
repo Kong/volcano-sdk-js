@@ -8,6 +8,7 @@
 
 import type { User } from '@volcano.dev/sdk';
 import Link from 'next/link';
+import type { JSX } from 'react';
 import { useAsyncHandler } from '@/hooks/eventHandlers';
 
 interface NavbarUserLinksProps {
@@ -19,7 +20,7 @@ interface NavbarUserLinksProps {
   signOut: () => Promise<unknown>;
 }
 
-export function NavbarUserLinks({ user, isAnonymous, signOut }: NavbarUserLinksProps) {
+export function NavbarUserLinks({ user, isAnonymous, signOut }: NavbarUserLinksProps): JSX.Element {
   const handleSignOut = useAsyncHandler(signOut);
 
   return (
@@ -56,7 +57,7 @@ export function NavbarUserLinks({ user, isAnonymous, signOut }: NavbarUserLinksP
   );
 }
 
-export function NavbarGuestLinks() {
+export function NavbarGuestLinks(): JSX.Element {
   return (
     <>
       <Link href="/auth/signin" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">

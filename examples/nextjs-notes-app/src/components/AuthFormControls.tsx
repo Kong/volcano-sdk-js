@@ -6,16 +6,16 @@
  * AuthForm's feedback messages, submit button, and guest sign-in.
  */
 
-import { useCallback } from 'react';
+import { type JSX, useCallback } from 'react';
 import type { AuthMode } from './useAuthForm';
 
-export function AuthFeedback({ error, success }: { error: Error | null; success: boolean }) {
+export function AuthFeedback({ error, success }: { error: Error | null; success: boolean }): JSX.Element {
   return (
     <>
       {/* Error Message */}
-      {error && (
+      {error !== null && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error.message || 'An error occurred'}
+          {error.message === '' ? 'An error occurred' : error.message}
         </div>
       )}
 
@@ -29,7 +29,7 @@ export function AuthFeedback({ error, success }: { error: Error | null; success:
   );
 }
 
-export function SubmitButton({ loading, submitText }: { loading: boolean; submitText: string }) {
+export function SubmitButton({ loading, submitText }: { loading: boolean; submitText: string }): JSX.Element {
   return (
     <div>
       <button
@@ -63,12 +63,12 @@ interface GuestSignInProps {
   loading: boolean;
 }
 
-export function GuestSignIn({ mode, onAnonymousSignIn, loading }: GuestSignInProps) {
+export function GuestSignIn({ mode, onAnonymousSignIn, loading }: GuestSignInProps): JSX.Element | null {
   const handleClick = useCallback(() => {
     void onAnonymousSignIn?.();
   }, [onAnonymousSignIn]);
 
-  if (mode !== 'signin' || !onAnonymousSignIn) {
+  if (mode !== 'signin' || onAnonymousSignIn === undefined) {
     return null;
   }
   return (

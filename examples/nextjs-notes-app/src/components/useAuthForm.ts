@@ -67,7 +67,7 @@ export function useAuthForm({ mode, onSubmit, showName }: UseAuthFormOptions): U
     });
 
     // Show success message for password reset
-    if (mode === 'forgot-password' && !result.error) {
+    if (mode === 'forgot-password' && result.error === null) {
       setSuccess(true);
     }
   };

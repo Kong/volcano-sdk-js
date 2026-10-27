@@ -29,33 +29,33 @@ export function isTransportClient(value: unknown): value is TransportClient {
 
 function clientHandlers(realtime: VolcanoRealtime): ClientHandlers {
   return {
-    connected: (ctx) => {
+    connected(ctx) {
       realtime._connected = true;
       realtime._onConnect.forEach((cb) => {
         cb(connectContext(ctx));
       });
     },
-    disconnected: (ctx) => {
+    disconnected(ctx) {
       realtime._connected = false;
       realtime._onDisconnect.forEach((cb) => {
         cb(disconnectContext(ctx));
       });
     },
-    error: (ctx) => {
+    error(ctx) {
       realtime._onError.forEach((cb) => {
         cb(errorContext(ctx));
       });
     },
-    publication: (ctx) => {
+    publication(ctx) {
       realtime._handleServerPublication(ctx);
     },
-    join: (ctx) => {
+    join(ctx) {
       realtime._handleServerJoin(ctx);
     },
-    leave: (ctx) => {
+    leave(ctx) {
       realtime._handleServerLeave(ctx);
     },
-    subscribed: (ctx) => {
+    subscribed(ctx) {
       realtime._handleServerSubscribed(ctx);
     },
   };

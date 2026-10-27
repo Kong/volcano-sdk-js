@@ -13,18 +13,18 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { type JSX, useEffect } from 'react';
 import { GuestAccountBanner, QuickTips, SdkCodeReference } from '@/components/DashboardSections';
 import { NotesList } from '@/components/NotesList';
 import { useAuth } from '@/context/AuthContext';
 
-export default function DashboardPage() {
+export default function DashboardPage(): JSX.Element | null {
   const { user, loading, isAnonymous } = useAuth();
   const router = useRouter();
 
   // Redirect to sign in if not authenticated
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && user === null) {
       router.push('/auth/signin');
     }
   }, [user, loading, router]);
@@ -39,7 +39,7 @@ export default function DashboardPage() {
   }
 
   // Don't render if not authenticated (will redirect)
-  if (!user) {
+  if (user === null) {
     return null;
   }
 

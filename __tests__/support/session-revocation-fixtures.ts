@@ -5,7 +5,7 @@ export const SESSION = '00000000-0000-4000-8000-000000000001';
 export const OTHER = '00000000-0000-4000-8000-000000000002';
 export const token = (id: string, version = 1): string =>
   `header.${Buffer.from(JSON.stringify({ session_id: id, version })).toString('base64url')}.signature`;
-export const renewed = () =>
+export const renewed = (): Response =>
   reply(200, {
     access_token: token(SESSION, 2),
     refresh_token: 'rotated',

@@ -25,7 +25,7 @@ exports.handler = durable(
   /** @param {PipelineInput} input */
   async (input, ctx) => {
     const order = await ctx.step('load-order', () => db.loadOrder(input.order_id));
-    if (!order) {
+    if (order === null) {
       // Throwing fails the execution and records the error, which is what a bad
       // input deserves: there is nothing to retry.
       throw new Error(`order ${input.order_id} does not exist`);

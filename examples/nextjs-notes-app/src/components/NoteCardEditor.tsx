@@ -6,6 +6,7 @@
  * NoteCard in editing mode: inline title and content inputs.
  */
 
+import type { JSX } from 'react';
 import { useAsyncHandler, useInputChange } from '@/hooks/eventHandlers';
 import type { NoteCardEditorState } from './useNoteCardEditor';
 
@@ -14,7 +15,7 @@ interface NoteCardEditorProps {
   editor: NoteCardEditorState;
 }
 
-export function NoteCardEditor({ editor }: NoteCardEditorProps) {
+export function NoteCardEditor({ editor }: NoteCardEditorProps): JSX.Element {
   const { editTitle, setEditTitle, editContent, setEditContent, handleSave, handleCancel, handleKeyDown } = editor;
   const handleTitleChange = useInputChange(setEditTitle);
   const handleContentChange = useInputChange(setEditContent);
@@ -45,7 +46,7 @@ export function NoteCardEditor({ editor }: NoteCardEditorProps) {
         </button>
         <button
           onClick={handleSaveClick}
-          disabled={!editTitle.trim()}
+          disabled={editTitle.trim() === ''}
           className="px-3 py-1.5 text-sm bg-volcano-600 text-white rounded-md hover:bg-volcano-700 disabled:opacity-50"
         >
           Save

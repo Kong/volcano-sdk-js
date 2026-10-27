@@ -6,7 +6,7 @@
  * The name, email, and password inputs AuthForm shows for its mode.
  */
 
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, JSX, SetStateAction } from 'react';
 import { useInputChange } from '@/hooks/eventHandlers';
 import type { AuthFormFieldValues, AuthMode } from './useAuthForm';
 
@@ -23,7 +23,7 @@ interface AuthFieldsProps {
   mode: AuthMode;
 }
 
-export function AuthFields({ fields, showName, showPassword, mode }: AuthFieldsProps) {
+export function AuthFields({ fields, showName, showPassword, mode }: AuthFieldsProps): JSX.Element {
   const { name, setName, email, setEmail, password, setPassword } = fields;
 
   return (

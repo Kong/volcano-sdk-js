@@ -22,7 +22,7 @@ export function useDashboardRedirect<Args extends unknown[], Result extends { er
     async (...args: Args) => {
       const result = await action(...args);
 
-      if (!result.error) {
+      if (result.error === null) {
         router.push('/dashboard');
       }
 

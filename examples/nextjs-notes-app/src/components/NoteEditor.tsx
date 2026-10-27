@@ -10,7 +10,7 @@
  * <NoteEditor onCreate={handleCreate} />
  */
 
-import { useCallback } from 'react';
+import { type JSX, useCallback } from 'react';
 import { NoteEditorForm } from './NoteEditorForm';
 import { type NoteCreateHandler, useNoteEditor } from './useNoteEditor';
 
@@ -19,7 +19,7 @@ interface NoteEditorProps {
   onCreate: NoteCreateHandler;
 }
 
-export function NoteEditor({ onCreate }: NoteEditorProps) {
+export function NoteEditor({ onCreate }: NoteEditorProps): JSX.Element {
   // ---------------------------------------------------------------------------
   // STATE
   // ---------------------------------------------------------------------------

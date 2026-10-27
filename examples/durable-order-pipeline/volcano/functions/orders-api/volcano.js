@@ -63,7 +63,7 @@ function isMissing(value) {
  * @returns {Row[]}
  */
 function unwrap({ data, error }) {
-  if (error) {
+  if (error !== null) {
     throw new Error(error.message);
   }
   return data ?? [];

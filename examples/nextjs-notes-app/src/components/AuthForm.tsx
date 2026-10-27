@@ -16,6 +16,7 @@
  */
 
 import Link from 'next/link';
+import type { JSX } from 'react';
 import { AuthFields } from './AuthFormFields';
 import { AuthFeedback, GuestSignIn, SubmitButton } from './AuthFormControls';
 import { type AuthFormSubmit, type AuthMode, useAuthForm } from './useAuthForm';
@@ -91,7 +92,7 @@ interface AuthFormProps {
   onAnonymousSignIn?: () => Promise<unknown>;
 }
 
-export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }: AuthFormProps) {
+export function AuthForm({ mode, onSubmit, loading, error, onAnonymousSignIn }: AuthFormProps): JSX.Element {
   const { title, submitText, showPassword, showName, alternateLink, forgotPasswordLink } = config[mode];
   const { fields, success, handleSubmit } = useAuthForm({ mode, onSubmit, showName });
 

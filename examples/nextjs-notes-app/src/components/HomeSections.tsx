@@ -7,9 +7,9 @@
  */
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 
-export function HomeHero() {
+export function HomeHero(): JSX.Element {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
       <div className="text-center">
@@ -113,7 +113,7 @@ WHERE user_id = auth.uid()`,
   },
 ];
 
-export function HomeFeatures() {
+export function HomeFeatures(): JSX.Element {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">Built with the Volcano SDK</h2>
@@ -142,7 +142,7 @@ function FeatureCard({ feature }: { feature: Feature }) {
   );
 }
 
-export function HomeFooter() {
+export function HomeFooter(): JSX.Element {
   return (
     <footer className="border-t border-gray-200 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

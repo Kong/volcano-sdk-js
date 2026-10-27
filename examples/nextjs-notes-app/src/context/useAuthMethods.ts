@@ -76,7 +76,7 @@ async function signIn(
   try {
     const result = await volcano.auth.signIn({ email, password });
 
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error);
       return { user: null, error: result.error };
     }
@@ -114,7 +114,7 @@ async function signUp(
   try {
     const result = await volcano.auth.signUp({ email, password, ...(metadata === undefined ? {} : { metadata }) });
 
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error);
       return { user: null, error: result.error };
     }
@@ -149,7 +149,7 @@ async function signInAnonymously({ setUser, setLoading, setError }: AuthSetters)
   try {
     const result = await volcano.auth.signInAnonymously();
 
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error);
       return { user: null, error: result.error };
     }
@@ -180,7 +180,7 @@ async function signOut({ setUser, setError }: AuthSetters): Promise<ErrorResult>
   try {
     const result = await volcano.auth.signOut();
 
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error);
       return { error: result.error };
     }
@@ -210,7 +210,7 @@ async function resetPassword({ setLoading, setError }: AuthSetters, email: strin
   try {
     const result = await volcano.auth.resetPasswordForEmail(email);
 
-    if (result.error) {
+    if (result.error !== null) {
       setError(result.error);
       return { error: result.error };
     }
@@ -241,7 +241,7 @@ export function useAuthMethods({ setUser, setLoading, setError }: AuthSetters): 
       signOut: () => signOut(setters),
       resetPassword: (email: string) => resetPassword(setters, email),
       // Clear the current error
-      clearError: () => {
+      clearError() {
         setError(null);
       },
     };
