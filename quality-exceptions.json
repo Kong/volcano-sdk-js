@@ -268,5 +268,11 @@
     "scope": "src/volcano-fetch.ts:volcanoFetch",
     "rationale": "Human-approved Orval boundary: generated callers supply the complete response type. Validating the unknown payload here would change existing runtime response behavior.",
     "evidence": "https://orval.dev/docs/guides/custom-client/ requires a generic custom client. Existing JSON, text, binary, bodyless, and error response tests preserve the generated response contract. Approved by Sean Keever on 2026-09-24."
+  },
+  {
+    "rule": "eslint/no-await-in-loop",
+    "scope": "examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder",
+    "rationale": "Order items are inserted one at a time so the first failed insert stops the order there, and the items after it are never written.",
+    "evidence": "Inserting them concurrently would write every valid item before the failure surfaced, leaving more orphaned order_items rows behind a request that still fails, and would send one request per item at once."
   }
 ]

@@ -93,6 +93,10 @@ const declarations: [string, string][] = [
     'Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>',
   ],
   ['src/volcano-fetch.ts:volcanoFetch', 'return { data, status: response.status, headers: response.headers } as T'],
+  [
+    'examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder',
+    'unwrap(await insertOrderItem(volcano, order, item));',
+  ],
 ];
 
 interface Exception {

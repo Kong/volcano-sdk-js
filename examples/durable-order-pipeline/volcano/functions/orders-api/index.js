@@ -141,9 +141,11 @@ async function submitOrder(auth, input) {
   if (order === undefined) {
     throw new Error('the order insert returned no row');
   }
-  const inserted = await Promise.all(items.map((item) => insertOrderItem(volcano, order, item)));
-  for (const result of inserted) {
-    unwrap(result);
+  // One item at a time, so a failed insert stops the order there instead of
+  // writing the items after it.
+  for (const item of items) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Stop at the first failed insert; later items are not written.
+    unwrap(await insertOrderItem(volcano, order, item));
   }
 
   const execution = await startExecution(order.id);

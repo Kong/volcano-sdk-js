@@ -115,6 +115,12 @@ const approvedComments = new Map<string, readonly string[]>([
     ],
   ],
   [
+    'examples/durable-order-pipeline/volcano/functions/orders-api/index.js',
+    [
+      '// oxlint-disable-next-line eslint/no-await-in-loop -- Stop at the first failed insert; later items are not written.',
+    ],
+  ],
+  [
     'examples/nextjs-notes-app/src/app/layout.tsx',
     [
       '// oxlint-disable-next-line import/no-unassigned-import -- Next.js loads global CSS only by a side-effect import.',
