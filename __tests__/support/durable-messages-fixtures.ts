@@ -82,8 +82,8 @@ export const options = (
 ): ReturnType<typeof expect.objectContaining> =>
   expect.objectContaining({ volcanoAuthorization: mode, volcanoClient: volcano, headers });
 
-export const refused = (message: string): { data: null; status: null; error: Error } => ({
+export const refused = (errorMessage: string): { data: null; status: null; error: Error } => ({
   data: null,
   status: null,
-  error: new Error(message),
+  error: new Error(errorMessage),
 });

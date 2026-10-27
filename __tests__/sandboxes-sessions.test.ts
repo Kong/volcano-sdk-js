@@ -3,6 +3,7 @@ import { afterEach, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { requestOptions, sandboxResult } from '../src/sandbox-request.ts';
 import { bodyJson, projectId, requestId, sessionId, snapshot } from './support/sandbox-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
 
 const originalFetch = globalThis.fetch;
 function client(): VolcanoAuth {
@@ -20,9 +21,8 @@ test('refreshes and resumes sessions and refuses changed identity', async () => 
   const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(snapshot));
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   fetchMock.mockResolvedValueOnce(Response.json({ ...snapshot, state: 'suspended' }));
   const observed4 = await result.data.refresh();
   expect(observed4.data).toMatchObject({ state: 'suspended' });
@@ -68,9 +68,8 @@ test('disposal of terminated sessions makes no request', async () => {
   const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json({ ...snapshot, state: 'terminated' }));
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   await result.data[Symbol.asyncDispose]();
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
@@ -79,9 +78,8 @@ test('disposal propagates failures and large file writes fail locally', async ()
   const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(snapshot));
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   const observed11 = await result.data.files.write('/workspace/large', new Uint8Array(8 * 1024 * 1024 + 1));
   expect(observed11.error).toBeInstanceOf(RangeError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -152,9 +150,8 @@ test('session commands use default execution options', async () => {
     );
   globalThis.fetch = fetchMock;
   const result = await client().sandboxes.get(sessionId);
-  if (result.data === null) {
-    throw result.error;
-  }
+  expect(result.error).toBeNull();
+  expectPresent(result.data);
   const observed14 = await result.data.exec('true');
   expect(observed14.error).toBeNull();
   expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Idempotency-Key')).toMatch(

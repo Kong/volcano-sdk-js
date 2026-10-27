@@ -6,10 +6,9 @@ class TestCompletenessReporter implements Reporter {
   private error: Error | undefined;
 
   constructor(globalConfig: Config.GlobalConfig) {
-    this.testNamePattern =
-      globalConfig.testNamePattern === undefined || globalConfig.testNamePattern === ''
-        ? undefined
-        : new RegExp(globalConfig.testNamePattern, 'i');
+    const pattern = globalConfig.testNamePattern;
+    // oxlint-disable-next-line eslint/require-unicode-regexp -- Select tests exactly as Jest's own name filter does.
+    this.testNamePattern = pattern === undefined || pattern === '' ? undefined : new RegExp(pattern, 'i');
   }
 
   onRunStart(): void {

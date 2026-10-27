@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from '@jest/globals';
 import { VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { config, fetchMock, resolvedFunction, withBrowserWindow } from './support/volcano-auth-functions-fixtures.ts';
 
 const TEST_ACCESS_TOKEN = testAccessToken();
@@ -44,11 +45,8 @@ function reportsPlatformRefusals(): void {
 
     expect(data).toBeNull();
     expect(status).toBe(400);
-    expect(error).toBeInstanceOf(VolcanoSystemError);
+    expectInstanceOf(error, VolcanoSystemError);
     expect(VolcanoSystemError.is(error)).toBe(true);
-    if (!VolcanoSystemError.is(error)) {
-      throw new TypeError('Expected a system error');
-    }
     expect(error.isSystemError).toBe(true);
     expect(error.status).toBe(400);
     expect(error.message).toBe('function cannot be invoked (status: failed)');
@@ -86,10 +84,8 @@ function reportsTransportFailures(): void {
 
     expect(data).toBeNull();
     expect(status).toBeNull();
-    expect(error).toBeInstanceOf(VolcanoSystemError);
-    if (!VolcanoSystemError.is(error)) {
-      throw new TypeError('Expected a system error');
-    }
+    expectInstanceOf(error, VolcanoSystemError);
+    expect(VolcanoSystemError.is(error)).toBe(true);
     expect(error.isSystemError).toBe(true);
     expect(error.status).toBeNull();
     expect(error.message).toBe('network down');

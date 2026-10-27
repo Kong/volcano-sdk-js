@@ -25,7 +25,7 @@ const MAX_SHARD_LINES = 80;
 export const mutationShardCount = 32;
 function handwrittenRuntime(path: string): boolean {
   return (
-    /^src\/.+\.(?:js|ts)$/.test(path) &&
+    /^src\/.+\.(?:js|ts)$/u.test(path) &&
     !path.endsWith('.d.ts') &&
     !path.startsWith('src/generated/') &&
     !path.startsWith('src/generated-runtime/')
@@ -33,7 +33,7 @@ function handwrittenRuntime(path: string): boolean {
 }
 
 export function mutationPatterns(paths: readonly string[]): string[] {
-  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].sort((left, right) =>
+  return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].toSorted((left, right) =>
     left.localeCompare(right),
   );
 }
@@ -54,7 +54,12 @@ function safeCutLines(path: string, source: string, lineCount: number): number[]
       }
     }
   }
-  return [...cuts].sort((left, right) => left - right);
+  return [...cuts].toSorted((left, right) => left - right);
+}
+
+function chunkEnd(cuts: readonly number[], start: number): number | undefined {
+  const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
+  return preferred.at(-1) ?? cuts.find((line) => line >= start);
 }
 
 function safeChunks(path: string, source: string, lineCount: number): LineRange[] {
@@ -62,8 +67,7 @@ function safeChunks(path: string, source: string, lineCount: number): LineRange[
   const chunks: LineRange[] = [];
   let start = 1;
   while (start <= lineCount) {
-    const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
-    const end = preferred.at(-1) ?? cuts.find((line) => line >= start);
+    const end = chunkEnd(cuts, start);
     if (end === undefined) {
       throw new Error(`${path}: no safe mutation shard boundary after line ${String(start)}`);
     }
@@ -74,7 +78,7 @@ function safeChunks(path: string, source: string, lineCount: number): LineRange[
 }
 
 function selectedRanges(path: string, lines: ReadonlySet<number>, start: number, end: number): MutationShard {
-  const selected = [...lines].filter((line) => line >= start && line <= end).sort((a, b) => a - b);
+  const selected = [...lines].filter((line) => line >= start && line <= end).toSorted((a, b) => a - b);
   const ranges: string[] = [];
   let current: LineRange | undefined;
   for (const line of selected) {
@@ -119,7 +123,7 @@ function parsePattern(pattern: string): {
   first: string | undefined;
   last: string | undefined;
 } {
-  const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/.exec(pattern);
+  const match = /^(src\/.+\.(?:js|ts))(?::(\d+)-(\d+))?$/u.exec(pattern);
   const path = match?.[1];
   if (path === undefined) {
     throw new Error(`Invalid mutation pattern: ${pattern}`);
@@ -182,9 +186,9 @@ function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCou
   }));
   const ordered = [...groups.values()]
     .flatMap((group) => shardItems(group))
-    .sort((left, right) => {
+    .toSorted((left, right) => {
       const weightOrder = right.weight - left.weight;
-      return weightOrder !== 0 ? weightOrder : firstPattern(left).localeCompare(firstPattern(right));
+      return weightOrder === 0 ? firstPattern(left).localeCompare(firstPattern(right)) : weightOrder;
     });
   for (const item of ordered) {
     const target = lightestShard(shards);
@@ -217,7 +221,7 @@ export function changedShardPatterns(patterns: readonly string[], shardIndex: nu
   return mutationShards(patterns, shardCount)[shardIndex] ?? [];
 }
 
-function lines(output: string): string[] {
+function outputLines(output: string): string[] {
   return output.split('\n').filter(Boolean);
 }
 
@@ -236,7 +240,7 @@ export function selectMutationPatterns(
   const listed =
     base === undefined ? git('ls-files', '--cached', '--', 'src') : git('diff', '--name-only', base, '--', 'src');
   const untracked = git('ls-files', '--others', '--exclude-standard', '--', 'src');
-  const scope = mutationPatterns([...lines(listed), ...lines(untracked)]);
+  const scope = mutationPatterns([...outputLines(listed), ...outputLines(untracked)]);
   if (shard === undefined) {
     return scope;
   }

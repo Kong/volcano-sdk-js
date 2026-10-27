@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { QueryBuilder, VolcanoAuth } from '../src/index.ts';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { fetchMock, mockVolcanoClientFactory } from './support/realtime-autofetch-fixtures.ts';
+import type { ChannelListener } from './support/realtime-listeners.ts';
 
 const createMockVolcanoClient = mockVolcanoClientFactory(VolcanoAuth);
 
@@ -13,7 +14,7 @@ function deliversFullPublicationsWithoutFetching(): void {
     const { client } = createMockVolcanoClient();
     realtime.setVolcanoClient(client);
     const channel = realtime.channel('public:users', { type: 'postgres' });
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
     const publication = { type: 'UPDATE', schema: 'public', table: 'users', record: { id: 1 } };
 
@@ -39,7 +40,7 @@ function batchesRequestsWithinTheWindow(): void {
 
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     // Send 3 lightweight INSERTs
@@ -129,7 +130,7 @@ function flushesAtMaxBatchSize(): void {
       fetchMaxBatchSize: 5,
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     // Reaching the limit flushes without waiting for the batch timer.
@@ -160,7 +161,7 @@ function deliversLightweightOnDatabaseError(): void {
 
     const channel = realtime.channel('public:users', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     // Suppress console.warn for this test
@@ -200,7 +201,7 @@ function deliversLightweightWhenRlsHidesTheRow(): void {
 
     const channel = realtime.channel('public:secrets', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<ChannelListener>();
     channel.on('*', callback);
 
     const warnings: unknown[][] = [];

@@ -171,7 +171,7 @@ function holdsBroadcastsUntilARetryReads(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);
@@ -198,7 +198,7 @@ function stopsRetryingOnResubscribe(): void {
       realtime,
     });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await jest.advanceTimersByTimeAsync(0);

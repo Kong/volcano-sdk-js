@@ -3,6 +3,7 @@ import type { RequestFailure, RequestResult } from './auth-request.ts';
 import { AuthSessionOperations } from './auth-session.ts';
 import { assertAuthTokenResponse, type AuthTokenFields, type CompleteSessionFields } from './auth-validation.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError } from './errors.ts';
+import { isFalsy } from './falsy.ts';
 import type { Session, User } from './sdk-public-types.ts';
 import { extractSessionIdFromToken } from './token-claims.ts';
 
@@ -123,7 +124,7 @@ function finishSignOut(host: AuthLifecycleHost, context: AuthContext, error: Err
     return { error };
   }
   const changed = new AuthSessionChangedError();
-  if (Boolean(error)) {
+  if (error !== null) {
     Object.defineProperty(changed, 'cause', { configurable: true, value: error, writable: true });
   }
   return { error: changed };
@@ -175,7 +176,7 @@ export async function revokeAccessSession(
 }
 
 function previousFailure(preceding: Exclude<PrecedingRefresh, null>, fallback: unknown): unknown {
-  return Boolean(preceding.error) ? preceding.error : fallback;
+  return isFalsy(preceding.error) ? fallback : preceding.error;
 }
 
 export async function refreshSession(host: AuthLifecycleHost): Promise<RefreshResponse> {

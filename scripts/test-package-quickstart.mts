@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
+// oxlint-disable-next-line typescript/strict-void-return -- promisify's custom overload resolves execFile's { stdout, stderr }.
 const run = promisify(execFile);
 const [artifact, ...extra] = process.argv.slice(2);
 assert.ok(
@@ -19,8 +20,8 @@ const digest = createHash('sha256')
   .update(await readFile(tarball))
   .digest('hex');
 const document = await readFile(new URL('../docs/getting-started.md', import.meta.url), 'utf8');
-const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /)[0];
-const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/g) ?? [])];
+const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /u)[0];
+const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/gu) ?? [])];
 assert.equal(examples.length, 1, 'Expected one complete documented quickstart');
 const quickstart = examples[0]?.[1];
 assert.ok(quickstart !== undefined);

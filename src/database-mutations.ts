@@ -2,6 +2,7 @@ import { errorResult } from './api-errors.ts';
 import { type AuthRetryClient, fetchWithAuthRetry } from './auth-fetch-retry.ts';
 import { type DatabaseFilter, FilterBuilder } from './database-filters.ts';
 import { databaseSegment } from './database-name.ts';
+import { isFalsy } from './falsy.ts';
 import { safeJsonParse } from './response-json.ts';
 
 type Operation = 'insert' | 'update' | 'delete';
@@ -48,6 +49,7 @@ export class MutationBuilder extends FilterBuilder {
     }
   }
 
+  // oxlint-disable-next-line unicorn/no-thenable -- Awaiting a mutation builder runs the mutation.
   then<TResult1 = MutationResult, TResult2 = never>(
     resolve?: ((value: MutationResult) => PromiseLike<TResult1> | TResult1) | null,
     reject?: ((reason: unknown) => PromiseLike<TResult2> | TResult2) | null,
@@ -106,7 +108,7 @@ function responseError(result: unknown, operation: Operation): Error {
   if (value instanceof Error) {
     return value;
   }
-  return new Error(Boolean(value) ? String(value) : `${operation} failed`);
+  return new Error(isFalsy(value) ? `${operation} failed` : String(value));
 }
 
 function sessionError(error: Error | string | null): Error {

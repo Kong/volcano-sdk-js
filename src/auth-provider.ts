@@ -36,7 +36,7 @@ function linkedProviders(value: unknown): OAuthProvider[] {
   if (providers === undefined || providers === null) {
     return [];
   }
-  if (!Array.isArray(providers) || !providers.every(isLinkedProvider)) {
+  if (!Array.isArray(providers) || !providers.every((provider) => isLinkedProvider(provider))) {
     throw new TypeError('OAuth providers response must contain valid providers');
   }
   return providers;

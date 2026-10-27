@@ -23,7 +23,9 @@ The approved corrections are documented in
 optional fields already present in the wire schema and runtime responses.
 Unapproved optionality or public-signature changes must fail the fixture.
 
-The Orval generic transport assertion and two compatibility generics have
-explicit human approval recorded in `quality-exceptions.json`. Native ESLint
-checks reject unused directives; exception tests verify their exact rules and
-source locations. These approvals do not authorize another suppression.
+`QueryBuilder` and `StorageFileApi` are each published as both a runtime value
+and a type, and the query and mutation builders are thenable. Their lint
+exceptions are recorded in `quality-exceptions.json` (see
+[Quality policy](quality-policy.md#lint)); exception tests verify their exact
+rules and source locations. These approvals do not authorize another
+suppression.

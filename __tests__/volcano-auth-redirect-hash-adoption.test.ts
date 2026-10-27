@@ -1,7 +1,8 @@
 /** @jest-environment ./__tests__/browser-environment.cjs */
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.ts';
+import { type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { NONCE, resetRedirectState, seedNonce } from './support/volcano-auth-redirect-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -11,9 +12,7 @@ function adoptsSessionsAtConstruction(): void {
     window.localStorage.setItem('volcano_access_token', 'stored-access');
     window.localStorage.setItem('volcano_refresh_token', 'stored-refresh');
     const sdk: unknown = Reflect.construct(VolcanoAuth, [{ anonKey: 'ak-test-key', accessToken }]);
-    if (!(sdk instanceof VolcanoAuth)) {
-      throw new TypeError('Expected a VolcanoAuth instance');
-    }
+    expectInstanceOf(sdk, VolcanoAuth);
 
     expect(sdk.accessToken).toBe('stored-access');
     expect(sdk.refreshToken).toBe('stored-refresh');
@@ -75,7 +74,7 @@ function adoptsLateFragments(): void {
     const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
     expect(v.accessToken).toBeFalsy();
 
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     v.auth.onAuthStateChange(callback);
     // ignore any initial emission on subscribe
     callback.mockClear();
@@ -105,7 +104,7 @@ function announcesConstructionAdoption(): void {
     const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
     expect(v.accessToken).toBe('ctor-access');
 
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     v.auth.onAuthStateChange(callback);
     // Immediate emission on subscribe reflects the not-yet-fetched user.
     expect(callback).toHaveBeenLastCalledWith(null);

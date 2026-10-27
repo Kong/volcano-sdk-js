@@ -22,7 +22,8 @@ export interface ResumableStorageHost {
   completeUploadSession(path: string, sessionId: string): Promise<StorageResult>;
 }
 
-const DEFAULT_UPLOAD_PART_SIZE = 26_214_400; // 25 MiB
+// 25 MiB
+const DEFAULT_UPLOAD_PART_SIZE = 26_214_400;
 
 /** Coordinate resumable upload without trusting the session response body. */
 export async function uploadResumable(
@@ -126,6 +127,7 @@ async function uploadParts(
     const start = (partNumber - 1) * session.partSize;
     const end = Math.min(start + session.partSize, fileBody.size);
     const partData = fileBody.slice(start, end);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Parts upload in order, and the first failure aborts the session.
     const result = await host.uploadPart(path, session.sessionId, partNumber, partData);
     if (result.error !== null) {
       return abortFailedPart(host, path, session.sessionId, result.error);

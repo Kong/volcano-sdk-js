@@ -1,4 +1,5 @@
 import { VolcanoRealtime } from '../src/realtime.ts';
+import type { ChannelListener, PostgresChangesListener, PresenceSyncListener } from './support/realtime-listeners.ts';
 
 let realtime: VolcanoRealtime;
 
@@ -14,7 +15,7 @@ function registersEventListeners(): void {
   test('registers callback for events', () => {
     const channel = realtime.channel('room-1');
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ChannelListener>>();
     channel.on('message', callback);
 
     channel._deliverPayload({ event: 'message' }, { data: { event: 'message' } });
@@ -24,7 +25,7 @@ function registersEventListeners(): void {
   test('returns unsubscribe function', () => {
     const channel = realtime.channel('room-1');
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ChannelListener>>();
     const unsubscribe = channel.on('message', callback);
 
     unsubscribe();
@@ -35,7 +36,7 @@ function registersEventListeners(): void {
   test('supports wildcard listeners', () => {
     const channel = realtime.channel('room-1');
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ChannelListener>>();
     channel.on('*', callback);
 
     channel._deliverPayload({ event: 'message' }, { data: { event: 'message' } });
@@ -62,14 +63,14 @@ function registersPostgresListeners(): void {
     const channel = realtime.channel('room-1');
 
     expect(() => {
-      channel.onPostgresChanges('*', 'public', 'messages', jest.fn());
+      channel.onPostgresChanges('*', 'public', 'messages', jest.fn<void, Parameters<PostgresChangesListener>>());
     }).toThrow('only available for postgres channels');
   });
 
   test('registers callback for postgres channel', () => {
     const channel = realtime.channel('public:messages', { type: 'postgres' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<PostgresChangesListener>>();
     channel.onPostgresChanges('INSERT', 'public', 'messages', callback);
 
     expect(channel._callbacks.get('*')).toHaveLength(1);
@@ -81,7 +82,7 @@ function guardsPresenceMethods(): void {
     const channel = realtime.channel('room-1');
 
     expect(() => {
-      channel.onPresenceSync(jest.fn());
+      channel.onPresenceSync(jest.fn<void, Parameters<PresenceSyncListener>>());
     }).toThrow('only available for presence channels');
   });
 
@@ -100,7 +101,7 @@ function guardsPresenceMethods(): void {
   test('onPresenceSync registers callback for presence channel', () => {
     const channel = realtime.channel('lobby', { type: 'presence' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<PresenceSyncListener>>();
     channel.onPresenceSync(callback);
 
     expect(channel._callbacks.get('presence_sync')).toHaveLength(1);
@@ -111,8 +112,8 @@ function retainsCallbacksOnUnsubscribe(): void {
   test('retains callbacks for a later resubscribe', () => {
     const channel = realtime.channel('room-1');
 
-    channel.on('message', jest.fn());
-    channel.on('update', jest.fn());
+    channel.on('message', jest.fn<void, Parameters<ChannelListener>>());
+    channel.on('update', jest.fn<void, Parameters<ChannelListener>>());
 
     channel.unsubscribe();
 

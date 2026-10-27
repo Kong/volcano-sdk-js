@@ -13,9 +13,10 @@ const requiredTasks = {
   'format:check': 'oxfmt --check',
   'check:unused':
     'knip --files && knip --production --files && knip --include exports && knip --include dependencies,unlisted,binaries',
-  lint: 'pnpm build && eslint . --max-warnings=0 && oxlint __tests__ && pnpm format:check',
+  lint: 'pnpm build && oxlint && pnpm format:check',
   test: 'pnpm build && jest',
-  'test:types': 'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json',
+  'test:types':
+    'pnpm build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.consumer.json && tsc --noEmit -p examples/durable-order-pipeline/jsconfig.json',
   'test:package':
     'pnpm build && pnpm pack --out reports/volcano-sdk.tgz && publint reports/volcano-sdk.tgz --strict && attw reports/volcano-sdk.tgz',
   'test:quickstart':
@@ -37,9 +38,9 @@ const requiredTasks = {
   'build:tooling': 'tsc -p tsconfig.tooling.json',
 };
 
-function requireTasks(scripts: Record<string, unknown>): void {
+function requireTasks(tasks: Record<string, unknown>): void {
   for (const [name, command] of Object.entries(requiredTasks)) {
-    assert.equal(scripts[name], command, `${name} must run its mandatory native check`);
+    assert.equal(tasks[name], command, `${name} must run its mandatory native check`);
   }
 }
 

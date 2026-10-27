@@ -1,9 +1,82 @@
 # Quality policy
 
-`pnpm quality` composes native tools in `package.json`: ESLint, TypeScript,
+`pnpm quality` composes native tools in `package.json`: oxlint, TypeScript,
 oxfmt, Knip, Jest, Stryker, Publint, ATTW, and pnpm audit own their checks.
 `quality:checks` runs the checks shared by both supported CI runtimes;
 `mutation:full` adds the complete mutation gate.
+
+## Lint
+
+oxlint runs its `correctness`, `suspicious`, `pedantic`, and `perf` categories
+as errors with the `typescript`, `unicorn`, `oxc`, `import`, `jest`, `promise`,
+`node`, `react`, `react-perf`, `jsx-a11y`, and `nextjs` plugins, so Jest suites
+and the Next.js example also get their framework's rules.
+`scripts/lint-policy.test.mts` pins `.oxlintrc.json`, so a rule, plugin, or
+override change fails until the policy test changes with it, and lints fixtures
+to show the categories and framework rules apply where that code lives.
+
+Type-aware mode (`options.typeAware`) runs the typed rules, such as
+`no-floating-promises`, `strict-boolean-expressions`, the `no-unsafe-*` family,
+`return-await`, and `no-deprecated`, through the pinned `oxlint-tsgolint`
+binary. It reads types from the compiler projects that own each file: the root
+`tsconfig.json`, which references `tsconfig.tooling.json` for scripts, the Next.js
+example's `tsconfig.json`, and the durable example's `jsconfig.json`. Type
+tests, fixtures, and both examples import `dist`, so `pnpm lint` builds first.
+
+Four rules are off:
+
+- `eslint/no-underscore-dangle`: a leading underscore is how JavaScript
+  consumers recognise the SDK's `@internal` members, which the published types
+  strip. Renaming them would make internals look public.
+- `react/react-in-jsx-scope`: it predates React 17's automatic JSX runtime,
+  which Next.js uses, so it only demands unused imports.
+- `eslint/require-await`: `typescript/require-await` replaces it. The base rule
+  also reports an async function that returns a promise without awaiting it,
+  which `return-await` requires, so the pair would make such functions
+  synchronous and throw instead of reject.
+- `typescript/prefer-readonly-parameter-types`: it demands deeply readonly types
+  for every parameter, DOM and library types included, and no recommended or
+  strict type-checked preset enables it.
+
+The `style` and `restriction` categories are not enabled: they hold opinions and
+feature bans meant to be adopted rule by rule. `nursery` is not enabled because
+its rules are unstable. The rules the ESLint configuration set explicitly are on
+with its options wherever oxlint has them: `strict-boolean-expressions` with no
+string, number, or nullable-object conditions, `no-explicit-any`,
+`no-non-null-assertion`, `consistent-type-assertions` allowing no assertions,
+`explicit-module-boundary-types`, `no-console` except `warn` and `error`,
+`complexity` 5, `no-var`, `no-use-before-define`, `no-new-require`,
+`no-path-concat`, `prefer-node-protocol`, `curly`, `prefer-const`,
+`prefer-template`, `object-shorthand`, `no-duplicate-imports`, and
+`dot-notation`. The categories already run `no-eval` and `no-implied-eval`.
+
+These ESLint rules have no oxlint equivalent:
+
+- `security/detect-child-process`: only tooling scripts and tests start
+  processes, with `execFile` or `spawnSync` argument arrays and no shell; the
+  SDK source imports no `child_process`.
+- `security/detect-eval-with-expression`: `no-eval`, `no-implied-eval`, and
+  `typescript/no-implied-eval` reject every `eval`, not only one given an
+  expression.
+- `security/detect-bidi-characters`: GitHub marks hidden and bidirectional
+  Unicode text in every pull request diff.
+- `sonarjs/cognitive-complexity` (10): `complexity` 5, `max-depth`,
+  `max-nested-callbacks`, and `max-lines-per-function` bound branching,
+  nesting, and length instead.
+
+The `sonarjs`, `regexp`, and `unicorn` recommended presets and
+`simple-import-sort` have no oxlint counterpart as sets; the enabled categories
+run the oxlint ports of some of their rules.
+
+A finding that cannot be fixed without changing behavior, such as a loop whose
+iterations must run in order, can be approved in `quality-exceptions.json` with
+the rule, a declaration scope, a rationale, and evidence. Its exact
+`// oxlint-disable-next-line <rule> -- <reason>` directive must be listed for
+that file in `scripts/suppression-policy.mts`, once per place it is approved,
+and must sit alone on its line. One directive may name several rules approved
+for the same line. `scripts/quality-exceptions.test.mts` fails once a rule no
+longer fires without its directive. Every other suppression comment fails the
+tracked-file policy.
 
 ## Dependency audit exceptions
 
@@ -48,7 +121,7 @@ from the [Node release index](https://nodejs.org/dist/index.json),
 
 `tsconfig.tooling.json` applies the SDK's strict compiler flags to every maintained
 script and native Node test. `pnpm build:tooling` emits ordinary JavaScript into
-`.quality-tools/`; ESLint checks the TypeScript sources. Knip inventories their
+`.quality-tools/`; oxlint checks the TypeScript sources. Knip inventories their
 source entrypoints, and the tracked-file policy rejects untyped scripts or tests.
 Jest's two CJS loader files only load the compiled environment adapters.
 
@@ -72,5 +145,5 @@ switch. Node even reports an empty test file as a passing case named after its
 path; Node 22 accepts an unmatched test glob. `scripts/node-completeness.mts`
 rejects those outcomes and skipped or pending cases while the native TAP reporter
 formats results. Negative suites prove these failures.
-ESLint rejects empty test files, focus and skip syntax before execution, including
-native test options.
+`scripts/jest-completeness.cts` does the same for Jest: focused, skipped, todo,
+and retried tests fail the run.

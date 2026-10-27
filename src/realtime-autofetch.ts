@@ -1,3 +1,4 @@
+import { isFalsy } from './falsy.ts';
 import type { PendingRow } from './realtime-internal-types.ts';
 import type { LightweightNotification } from './realtime-public-types.ts';
 import { property, record } from './realtime-values.ts';
@@ -92,7 +93,7 @@ function runBatchQuery(realtime: FetchClient, schema: string, table: string, ids
 
 function recordsFromQuery(result: unknown): Map<string, Record<string, unknown>> {
   const error = property(result, 'error');
-  if (Boolean(error)) {
+  if (!isFalsy(error)) {
     throw databaseFetchError(error);
   }
   return recordsById(property(result, 'data'));

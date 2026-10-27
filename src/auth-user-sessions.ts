@@ -63,7 +63,7 @@ function sessionsField(value: unknown): AuthSession[] | undefined {
   if (sessions === undefined) {
     return undefined;
   }
-  if (!Array.isArray(sessions) || !sessions.every(isAuthSession)) {
+  if (!Array.isArray(sessions) || !sessions.every((session) => isAuthSession(session))) {
     throw new TypeError('Auth sessions response must contain valid sessions');
   }
   return sessions;

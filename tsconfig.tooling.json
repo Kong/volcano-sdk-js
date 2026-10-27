@@ -8,7 +8,9 @@
     "outDir": ".quality-tools",
     "noEmit": false,
     "verbatimModuleSyntax": false,
-    "sourceMap": true
+    "sourceMap": true,
+    "composite": true,
+    "tsBuildInfoFile": ".quality-tools/tsconfig.tooling.tsbuildinfo"
   },
   "include": ["scripts/**/*.mts", "scripts/**/*.cts"],
   "exclude": []

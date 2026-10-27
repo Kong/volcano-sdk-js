@@ -17,42 +17,39 @@ for (const source of emitted) {
   );
 }
 
-for (const [source, target, transform] of declarationFiles) {
-  await mkdir(dirname(target), { recursive: true });
-  const declaration = await readFile(source, 'utf8');
-  await writeFile(target, transform === undefined ? declaration : transform(declaration, source, emittedStems));
-}
+// Every target is distinct, so the copies are independent.
+await Promise.all(
+  declarationFiles.map(async ([source, target, transform]) => {
+    await mkdir(dirname(target), { recursive: true });
+    const declaration = await readFile(source, 'utf8');
+    await writeFile(target, transform === undefined ? declaration : transform(declaration, source, emittedStems));
+  }),
+);
 
 await rm('dist/typescript', { recursive: true, force: true });
 
 async function emittedDeclarations(directory: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) {
-      files.push(...(await emittedDeclarations(path)));
-    } else if (entry.name.endsWith('.d.ts')) {
-      files.push(path);
-    }
-  }
-  return files;
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory() && entry.name.endsWith('.d.ts'))
+    .map((entry) => `${entry.parentPath}/${entry.name}`);
 }
 
 function toCjsDeclaration(declaration: string): string {
   return declaration
-    .replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2$3')
-    .replaceAll(/(import\(\s*['"])(\.{1,2}\/[^'"]+)\.ts(['"]\s*\))/g, '$1$2$3');
+    .replaceAll(/(from\s+['"])(\.{1,2}\/[^'"]+)\.ts(['"])/gu, '$1$2$3')
+    .replaceAll(/(import\(\s*['"])(\.{1,2}\/[^'"]+)\.ts(['"]\s*\))/gu, '$1$2$3');
 }
 
 function toEsmDeclaration(declaration: string, source: string, stems: ReadonlySet<string>): string {
   return declaration
     .replaceAll(
-      /(from\s+['"])(\.{1,2}\/[^'"]+)(['"])/g,
+      /(from\s+['"])(\.{1,2}\/[^'"]+)(['"])/gu,
       (match: string, prefix: string, specifier: string, suffix: string) =>
         replaceRelativeSpecifier(match, prefix, specifier, suffix, source, stems),
     )
     .replaceAll(
-      /(import\(\s*['"])(\.{1,2}\/[^'"]+)(['"]\s*\))/g,
+      /(import\(\s*['"])(\.{1,2}\/[^'"]+)(['"]\s*\))/gu,
       (match: string, prefix: string, specifier: string, suffix: string) =>
         replaceRelativeSpecifier(match, prefix, specifier, suffix, source, stems),
     );

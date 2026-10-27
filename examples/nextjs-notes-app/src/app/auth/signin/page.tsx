@@ -1,0 +1,49 @@
+'use client';
+
+/**
+ * Sign In Page
+ *
+ * Allows users to:
+ * - Sign in with email/password
+ * - Continue as guest (anonymous)
+ * - Navigate to sign up or password reset
+ */
+
+import { useRouter } from 'next/navigation';
+import { type JSX, useEffect } from 'react';
+import { AuthForm } from '@/components/AuthForm';
+import { useAuth } from '@/context/AuthContext';
+import { useDashboardRedirect } from '@/hooks/useDashboardRedirect';
+
+export default function SignInPage(): JSX.Element | null {
+  const { user, loading, error, signIn, signInAnonymously } = useAuth();
+  const router = useRouter();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!loading && user !== null) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
+
+  // Handle sign in
+  const handleSignIn = useDashboardRedirect(signIn);
+
+  // Handle anonymous sign in
+  const handleAnonymousSignIn = useDashboardRedirect(signInAnonymously);
+
+  // Don't render form if already authenticated
+  if (user !== null) {
+    return null;
+  }
+
+  return (
+    <AuthForm
+      mode="signin"
+      onSubmit={handleSignIn}
+      onAnonymousSignIn={handleAnonymousSignIn}
+      loading={loading}
+      error={error}
+    />
+  );
+}

@@ -12,30 +12,28 @@ beforeEach(() => {
   volcano = new VolcanoAuth(config);
 });
 
-function rejectedProfileFixture(mode: string): {
-  first: Response;
-  refresh: Response | null;
-  code: string | undefined;
-  calls: number;
-} {
-  if (mode === 'malformed rejection') {
-    return {
-      first: new Response('not-json', { status: 401, headers: { 'Retry-After': '7' } }),
-      refresh: null,
-      code: undefined,
-      calls: 1,
-    };
-  }
-  const first = reply(401, { error: 'Session revoked', code: 'SESSION_REVOKED' }, { 'Retry-After': '7' });
-  return mode === 'rejected refresh'
-    ? {
-        first,
-        refresh: reply(401, { error: 'Refresh rejected', code: 'REFRESH_REJECTED' }),
-        code: 'SESSION_REVOKED',
-        calls: 2,
-      }
-    : { first, refresh: null, code: 'SESSION_REVOKED', calls: 1 };
+function revokedSession(): Response {
+  return reply(401, { error: 'Session revoked', code: 'SESSION_REVOKED' }, { 'Retry-After': '7' });
 }
+
+// Rows: mode, stored refresh token, replies in request order, expected error code, expected requests.
+const rejectedProfiles: readonly [string, string | null, () => Response[], string | undefined, number][] = [
+  ['missing refresh token', null, () => [revokedSession()], 'SESSION_REVOKED', 1],
+  [
+    'rejected refresh',
+    'refresh-token',
+    () => [revokedSession(), reply(401, { error: 'Refresh rejected', code: 'REFRESH_REJECTED' })],
+    'SESSION_REVOKED',
+    2,
+  ],
+  [
+    'malformed rejection',
+    null,
+    () => [new Response('not-json', { status: 401, headers: { 'Retry-After': '7' } })],
+    undefined,
+    1,
+  ],
+];
 
 function replaysProfileRequests(): void {
   it.each(['getUser', 'updateUser', 'convertAnonymous', 'confirmEmailChange'] as const)(
@@ -89,18 +87,14 @@ function replaysProfileRequests(): void {
 }
 
 function preservesRejectionMetadata(): void {
-  it.each(['missing refresh token', 'rejected refresh', 'malformed rejection'])(
+  it.each(rejectedProfiles)(
     'preserves authentication error metadata with %s',
-    async (mode) => {
-      const fixture = rejectedProfileFixture(mode);
+    async (_mode, refreshToken, replies, code, requests) => {
       volcano.accessToken = sessionToken();
-      if (fixture.refresh !== null) {
-        volcano.refreshToken = 'refresh-token';
-      }
-      fetchMock.mockResolvedValueOnce(fixture.first);
-      if (fixture.refresh !== null) {
-        fetchMock.mockResolvedValueOnce(fixture.refresh);
-      }
+      volcano.refreshToken = refreshToken;
+      replies().forEach((response) => {
+        fetchMock.mockResolvedValueOnce(response);
+      });
 
       const result = await volcano.auth.getUser();
       expect(result.user).toBeNull();
@@ -109,8 +103,8 @@ function preservesRejectionMetadata(): void {
         status: 401,
         retryAfter: 7,
       });
-      expect(result.error?.code).toBe(fixture.code);
-      expect(global.fetch).toHaveBeenCalledTimes(fixture.calls);
+      expect(result.error?.code).toBe(code);
+      expect(global.fetch).toHaveBeenCalledTimes(requests);
     },
   );
 

@@ -1,3 +1,5 @@
+import { isFalsy } from './falsy.ts';
+
 type EventHandler = (context: unknown) => void | Promise<void>;
 
 export interface ChannelSubscription {
@@ -74,7 +76,7 @@ function deliverPublication(state: ChannelLifecycleState, context: unknown): voi
   }
   const data = property(context, 'data');
   const eventValue = property(data, 'event');
-  const event = Boolean(eventValue) ? eventValue : 'message';
+  const event = isFalsy(eventValue) ? 'message' : eventValue;
   notifyCallbacks(state, event, data, context);
   notifyCallbacks(state, '*', data, context);
 }

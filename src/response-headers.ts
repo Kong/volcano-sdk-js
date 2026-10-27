@@ -9,11 +9,15 @@ export interface HeaderResponse {
 }
 
 export function responseHeadersToObject(response: HeaderResponse | null | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
   const headers = response?.headers;
-  if (headers == null) {
-    return result;
+  if (headers === null || headers === undefined) {
+    return {};
   }
+  return headerRecord(headers);
+}
+
+function headerRecord(headers: HeaderMethods | Readonly<Record<string, string>>): Record<string, string> {
+  const result: Record<string, string> = {};
   if (typeof headers.forEach === 'function') {
     headers.forEach((value, key) => {
       result[key] = value;
@@ -34,7 +38,7 @@ function copyHeaderEntries(entries: Iterable<readonly [string, string]>, target:
 
 export function getHeaderValue(response: HeaderResponse | null | undefined, headerName: string): unknown {
   const headers = response?.headers;
-  if (headers == null) {
+  if (headers === null || headers === undefined) {
     return null;
   }
   if (typeof headers.get === 'function') {

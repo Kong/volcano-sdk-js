@@ -27,15 +27,15 @@ async function runCoverage(
 ): Promise<SpawnSyncReturns<string> & { coverage: Record<string, unknown> }> {
   const directory = await mkdtemp(join(tmpdir(), 'volcano-typed-coverage-'));
   try {
-    for (const [name, contents] of Object.entries({
-      'src/value.ts': source,
-      '__tests__/value.test.ts': assertions,
-      ...files,
-    })) {
-      const path = join(directory, name);
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, contents);
-    }
+    await Promise.all(
+      Object.entries({ 'src/value.ts': source, '__tests__/value.test.ts': assertions, ...files }).map(
+        async ([name, contents]) => {
+          const path = join(directory, name);
+          await mkdir(dirname(path), { recursive: true });
+          await writeFile(path, contents);
+        },
+      ),
+    );
     const result = spawnSync(
       process.execPath,
       [
@@ -73,7 +73,7 @@ await test('typed coverage rejects a new runtime module that no test imports', a
     'src/new-module.ts': 'export function missed(): number { return 1; }',
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /Coverage for (lines|statements) .*does not meet/);
+  assert.match(result.stderr, /Coverage for (lines|statements) .*does not meet/u);
   assert.equal(Object.keys(result.coverage).length, 2);
 });
 
@@ -82,7 +82,7 @@ await test('typed coverage rejects an unexercised branch', async () => {
     '__tests__/value.test.ts': assertions.replace('expect(value(false)).toBe(2);', ''),
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /Coverage for branches .*does not meet/);
+  assert.match(result.stderr, /Coverage for branches .*does not meet/u);
 });
 
 await test('typed coverage rejects 99 percent function coverage with every line covered', async () => {
@@ -98,8 +98,8 @@ await test('typed coverage rejects 99 percent function coverage with every line 
     `,
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /Coverage for functions .*does not meet/);
-  assert.doesNotMatch(result.stderr, /Coverage for (lines|statements|branches) /);
+  assert.match(result.stderr, /Coverage for functions .*does not meet/u);
+  assert.doesNotMatch(result.stderr, /Coverage for (lines|statements|branches) /u);
 });
 
 await test('typed coverage excludes generated output and declarations', async () => {
@@ -116,5 +116,5 @@ await test('typed coverage discovers a newly added test without a task-list edit
     '__tests__/new.test.ts': "test('new failure', () => { expect(true).toBe(false); });",
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.doesNotMatch(result.stderr, /Coverage for \w+ .*does not meet/);
+  assert.doesNotMatch(result.stderr, /Coverage for \w+ .*does not meet/u);
 });

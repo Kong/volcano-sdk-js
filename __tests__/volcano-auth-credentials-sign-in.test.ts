@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
+import { AuthSessionChangedError, type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -47,7 +47,7 @@ function discardsStaleSignIns(): void {
   it('discards a sign-in response after another session wins', async () => {
     const response = deferred<Response>();
     const requestStarted = signal();
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     volcano.auth.onAuthStateChange(callback);
     callback.mockClear();
     fetchMock.mockImplementationOnce(() => {

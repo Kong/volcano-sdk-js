@@ -71,16 +71,53 @@ async function awaitPayment(ctx: DurableContext) {
   }
 }
 
+async function chargeOrder(input: OrderInput, ctx: DurableContext): Promise<Charge> {
+  const charge: Charge = await ctx.step(
+    'charge',
+    (scope: DurableStepScope) => {
+      scope.log.info('charging', { attempt: scope.attempt });
+      return Promise.resolve({ id: 'ch_1', amount: input.order_id });
+    },
+    { retry: { attempts: 5, initialDelay: '2s' } },
+  );
+  return charge;
+}
+
+async function reviewShipment(input: OrderInput, ctx: DurableContext) {
+  const request: WaitForApprovalOptions = {
+    title: `Ship order ${String(input.order_id)}?`,
+    description: 'Over the auto-ship limit',
+    details: { items: input.items },
+    timeout: '2d',
+  };
+  const decision: ApprovalDecision = await ctx.waitForApproval('ship-order', request);
+  const decidedBy: string | null = decision.decidedBy?.email ?? null;
+  const outcome: 'approved' | 'denied' | 'expired' = decision.status;
+  const reviewed = decision.approved ? decision.comment : decision.decidedAt;
+  // @ts-expect-error a title is required
+  void ctx.waitForApproval('untitled', {});
+  return { decidedBy, outcome, reviewed };
+}
+
+async function shipItems(input: OrderInput, ctx: DurableContext) {
+  const shipped: BatchResult<string> = await ctx.map(
+    'ship',
+    input.items,
+    (item, itemCtx, index) => itemCtx.step(`ship-${String(index)}`, () => Promise.resolve(item)),
+    { concurrency: 4 },
+  );
+  shipped.throwIfFailed();
+  // The stable parts of a batch result, which is all the facade exposes: the
+  // in-flight items and the count the live run observed are not on it,
+  // because a replay is not obliged to reproduce them.
+  const completed = shipped.completionReason === 'min_successful_reached' ? shipped.completed : undefined;
+  const failures = shipped.errors.map((failure) => `${failure.name}: ${failure.message}`);
+  return { shipped, completed, failures };
+}
+
 export const handler = durable<OrderInput, { charge: string; shipped: number }>(
   async (input, ctx: DurableContext) => {
-    const charge: Charge = await ctx.step(
-      'charge',
-      (scope: DurableStepScope) => {
-        scope.log.info('charging', { attempt: scope.attempt });
-        return Promise.resolve({ id: 'ch_1', amount: input.order_id });
-      },
-      { retry: { attempts: 5, initialDelay: '2s' } },
-    );
+    const charge = await chargeOrder(input, ctx);
 
     await ctx.wait('settle', '30s');
     await ctx.wait({ minutes: 1, seconds: 30 });
@@ -91,33 +128,11 @@ export const handler = durable<OrderInput, { charge: string; shipped: number }>(
       interval: 15,
     });
 
-    const request: WaitForApprovalOptions = {
-      title: `Ship order ${String(input.order_id)}?`,
-      description: 'Over the auto-ship limit',
-      details: { items: input.items },
-      timeout: '2d',
-    };
-    const decision: ApprovalDecision = await ctx.waitForApproval('ship-order', request);
-    const decidedBy: string | null = decision.decidedBy?.email ?? null;
-    const outcome: 'approved' | 'denied' | 'expired' = decision.status;
-    const reviewed = decision.approved ? decision.comment : decision.decidedAt;
-    // @ts-expect-error a title is required
-    void ctx.waitForApproval('untitled', {});
+    const { decidedBy, outcome, reviewed } = await reviewShipment(input, ctx);
     const confirmation = await exchangeMessages(ctx);
     const payment = await awaitPayment(ctx);
 
-    const shipped: BatchResult<string> = await ctx.map(
-      'ship',
-      input.items,
-      (item, itemCtx, index) => itemCtx.step(`ship-${String(index)}`, () => Promise.resolve(item)),
-      { concurrency: 4 },
-    );
-    shipped.throwIfFailed();
-    // The stable parts of a batch result, which is all the facade exposes: the
-    // in-flight items and the count the live run observed are not on it,
-    // because a replay is not obliged to reproduce them.
-    const completed = shipped.completionReason === 'min_successful_reached' ? shipped.completed : undefined;
-    const failures = shipped.errors.map((failure) => `${failure.name}: ${failure.message}`);
+    const { shipped, completed, failures } = await shipItems(input, ctx);
 
     const checks = await ctx.parallel([
       (branch) => branch.step('fraud', () => Promise.resolve('clear')),

@@ -48,7 +48,7 @@ async function performFetch(
 }
 
 function followCaller(signal: AbortSignal | null | undefined, controller: AbortController): (() => void) | undefined {
-  if (signal == null) {
+  if (signal === null || signal === undefined) {
     return undefined;
   }
   const abort = (): void => {

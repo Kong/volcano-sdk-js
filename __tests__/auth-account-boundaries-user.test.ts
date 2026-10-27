@@ -9,6 +9,7 @@ import {
   updateUser,
 } from '../src/auth-account.ts';
 import { context, credentials, fixture, user } from './support/auth-boundaries-account-fixtures.ts';
+import { recordAuthRequests } from './support/auth-request-recorder.ts';
 
 test.each([
   ['updateUser', (host: AuthAccountHost) => updateUser(host, { metadata: { plan: 'pro' } })],
@@ -32,7 +33,7 @@ test('getUser rejects a malformed successful response before adopting a user', a
       result: { ok: true, status: 200, data: null, error: null },
       context,
     });
-  const notify = jest.fn();
+  const notify = jest.fn<AuthAccountHost['_notifyAuthCallbacks']>();
   host._notifyAuthCallbacks = notify;
 
   await expect(getUser(host)).rejects.toThrow('Auth response must be an object');
@@ -86,20 +87,17 @@ const authenticatedRequests = [
 
 test('user and email-change actions send exact authenticated requests', async () => {
   const host = fixture();
-  const calls: { path: string; options: RequestInit | undefined }[] = [];
   const data = {
     user,
     message: 'sent',
     new_email: 'new@example.com',
     email_change_token: 'change-token',
   };
-  host._authFetchWithContext = (path, options) => {
-    calls.push({
-      path: typeof path === 'function' ? path() : path,
-      options: typeof options === 'function' ? options() : options,
-    });
-    return Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context });
-  };
+  const { requests, authFetchWithContext } = recordAuthRequests({
+    result: { ok: true, status: 200, data, error: null },
+    context,
+  });
+  host._authFetchWithContext = authFetchWithContext;
 
   expect(await getUser(host)).toEqual({ user, error: null });
   expect(await updateUser(host, { password: 'new-password', metadata: { team: 'volcano' } })).toEqual({
@@ -118,7 +116,7 @@ test('user and email-change actions send exact authenticated requests', async ()
   });
   expect(await confirmEmailChange(host, 'change-token')).toEqual({ user, error: null });
   expect(await cancelEmailChange(host)).toEqual({ message: 'sent', error: null });
-  expect(calls).toEqual(authenticatedRequests);
+  expect(requests).toEqual(authenticatedRequests);
 });
 
 test('email-change response rejects a non-string token before returning it', async () => {

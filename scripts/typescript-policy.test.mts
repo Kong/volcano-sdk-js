@@ -2,45 +2,26 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ESLint } from 'eslint';
 import ts from 'typescript';
+import { requireLinted } from './oxlint-report.mts';
+import { requireUnsuppressed } from './suppression-policy.mts';
+// oxlint-disable-next-line import/max-dependencies -- This test checks every tracked file against each native tool.
 import { array, record, stringValue } from './values.mts';
 
-interface LintChecker {
-  isPathIgnored(path: string): Promise<boolean>;
-  calculateConfigForFile(path: string): Promise<unknown>;
-}
-
 const root = fileURLToPath(new URL('..', import.meta.url));
-const eslint = join(root, 'node_modules/eslint/bin/eslint.js');
 const jest = join(root, 'node_modules/jest/bin/jest.js');
 const oxfmt = join(root, 'node_modules/oxfmt/bin/oxfmt');
 const require = createRequire(import.meta.url);
 const coverageConfig = record(require('../jest.typed.config.cjs'));
 const manifest = record(require('../package.json'));
-const nextPlugin = record(require('@next/eslint-plugin-next'));
-const nextConfigs = record(nextPlugin['configs']);
-const nextCoreConfig = record(nextConfigs['core-web-vitals']);
-const nextRules = record(nextCoreConfig['rules']);
-const approvedComments = new Map([
-  [
-    'src/sdk-public-types.ts',
-    new Set([
-      '// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve published caller-specified payload and result types.',
-      '// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Preserve the published caller-specified input type.',
-    ]),
-  ],
-  [
-    'src/volcano-fetch.ts',
-    new Set([
-      '// eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-type-assertion -- Orval supplies T; preserve its generated response contract.',
-    ]),
-  ],
-]);
-
+const nextExample = 'examples/nextjs-notes-app';
+const durableExample = 'examples/durable-order-pipeline';
+// Each example's own compiler project: Next.js reads only the app's tsconfig.json, and the durable functions'
+// directories deploy as they are.
+const exampleProjects = new Set([`${nextExample}/tsconfig.json`, `${durableExample}/jsconfig.json`]);
 function trackedFiles(): string[] {
   return execFileSync('/usr/bin/git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
 }
@@ -56,37 +37,53 @@ function handwrittenSource(files: readonly string[]): string[] {
   );
 }
 
+function handwrittenTests(files: readonly string[]): string[] {
+  return files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
+}
+
+// Every tracked file one of the compiler projects must check.
+function typedFiles(files: readonly string[]): string[] {
+  return [
+    ...handwrittenSource(files),
+    ...handwrittenTests(files),
+    ...files.filter((path) => path.startsWith('test/') && path.endsWith('.ts')),
+    ...files.filter((path) => path.startsWith('scripts/') && /\.[cm]ts$/u.test(path)),
+    ...files.filter((path) => path.startsWith(`${nextExample}/`) && /\.tsx?$/u.test(path)),
+    ...files.filter((path) => path.startsWith(`${durableExample}/volcano/functions/`) && path.endsWith('.js')),
+  ];
+}
+
 function maintainedCode(files: readonly string[]): string[] {
   return files.filter(
     (path) =>
-      /\.(?:[cm]?[jt]s|[jt]sx)$/.test(path) &&
+      /\.(?:[cm]?[jt]s|[jt]sx)$/u.test(path) &&
       !path.startsWith('src/generated/') &&
       !path.startsWith('src/generated-runtime/'),
   );
 }
 
 function untypedHandwrittenFile(path: string): boolean {
-  if (!/\.[cm]?js$/.test(path) || path.startsWith('src/generated-runtime/')) {
+  if (!/\.[cm]?js$/u.test(path) || path.startsWith('src/generated-runtime/')) {
     return false;
   }
   const nativeLoaders = ['__tests__/node-environment.cjs', '__tests__/browser-environment.cjs'];
   if (nativeLoaders.includes(path)) {
     return false;
   }
-  return ['src/', 'scripts/', '__tests__/'].some((prefix) => path.startsWith(prefix));
+  return ['src/', 'scripts/', '__tests__/', `${nextExample}/src/`].some((prefix) => path.startsWith(prefix));
 }
 
-function typecheckedFiles(configPath: string): Set<string> {
+function typecheckedFiles(configPath: string, relaxed: readonly string[] = []): Set<string> {
   const path = join(root, configPath);
   const config = ts.readConfigFile(path, (filename) => ts.sys.readFile(filename));
   assert.equal(config.error, undefined, `${configPath} is invalid`);
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, path);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path), undefined, path);
   assert.deepEqual(parsed.errors, [], `${configPath} has configuration errors`);
-  requireCompilerOptions(parsed.options);
+  requireCompilerOptions(parsed.options, relaxed);
   return new Set(parsed.fileNames);
 }
 
-function requireCompilerOptions(options: ts.CompilerOptions): void {
+function requireCompilerOptions(options: ts.CompilerOptions, relaxed: readonly string[] = []): void {
   const required = {
     strict: true,
     noUncheckedIndexedAccess: true,
@@ -102,7 +99,7 @@ function requireCompilerOptions(options: ts.CompilerOptions): void {
     skipLibCheck: false,
     noEmitOnError: true,
   };
-  for (const [name, value] of Object.entries(required)) {
+  for (const [name, value] of Object.entries(required).filter(([option]) => !relaxed.includes(option))) {
     assert.equal(options[name], value, `${name} weakens TypeScript checking`);
   }
 }
@@ -128,60 +125,13 @@ function requireFullCoverage(config: unknown): void {
   assert.deepEqual(record(config)['collectCoverageFrom'], ['src/**/*.ts', '!src/**/*.d.ts', '!src/generated/**']);
 }
 
-function requireUnsuppressed(path: string, source: string): void {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) {
-      continue;
-    }
-    requireAllowedComment(path, scanner.getTokenText());
-  }
-}
-
-function requireAllowedComment(path: string, comment: string): void {
-  if (approvedComments.get(path)?.has(comment) === true) {
-    return;
-  }
-  const forbidden =
-    /eslint-disable|eslint-enable|eslint\s|@ts-ignore|@ts-nocheck|(?:istanbul|[cv]8|nyc) ignore|Stryker (?:disable|restore)|(?:prettier|oxfmt)-ignore/;
-  assert.doesNotMatch(comment, forbidden, `${path} suppresses a quality check`);
-  if (path.startsWith('test/types/') && comment.includes('@ts-expect-error')) {
-    assert.match(comment, /^\/\/\s*@ts-expect-error\s+\S/, `${path} needs an expected-error rationale`);
-    return;
-  }
-  assert.doesNotMatch(comment, /@ts-expect-error/, `${path} suppresses a quality check`);
-}
-
-async function requireLinted(checker: LintChecker, path: string): Promise<void> {
-  const absolute = join(root, path);
-  assert.equal(await checker.isPathIgnored(absolute), false, `${path} is ignored by ESLint`);
-  const active = await checker.calculateConfigForFile(absolute);
-  assert.ok(active !== undefined, `${path} has no ESLint configuration`);
-  const config = record(active);
-  const rules = record(config['rules']);
-  if (!path.endsWith('.d.ts')) {
-    assert.deepEqual(rules['complexity'], [2, 5], `${path} weakens complexity`);
-  }
-  if (/\.[cm]?ts$/.test(path) && !path.endsWith('.d.ts')) {
-    assert.deepEqual(rules['sonarjs/cognitive-complexity'], [2, 10]);
-  }
-  if (path.startsWith('examples/nextjs-notes-app/src/')) {
-    requireNextRules(config, path);
-  }
-}
-
-function requireNextRules(config: Record<string, unknown>, path: string): void {
-  const rules = record(config['rules']);
-  for (const [rule, severity] of Object.entries(nextRules)) {
-    assert.equal(array(rules[rule])[0], severity === 'error' ? 2 : 1, `${path} weakens ${rule}`);
-  }
-}
-
 function requireNoNestedConfigs(files: readonly string[]): void {
   const names = [
     '.eslintrc',
     '.eslintignore',
     'eslint.config.',
+    '.oxlintrc',
+    'oxlint.config.',
     '.oxfmtrc',
     'oxfmt.config.',
     '.prettierrc',
@@ -196,10 +146,14 @@ function requireNoNestedConfigs(files: readonly string[]): void {
     '.c8rc',
     'jest.',
     'tsconfig.',
+    'jsconfig.',
   ];
   assert.deepEqual(
     files.filter(
-      (path) => path.includes('/') && names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
+      (path) =>
+        path.includes('/') &&
+        !exampleProjects.has(path) &&
+        names.some((name) => path.split('/').at(-1)?.startsWith(name) === true),
     ),
     [],
   );
@@ -215,42 +169,49 @@ function requireRootFormatting(path: string): void {
 
 async function requireNoManifestOverrides(files: readonly string[]): Promise<void> {
   const qualityKeys = ['eslintConfig', 'jest', 'nyc', 'c8'];
-  for (const path of files.filter((item) => item.includes('/') && item.endsWith('/package.json'))) {
-    const absolute = isAbsolute(path) ? path : join(root, path);
-    const manifest = record(JSON.parse(await readFile(absolute, 'utf8')));
-    for (const key of qualityKeys) {
-      assert.equal(manifest[key], undefined, `${path} overrides ${key}`);
-    }
-  }
+  const nestedManifests = files.filter((item) => item.includes('/') && item.endsWith('/package.json'));
+  await Promise.all(
+    nestedManifests.map(async (path) => {
+      const absolute = isAbsolute(path) ? path : join(root, path);
+      const nested = record(JSON.parse(await readFile(absolute, 'utf8')));
+      for (const key of qualityKeys) {
+        assert.equal(nested[key], undefined, `${path} overrides ${key}`);
+      }
+    }),
+  );
 }
 
-await test('tracked SDK code remains in native lint, type, test, and coverage gates', async () => {
+await test('tracked SDK code remains in native lint, format, type, test, and coverage gates', async () => {
   const files = trackedFiles();
-  const runtime = handwrittenSource(files);
-  const tests = files.filter((path) => path.startsWith('__tests__/') && path.endsWith('.ts'));
-  assert.ok(runtime.length > 0);
-  assert.ok(tests.some((path) => path.endsWith('.test.ts')));
-  const typechecked = new Set([...typecheckedFiles('tsconfig.json'), ...typecheckedFiles('tsconfig.tooling.json')]);
-  for (const path of [
-    ...runtime,
-    ...tests,
-    ...files.filter((item) => item.startsWith('test/') && item.endsWith('.ts')),
-    ...files.filter((item) => item.startsWith('scripts/') && /\.[cm]ts$/.test(item)),
-  ]) {
+  assert.ok(handwrittenSource(files).length > 0);
+  assert.ok(handwrittenTests(files).some((path) => path.endsWith('.test.ts')));
+  const typechecked = new Set([
+    ...typecheckedFiles('tsconfig.json'),
+    ...typecheckedFiles('tsconfig.tooling.json'),
+    // Next.js generates route declarations under both .next/types and .next/dev/types; after `next dev`
+    // they declare the same globals, and checking them fails the build.
+    ...typecheckedFiles(`${nextExample}/tsconfig.json`, ['skipLibCheck']),
+    // JavaScript cannot omit an optional SDK option it holds as possibly undefined without a conditional spread.
+    ...typecheckedFiles(`${durableExample}/jsconfig.json`, ['exactOptionalPropertyTypes']),
+  ]);
+  for (const path of typedFiles(files)) {
     assert.ok(typechecked.has(join(root, path)), `${path} is outside the TypeScript project`);
   }
   requireFullCoverage(coverageConfig);
   assert.equal(record(manifest['scripts'])['format:check'], 'oxfmt --check');
   const discovered = new Set(['jest.config.js', 'jest.typed.config.cjs'].flatMap((config) => discoveredTests(config)));
-  for (const path of files.filter((item) => /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/.test(item))) {
+  for (const path of files.filter((item) => /^__tests__\/.*\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/u.test(item))) {
     assert.ok(discovered.has(join(root, path)), `${path} is not discovered by Jest`);
   }
-  const checker = new ESLint();
-  for (const path of maintainedCode(files)) {
-    await requireLinted(checker, path);
-    requireRootFormatting(path);
-    requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
-  }
+  const maintained = maintainedCode(files);
+  // One run: each type-aware oxlint process loads the TypeScript projects again.
+  requireLinted(maintained);
+  await Promise.all(
+    maintained.map(async (path) => {
+      requireRootFormatting(path);
+      requireUnsuppressed(path, await readFile(join(root, path), 'utf8'));
+    }),
+  );
   assert.deepEqual(
     files.filter((path) => untypedHandwrittenFile(path)),
     [],
@@ -265,6 +226,12 @@ await test('lowered coverage and suppression comments fail policy validation', (
   });
   assert.throws(() => {
     requireUnsuppressed('src/new.ts', '// eslint-disable-next-line complexity');
+  });
+  assert.throws(() => {
+    requireUnsuppressed('src/new.ts', '// oxlint-disable-next-line max-lines');
+  });
+  assert.throws(() => {
+    requireUnsuppressed('src/index.ts', '// oxlint-disable-next-line eslint/no-redeclare');
   });
   assert.throws(() => {
     requireUnsuppressed('src/new.ts', 'const marker = true; // @ts-expect-error\nmarker;');
@@ -282,6 +249,9 @@ await test('lowered coverage and suppression comments fail policy validation', (
     requireNoNestedConfigs(['examples/nextjs-notes-app/.eslintrc.json']);
   });
   assert.throws(() => {
+    requireNoNestedConfigs(['examples/nextjs-notes-app/.oxlintrc.json']);
+  });
+  assert.throws(() => {
     requireNoNestedConfigs(['examples/nextjs-notes-app/.babelrc']);
   });
 });
@@ -297,35 +267,12 @@ await test('nested formatter configuration and ignored paths fail policy validat
     await writeFile(source, 'export const value = true;\n');
     assert.throws(() => {
       requireRootFormatting(source);
-    }, /ignored by oxfmt/);
+    }, /ignored by oxfmt/u);
     await writeFile(join(directory, 'package.json'), JSON.stringify({ jest: { testMatch: [] } }));
-    await assert.rejects(requireNoManifestOverrides([join(directory, 'package.json')]), /overrides jest/);
+    await assert.rejects(requireNoManifestOverrides([join(directory, 'package.json')]), /overrides jest/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-await test('excluded new code and weakened complexity fail policy validation', async () => {
-  await assert.rejects(
-    requireLinted(
-      {
-        isPathIgnored: () => Promise.resolve(true),
-        calculateConfigForFile: () => Promise.resolve({}),
-      },
-      'src/new-module.ts',
-    ),
-    /ignored by ESLint/,
-  );
-  await assert.rejects(
-    requireLinted(
-      {
-        isPathIgnored: () => Promise.resolve(false),
-        calculateConfigForFile: () => Promise.resolve({ rules: { complexity: [2, 6] } }),
-      },
-      'src/new-module.ts',
-    ),
-    /weakens complexity/,
-  );
 });
 
 await test('mutation, coverage, and formatting suppression comments fail policy validation', () => {
@@ -340,114 +287,4 @@ await test('mutation, coverage, and formatting suppression comments fail policy 
       requireUnsuppressed('src/new.ts', comment);
     });
   }
-});
-
-async function lintFixture(source: string, parent: string): Promise<Record<string, unknown>[]> {
-  const directory = await mkdtemp(join(root, parent, 'quality-fixture-'));
-  try {
-    const filename = parent === 'scripts' ? 'fixture.test.mts' : 'fixture.ts';
-    const path = join(directory, parent === '__tests__' ? 'fixture.test.ts' : filename);
-    await writeFile(path, source);
-    const result = spawnSync(process.execPath, [eslint, '--format=json', '--max-warnings=0', path], {
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-    assert.equal(result.error, undefined);
-    assert.ok(result.status === 0 || result.status === 1, result.stderr);
-    return array(JSON.parse(result.stdout)).map((value) => record(value));
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-}
-const violations: [string, string, string][] = [
-  [
-    'disabled rule comment',
-    '/* eslint-disable @typescript-eslint/no-explicit-any */\nexport function value(input: any): unknown { return input; }',
-    '@typescript-eslint/no-explicit-any',
-  ],
-  [
-    'inline rule override',
-    '/* eslint @typescript-eslint/no-explicit-any: "off" */\nexport function value(input: any): unknown { return input; }',
-    '@typescript-eslint/no-explicit-any',
-  ],
-  [
-    'explicit any',
-    'export function value(input: any): unknown { return input; }',
-    '@typescript-eslint/no-explicit-any',
-  ],
-  [
-    'unsafe assertion',
-    'export function value(input: unknown): string { return input as unknown as string; }',
-    '@typescript-eslint/no-unsafe-type-assertion',
-  ],
-  [
-    'non-null assertion',
-    'export function value(input: string | undefined): string { return input!; }',
-    '@typescript-eslint/no-non-null-assertion',
-  ],
-  [
-    'unawaited operation',
-    'export function value(): void { Promise.resolve(); }',
-    '@typescript-eslint/no-floating-promises',
-  ],
-  [
-    'unsafe boolean',
-    'export function value(input: unknown): boolean { return input ? true : false; }',
-    '@typescript-eslint/strict-boolean-expressions',
-  ],
-  [
-    'excessive complexity',
-    'export function value(input: number): boolean { return input === 1 || input === 2 || input === 3 || input === 4 || input === 5 || input === 6; }',
-    'complexity',
-  ],
-];
-
-const contexts: [string, string][] = [
-  ['src', ''],
-  [
-    'scripts',
-    "import assert from 'node:assert/strict';\nimport test from 'node:test';\nawait test('works', () => { assert.equal(1, 1); });\n",
-  ],
-  [
-    '__tests__',
-    "import { expect, test } from '@jest/globals';\ntest('works', () => { expect(Math.max(1, 2)).toBe(2); });\n",
-  ],
-];
-
-for (const [parent, setup] of contexts) {
-  await test(`typed lint accepts safe code in ${parent}`, async () => {
-    const results = await lintFixture(`${setup}export const enabled = true;`, parent);
-    assert.deepEqual(
-      results.flatMap((result) => array(result['messages'])),
-      [],
-    );
-  });
-
-  for (const [name, source, rule] of violations) {
-    await test(`typed lint rejects ${name} in ${parent}`, async () => {
-      const results = await lintFixture(`${setup}${source}`, parent);
-      const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
-      assert.ok(rules.includes(rule), `Missing ${rule}: ${JSON.stringify(results)}`);
-    });
-  }
-}
-
-for (const source of [
-  "import test from 'node:test'; await test.skip('skipped', () => {});",
-  "import test from 'node:test'; await test.only('focused', () => {});",
-  "import test from 'node:test'; await test('focused', { only: true }, () => {});",
-  "import test from 'node:test'; await test('skipped', { skip: true }, () => {});",
-  "import test from 'node:test'; await test('pending', (context) => { context.todo(); });",
-]) {
-  await test(`tooling lint rejects incomplete native tests: ${source}`, async () => {
-    const results = await lintFixture(source, 'scripts');
-    const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
-    assert.ok(rules.includes('no-restricted-syntax'));
-  });
-}
-
-await test('tooling lint rejects an empty native suite file', async () => {
-  const results = await lintFixture('export const unusedSuite = true;', 'scripts');
-  const rules = results.flatMap((result) => array(result['messages']).map((message) => record(message)['ruleId']));
-  assert.ok(rules.includes('sonarjs/no-empty-test-file'));
 });

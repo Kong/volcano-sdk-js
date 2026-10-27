@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { expect, jest, test } from '@jest/globals';
 import { authSignin, downloadStorageObject } from '../src/generated/client.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 test('generated fetch preserves text responses as strings', async () => {
   const html = '<!doctype html><title>Preview</title>';
@@ -33,9 +34,6 @@ test('storage downloads preserve HTML bytes as a Blob', async () => {
     volcanoResponseType: 'blob',
   });
 
-  expect(result.data).toBeInstanceOf(Blob);
-  if (!(result.data instanceof Blob)) {
-    throw new TypeError('Expected a binary response');
-  }
+  expectInstanceOf(result.data, Blob);
   await expect(result.data.text()).resolves.toBe(html);
 });

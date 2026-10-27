@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
 import {
   oauthWindow,
   PROVIDER_REQUEST_LABELS,
@@ -29,7 +30,8 @@ function signsInWithProviders(): void {
     expect(parsed.searchParams.get('anon_key')).toBe('ak-test-anon-key');
     const redirectUrl = parsed.searchParams.get('redirect_url');
     expect(redirectUrl).toBeTruthy();
-    expect(new URL(redirectUrl ?? '').searchParams.get('vh_state')).toBe(parsed.searchParams.get('client_state'));
+    expectPresent(redirectUrl);
+    expect(new URL(redirectUrl).searchParams.get('vh_state')).toBe(parsed.searchParams.get('client_state'));
   });
 
   it('should have convenience methods for all providers', () => {

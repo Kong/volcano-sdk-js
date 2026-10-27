@@ -15,8 +15,8 @@ if ((shardIndex === undefined) !== (shardCount === undefined)) {
   throw new Error('Set both MUTATION_SHARD_INDEX and MUTATION_SHARD_COUNT');
 }
 if (
-  (shardIndex !== undefined && !/^\d+$/.test(shardIndex)) ||
-  (shardCount !== undefined && !/^\d+$/.test(shardCount))
+  (shardIndex !== undefined && !/^\d+$/u.test(shardIndex)) ||
+  (shardCount !== undefined && !/^\d+$/u.test(shardCount))
 ) {
   throw new Error('Mutation shard index and count must be non-negative integers');
 }

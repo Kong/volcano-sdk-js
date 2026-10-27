@@ -1,12 +1,13 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
+import { expectNoPendingTimers } from './support/fake-timer-leaks.ts';
 import { setup } from './support/locks-session-fixtures.ts';
 
 beforeEach(() => {
   jest.useFakeTimers({ now: 0, timerLimit: 100 });
 });
 afterEach(() => {
-  expect(jest.getTimerCount()).toBe(0);
+  expectNoPendingTimers();
   jest.restoreAllMocks();
   jest.useRealTimers();
 });

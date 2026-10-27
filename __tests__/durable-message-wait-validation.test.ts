@@ -1,5 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   bodyAt,
   callbackCalls,
@@ -25,6 +26,12 @@ beforeEach(resetRuntimeDouble);
 
 afterEach(restoreRuntimeDouble);
 
+function withoutData(): Record<string, unknown> {
+  const message = sent();
+  Reflect.deleteProperty(message, 'data');
+  return message;
+}
+
 function readsMessages(): void {
   it('accepts a message the runtime already parsed', async () => {
     await expect(receive(() => Promise.resolve(sent({ data: [1, 2] })))).resolves.toMatchObject({
@@ -33,14 +40,9 @@ function readsMessages(): void {
   });
 
   it.each([
-    ['left out', {}],
-    ['sent as null', { data: null }],
-  ])('resolves null data when it is %s', async (_case, overrides) => {
-    const message = sent(overrides);
-    if (!('data' in overrides)) {
-      Reflect.deleteProperty(message, 'data');
-    }
-
+    ['left out', withoutData()],
+    ['sent as null', sent({ data: null })],
+  ])('resolves null data when it is %s', async (_case, message) => {
     await expect(receive(() => Promise.resolve(message))).resolves.toMatchObject({ data: null });
   });
 
@@ -63,8 +65,8 @@ function refusesUnreadableMessages(): void {
   it('keeps the parse error behind a message that is not JSON', async () => {
     const failure = await failureOf(receive(() => Promise.resolve('address-confirmed')));
 
-    expect(failure).toBeInstanceOf(TypeError);
-    expect(failure instanceof Error ? failure.cause : undefined).toBeInstanceOf(SyntaxError);
+    expectInstanceOf(failure, TypeError);
+    expect(failure.cause).toBeInstanceOf(SyntaxError);
   });
 
   it.each([

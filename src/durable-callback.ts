@@ -11,7 +11,7 @@ export interface CallbackContext {
 // ASCII characters. The runtimes add suffixes of up to 19 characters to it, and
 // every SDK holds names to the same limit.
 export const MAX_NAME_LENGTH = 237;
-export const OPERATION_NAME = /^[\u0020-\u007E]+$/;
+export const OPERATION_NAME = /^[\u0020-\u007E]+$/u;
 
 /** Requires value to be a name operation can open a callback with. */
 export function checkedName(operation: string, value: unknown): string {

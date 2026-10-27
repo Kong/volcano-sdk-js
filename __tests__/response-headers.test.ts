@@ -68,10 +68,10 @@ test('does not read inherited or non-enumerable plain-object headers', () => {
 
 test('preserves the adapter receiver and prefers get over plain-object values', () => {
   const headers = {
-    value: 'native value',
+    native: new Headers({ 'X-Version': 'native value' }),
     'X-Version': 'fallback value',
     get(name: string): string | null {
-      return name === 'X-Version' ? this.value : null;
+      return this.native.get(name);
     },
   };
 

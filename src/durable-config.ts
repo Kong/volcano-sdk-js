@@ -1,6 +1,7 @@
 import { engineConfig } from './durable-arguments.ts';
 import { optionalDuration } from './durable-duration.ts';
 import { toRetryStrategy } from './durable-retry.ts';
+import { isFalsy } from './falsy.ts';
 
 interface DurableConfigEngine {
   StepSemantics: { AtMostOncePerRetry: unknown };
@@ -10,11 +11,11 @@ interface DurableConfigEngine {
 
 export function stepConfig(options: Record<string, unknown>, engine: DurableConfigEngine): Record<string, unknown> {
   const config: Record<string, unknown> = {};
-  if (Boolean(options['atMostOnce'])) {
+  if (!isFalsy(options['atMostOnce'])) {
     config['semantics'] = engine.StepSemantics.AtMostOncePerRetry;
   }
   const retryStrategy = toRetryStrategy(options['retry'], engine);
-  if (Boolean(retryStrategy)) {
+  if (!isFalsy(retryStrategy)) {
     config['retryStrategy'] = retryStrategy;
   }
   return config;
@@ -47,7 +48,7 @@ export function conditionConfig(
       engineConfig({
         shouldContinuePolling(state: unknown) {
           const reached: unknown = Reflect.apply(until, options, [state]);
-          return !Boolean(reached);
+          return isFalsy(reached);
         },
         maxAttempts: options['maxAttempts'],
         initialDelay: optionalDuration(options['interval'], 'interval'),

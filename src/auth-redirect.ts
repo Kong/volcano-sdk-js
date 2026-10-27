@@ -1,5 +1,6 @@
 import { AuthSessionOperations } from './auth-session.ts';
 import { validateOAuthSession } from './auth-validation.ts';
+import { isFalsy } from './falsy.ts';
 
 const accessTokenKey = 'volcano_access_token';
 const refreshTokenKey = 'volcano_refresh_token';
@@ -140,7 +141,7 @@ function redirectTarget(stored: string | null, callback: OAuthCallback): string 
 }
 
 function exchangeFailure(value: unknown): unknown {
-  return Boolean(value) ? value : new Error('OAuth code exchange failed');
+  return isFalsy(value) ? new Error('OAuth code exchange failed') : value;
 }
 
 function providerFailure(callback: OAuthCallback): Error | null {

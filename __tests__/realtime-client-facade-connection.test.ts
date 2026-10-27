@@ -36,9 +36,8 @@ function validatesTransportsAndWebSockets(): void {
         }),
       ),
     ).toBe(true);
-    const callable = (): void => undefined;
-    Object.setPrototypeOf(
-      callable,
+    const callable: unknown = Object.setPrototypeOf(
+      (): void => undefined,
       new MockTransport('url', {
         token: undefined,
         getToken: undefined,

@@ -47,46 +47,48 @@ async function runFixture(
   }
 }
 
-for (const [name, config] of Object.entries({ unit })) {
-  await test(`${name} attributes an unhandled rejection to the originating test`, async () => {
-    const result = await runFixture(
-      `
+await Promise.all(
+  Object.entries({ unit }).flatMap(([name, config]) => [
+    test(`${name} attributes an unhandled rejection to the originating test`, async () => {
+      const result = await runFixture(
+        `
         test('detached rejection', () => {
           Promise.reject(new Error('detached work failed'));
           expect(true).toBe(true);
         });
         test('later test', () => expect(true).toBe(true));
       `,
-      config,
-    );
-    assert.equal(result.status, 1, result.stderr);
-    assert.equal(result.report['numFailedTests'], 1);
-    assert.equal(result.report['numPassedTests'], 1);
-    assert.equal(result.report['numRuntimeErrorTestSuites'], 0);
-    const assertions = assertionResults(result.report);
-    assert.deepEqual(
-      assertions.map(({ title, status }) => ({ title, status })),
-      [
-        { title: 'detached rejection', status: 'failed' },
-        { title: 'later test', status: 'passed' },
-      ],
-    );
-    assert.match(failureMessages(assertions[0]), /detached work failed/);
-  });
+        config,
+      );
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.report['numFailedTests'], 1);
+      assert.equal(result.report['numPassedTests'], 1);
+      assert.equal(result.report['numRuntimeErrorTestSuites'], 0);
+      const assertions = assertionResults(result.report);
+      assert.deepEqual(
+        assertions.map(({ title, status }) => ({ title, status })),
+        [
+          { title: 'detached rejection', status: 'failed' },
+          { title: 'later test', status: 'passed' },
+        ],
+      );
+      assert.match(failureMessages(assertions[0]), /detached work failed/u);
+    }),
 
-  await test(`${name} accepts a rejection handled on the next event-loop turn`, async () => {
-    const result = await runFixture(
-      `
+    test(`${name} accepts a rejection handled on the next event-loop turn`, async () => {
+      const result = await runFixture(
+        `
         test('handled rejection', async () => {
           const pending = Promise.reject(new Error('expected failure'));
           await new Promise((resolve) => setTimeout(resolve, 0));
           await expect(pending).rejects.toThrow('expected failure');
         });
       `,
-      config,
-    );
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.report['numPassedTests'], 1);
-    assert.equal(result.report['numFailedTests'], 0);
-  });
-}
+        config,
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.report['numPassedTests'], 1);
+      assert.equal(result.report['numFailedTests'], 0);
+    }),
+  ]),
+);

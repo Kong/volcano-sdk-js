@@ -37,14 +37,15 @@ function failsWithoutAStatus(): void {
     const volcano = new VolcanoClient(options);
     const { approvals } = volcano.durable;
 
-    for (const call of [
-      () => approvals.list('proj-1'),
-      () => approvals.stats('proj-1'),
-      () => approvals.get('proj-1', 'apr-1'),
-      () => approvals.approve('proj-1', 'apr-1'),
-      () => approvals.deny('proj-1', 'apr-1'),
-    ]) {
-      await expect(call()).resolves.toEqual({
+    const refusals = await Promise.all([
+      approvals.list('proj-1'),
+      approvals.stats('proj-1'),
+      approvals.get('proj-1', 'apr-1'),
+      approvals.approve('proj-1', 'apr-1'),
+      approvals.deny('proj-1', 'apr-1'),
+    ]);
+    for (const refusal of refusals) {
+      expect(refusal).toEqual({
         data: null,
         status: null,
         error: new Error('No active session'),

@@ -215,23 +215,19 @@ function sendsAndListsOverTheWire(): void {
 
 function surfacesRefusalsOverTheWire(): void {
   // A refusal is a result, not an exception, and keeps the platform's code.
-  test.each([
-    [404, undefined, 'durable execution not found'],
-    [409, 'execution_not_running', 'execution has ended'],
-    [409, 'too_many_queued_messages', 'too many queued messages'],
-  ])('surfaces a %d refusal with its status and code', async (status, code, error) => {
-    fetchMock().mockResolvedValueOnce(Response.json({ error, code }, { status }));
+  test.each<[number, { message: string; code?: string }]>([
+    [404, { message: 'durable execution not found' }],
+    [409, { message: 'execution has ended', code: 'execution_not_running' }],
+    [409, { message: 'too many queued messages', code: 'too_many_queued_messages' }],
+  ])('surfaces a %d refusal with its status and code', async (status, refusal) => {
+    fetchMock().mockResolvedValueOnce(Response.json({ error: refusal.message, code: refusal.code }, { status }));
     const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-durable' });
 
     const result = await volcano.durable.messages.send(target, 'go');
 
     expect(result.data).toBeNull();
     expect(result.status).toBe(status);
-    expect(result.error).toMatchObject({
-      status,
-      message: error,
-      ...(code === undefined ? {} : { code }),
-    });
+    expect(result.error).toMatchObject({ status, ...refusal });
   });
 }
 

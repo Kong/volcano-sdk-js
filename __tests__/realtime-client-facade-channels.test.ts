@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import * as centrifuge from '../src/realtime-centrifuge.ts';
 import { client, latestTransport, MockTransport, resetTransports } from './support/realtime-client-facade-transport.ts';
+import { expectPresent } from './support/assertions.ts';
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -144,9 +145,7 @@ function removesDurableAndNamedChannels(): void {
   test('opens one durable channel per execution and removes only the one it opened', () => {
     const realtime = client();
     const channel = realtime._durableChannel('exec-1', 'token');
-    if (channel === null) {
-      throw new Error('durable channel was not opened');
-    }
+    expectPresent(channel);
     expect(channel.name).toBe('durable:exec-1');
     expect(channel._type).toBe('durable');
     expect(channel._subscribeData).toEqual({ client_token: 'token' });

@@ -2,15 +2,9 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { LeaseClock } from '../src/lock-session.ts';
-import {
-  abortReason,
-  complete,
-  countMethod,
-  methodsSeen,
-  pinRandomValues,
-  response,
-  signalAt,
-} from './support/locks-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
+import { rejectOnAbort } from './support/locks-abort.ts';
+import { complete, countMethod, methodsSeen, pinRandomValues, response, signalAt } from './support/locks-fixtures.ts';
 
 let fetchMock: jest.MockedFunction<typeof fetch>;
 let volcano: VolcanoAuth;
@@ -33,23 +27,11 @@ afterEach(() => {
 function propagatesCancellation(): void {
   test('renew propagates caller cancellation to the request', async () => {
     const controller = new AbortController();
-    fetchMock.mockImplementationOnce(
-      (_url, options) =>
-        new Promise<Response>((_resolve, reject) => {
-          const signal = options?.signal;
-          if (!(signal instanceof AbortSignal)) {
-            reject(new TypeError('Expected renewal cancellation signal'));
-            return;
-          }
-          signal.addEventListener(
-            'abort',
-            () => {
-              reject(abortReason(signal));
-            },
-            { once: true },
-          );
-        }),
-    );
+    fetchMock.mockImplementationOnce((_url, options) => {
+      const signal = options?.signal;
+      expectInstanceOf(signal, AbortSignal);
+      return rejectOnAbort(signal);
+    });
     const lease = {
       key: 'leader',
       token: '00000000-0000-4000-8000-00000000000e',
@@ -72,26 +54,9 @@ function reportsCancellationMidBody(): void {
     const cancellation = new Error('renewal cancelled');
     fetchMock.mockImplementationOnce((_url, options) => {
       const signal = options?.signal;
-      if (!(signal instanceof AbortSignal)) {
-        throw new TypeError('Expected renewal cancellation signal');
-      }
+      expectInstanceOf(signal, AbortSignal);
       const delayed = response(200, {});
-      jest.spyOn(delayed, 'json').mockImplementation(
-        () =>
-          new Promise<unknown>((_resolve, reject) => {
-            if (signal.aborted) {
-              reject(abortReason(signal));
-              return;
-            }
-            signal.addEventListener(
-              'abort',
-              () => {
-                reject(abortReason(signal));
-              },
-              { once: true },
-            );
-          }),
-      );
+      jest.spyOn(delayed, 'json').mockImplementation(() => rejectOnAbort(signal));
       return Promise.resolve(delayed);
     });
     const lease = {

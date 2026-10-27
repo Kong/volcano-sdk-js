@@ -1,5 +1,6 @@
 import { disposeChannel, resetChannelForIdentityChange, subscribeChannel } from '../src/realtime-channel-lifecycle.ts';
 import { presenceState, State } from './support/realtime-channel-lifecycle-state.ts';
+import { expectPresent } from './support/assertions.ts';
 
 test('unsubscribe cancels timers and pending fetches while retaining the subscription', async () => {
   jest.useFakeTimers();
@@ -7,9 +8,7 @@ test('unsubscribe cancels timers and pending fetches while retaining the subscri
     const state = presenceState();
     await subscribeChannel(state);
     const client = state.client;
-    if (client === null) {
-      throw new Error('client missing');
-    }
+    expectPresent(client);
     await client.subscription.emit('subscribed', {});
     const rejected: Error[] = [];
     state._pendingFetches.set('public.items', {
@@ -43,9 +42,7 @@ test('reset removes listeners and registry state; disposal also clears callbacks
   const state = new State();
   await subscribeChannel(state);
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   state._callbacks.set('message', [
     () => {
       state.syncs += 1;
@@ -67,9 +64,7 @@ test('reset finishes cleanup when event removal or registry removal fails', asyn
   const state = new State();
   await subscribeChannel(state);
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   client.subscription.failOff = true;
   client.failRemove = true;
   resetChannelForIdentityChange(state);

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { fetchUrl, reply } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
 import { config, fetchMock, withBrowserWindow } from './support/volcano-auth-functions-fixtures.ts';
 
 const TEST_ACCESS_TOKEN = testAccessToken();
@@ -62,8 +63,8 @@ function acceptsOnlyDnsSafeNames(): void {
     volcano.accessToken = TEST_ACCESS_TOKEN;
 
     const maliciousIds = ['../admin', '../../etc/passwd', 'func/../other'];
-    for (const id of maliciousIds) {
-      const { data, error } = await volcano.functions.invoke(id, {});
+    const results = await Promise.all(maliciousIds.map((id) => volcano.functions.invoke(id, {})));
+    for (const { data, error } of results) {
       expect(data).toBeNull();
       expect(error).toBeDefined();
       expect(error?.message).toContain('DNS-safe');
@@ -75,35 +76,47 @@ function acceptsOnlyDnsSafeNames(): void {
     volcano.accessToken = TEST_ACCESS_TOKEN;
 
     const specialIds = ['func;drop', 'func&cmd', 'func|pipe'];
-    for (const id of specialIds) {
-      const { error } = await volcano.functions.invoke(id, {});
+    const results = await Promise.all(specialIds.map((id) => volcano.functions.invoke(id, {})));
+    for (const { error } of results) {
       expect(error).toBeDefined();
       expect(error?.message).toContain('DNS-safe');
     }
     expect(fetch).not.toHaveBeenCalled();
   });
+}
 
+function allowsDnsSafeNames(): void {
   it('should allow DNS-safe function names', async () => {
     volcano.accessToken = TEST_ACCESS_TOKEN;
+    const invokeUrl = 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/';
 
-    fetchMock.mockImplementation((url) => {
-      if (fetchUrl(url).startsWith('https://api.test.com/functions/resolve?name=')) {
-        return Promise.resolve(
-          reply(200, {
-            function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
-            invoke_url: 'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
-            cache_ttl_seconds: 300,
-          }),
-        );
-      }
-      return Promise.resolve(reply(200, { result: 'success' }));
-    });
+    fetchMock.mockImplementation(
+      fetchRoutes({
+        '/functions/resolve': () =>
+          Promise.resolve(
+            reply(200, {
+              function_id: '3cd3e058-e3ff-42a5-ae4d-650ef9b45746',
+              invoke_url: invokeUrl,
+              cache_ttl_seconds: 300,
+            }),
+          ),
+        '/': () => Promise.resolve(reply(200, { result: 'success' })),
+      }),
+    );
 
     const validNames = ['my-function', 'func123', 'a'];
-    for (const name of validNames) {
-      const { error } = await volcano.functions.invoke(name, {});
+    const results = await Promise.all(validNames.map((name) => volcano.functions.invoke(name, {})));
+    for (const { error } of results) {
       expect(error).toBeNull();
     }
+    const requested = fetchMock.mock.calls.map(([url]) => fetchUrl(url));
+    expect(requested).toHaveLength(6);
+    expect(requested).toEqual(
+      expect.arrayContaining([
+        ...validNames.map((name) => `https://api.test.com/functions/resolve?name=${name}`),
+        invokeUrl,
+      ]),
+    );
   });
 }
 
@@ -111,5 +124,6 @@ describe('VolcanoAuth function resolution, cache, and input validation', () => {
   describe('Functions - Security', () => {
     rejectsMissingNames();
     acceptsOnlyDnsSafeNames();
+    allowsDnsSafeNames();
   });
 });

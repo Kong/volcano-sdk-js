@@ -9,6 +9,7 @@
 // that don't require actual centrifuge client
 
 import { RealtimeChannel, VolcanoRealtime } from '../src/realtime.ts';
+import type { ConnectListener, DisconnectListener, ErrorListener } from './support/realtime-listeners.ts';
 
 function makeRealtime(): VolcanoRealtime {
   return new VolcanoRealtime({ apiUrl: 'https://api.example.com', anonKey: 'project123.secret' });
@@ -205,7 +206,7 @@ function registersConnectionCallbacks(): void {
       anonKey: 'project123.secret',
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ConnectListener>>();
     realtime.onConnect(callback);
 
     expect(realtime._onConnect).toContain(callback);
@@ -217,7 +218,7 @@ function registersConnectionCallbacks(): void {
       anonKey: 'project123.secret',
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ConnectListener>>();
     const unsubscribe = realtime.onConnect(callback);
 
     unsubscribe();
@@ -233,7 +234,7 @@ function registersStatusCallbacks(): void {
       anonKey: 'project123.secret',
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<DisconnectListener>>();
     realtime.onDisconnect(callback);
 
     expect(realtime._onDisconnect).toContain(callback);
@@ -245,7 +246,7 @@ function registersStatusCallbacks(): void {
       anonKey: 'project123.secret',
     });
 
-    const callback = jest.fn();
+    const callback = jest.fn<void, Parameters<ErrorListener>>();
     realtime.onError(callback);
 
     expect(realtime._onError).toContain(callback);

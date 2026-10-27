@@ -52,14 +52,13 @@ describe('Sandbox wire validation', () => {
   ])('requires exactly one selector %j', (options) => {
     expect(() => createRequest(options)).toThrow('Choose exactly one preset or sandboxId');
   });
-  test.each([{}, { data: {} }, { data: [{ id: 'node22', memory_mb: 1024, regions: {} }] }])(
-    'rejects malformed catalog %j',
-    (value) => {
-      const message =
-        'data' in value && Array.isArray(value.data) ? 'Invalid Sandbox regions' : 'Invalid Sandbox preset catalog';
-      expect(() => presetsResult(value)).toThrow(message);
-    },
-  );
+  test.each([
+    [{}, 'Invalid Sandbox preset catalog'],
+    [{ data: {} }, 'Invalid Sandbox preset catalog'],
+    [{ data: [{ id: 'node22', memory_mb: 1024, regions: {} }] }, 'Invalid Sandbox regions'],
+  ])('rejects malformed catalog %j', (value, message) => {
+    expect(() => presetsResult(value)).toThrow(message);
+  });
   test('accepts the file limit and rejects the next byte', () => {
     const limit = 8 * 1024 * 1024;
     expect(encodeBytes(new Uint8Array(limit))).toHaveLength(Math.ceil(limit / 3) * 4);

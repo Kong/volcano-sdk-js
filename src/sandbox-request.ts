@@ -13,7 +13,7 @@ export interface SandboxClient {
   ): TransportOptions;
 }
 export function pathId(value: string): string {
-  if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)) {
+  if (!/^[\dA-Fa-f]{8}(?:-[\dA-Fa-f]{4}){3}-[\dA-Fa-f]{12}$/u.test(value)) {
     throw new TypeError('A Sandbox resource ID must be a UUID');
   }
   return encodeURIComponent(value);

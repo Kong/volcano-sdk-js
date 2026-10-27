@@ -113,13 +113,12 @@ function reportsUserTransportFailures(): void {
   });
 
   test.each([
-    ['record without a name', { message: 'offline' }],
-    ['record without a string message', { message: 42 }],
-    ['string', 'offline'],
-  ])('getUser normalizes a rejected %s to an Error', async (_case, failure) => {
+    ['record without a name', { message: 'offline' }, 'offline'],
+    ['record without a string message', { message: 42 }, '[object Object]'],
+    ['string', 'offline', 'offline'],
+  ])('getUser normalizes a rejected %s to an Error', async (_case, failure, message) => {
     jest.mocked(globalThis.fetch).mockRejectedValueOnce(failure);
 
-    const message = typeof failure === 'object' && typeof failure.message !== 'string' ? '[object Object]' : 'offline';
     await expect(createServerClient(config).getUser('access-token')).resolves.toEqual({
       user: null,
       error: new Error(message),

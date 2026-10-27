@@ -2,6 +2,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
+import { expectInstanceOf } from './support/assertions.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
 import { settledRun } from './support/settled-run.ts';
 
 // durable-message.test.ts stands a double in for the runtime. These run the
@@ -97,12 +99,17 @@ function publishRequest(key: number, body: unknown): { headers: Record<string, s
 
 let seq = 0;
 
+const registered = (): Response => Response.json({ id: 'registered' }, { status: 201 });
+
+const notRunning = (): Response =>
+  Response.json({ error: 'execution is not running', code: 'execution_not_running' }, { status: 409 });
+
 function answer(url: unknown): Response {
   if (url === `${API_URL}/durable-messages/publish`) {
     seq += 1;
     return Response.json({ id: `msg-${String(seq)}`, seq }, { status: 201 });
   }
-  return Response.json({ id: 'registered' }, { status: 201 });
+  return registered();
 }
 
 beforeAll(() => LocalDurableTestRunner.setupTestEnvironment({ skipTime: true }));
@@ -178,18 +185,18 @@ function settlesTimeoutsAndRefusals(): void {
   });
 
   it('fails the publish on a refusal, without retrying it', async () => {
-    fetchMock().mockImplementation((url) =>
-      Promise.resolve(
-        url === `${API_URL}/durable-messages/publish`
-          ? Response.json({ error: 'execution is not running', code: 'execution_not_running' }, { status: 409 })
-          : answer(url),
-      ),
+    fetchMock().mockImplementation(
+      fetchRoutes({
+        '/durable-messages/sessions': () => Promise.resolve(registered()),
+        '/durable-messages/publish': () => Promise.resolve(notRunning()),
+      }),
     );
     const runner = runnerFor(async (_input, ctx) => {
       try {
         return await ctx.publish('started');
       } catch (error) {
-        return error instanceof Error ? error.message : error;
+        expectInstanceOf(error, Error);
+        return error.message;
       }
     });
 
@@ -204,17 +211,18 @@ function settlesTimeoutsAndRefusals(): void {
 
 function replaysSessionFailures(): void {
   it('replays a publish that failed to open the session without reading it again', async () => {
-    fetchMock().mockImplementation((url) =>
-      Promise.resolve(
-        url === `${API_URL}/durable-messages/sessions`
-          ? Response.json({ error: 'execution is not running', code: 'execution_not_running' }, { status: 409 })
-          : answer(url),
-      ),
+    fetchMock().mockImplementation(
+      fetchRoutes({
+        '/durable-messages/sessions': () => Promise.resolve(notRunning()),
+      }),
     );
     const runner = runnerFor(async (_input, ctx) => {
       const failure = await ctx.publish('started').then(
         () => 'published',
-        (error: unknown) => (error instanceof Error ? error.message : error),
+        (error: unknown) => {
+          expectInstanceOf(error, Error);
+          return error.message;
+        },
       );
       await ctx.wait('1s');
       return failure;
@@ -239,6 +247,7 @@ function keepsPublishOrder(): void {
         .step('first', () => Promise.resolve(1))
         .then(async () => {
           for (let turn = 0; turn < 50; turn += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- 50 turns in sequence let a replayed session resolve before `second`.
             await Promise.resolve();
           }
           return ctx.step('second', () => Promise.resolve(2));

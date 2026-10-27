@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { transformFileAsync } from '@babel/core';
 import { assertionResults, failureMessages } from './jest-results.mts';
+// oxlint-disable-next-line import/max-dependencies -- This end-to-end test drives Babel, Jest, and Node's process APIs.
 import { record } from './values.mts';
 
 const require = createRequire(import.meta.url);
@@ -18,20 +19,18 @@ const optionsFile = fileURLToPath(new URL('../__tests__/support/property-options
 const configFile = fileURLToPath(new URL('../babel.config.js', import.meta.url));
 const prepareReports = fileURLToPath(new URL('prepare-test-reports.mjs', import.meta.url));
 
-await test('a failing property fails Jest and preserves its seed and minimized counterexample', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'volcano-property-policy-'));
-  try {
-    // The generated test require()s this output. Babel 8 compiles modules to
-    // CommonJS only when the caller says it lacks ESM support, as babel-jest does.
-    const compiled = await transformFileAsync(optionsFile, {
-      configFile,
-      caller: { name: 'property-policy-test', supportsStaticESM: false },
-    });
-    assert.ok(compiled !== null && typeof compiled.code === 'string');
-    await writeFile(join(directory, 'property-options.js'), compiled.code);
-    await writeFile(
-      join(directory, 'property.test.js'),
-      `
+async function writePropertyFixture(directory: string): Promise<void> {
+  // The generated test require()s this output. Babel 8 compiles modules to
+  // CommonJS only when the caller says it lacks ESM support, as babel-jest does.
+  const compiled = await transformFileAsync(optionsFile, {
+    configFile,
+    caller: { name: 'property-policy-test', supportsStaticESM: false },
+  });
+  assert.ok(compiled !== null && typeof compiled.code === 'string');
+  await writeFile(join(directory, 'property-options.js'), compiled.code);
+  await writeFile(
+    join(directory, 'property.test.js'),
+    `
       const fc = require(${JSON.stringify(fastCheck)});
       const { propertyOptions } = require('./property-options.js');
       test('negative property', () => {
@@ -39,7 +38,37 @@ await test('a failing property fails Jest and preserves its seed and minimized c
         fc.assert(fc.property(fc.integer({min: 0, max: 100}), value => value < 0), propertyOptions());
       });
     `,
-    );
+  );
+}
+
+function runPropertyJest(directory: string, report: string): SpawnSyncReturns<string> {
+  return spawnSync(
+    process.execPath,
+    [
+      jest,
+      '--config',
+      JSON.stringify({
+        rootDir: directory,
+        testEnvironment: 'node',
+        reporters: [reporter],
+        testMatch: ['<rootDir>/*.test.js'],
+      }),
+      '--runInBand',
+      '--json',
+      `--outputFile=${report}`,
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { ...process.env, VOLCANO_PROPERTY_SEED: '12345' },
+    },
+  );
+}
+
+await test('a failing property fails Jest and preserves its seed and minimized counterexample', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'volcano-property-policy-'));
+  try {
+    await writePropertyFixture(directory);
     const prepared = spawnSync(process.execPath, [prepareReports], {
       cwd: directory,
       encoding: 'utf8',
@@ -47,36 +76,16 @@ await test('a failing property fails Jest and preserves its seed and minimized c
     });
     assert.equal(prepared.status, 0, prepared.stderr);
     const report = join(directory, 'reports/unit.json');
-    const result = spawnSync(
-      process.execPath,
-      [
-        jest,
-        '--config',
-        JSON.stringify({
-          rootDir: directory,
-          testEnvironment: 'node',
-          reporters: [reporter],
-          testMatch: ['<rootDir>/*.test.js'],
-        }),
-        '--runInBand',
-        '--json',
-        `--outputFile=${report}`,
-      ],
-      {
-        encoding: 'utf8',
-        timeout: 15_000,
-        env: { ...process.env, VOLCANO_PROPERTY_SEED: '12345' },
-      },
-    );
+    const result = runPropertyJest(directory, report);
     assert.equal(result.error, undefined);
     assert.equal(result.status, 1, result.stderr);
     const results = record(JSON.parse(await readFile(report, 'utf8')));
     assert.equal(results['numFailedTests'], 1);
     assert.equal(results['numPendingTests'], 0);
     const failure = failureMessages(assertionResults(results)[0]);
-    assert.match(failure, /seed: 12345/);
-    assert.match(failure, /Counterexample: \[0\]/);
-    assert.match(failure, /path: "/);
+    assert.match(failure, /seed: 12345/u);
+    assert.match(failure, /Counterexample: \[0\]/u);
+    assert.match(failure, /path: "/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

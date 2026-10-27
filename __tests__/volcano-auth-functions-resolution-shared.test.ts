@@ -3,6 +3,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { AuthSessionChangedError, VolcanoAuth } from '../src/index.ts';
 import { bodyText, fetchUrl, reply, signal, within } from './auth-concurrency-fixtures.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
+import { fetchRoutes } from './support/fetch-routes.ts';
 import {
   config,
   fetchMock,
@@ -67,16 +68,17 @@ function dedupesResolveAcrossContexts(): void {
     const resolveStarted = signal();
     const resolveGate = signal();
 
-    fetchMock.mockImplementation(async (url) => {
-      const requestUrl = fetchUrl(url);
-      if (requestUrl === 'https://api.test.com/functions/resolve?name=my-function') {
-        resolveCalls += 1;
-        resolveStarted.resolve();
-        await within(resolveGate.promise, 'shared resolver release');
-        return resolvedFunction('my-function');
-      }
-      return reply(200, { result: 'ok' });
-    });
+    fetchMock.mockImplementation(
+      fetchRoutes({
+        async '/functions/resolve'() {
+          resolveCalls += 1;
+          resolveStarted.resolve();
+          await within(resolveGate.promise, 'shared resolver release');
+          return resolvedFunction('my-function');
+        },
+        '/': () => Promise.resolve(reply(200, { result: 'ok' })),
+      }),
+    );
 
     const invokeA = instanceA.functions.invoke('my-function', { call: 'a' });
     const invokeB = instanceB.functions.invoke('my-function', { call: 'b' });
@@ -89,6 +91,10 @@ function dedupesResolveAcrossContexts(): void {
     expect(resultB.error).toBeNull();
     expect(resolveCalls).toBe(1);
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => fetchUrl(url))).toEqual([
+      'https://api.test.com/functions/resolve?name=my-function',
+      'https://3cd3e058-e3ff-42a5-ae4d-650ef9b45746.functions.test.run/',
+    ]);
   });
 }
 

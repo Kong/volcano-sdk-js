@@ -168,8 +168,7 @@ function appliesTheModeSafely(): void {
     const twice = databaseConnectionString(once, { userId: 'u1' });
     expect(twice).toBe(once);
     // And exactly one application_name is present.
-    const raw = new URL(twice).search.match(/application_name=/gu) ?? [];
-    expect(raw).toHaveLength(1);
+    expect(new URL(twice).search.match(/application_name=/gu)).toHaveLength(1);
   });
 
   it('does not mutate credentials or database when only switching mode', () => {

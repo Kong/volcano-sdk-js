@@ -1,4 +1,11 @@
-import { deletePayload, recordsFromQuery, rejectBatch, runBatchQuery, settleBatch } from './realtime-autofetch.ts';
+import {
+  deliverFetchedNotification,
+  deliverPayload,
+  fetchRow,
+  flushFetch,
+  handleLightweightNotification,
+  handlePublication,
+} from './realtime-channel-delivery.ts';
 import {
   activateChannelSubscription,
   disposeChannel,
@@ -14,7 +21,6 @@ import type {
   EventHandler,
   InternalChannelType,
   PendingBatch,
-  PendingRow,
   TransportSubscription,
 } from './realtime-internal-types.ts';
 import type {
@@ -25,15 +31,7 @@ import type {
   PublicationContext,
   UnsubscribeFunction,
 } from './realtime-public-types.ts';
-import {
-  isLightweightNotification,
-  isPresenceState,
-  isPublicationContext,
-  matchesPostgresChange,
-  payloadEvent,
-  property,
-  record,
-} from './realtime-values.ts';
+import { isPresenceState, isPublicationContext, matchesPostgresChange, property, record } from './realtime-values.ts';
 
 /**
  * RealtimeChannel - Represents a subscription to a realtime channel
@@ -119,173 +117,34 @@ class RealtimeChannel {
     resetChannelForIdentityChange(this);
   }
 
-  /**
-   * Handle publication from server-side subscription
-   * Called by VolcanoRealtime when a message arrives on the internal channel
-   */
   /** @internal */
   _handlePublication(ctx: unknown): void {
-    if (this._paused) {
-      return;
-    }
-    const data = property(ctx, 'data');
-
-    // Check if this is a lightweight notification (Phase 3)
-    if (isLightweightNotification(data)) {
-      void this._handleLightweightNotification(data, ctx);
-      return;
-    }
-
-    // Full payload - deliver immediately
-    this._deliverPayload(data, ctx);
-  }
-
-  /**
-   * Handle a lightweight notification by auto-fetching the record data
-   * @param {Object} data - Lightweight notification data
-   * @param {Object} ctx - Publication context
-   */
-  /** @internal */
-  async _handleLightweightNotification(data: LightweightNotification, ctx: unknown): Promise<void> {
-    // DELETE notifications may include old_record, deliver immediately
-    if (data.type === 'DELETE') {
-      this._deliverPayload(deletePayload(data), ctx);
-      return;
-    }
-
-    // If no volcanoClient or auto-fetch disabled, deliver lightweight as-is
-    const volcanoClient = this._realtime.getVolcanoClient();
-    if (volcanoClient === null || !this._fetchConfig.enabled) {
-      this._deliverPayload(data, ctx);
-      return;
-    }
-
-    await this._deliverFetchedNotification(data, ctx, this._lifecycleVersion);
+    handlePublication(this, ctx);
   }
 
   /** @internal */
-  async _deliverFetchedNotification(
-    data: LightweightNotification,
-    ctx: unknown,
-    lifecycleVersion: number,
-  ): Promise<void> {
-    // Auto-fetch the record for INSERT/UPDATE
-    try {
-      const record = await this._fetchRow(data.schema, data.table, data.id);
-      if (lifecycleVersion !== this._lifecycleVersion) {
-        return;
-      }
-
-      // Convert to full payload format for backward compatibility
-      const fullPayload = {
-        type: data.type,
-        schema: data.schema,
-        table: data.table,
-        record,
-        timestamp: data.timestamp,
-      };
-
-      this._deliverPayload(fullPayload, ctx);
-    } catch (err) {
-      if (lifecycleVersion !== this._lifecycleVersion) {
-        return;
-      }
-      // On fetch error, still deliver the lightweight notification
-      // so the client knows something changed, even if we couldn't get the data
-      console.warn(
-        `[Realtime] Failed to fetch record for ${data.schema}.${data.table}:${String(data.id)}:`,
-        err instanceof Error ? err.message : String(err),
-      );
-      this._deliverPayload(data, ctx);
-    }
+  _handleLightweightNotification(data: LightweightNotification, ctx: unknown): Promise<void> {
+    return handleLightweightNotification(this, data, ctx);
   }
 
-  /**
-   * Fetch a row from the database, batching requests for efficiency
-   * @param {string} schema - Schema name
-   * @param {string} table - Table name
-   * @param {*} id - Primary key value
-   * @returns {Promise<Object>} The fetched record
-   */
+  /** @internal */
+  _deliverFetchedNotification(data: LightweightNotification, ctx: unknown, lifecycleVersion: number): Promise<void> {
+    return deliverFetchedNotification(this, data, ctx, lifecycleVersion);
+  }
+
   /** @internal */
   _fetchRow(schema: string, table: string, id: unknown): Promise<unknown> {
-    const tableKey = `${schema}.${table}`;
-
-    return new Promise<unknown>((resolve, reject) => {
-      // Get or create pending batch for this table
-      let batch = this._pendingFetches.get(tableKey);
-      if (batch === undefined) {
-        batch = {
-          ids: new Map<string, PendingRow>(),
-          timer: null,
-          schema,
-          table,
-        };
-        this._pendingFetches.set(tableKey, batch);
-      }
-
-      // Add this ID to the batch
-      batch.ids.set(String(id), { resolve, reject });
-
-      // Check if we should flush due to size
-      if (batch.ids.size >= this._fetchConfig.maxBatchSize) {
-        void this._flushFetch(schema, table);
-        return;
-      }
-
-      // Set timer for batch window if not already set
-      batch.timer ??= setTimeout(() => {
-        void this._flushFetch(schema, table);
-      }, this._fetchConfig.batchWindowMs);
-    });
+    return fetchRow(this, schema, table, id);
   }
 
-  /**
-   * Flush pending fetch requests for a table
-   * @param {string} schema - Schema name
-   * @param {string} table - Table name
-   */
   /** @internal */
-  async _flushFetch(schema: string, table: string): Promise<void> {
-    const tableKey = `${schema}.${table}`;
-    const batch = this._pendingFetches.get(tableKey);
-
-    if (batch === undefined || batch.ids.size === 0) {
-      return;
-    }
-
-    // Clear timer and remove from pending
-    if (batch.timer !== null) {
-      clearTimeout(batch.timer);
-    }
-    this._pendingFetches.delete(tableKey);
-
-    try {
-      const result: unknown = await runBatchQuery(this._realtime, schema, table, [...batch.ids.keys()]);
-      settleBatch(batch.ids, recordsFromQuery(result), table);
-    } catch (err) {
-      rejectBatch(batch.ids, err);
-    }
+  _flushFetch(schema: string, table: string): Promise<void> {
+    return flushFetch(this, schema, table);
   }
 
-  /**
-   * Deliver a payload to registered callbacks
-   * @param {Object} data - Payload data
-   * @param {Object} ctx - Publication context
-   */
   /** @internal */
   _deliverPayload(data: unknown, ctx: unknown): void {
-    const event = payloadEvent(data);
-    const callbacks = this._callbacks.get(event) ?? [];
-    callbacks.forEach((cb) => {
-      cb(data, ctx);
-    });
-
-    // Also trigger wildcard listeners
-    const wildcardCallbacks = this._callbacks.get('*') ?? [];
-    wildcardCallbacks.forEach((cb) => {
-      cb(data, ctx);
-    });
+    deliverPayload(this, data, ctx);
   }
 
   /**
@@ -306,10 +165,10 @@ class RealtimeChannel {
 
     // Return unsubscribe function
     return () => {
-      const callbacks = this._callbacks.get(event) ?? [];
+      const registered = this._callbacks.get(event) ?? [];
       this._callbacks.set(
         event,
-        callbacks.filter((cb) => cb !== deliver),
+        registered.filter((cb) => cb !== deliver),
       );
     };
   }

@@ -1,0 +1,69 @@
+import { errorResult } from './api-errors.ts';
+import { isFalsy } from './falsy.ts';
+import type { StorageError } from './index.js';
+import type { StorageFileApi } from './storage-file.ts';
+import { storageTargetError } from './storage-paths.ts';
+import type { StorageRequestResult } from './storage-transport.ts';
+
+export interface StorageResult<T> {
+  data: T | null;
+  error: StorageError | null;
+}
+
+export function validatedResult<T>(
+  result: StorageRequestResult,
+  guard: (value: unknown) => value is T,
+  responseName: string,
+): StorageResult<T> {
+  if (result.error !== null) {
+    return { data: null, error: result.error };
+  }
+  if (!guard(result.data)) {
+    return { data: null, error: new TypeError(`Invalid ${responseName} response`) };
+  }
+  return { data: result.data, error: null };
+}
+
+export function legacyStringDefault(value: unknown, fallback: string): string {
+  return isFalsy(value) ? fallback : String(value);
+}
+
+export function legacyValueDefault(value: unknown, fallback: unknown): unknown {
+  return isFalsy(value) ? fallback : value;
+}
+
+/** Refuse a bucket or path before a URL parser can resolve it outside the bucket route. */
+export function invalidTarget(bucketName: string, paths: readonly unknown[]): StorageResult<never> | null {
+  const message = storageTargetError(bucketName, paths);
+  return message === null ? null : errorResult(message);
+}
+
+/** Refuse a request without a session, once any pending OAuth exchange settles. */
+export async function sessionRefusal(host: StorageFileApi): Promise<StorageResult<never> | null> {
+  await host.volcanoAuth._completeOAuthExchange();
+  if (isFalsy(host.volcanoAuth.accessToken)) {
+    const exchangeError = host.volcanoAuth._oauthExchangeError;
+    return errorResult(
+      exchangeError instanceof Error
+        ? exchangeError
+        : legacyStringDefault(exchangeError, 'No active session. Please sign in first.'),
+    );
+  }
+  return null;
+}
+
+export async function preflightPaths(
+  host: StorageFileApi,
+  paths: readonly unknown[],
+): Promise<StorageResult<never> | null> {
+  return invalidTarget(host.bucketName, paths) ?? (await host._checkAuth());
+}
+
+export function preflight(host: StorageFileApi, ...paths: unknown[]): Promise<StorageResult<never> | null> {
+  return preflightPaths(host, paths);
+}
+
+// Validated paths always end in a non-empty segment.
+export function fileName(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}

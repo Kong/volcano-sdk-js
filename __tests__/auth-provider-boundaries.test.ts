@@ -10,6 +10,7 @@ import {
 } from '../src/auth-provider.ts';
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
+import { recordAuthRequests } from './support/auth-request-recorder.ts';
 
 const context: AuthContext = {
   generation: 1,
@@ -54,13 +55,13 @@ test('provider methods route to their distinct endpoints with exact method and b
     expires_in: 120,
     data: { repository: 'volcano' },
   };
-  const calls: { path: string; options: RequestInit | undefined }[] = [];
+  const { requests, authFetchWithContext } = recordAuthRequests({
+    result: { ok: true, status: 200, data, error: null },
+    context,
+  });
   const host: AuthProviderHost = {
     _isAuthContextCurrent: () => true,
-    _authFetchWithContext(path, options) {
-      calls.push({ path, options: typeof options === 'function' ? options() : options });
-      return Promise.resolve({ result: { ok: true, status: 200, data, error: null }, context });
-    },
+    _authFetchWithContext: authFetchWithContext,
   };
 
   expect(await linkOAuthProvider(host, 'github')).toEqual({ data, error: null });
@@ -92,5 +93,5 @@ test('provider methods route to their distinct endpoints with exact method and b
     data: { repository: 'volcano' },
     error: null,
   });
-  expect(calls).toEqual(providerRequests);
+  expect(requests).toEqual(providerRequests);
 });

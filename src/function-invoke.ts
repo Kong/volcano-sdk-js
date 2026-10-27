@@ -1,55 +1,15 @@
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from './errors.ts';
+import { isFalsy } from './falsy.ts';
 import { fetchWithTimeout } from './fetch-lifecycle.ts';
 import { functionInvokeResult, functionWasDispatched } from './function-invocation-response.ts';
-import type { FunctionError } from './sdk-public-types.ts';
+import type { FunctionInvocationHost, FunctionInvocationResult } from './function-invoke-types.ts';
 
-export interface FunctionInvokeResponse<TResult = unknown> {
-  data: TResult | string | null;
-  status: number | null;
-  headers: Record<string, string>;
-  version: string | null;
-  /** Platform failures are errors; non-2xx function responses remain data. */
-  error: FunctionError | null;
-}
-
-export interface FunctionInvocationResult {
-  data: unknown;
-  status: number | null;
-  headers: Record<string, string>;
-  version: string | null;
-  error: Error | null;
-}
-
-interface Resolution {
-  functionId: unknown;
-  invokeUrl: unknown;
-  token: string | null;
-}
-
-export interface FunctionInvocationHost {
-  readonly anonKey: string;
-  readonly accessToken: string | null;
-  readonly timeout: number;
-  readonly _oauthExchangePromise: Promise<unknown> | null;
-  readonly _sessionOperations: AuthContext['operations'];
-  readonly _sessionGeneration: number;
-  _captureAuthContext(): AuthContext;
-  _isAuthContextCurrent(context: AuthContext): boolean;
-  _completeOAuthExchange(): Promise<unknown>;
-  _resolveFunctionIdByName(
-    functionName: string,
-    options: {
-      authContext: AuthContext;
-      token: string | null;
-      useAnonKey: boolean;
-      allowRefresh?: boolean;
-    },
-  ): Promise<Resolution>;
-  _getFunctionInvokeUrl(functionIdentifier: unknown, resolvedInvokeUrl: unknown): string;
-  _refreshSessionForContext(context: AuthContext): Promise<{ error: unknown }>;
-  _clearFunctionResolveCache(functionName: string, token: string | null, useAnonKey: boolean): void;
-}
+export type {
+  FunctionInvocationHost,
+  FunctionInvocationResult,
+  FunctionInvokeResponse,
+} from './function-invoke-types.ts';
 
 function failed(error: Error, status: number | null = null): FunctionInvocationResult {
   return { data: null, status, headers: {}, version: null, error };
@@ -114,7 +74,7 @@ class FunctionInvocation {
   ) {
     this.operationContext = context;
     this.resolutionContext = context;
-    this.useAnonKey = !Boolean(context.accessToken);
+    this.useAnonKey = !hasToken(context.accessToken);
   }
 
   async run(): Promise<FunctionInvocationResult> {
@@ -149,7 +109,7 @@ class FunctionInvocation {
     if (this.host._oauthExchangePromise !== null) {
       await this.host._completeOAuthExchange();
       this.operationContext = this.host._captureAuthContext();
-      this.useAnonKey = !Boolean(this.operationContext.accessToken);
+      this.useAnonKey = !hasToken(this.operationContext.accessToken);
     }
     this.resolutionContext = this.operationContext;
     this.resolutionToken = this.credential(this.resolutionContext);
@@ -224,7 +184,7 @@ class FunctionInvocation {
         return retry;
       }
     }
-    return await functionInvokeResult(response, dispatched);
+    return functionInvokeResult(response, dispatched);
   }
 
   private async request(url: string, accessToken: string): Promise<{ response: Response; dispatched: boolean }> {
@@ -250,7 +210,7 @@ class FunctionInvocation {
     if (AuthRefreshDiscardedError.is(refreshed.error)) {
       return failed(refreshed.error, refreshed.error.status);
     }
-    if (!Boolean(refreshed.error)) {
+    if (isFalsy(refreshed.error)) {
       if (!this.host._isAuthContextCurrent(context)) {
         const error = new AuthRefreshDiscardedError();
         return failed(error, error.status);

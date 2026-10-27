@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import type { StorageFileApi } from '../src/storage-file.ts';
 import { storageObject } from './storage-response-fixtures.ts';
 import { apiUrl, type Fixture, fixture } from './support/storage-file-fixtures.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -16,23 +17,25 @@ const UNSAFE_PATH = 'Storage path cannot contain empty, ".", or ".." segments';
 const UNSAFE_BUCKET = 'Bucket name cannot contain "/" or be "." or ".."';
 
 type Run = (api: StorageFileApi, path: string) => Promise<{ data?: unknown; error: Error | null }>;
+/** An operation's name, a call to it, and the `data` it returns when it refuses the input. */
+type Operation = [name: string, run: Run, refusedData: null | undefined];
 
-const pathOperations: [string, Run][] = [
-  ['upload', (api, path) => api.upload(path, new Blob(['data']))],
-  ['download', (api, path) => api.download(path)],
-  ['remove', (api, path) => api.remove(path)],
-  ['remove list', (api, path) => api.remove(['safe.bin', path])],
-  ['move source', (api, path) => api.move(path, 'safe.bin')],
-  ['move destination', (api, path) => api.move('safe.bin', path)],
-  ['copy source', (api, path) => api.copy(path, 'safe.bin')],
-  ['copy destination', (api, path) => api.copy('safe.bin', path)],
-  ['updateVisibility', (api, path) => api.updateVisibility(path, true)],
-  ['createUploadSession', (api, path) => api.createUploadSession(path, { totalSize: 4 })],
-  ['uploadPart', (api, path) => api.uploadPart(path, 'session-1', 1, new Blob())],
-  ['completeUploadSession', (api, path) => api.completeUploadSession(path, 'session-1')],
-  ['getUploadSession', (api, path) => api.getUploadSession(path, 'session-1')],
-  ['abortUploadSession', (api, path) => api.abortUploadSession(path, 'session-1')],
-  ['uploadResumable', (api, path) => api.uploadResumable(path, new Blob(['data']))],
+const pathOperations: Operation[] = [
+  ['upload', (api, path) => api.upload(path, new Blob(['data'])), null],
+  ['download', (api, path) => api.download(path), null],
+  ['remove', (api, path) => api.remove(path), null],
+  ['remove list', (api, path) => api.remove(['safe.bin', path]), null],
+  ['move source', (api, path) => api.move(path, 'safe.bin'), null],
+  ['move destination', (api, path) => api.move('safe.bin', path), null],
+  ['copy source', (api, path) => api.copy(path, 'safe.bin'), null],
+  ['copy destination', (api, path) => api.copy('safe.bin', path), null],
+  ['updateVisibility', (api, path) => api.updateVisibility(path, true), null],
+  ['createUploadSession', (api, path) => api.createUploadSession(path, { totalSize: 4 }), null],
+  ['uploadPart', (api, path) => api.uploadPart(path, 'session-1', 1, new Blob()), null],
+  ['completeUploadSession', (api, path) => api.completeUploadSession(path, 'session-1'), null],
+  ['getUploadSession', (api, path) => api.getUploadSession(path, 'session-1'), null],
+  ['abortUploadSession', (api, path) => api.abortUploadSession(path, 'session-1'), undefined],
+  ['uploadResumable', (api, path) => api.uploadResumable(path, new Blob(['data'])), null],
 ];
 
 const unsafePaths = ['..', '.', 'a/../b', 'a/./b', '../../functions/x', 'a//b', 'a/', '//a', '/'];
@@ -43,18 +46,19 @@ function expectNoRequest(given: Fixture): void {
   expect(given.download).not.toHaveBeenCalled();
 }
 
-test.each(pathOperations.flatMap(([name, run]) => unsafePaths.map((path) => [name, path, run] as const)))(
-  '%s refuses %p before authentication or any request',
-  async (_name, path, run) => {
-    const given = fixture(null);
-    const exchange = jest.spyOn(given.host, '_completeOAuthExchange');
-    const result = await run(given.api, path);
-    expect(result.error).toEqual(new Error(UNSAFE_PATH));
-    expect(result.data ?? null).toBeNull();
-    expect(exchange).not.toHaveBeenCalled();
-    expectNoRequest(given);
-  },
-);
+test.each(
+  pathOperations.flatMap(([name, run, refusedData]) =>
+    unsafePaths.map((path) => [name, path, run, refusedData] as const),
+  ),
+)('%s refuses %p before authentication or any request', async (_name, path, run, refusedData) => {
+  const given = fixture(null);
+  const exchange = jest.spyOn(given.host, '_completeOAuthExchange');
+  const result = await run(given.api, path);
+  expect(result.error).toEqual(new Error(UNSAFE_PATH));
+  expect(result.data).toBe(refusedData);
+  expect(exchange).not.toHaveBeenCalled();
+  expectNoRequest(given);
+});
 
 test.each(pathOperations)('%s returns an error result for a lone surrogate', async (_name, run) => {
   const given = fixture();
@@ -75,9 +79,7 @@ test.each(pathOperations)('%s refuses a dot segment even with a session', async 
 test.each([null, undefined, 4, ''])('refuses a missing storage path %p before sending it', async (path) => {
   const given = fixture();
   const pending: unknown = Reflect.apply(given.api.download.bind(given.api), given.api, [path]);
-  if (!(pending instanceof Promise)) {
-    throw new TypeError('Expected a download promise');
-  }
+  expectInstanceOf(pending, Promise);
   await expect(pending).resolves.toEqual({
     data: null,
     error: new Error('Storage path must be a non-empty string'),
@@ -85,22 +87,22 @@ test.each([null, undefined, 4, ''])('refuses a missing storage path %p before se
   expectNoRequest(given);
 });
 
-const bucketOperations: [string, Run][] = [
+const bucketOperations: Operation[] = [
   ...pathOperations,
-  ['list', (api) => api.list()],
-  ['getPublicUrl', (api, path) => Promise.resolve(api.getPublicUrl(path))],
+  ['list', (api) => api.list(), null],
+  ['getPublicUrl', (api, path) => Promise.resolve(api.getPublicUrl(path)), null],
 ];
 
 test.each(
-  bucketOperations.flatMap(([name, run]) =>
-    ['.', '..', 'a/..', '/bucket', 'bucket/', 'team/photos'].map((bucket) => [name, bucket, run] as const),
+  bucketOperations.flatMap(([name, run, refusedData]) =>
+    ['.', '..', 'a/..', '/bucket', 'bucket/', 'team/photos'].map((bucket) => [name, bucket, run, refusedData] as const),
   ),
-)('%s refuses the bucket %p before authentication or any request', async (_name, bucket, run) => {
+)('%s refuses the bucket %p before authentication or any request', async (_name, bucket, run, refusedData) => {
   const given = fixture(null, bucket);
   const exchange = jest.spyOn(given.host, '_completeOAuthExchange');
   const result = await run(given.api, 'file.bin');
   expect(result.error).toEqual(new Error(UNSAFE_BUCKET));
-  expect(result.data ?? null).toBeNull();
+  expect(result.data).toBe(refusedData);
   expect(exchange).not.toHaveBeenCalled();
   expectNoRequest(given);
 });

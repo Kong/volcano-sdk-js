@@ -107,6 +107,7 @@ export class QueryBuilder extends FilterBuilder {
     }
   }
 
+  // oxlint-disable-next-line unicorn/no-thenable -- Awaiting a query builder runs the query.
   then<TResult1 = SelectResult, TResult2 = never>(
     resolve?: ((value: SelectResult) => PromiseLike<TResult1> | TResult1) | null,
     reject?: ((reason: unknown) => PromiseLike<TResult2> | TResult2) | null,

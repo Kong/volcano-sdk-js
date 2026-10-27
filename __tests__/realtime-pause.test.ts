@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { VolcanoRealtime } from '../src/realtime.ts';
 import { subscriptionAt, TestTransportClient } from './realtime-transport-fixtures.ts';
+import type { ChannelListener } from './support/realtime-listeners.ts';
 
 function createRealtime() {
   const realtime = new VolcanoRealtime({
@@ -17,7 +18,7 @@ function pausesAndResumesTheSameSubscription(): void {
   test('pauses and resumes the same subscription without dropping listeners', async () => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('room');
-    const onMessage = jest.fn();
+    const onMessage = jest.fn<ChannelListener>();
     channel.on('message', onMessage);
     await channel.subscribe();
     const subscription = subscriptionAt(client, 0);
@@ -37,7 +38,7 @@ function pausesAndResumesTheSameSubscription(): void {
   test('discards a paused subscription when its credential changes', async () => {
     const { realtime, client } = createRealtime();
     const channel = realtime.channel('room');
-    const onMessage = jest.fn();
+    const onMessage = jest.fn<ChannelListener>();
     channel.on('message', onMessage);
     await channel.subscribe();
     const previous = subscriptionAt(client, 0);
@@ -55,7 +56,7 @@ function discardsPausedPublications(): void {
   test('discards server-side publications while paused and delivers new messages on resume', async () => {
     const { realtime } = createRealtime();
     const channel = realtime.channel('room');
-    const onMessage = jest.fn();
+    const onMessage = jest.fn<ChannelListener>();
     channel.on('message', onMessage);
     await channel.subscribe();
     channel.unsubscribe();
@@ -98,7 +99,7 @@ function disposesPausedChannels(): void {
     async (_name, dispose) => {
       const { realtime, client } = createRealtime();
       const channel = realtime.channel('room');
-      channel.on('message', jest.fn());
+      channel.on('message', jest.fn<ChannelListener>());
       await channel.subscribe();
       const subscription = subscriptionAt(client, 0);
       channel.unsubscribe();

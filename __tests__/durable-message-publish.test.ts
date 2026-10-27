@@ -150,12 +150,8 @@ function nestsSessions(): void {
 
 function sendsCheckedData(): void {
   it('sends the data it checked', async () => {
-    let serialized = 0;
     const data = {
-      toJSON() {
-        serialized += 1;
-        return serialized === 1 ? { percent: 50 } : 'x'.repeat(70_000);
-      },
+      toJSON: jest.fn<() => unknown>().mockReturnValueOnce({ percent: 50 }).mockReturnValue('x'.repeat(70_000)),
     };
 
     await run((_input, ctx) => ctx.publish('progress', data));

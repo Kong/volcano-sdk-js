@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "paths": {
+      "@volcano.dev/sdk": ["../../dist/index.d.ts"],
+      "@volcano.dev/sdk/durable": ["../../dist/durable.d.ts"]
+    },
+    "allowJs": true,
+    "maxNodeModuleJsDepth": 0,
+    "checkJs": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "skipLibCheck": false,
+    "noEmit": true,
+    "noEmitOnError": true
+  },
+  "include": ["volcano/functions/**/*.js"]
+}

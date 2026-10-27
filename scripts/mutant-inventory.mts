@@ -45,7 +45,7 @@ export function mutantCount(patterns: readonly string[]): number {
     if (run.status !== 0) {
       reportDryRunFailure(run);
     }
-    const count = /Instrumented \d+ source file\(s\) with (\d+) mutant\(s\)/.exec(run.stdout);
+    const count = /Instrumented \d+ source file\(s\) with (\d+) mutant\(s\)/u.exec(run.stdout);
     if (count === null) {
       throw new Error('Stryker did not report an instrumented mutant count');
     }

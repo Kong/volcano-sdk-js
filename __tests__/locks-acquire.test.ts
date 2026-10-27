@@ -1,6 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
+import { expectPresent } from './support/assertions.ts';
 import { headerAt, methodAt, response, textBodyAt } from './support/locks-fixtures.ts';
 
 let fetchMock: jest.MockedFunction<typeof fetch>;
@@ -43,9 +44,7 @@ function acquiresAndReleases(): void {
       },
       error: null,
     });
-    if (acquired.lease === null) {
-      throw new Error('Expected an acquired lease');
-    }
+    expectPresent(acquired.lease);
 
     const renewed = await volcano.locks.renew('leader', acquired.lease, {
       ttl: 10,

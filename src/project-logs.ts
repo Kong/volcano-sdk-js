@@ -26,9 +26,9 @@ function isJsonValue(value: unknown): value is JsonValue {
     return true;
   }
   if (Array.isArray(value)) {
-    return value.every(isJsonValue);
+    return value.every((item) => isJsonValue(item));
   }
-  return isRecord(value) && Object.values(value).every(isJsonValue);
+  return isRecord(value) && Object.values(value).every((item) => isJsonValue(item));
 }
 
 function isLogResource(value: unknown): value is LogResource {

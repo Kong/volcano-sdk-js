@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { AuthRefreshDiscardedError, VolcanoAuth } from '../src/index.ts';
+import { AuthRefreshDiscardedError, type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { deferred, reply, signal, within } from './auth-concurrency-fixtures.ts';
 
 const fetchMock = jest.mocked(globalThis.fetch);
@@ -59,21 +59,20 @@ function dropsSupersededRefresh(): void {
 
 function dropsRefreshReplacedByCallback(): void {
   it('does not replay after a refresh callback replaces the session', async () => {
-    let replaced = false;
     volcano._setSession({
       access_token: 'old-access',
       refresh_token: 'old-refresh',
       user: { id: 'old-user', email: 'fixture@example.com', status: 'active' },
     });
-    volcano.auth.onAuthStateChange((user) => {
-      if (!replaced && user !== null && Reflect.get(user, 'refreshed') === true) {
-        replaced = true;
-        volcano._setSession({
-          access_token: 'replacement-access',
-          refresh_token: 'replacement-refresh',
-          user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
-        });
-      }
+    const listener = jest.fn<AuthStateCallback>();
+    volcano.auth.onAuthStateChange(listener);
+    // Registration already reported the current user; the next notification is the refreshed user.
+    listener.mockImplementationOnce(() => {
+      volcano._setSession({
+        access_token: 'replacement-access',
+        refresh_token: 'replacement-refresh',
+        user: { id: 'user-2', email: 'fixture@example.com', status: 'active' },
+      });
     });
     fetchMock.mockResolvedValueOnce(reply(401, { error: 'Token expired' })).mockResolvedValueOnce(
       reply(200, {
@@ -100,6 +99,7 @@ function dropsRefreshReplacedByCallback(): void {
       email: 'fixture@example.com',
       status: 'active',
     });
+    expect(listener).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'old-user', refreshed: true }));
   });
 }
 

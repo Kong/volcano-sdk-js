@@ -96,8 +96,8 @@ export function presetsResult(value: unknown): SandboxPreset[] {
   if (!Array.isArray(data['data'])) {
     throw new TypeError('Invalid Sandbox preset catalog');
   }
-  return data['data'].map((value: unknown) => {
-    const preset = record(value);
+  return data['data'].map((entry: unknown) => {
+    const preset = record(entry);
     if (!Array.isArray(preset['regions'])) {
       throw new TypeError('Invalid Sandbox regions');
     }

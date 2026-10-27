@@ -1,6 +1,6 @@
 /** @jest-environment ./__tests__/browser-environment.cjs */
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { VolcanoAuth } from '../src/index.ts';
+import { type AuthStateCallback, VolcanoAuth } from '../src/index.ts';
 import { reply } from './auth-concurrency-fixtures.ts';
 import { NONCE, resetRedirectState, seedNonce } from './support/volcano-auth-redirect-fixtures.ts';
 
@@ -99,7 +99,7 @@ function adoptsPreservedFragmentsOnce(): void {
     window.location.hash = `#access_token=hash-access&refresh_token=hash-refresh&state=${NONCE}&app_view=billing`;
     const v = new VolcanoAuth({ apiUrl: 'https://api.test.com', anonKey: 'ak-test-key' });
 
-    const callback = jest.fn();
+    const callback = jest.fn<AuthStateCallback>();
     v.auth.onAuthStateChange(callback);
     // ignore the initial emission on subscribe
     callback.mockClear();

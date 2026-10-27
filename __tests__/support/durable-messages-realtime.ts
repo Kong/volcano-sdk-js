@@ -91,6 +91,7 @@ export async function until(condition: () => boolean): Promise<void> {
     if (condition()) {
       return;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Polls once per event-loop turn; the next check must follow this turn.
     await settled();
   }
   throw new Error('condition not reached');

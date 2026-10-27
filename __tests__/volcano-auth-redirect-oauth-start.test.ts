@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from '@jest/globals';
 import { VolcanoAuth } from '../src/index.ts';
 import { testAccessToken } from './auth-token-fixtures.ts';
+import { expectPresent } from './support/assertions.ts';
 
 function startsHostedAuth(): void {
   it('generates a random state nonce and stores it without a redirect URL by default', () => {
@@ -52,11 +53,13 @@ function startsOAuthSignIn(): void {
     const nonce = parsed.searchParams.get('client_state');
     expect(nonce).toBeTruthy();
     expect(parsed.searchParams.get('response_mode')).toBe('code');
-    expect(new URL(transportRedirectUrl ?? '').searchParams.get('vh_state')).toBe(nonce);
+    expectPresent(transportRedirectUrl);
+    expect(new URL(transportRedirectUrl).searchParams.get('vh_state')).toBe(nonce);
     expect(window.sessionStorage.getItem('volcano_auth_state')).toBe(nonce);
     const storedRedirectUrl = window.sessionStorage.getItem('volcano_auth_redirect_url');
     expect(storedRedirectUrl).toBeTruthy();
-    expect(new URL(storedRedirectUrl ?? '').searchParams.get('vh_state')).toBeNull();
+    expectPresent(storedRedirectUrl);
+    expect(new URL(storedRedirectUrl).searchParams.get('vh_state')).toBeNull();
   });
 }
 
@@ -69,7 +72,8 @@ function guardsOAuthRedirects(): void {
     const parsed = new URL(oauthUrl);
     const nonce = parsed.searchParams.get('client_state');
 
-    expect(parsed.searchParams.get('redirect_url')).toBe(`${redirectTo}&vh_state=${nonce ?? ''}`);
+    expectPresent(nonce);
+    expect(parsed.searchParams.get('redirect_url')).toBe(`${redirectTo}&vh_state=${nonce}`);
     expect(window.sessionStorage.getItem('volcano_auth_redirect_url')).toBe(redirectTo);
   });
 

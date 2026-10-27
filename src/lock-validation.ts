@@ -1,4 +1,5 @@
-const MAX_LOCK_TTL_SECONDS = 7_776_000; // 90 days
+// 90 days
+const MAX_LOCK_TTL_SECONDS = 7_776_000;
 
 export function validateLockOptions(key: unknown, options: unknown): number {
   validateLockKey(key);
@@ -14,7 +15,7 @@ function validTtl(ttl: unknown): ttl is number {
 }
 
 export function validateLockKey(key: unknown): void {
-  if (typeof key !== 'string' || !/^[a-z0-9][\w.:-]{0,127}$/i.test(key)) {
+  if (typeof key !== 'string' || !/^[A-Za-z0-9][\w.:-]{0,127}$/u.test(key)) {
     throw new TypeError('lock key must match ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
   }
 }

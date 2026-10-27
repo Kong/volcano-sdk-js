@@ -13,8 +13,8 @@ test('invalid function names fail before resolving or sending', async () => {
   const resolve = jest.spyOn(host, '_resolveFunctionIdByName');
   const fetch = jest.spyOn(globalThis, 'fetch');
 
-  for (const name of ['', null, 0]) {
-    const result = await invokeFunction(host, name);
+  const results = await Promise.all(['', null, 0].map((name) => invokeFunction(host, name)));
+  for (const result of results) {
     expect(result).toMatchObject({
       data: null,
       status: null,
@@ -164,16 +164,24 @@ test('a payload that throws while serializing fails before any request', async (
   const { host } = hostFixture();
   const fetch = jest.spyOn(globalThis, 'fetch');
 
-  for (const reason of [new Error('broken payload'), foreignError('foreign serialization failure')]) {
-    const payload = {
-      toJSON(): never {
-        throw reason;
-      },
-    };
-    const result = await invokeFunction(host, 'orders', payload);
+  const failures = [
+    { reason: new Error('broken payload'), message: 'broken payload' },
+    { reason: foreignError('foreign serialization failure'), message: 'Invalid function payload' },
+  ];
+  const outcomes = await Promise.all(
+    failures.map(async ({ reason, message }) => {
+      const payload = {
+        toJSON(): never {
+          throw reason;
+        },
+      };
+      return { reason, message, result: await invokeFunction(host, 'orders', payload) };
+    }),
+  );
+  for (const { reason, message, result } of outcomes) {
     expect(result.data).toBeNull();
     expect(result.error).toBeInstanceOf(VolcanoSystemError);
-    expect(result.error?.message).toBe(reason instanceof Error ? reason.message : 'Invalid function payload');
+    expect(result.error?.message).toBe(message);
     expect(result.error?.cause).toBe(reason);
   }
   expect(fetch).not.toHaveBeenCalled();

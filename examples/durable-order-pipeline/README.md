@@ -11,13 +11,15 @@ machine. Here it is four lines in the middle of the handler.
 
 ## What's in it
 
-| File                                        | What it is                                                                       |
-| ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `volcano/functions/order-pipeline/index.js` | The durable function: the workflow, and where each operation is checkpointed.    |
-| `volcano/functions/order-pipeline/db.js`    | The work each step does, behind one object, so the handler reads as a flow.      |
-| `volcano/functions/orders-api/index.js`     | A standard function that starts executions, reports status, and records reviews. |
-| `volcano/migrations/001_orders.sql`         | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.      |
-| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`, and who can call each function.    |
+| File                                        | What it is                                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `volcano/functions/order-pipeline/index.js` | The durable function: the workflow, and where each operation is checkpointed.       |
+| `volcano/functions/order-pipeline/db.js`    | The work each step does, behind one object, so the handler reads as a flow.         |
+| `volcano/functions/orders-api/index.js`     | A standard function that starts executions, reports status, and records reviews.    |
+| `volcano/functions/orders-api/volcano.js`   | The clients `orders-api` calls Volcano with, and where it checks their keys.        |
+| `volcano/migrations/001_orders.sql`         | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.         |
+| `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`, and who can call each function.       |
+| `jsconfig.json`                             | Type-checks the functions' JavaScript against the SDK's declarations. Not deployed. |
 
 ## The pipeline
 

@@ -43,9 +43,9 @@ function isJsonValue(value: unknown): value is JsonValue {
     return true;
   }
   if (Array.isArray(value)) {
-    return value.every(isJsonValue);
+    return value.every((item) => isJsonValue(item));
   }
-  return isRecord(value) && Object.values(value).every(isJsonValue);
+  return isRecord(value) && Object.values(value).every((item) => isJsonValue(item));
 }
 
 function hasOptionalMetadata(value: Record<string, unknown>): boolean {
@@ -77,7 +77,7 @@ export function isStorageObject(value: unknown): value is StorageObject {
 }
 
 export function isStorageObjects(value: unknown): value is StorageObject[] {
-  return Array.isArray(value) && value.every(isStorageObject);
+  return Array.isArray(value) && value.every((item) => isStorageObject(item));
 }
 
 export function isBlob(value: unknown): value is Blob {

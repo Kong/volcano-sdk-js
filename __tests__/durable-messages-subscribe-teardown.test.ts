@@ -111,7 +111,7 @@ function retriesNothingAfterUnsubscribing(): void {
     const { volcano } = clientWithTransport({ listDurableMessagesFromApplication: list });
     const { data } = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
     jest.useFakeTimers({ timerLimit: 100 });
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('subscribing');
     latestSubscription().move('subscribed');
@@ -153,7 +153,7 @@ function endsWithItsChannel(): void {
       realtime,
     });
 
-    jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
     latestSubscription().move('unsubscribed');
     latestTransport().publication({ ...message(3), prev_seq: 2 });
     await settled();
@@ -171,7 +171,7 @@ function reportsOnlyServerEndings(): void {
       listDurableMessagesFromApplication: jest.fn<TransportOperation>().mockImplementation(() => listed(page([]))),
     });
     await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     latestSubscription().move('unsubscribed');
     const again = await volcano.durable.messages.subscribe(target, jest.fn(), { realtime });
@@ -192,7 +192,7 @@ function reportsOnlyServerEndings(): void {
     const subscription = await volcano.durable.messages.subscribe(target, jest.fn(), {
       realtime,
     });
-    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn());
+    const reported = jest.spyOn(console, 'error').mockImplementation(jest.fn<typeof console.error>());
 
     await subscription.data?.unsubscribe();
 

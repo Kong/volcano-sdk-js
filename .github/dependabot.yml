@@ -23,17 +23,10 @@ updates:
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
-      # TypeScript 7 ships no compiler API yet. typescript-eslint, which
-      # supports only TypeScript <6.1, @rollup/plugin-typescript, and the
-      # scripts that import `typescript` all need it. Drop this once
-      # typescript-eslint supports TypeScript 7.
+      # TypeScript 7 ships no compiler API yet. @rollup/plugin-typescript and
+      # the scripts that import `typescript` need it. Drop this once both
+      # support TypeScript 7.
       - dependency-name: 'typescript'
-        update-types:
-          - 'version-update:semver-major'
-      # eslint-plugin-unicorn 76 renames rules this config disables and adds
-      # recommended rules with ~1,100 violations. Adopt it in its own PR rather
-      # than in the grouped major bump, then drop this ignore.
-      - dependency-name: 'eslint-plugin-unicorn'
         update-types:
           - 'version-update:semver-major'
       # Tailwind CSS 4 (examples/nextjs-notes-app) needs a migration: the

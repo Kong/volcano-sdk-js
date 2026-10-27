@@ -10,10 +10,13 @@
  * invoke_url.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { VolcanoAuth, VolcanoSystemError } from '../src/index.ts';
 import { realFetch } from './setup.ts';
 import { apiServer, startServer, type TestServer } from './support/functions-http-server.ts';
+
+type Respond = Parameters<typeof startServer>[0];
+type Reply = Awaited<ReturnType<Respond>>;
 
 const FUNCTION_ID = '3cd3e058-e3ff-42a5-ae4d-650ef9b45746';
 // Signed with the project the SDK requires on a function token.
@@ -22,6 +25,7 @@ const ACCESS_TOKEN = [
   'eyJwcm9qZWN0X2lkIjoicHJvamVjdC0xMjMiLCJzdWIiOiJ1c2VyLTEifQ',
   'signature',
 ].join('.');
+const RESOLVED: Reply = [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
 let servers: TestServer[];
 
 function client(apiUrl: string) {
@@ -31,6 +35,15 @@ function client(apiUrl: string) {
 function track(server: TestServer): TestServer {
   servers.push(server);
   return server;
+}
+
+/** Answers successive requests with `replies`, in order. */
+function answersInOrder(...replies: Reply[]): Respond {
+  const respond = jest.fn<Respond>();
+  for (const reply of replies) {
+    respond.mockReturnValueOnce(reply);
+  }
+  return respond;
 }
 
 function reachesResolvedHost(): void {
@@ -47,6 +60,7 @@ function reachesResolvedHost(): void {
     const volcano = client(api.url);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each repeat must follow the cached first resolve.
       const { error, status } = await volcano.functions.invoke('my-function', { user_id: 'u-1' });
       expect(error).toBeNull();
       expect(status).toBe(200);
@@ -76,6 +90,7 @@ function sharesResolution(): void {
     const volcano = client(api.url);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each retry must follow the cached failed resolve.
       const { error } = await volcano.functions.invoke('missing-function', {});
       expect(error).toBeDefined();
     }
@@ -108,20 +123,18 @@ function sharesResolution(): void {
 
 function retriesOnlyPlatformNotFound(): void {
   it('resolves a recreated function again after a platform 404', async () => {
-    let invoked = 0;
     const api = track(
-      await startServer((target) => {
-        if (target.startsWith('/functions/resolve')) {
-          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
-        }
-        invoked += 1;
-        // The first invocation finds the cached identity gone. The platform
-        // answers without the dispatch marker, which is the only thing telling
-        // this apart from the function itself returning 404.
-        return invoked === 1
-          ? [404, { error: 'function not found' }]
-          : [200, { ok: true }, { 'X-Volcano-Function-Invoked': 'true' }];
-      }),
+      await startServer(
+        answersInOrder(
+          RESOLVED,
+          // The first invocation finds the cached identity gone. The platform
+          // answers without the dispatch marker, which is the only thing telling
+          // this apart from the function itself returning 404.
+          [404, { error: 'function not found' }],
+          RESOLVED,
+          [200, { ok: true }, { 'X-Volcano-Function-Invoked': 'true' }],
+        ),
+      ),
     );
 
     const { error, status } = await client(api.url).functions.invoke('my-function', {});
@@ -138,14 +151,14 @@ function retriesOnlyPlatformNotFound(): void {
 
   it('returns a function-authored 404 without invoking it twice', async () => {
     const api = track(
-      await startServer((target) => {
-        if (target.startsWith('/functions/resolve')) {
-          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
-        }
-        // The function ran and chose 404. Retrying would repeat whatever it did
-        // on the way to deciding that.
-        return [404, { error: 'no such record' }, { 'X-Volcano-Function-Invoked': 'true' }];
-      }),
+      await startServer(
+        answersInOrder(
+          RESOLVED,
+          // The function ran and chose 404. Retrying would repeat whatever it did
+          // on the way to deciding that.
+          [404, { error: 'no such record' }, { 'X-Volcano-Function-Invoked': 'true' }],
+        ),
+      ),
     );
 
     const { status, error } = await client(api.url).functions.invoke('my-function', {});
@@ -162,17 +175,18 @@ function separatesPlatformAndFunctionErrors(): void {
   // though the function had answered.
   it('surfaces a platform refusal as a system error', async () => {
     const api = track(
-      await startServer((target) => {
-        if (target.startsWith('/functions/resolve')) {
-          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
-        }
-        // No dispatch marker: the platform refused before the function ran.
-        return [400, { error: 'function cannot be invoked (status: failed)' }];
-      }),
+      await startServer(
+        answersInOrder(
+          RESOLVED,
+          // No dispatch marker: the platform refused before the function ran.
+          [400, { error: 'function cannot be invoked (status: failed)' }],
+        ),
+      ),
     );
 
     const { data, status, error } = await client(api.url).functions.invoke('my-function', {});
 
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
     expect(data).toBeNull();
     expect(status).toBe(400);
     expect(error).not.toBeNull();
@@ -182,17 +196,18 @@ function separatesPlatformAndFunctionErrors(): void {
 
   it('returns a function-authored error as data, not a system error', async () => {
     const api = track(
-      await startServer((target) => {
-        if (target.startsWith('/functions/resolve')) {
-          return [200, { name: 'my-function', function_id: FUNCTION_ID, cache_ttl_seconds: 300 }];
-        }
-        // The function ran and chose 400, so this is its answer.
-        return [400, { error: 'bad input' }, { 'X-Volcano-Function-Invoked': 'true' }];
-      }),
+      await startServer(
+        answersInOrder(
+          RESOLVED,
+          // The function ran and chose 400, so this is its answer.
+          [400, { error: 'bad input' }, { 'X-Volcano-Function-Invoked': 'true' }],
+        ),
+      ),
     );
 
     const { data, status, error } = await client(api.url).functions.invoke('my-function', {});
 
+    expect(api.targets()).toEqual(['/functions/resolve?name=my-function', `/functions/${FUNCTION_ID}/invoke`]);
     expect(error).toBeNull();
     expect(status).toBe(400);
     expect(data).toEqual({ error: 'bad input' });

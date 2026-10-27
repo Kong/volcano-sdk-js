@@ -1,7 +1,7 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, expect, jest, test } from '@jest/globals';
 import { AuthRefreshDiscardedError, AuthSessionChangedError, VolcanoSystemError } from '../src/errors.ts';
-import { invokeFunction } from '../src/function-invoke.ts';
+import { type FunctionInvocationHost, invokeFunction } from '../src/function-invoke.ts';
 import { foreignError, hostFixture, rejectedRefreshResult } from './support/functions-invoke-host.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
 
@@ -62,15 +62,27 @@ test('second-request transport rejection stays a system error', async () => {
 test('a rejected refresh preserves the platform response only for its own cleared session', async () => {
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 401 }));
   const cases = [
-    { name: 'owned clear', cleared: true, owner: true, generation: 2, preserve: true },
-    { name: 'no clear', cleared: false, owner: true, generation: 2, preserve: false },
-    { name: 'other owner', cleared: true, owner: false, generation: 2, preserve: false },
-    { name: 'other generation', cleared: true, owner: true, generation: 3, preserve: false },
+    { name: 'owned clear', cleared: true, owner: true, generation: 2, error: VolcanoSystemError, status: 401 },
+    { name: 'no clear', cleared: false, owner: true, generation: 2, error: AuthSessionChangedError, status: 409 },
+    { name: 'other owner', cleared: true, owner: false, generation: 2, error: AuthSessionChangedError, status: 409 },
+    {
+      name: 'other generation',
+      cleared: true,
+      owner: true,
+      generation: 3,
+      error: AuthSessionChangedError,
+      status: 409,
+    },
   ];
-  for (const scenario of cases) {
-    const result = await rejectedRefreshResult(scenario.cleared, scenario.owner, scenario.generation);
-    expect(result.error).toBeInstanceOf(scenario.preserve ? VolcanoSystemError : AuthSessionChangedError);
-    expect(result.status).toBe(scenario.preserve ? 401 : 409);
+  const outcomes = await Promise.all(
+    cases.map(async (scenario) => ({
+      scenario,
+      result: await rejectedRefreshResult(scenario.cleared, scenario.owner, scenario.generation),
+    })),
+  );
+  for (const { scenario, result } of outcomes) {
+    expect(result.error).toBeInstanceOf(scenario.error);
+    expect(result.status).toBe(scenario.status);
   }
 });
 
@@ -93,17 +105,15 @@ test('a stale 404 clears the trimmed cache key and re-resolves once', async () =
 test('foreign re-resolution failure after a stale 404 keeps the fallback error', async () => {
   const { host } = hostFixture();
   jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
-  let attempts = 0;
-  host._resolveFunctionIdByName = () => {
-    attempts += 1;
-    return attempts === 1
-      ? Promise.resolve({ functionId: 'fn-1', invokeUrl: null, token: 'user-token' })
-      : rejectWithForeignValue('resolution unavailable');
-  };
+  const resolve = jest
+    .fn<FunctionInvocationHost['_resolveFunctionIdByName']>()
+    .mockResolvedValueOnce({ functionId: 'fn-1', invokeUrl: null, token: 'user-token' })
+    .mockImplementationOnce(() => rejectWithForeignValue('resolution unavailable'));
+  host._resolveFunctionIdByName = resolve;
 
   const result = await invokeFunction(host, 'orders');
   expect(result.error?.message).toBe('Failed to resolve function');
-  expect(attempts).toBe(2);
+  expect(resolve).toHaveBeenCalledTimes(2);
 });
 
 test('foreign resolution and URL failures receive stable operation errors', async () => {

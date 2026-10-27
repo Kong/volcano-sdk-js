@@ -1,4 +1,5 @@
 import { getHeaderValue, type HeaderResponse } from './response-headers.ts';
+import { retryAfterSeconds } from './volcano-fetch.ts';
 
 type RequestError = Error & {
   status: number;
@@ -24,7 +25,7 @@ export function apiRequestError(
   if (code !== undefined) {
     error.code = code;
   }
-  const retrySeconds = retryAfterSeconds(response);
+  const retrySeconds = retryAfterSeconds(getHeaderValue(response, 'retry-after'));
   if (retrySeconds !== undefined) {
     error.retryAfter = retrySeconds;
   }
@@ -41,15 +42,6 @@ function stringField(data: unknown, key: string): string | undefined {
   }
   const value = data[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function retryAfterSeconds(response: HeaderResponse): number | undefined {
-  const header = getHeaderValue(response, 'retry-after');
-  if (typeof header !== 'string') {
-    return undefined;
-  }
-  const seconds = Number.parseInt(header, 10);
-  return Number.isFinite(seconds) ? seconds : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -97,14 +97,16 @@ function validatesNamesBeforeStarting(): void {
   test('refuses a missing function name before reaching the platform', async () => {
     const { volcano, transport } = clientWithTransport();
 
-    for (const name of ['', '   ', undefined, 42]) {
-      const result: unknown = Reflect.apply(volcano.durable.start.bind(volcano.durable), undefined, [name]);
-      await expect(result).resolves.toMatchObject({
-        data: null,
-        status: null,
-        error: { message: expect.stringContaining('functionName must be a non-empty string') },
-      });
-    }
+    await Promise.all(
+      ['', '   ', undefined, 42].map((name) => {
+        const result: unknown = Reflect.apply(volcano.durable.start.bind(volcano.durable), undefined, [name]);
+        return expect(result).resolves.toMatchObject({
+          data: null,
+          status: null,
+          error: { message: expect.stringContaining('functionName must be a non-empty string') },
+        });
+      }),
+    );
     expect(transport.startDurableExecutionFromApplication).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 /** @jest-environment ./__tests__/node-environment.cjs */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { expectInstanceOf } from './support/assertions.ts';
 import {
   bodyAt,
   callbackCalls,
@@ -83,9 +84,7 @@ function forwardsTheOptions(): void {
     const { config } = onlyCallbackCall();
     expect(config['timeout']).toEqual({ hours: 48 });
     const retryStrategy = config['retryStrategy'];
-    if (typeof retryStrategy !== 'function') {
-      throw new TypeError('Expected a retry strategy');
-    }
+    expectInstanceOf(retryStrategy, Function);
     expect(Reflect.apply(retryStrategy, undefined, [new Error('refused'), 1])).toEqual({
       shouldRetry: false,
     });
@@ -153,12 +152,8 @@ function measuresTheRequest(): void {
 
 function sendsTheDetails(): void {
   it('sends the details it checked', async () => {
-    let serialized = 0;
     const details = {
-      toJSON() {
-        serialized += 1;
-        return serialized === 1 ? { total: 1250 } : 'x'.repeat(70_000);
-      },
+      toJSON: jest.fn<() => unknown>().mockReturnValueOnce({ total: 1250 }).mockReturnValue('x'.repeat(70_000)),
     };
 
     await run((_input, ctx) => ctx.waitForApproval('ship-order', { title: 'Ship?', details }));

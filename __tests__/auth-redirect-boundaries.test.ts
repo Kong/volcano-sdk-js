@@ -44,13 +44,13 @@ function host(): OAuthRedirectHost {
     _hasSessionInUrl: jest.fn(() => true),
     _takeAuthState: jest.fn(() => 'nonce'),
     _takeAuthRedirectURL: jest.fn(() => null),
-    _replaceSessionFromUrl: jest.fn(),
-    _stripAuthHashFromUrl: jest.fn(),
-    _setStorageItem: jest.fn(),
-    _removeStorageItem: jest.fn(),
+    _replaceSessionFromUrl: jest.fn<OAuthRedirectHost['_replaceSessionFromUrl']>(),
+    _stripAuthHashFromUrl: jest.fn<OAuthRedirectHost['_stripAuthHashFromUrl']>(),
+    _setStorageItem: jest.fn<OAuthRedirectHost['_setStorageItem']>(),
+    _removeStorageItem: jest.fn<OAuthRedirectHost['_removeStorageItem']>(),
     _oauthExchangeError: null,
     _oauthExchangePromise: null,
-    _stripOAuthQueryFromUrl: jest.fn(),
+    _stripOAuthQueryFromUrl: jest.fn<OAuthRedirectHost['_stripOAuthQueryFromUrl']>(),
     _anonFetch: jest.fn(() => Promise.resolve({ ok: true, data: session, error: null })),
     _setSession: jest.fn(() => true),
   };
@@ -97,15 +97,14 @@ test('fragment handoff rejects a missing state without adopting tokens', () => {
 });
 
 test.each([
-  { expected: null, state: null },
-  { expected: null, state: 'nonce' },
-  { expected: '', state: '' },
-  { expected: 'nonce', state: 'other' },
-])('fragment handoff rejects state $state against stored $expected', ({ expected, state }) => {
+  { expected: null, state: null, hash: '#access_token=token' },
+  { expected: null, state: 'nonce', hash: '#access_token=token&state=nonce' },
+  { expected: '', state: '', hash: '#access_token=token&state=' },
+  { expected: 'nonce', state: 'other', hash: '#access_token=token&state=other' },
+])('fragment handoff rejects state $state against stored $expected', ({ expected, hash }) => {
   const client = host();
   client._takeAuthState = jest.fn(() => expected);
-  const stateQuery = state === null ? '' : `&state=${state}`;
-  setWindow({ hash: `#access_token=token${stateQuery}` });
+  setWindow({ hash });
 
   expect(consumeSessionFromUrl(client)).toBe(false);
   expect(client._urlSessionConsumed).toBe(true);
@@ -256,11 +255,11 @@ test('complete exchange ignores no pending work and retains a replacement promis
 
 test.each([new Error('exchange failed'), new TypeError('exchange failed')])(
   'complete exchange captures a rejected callback: %p',
-  async (error) => {
+  async (reason) => {
     const client = host();
-    client._oauthExchangePromise = Promise.reject(error);
+    client._oauthExchangePromise = Promise.reject(reason);
     await completeOAuthExchange(client);
-    expect(client._oauthExchangeError).toEqual(error);
+    expect(client._oauthExchangeError).toEqual(reason);
     expect(client._oauthExchangePromise).toBeNull();
   },
 );

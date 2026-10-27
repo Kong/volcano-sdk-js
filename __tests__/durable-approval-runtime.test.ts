@@ -2,6 +2,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { durable } from '../src/durable.ts';
 import type { DurableHandler } from '../src/durable-types.ts';
+import { expectInstanceOf } from './support/assertions.ts';
 import { settledRun } from './support/settled-run.ts';
 
 // The durable-approval tests stand a double in for the runtime. These run the
@@ -175,7 +176,8 @@ function reportsTheExecution(): void {
       try {
         return await ctx.waitForApproval('ship-order', { title: 'Ship order 42?' });
       } catch (error) {
-        return error instanceof Error ? { name: error.name, message: error.message } : error;
+        expectInstanceOf(error, Error);
+        return { name: error.name, message: error.message };
       }
     });
 

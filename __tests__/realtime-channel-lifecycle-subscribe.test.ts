@@ -2,6 +2,7 @@ import { activateChannelSubscription, subscribeChannel } from '../src/realtime-c
 import { deferredVoid } from './realtime-transport-fixtures.ts';
 import { State } from './support/realtime-channel-lifecycle-state.ts';
 import { Subscription } from './support/realtime-channel-lifecycle-subscription.ts';
+import { expectPresent } from './support/assertions.ts';
 
 test('rejects subscription before the realtime client connects', async () => {
   const state = new State();
@@ -12,14 +13,23 @@ test('rejects subscription before the realtime client connects', async () => {
 test('retains and resumes broadcast subscriptions and event listeners', async () => {
   const state = new State();
   const client = state.client;
-  expect(client).not.toBeNull();
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   const received: unknown[] = [];
-  state._callbacks.set('message', [(data) => received.push(data)]);
-  state._callbacks.set('custom', [(data) => received.push(data)]);
-  state._callbacks.set('*', [(data) => received.push(data)]);
+  state._callbacks.set('message', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
+  state._callbacks.set('custom', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
+  state._callbacks.set('*', [
+    (data) => {
+      received.push(data);
+    },
+  ]);
   await subscribeChannel(state);
   expect(client.created).toEqual([{ name: 'broadcast:room', joinLeave: false }]);
   expect(client.subscription.readyTimeouts).toEqual([10_000]);
@@ -49,17 +59,17 @@ test('retains and resumes broadcast subscriptions and event listeners', async ()
 test('subscribes with the channel data and reports each state of the current subscription', async () => {
   const state = new State();
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   state._name = 'durable:execution';
   state._type = 'durable';
   state._subscribeData = { client_token: 'token' };
   const states: string[] = [];
-  state._onSubscriptionState = (newState) => states.push(newState);
+  state._onSubscriptionState = (newState) => {
+    states.push(newState);
+  };
   await subscribeChannel(state);
   expect(client.created).toEqual([{ name: 'durable:execution', joinLeave: false, data: { client_token: 'token' } }]);
-  expect(Object.keys(client.created[0] ?? {})).toEqual(['name', 'joinLeave', 'data']);
+  expect(client.created.map((created) => Object.keys(created))).toEqual([['name', 'joinLeave', 'data']]);
   await client.subscription.emit('state', { newState: 'subscribing' });
   await client.subscription.emit('state', { newState: 'subscribed' });
   await client.subscription.emit('state', { newState: 7 });
@@ -74,12 +84,10 @@ test('subscribes with the channel data and reports each state of the current sub
 test('subscribes without data when the channel has none', async () => {
   const state = new State();
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   await subscribeChannel(state);
   await client.subscription.emit('state', { newState: 'subscribed' });
-  expect(Object.keys(client.created[0] ?? {})).toEqual(['name', 'joinLeave']);
+  expect(client.created.map((created) => Object.keys(created))).toEqual([['name', 'joinLeave']]);
 });
 
 test('listeners registered during delivery receive only subsequent publications', async () => {
@@ -96,9 +104,7 @@ test('listeners registered during delivery receive only subsequent publications'
   state._callbacks.set('message', callbacks);
   await subscribeChannel(state);
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   await client.subscription.emit('publication', { data: { text: 'first' } });
   expect(received).toEqual(['first']);
   await client.subscription.emit('publication', { data: { text: 'second' } });
@@ -108,9 +114,7 @@ test('listeners registered during delivery receive only subsequent publications'
 test('pauses a failed subscription but preserves the rejection and retained transport', async () => {
   const state = new State();
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   const failure = new Error('denied');
   client.subscription.readyResult = Promise.reject(failure);
   await expect(subscribeChannel(state)).rejects.toBe(failure);
@@ -125,9 +129,7 @@ test('pauses a failed subscription but preserves the rejection and retained tran
 test('stale readiness cannot pause a newer lifecycle', async () => {
   const state = new State();
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   const waiting = deferredVoid();
   client.subscription.readyResult = waiting.promise;
   const first = subscribeChannel(state);
@@ -143,9 +145,7 @@ test('stale readiness cannot pause a newer lifecycle', async () => {
 test('rejects readiness from a removed subscription', async () => {
   const state = new State();
   const client = state.client;
-  if (client === null) {
-    throw new Error('client missing');
-  }
+  expectPresent(client);
   const waiting = deferredVoid();
   client.subscription.readyResult = waiting.promise;
   const first = subscribeChannel(state);
