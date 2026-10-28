@@ -99,8 +99,10 @@ which also runs daily, runs `pnpm test:fresh-install`:
 4. Jest runs the suite with `scripts/fresh-install-resolver.cts` as its resolver.
    It resolves every import of a runtime package from the consumer install, so
    their own dependencies resolve there too, while Jest, Babel and the durable
-   test runner stay at the lockfile. The check fails unless Jest loaded each
-   runtime package from that install.
+   test runner stay at the lockfile. The check fails unless Jest resolved each
+   runtime package from that install. A mocked import also counts, so the
+   suite's tests that load the real `centrifuge`, `ws` and durable runtime are
+   what exercise them.
 
 `pnpm update` cannot reproduce a consumer's resolution: it keeps the locked
 dependencies of any package whose own version does not change, which left an

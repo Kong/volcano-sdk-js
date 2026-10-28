@@ -135,7 +135,7 @@ const durableSmoke = `  let invocations = 0;
   }
   console.log('durable execution replayed through the installed runtime');`;
 
-function requireJestLoadedFreshInstall(directory: string, log: string, packages: readonly string[]): string[] {
+function requireJestResolvedFreshInstall(directory: string, log: string, packages: readonly string[]): string[] {
   const loaded = readFileSync(log, 'utf8')
     .split('\n')
     .filter(Boolean)
@@ -145,7 +145,7 @@ function requireJestLoadedFreshInstall(directory: string, log: string, packages:
     assert.ok(installed !== undefined, `The fresh install has no ${name}`);
     assert.ok(
       loaded.some((path) => path.startsWith(`${installed.directory}${sep}`)),
-      `Jest never loaded ${name} from the fresh install`,
+      `Jest never resolved ${name} from the fresh install`,
     );
     return `${name} ${installed.version}`;
   });
@@ -234,8 +234,8 @@ try {
     },
   );
   assert.equal(jest.status, 0, 'Jest failed against the fresh install');
-  const loaded = requireJestLoadedFreshInstall(directory, log, packages);
-  process.stdout.write(`Jest ran against the fresh install's ${loaded.join(', ')}.\n`);
+  const loaded = requireJestResolvedFreshInstall(directory, log, packages);
+  process.stdout.write(`Jest resolved the fresh install's ${loaded.join(', ')}.\n`);
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }
