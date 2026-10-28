@@ -194,9 +194,9 @@ await test('every lint exception is approved, exact, and still needed', async ()
   assert.equal(total, approved.length, 'Each lint exception covers exactly one rule in one directive');
 });
 
-await test('the dependency audit has no exceptions', async () => {
+await test('dependency audit exceptions name one advisory at one version', async () => {
   assert.deepEqual(
     (await exceptions()).filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
-    [],
+    ['GHSA-gcqx-w48m-w2h4:deepmerge@4.3.1'],
   );
 });

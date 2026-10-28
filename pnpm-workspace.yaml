@@ -17,7 +17,7 @@ overrides:
   # Generator dependencies pin older vulnerable js-yaml 4 releases.
   'js-yaml@>=4.0.0 <4.3.2': ^4.3.2
   # Stryker's HTTP client resolves a qs release with DoS advisories.
-  'typed-rest-client>qs': 6.16.0
+  'typed-rest-client>qs': 6.16.1
   # Patch URI parsing and Markdown denial-of-service advisories in tooling.
   'fast-uri@>=3.0.0 <3.1.9': ^3.1.9
   # Orval's spec loader resolves an undici release with fetch advisories.
