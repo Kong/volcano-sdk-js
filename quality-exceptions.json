@@ -268,5 +268,11 @@
     "scope": "examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder",
     "rationale": "Order items are inserted one at a time so the first failed insert stops the order there, and the items after it are never written.",
     "evidence": "Inserting them concurrently would write every valid item before the failure surfaced, leaving more orphaned order_items rows behind a request that still fails, and would send one request per item at once."
+  },
+  {
+    "rule": "pnpm audit",
+    "scope": "GHSA-gcqx-w48m-w2h4:deepmerge@4.3.1",
+    "rationale": "deepmerge 4.3.1 is the latest release and has no fix. It is reached only through Jest (jest-config), which merges this repository's own Jest configuration: config defaults with overrides, and a preset's globals. No caller input reaches it, and the SDK package does not depend on it.",
+    "evidence": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4 lists no patched version; npm lists 4.3.1 as latest. jest-config 30.5.2 calls deepmerge only in mergeConfig and for preset globals. Approved by Marco Palladino on 2026-10-28. Remove this entry when deepmerge publishes a fix; the audit fails while it names an advisory pnpm no longer reports."
   }
 ]
