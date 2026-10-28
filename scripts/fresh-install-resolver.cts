@@ -1,10 +1,11 @@
 import { appendFileSync } from 'node:fs';
+import { sep } from 'node:path';
 
-// Jest resolver for `pnpm test:fresh-install`. Every import of a runtime
-// package, from the SDK, its tests or the durable runner, resolves inside the
-// consumer install, so the durable runner and the SDK share one runtime
-// instance. Their dependencies then resolve within that tree. Everything else
-// resolves from the workspace at pnpm-lock.yaml.
+// Jest resolver for `pnpm test:fresh-install`. An import of a runtime package
+// from the SDK, its tests or the durable runner resolves from the consumer
+// install's root, so the durable runner and the SDK share one runtime instance.
+// Imports inside the consumer install resolve as Node would, nested copies
+// included. Everything else resolves from the workspace at pnpm-lock.yaml.
 interface ResolverOptions {
   basedir: string;
   defaultResolver(path: string, options: ResolverOptions): string;
@@ -25,7 +26,10 @@ const entries: readonly unknown[] = Array.isArray(parsed) ? parsed : [];
 const packages = entries.filter((name): name is string => typeof name === 'string');
 
 function resolveFromFreshInstall(request: string, options: ResolverOptions): string {
-  if (!packages.some((name) => request === name || request.startsWith(`${name}/`))) {
+  if (
+    options.basedir.startsWith(`${directory}${sep}`) ||
+    !packages.some((name) => request === name || request.startsWith(`${name}/`))
+  ) {
     return options.defaultResolver(request, options);
   }
   const path = options.defaultResolver(request, { ...options, basedir: directory });
