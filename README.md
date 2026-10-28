@@ -92,6 +92,10 @@ Installing `@volcano.dev/sdk` pulls in two packages, both for realtime:
 | [`centrifuge`](https://www.npmjs.com/package/centrifuge) | The realtime protocol client                                         |
 | [`ws`](https://www.npmjs.com/package/ws)                 | WebSocket transport outside the browser, loaded only when it is used |
 
+The SDK pins `centrifuge` to the exact release it is tested with, because its
+protocol behavior is part of the SDK's realtime behavior. `ws` accepts any later
+8.x release, so your application can share one copy and take its security fixes.
+
 Writing a [durable function](./docs/durable-functions.md) needs one more, and
 you do not install it: Volcano adds it when it builds a function deployed as
 durable.

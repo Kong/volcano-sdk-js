@@ -20,6 +20,7 @@ Thanks for your interest in improving the Volcano JavaScript SDK.
 | Check public types              | `pnpm test:types`                |
 | Build the package               | `pnpm build`                     |
 | Check packed metadata and types | `pnpm test:package`              |
+| Test a fresh consumer install   | `pnpm test:fresh-install`        |
 
 The SDK repository keeps its local workflow focused on client behavior,
 packaging, and documentation. Server-backed end-to-end coverage lives with the
@@ -32,6 +33,12 @@ and bundler resolution through the package export map. Legacy Node 10 resolution
 is outside the SDK's Node 22+ support; no diagnostic rules or entrypoints are ignored.
 `pnpm test:quickstart` also installs that tarball in an isolated consumer and
 checks realtime imports and the documented quickstart.
+
+`pnpm test:fresh-install` installs the tarball with npm and no lockfile, as a
+consumer does, so each published range resolves to its newest release. It
+prints how those releases differ from `pnpm-lock.yaml`, drives realtime and
+durable through the installed package, and runs Jest against them. CI runs it on
+every change and daily. See [the quality policy](maintainers/quality-policy.md#fresh-install-resolution).
 
 Hosting owns live acceptance under `tests/sdk-contract`. It builds and installs
 this SDK as a customer would during Staging Validation.

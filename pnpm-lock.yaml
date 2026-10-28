@@ -23,10 +23,10 @@ importers:
   .:
     dependencies:
       centrifuge:
-        specifier: ^5.7.4
+        specifier: 5.8.0
         version: 5.8.0
       ws:
-        specifier: ^8.21.3
+        specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
       '@arethetypeswrong/cli':

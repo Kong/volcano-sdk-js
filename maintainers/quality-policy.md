@@ -77,6 +77,42 @@ one advisory and its count. pnpm's `auditConfig.ignoreGhsas` cannot do this: it
 hides the advisory but keeps it in the severity counts. The audit fails while an
 approval names an advisory pnpm no longer reports, so remove it once a fix ships.
 
+## Fresh-install resolution
+
+`pnpm-lock.yaml` fixes what every other check installs, but a consumer resolves
+the published `dependencies` and the durable peer range afresh. A new release
+inside those ranges reaches them before it reaches CI. The `fresh-install` job,
+which also runs daily, runs `pnpm test:fresh-install`:
+
+1. npm installs the packed tarball into an empty directory with no lockfile,
+   with each optional peer at its newest allowed release. It omits
+   `--legacy-peer-deps`, so npm validates peer ranges.
+2. The check fails if an exactly pinned dependency loads at another version. It
+   prints each runtime package next to its lock version, in the log and the job
+   summary, and warns when they differ. Type declarations are left out because
+   they never load.
+3. As ESM and CommonJS, the installed package connects, subscribes, receives and
+   publishes against a local server speaking the realtime JSON protocol, and
+   runs a durable execution through the runtime's local runner. Both load their
+   dependencies lazily, so this is what loads `centrifuge`, `ws` and the durable
+   runtime.
+4. Jest runs the suite with `scripts/fresh-install-resolver.cts` as its resolver.
+   It resolves every import of a runtime package from the consumer install, so
+   their own dependencies resolve there too, while Jest, Babel and the durable
+   test runner stay at the lockfile. The check fails unless Jest loaded each
+   runtime package from that install.
+
+`pnpm update` cannot reproduce a consumer's resolution: it keeps the locked
+dependencies of any package whose own version does not change, which left an
+older `@smithy/core` than a fresh install loads. Jest's
+[`resolver`](https://jestjs.io/docs/configuration#resolver-string) option is
+the native hook for choosing where modules resolve.
+
+`pnpm quality` leaves this check out because its result depends on the registry
+at run time, not on the commit. When it fails, a release inside a published range
+breaks the SDK: fix the SDK, or cap the range below that release with a comment,
+and release the change as `fix(deps)`.
+
 ## Protecting the task graph
 
 A valid task can silently stop enforcing quality if its command becomes
