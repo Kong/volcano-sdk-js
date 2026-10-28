@@ -53,17 +53,15 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [2.2.0](https://github.com/Kong/volcano-sdk-js/compare/v2.1.0...v2.2.0) (2026-10-28)
 
-
 ### Features
 
-* **durable:** wait for callbacks with ctx.waitForCallback ([#332](https://github.com/Kong/volcano-sdk-js/issues/332)) ([e63879e](https://github.com/Kong/volcano-sdk-js/commit/e63879efcf461660e4898eead7cf466d527281e6))
-
+- **durable:** wait for callbacks with ctx.waitForCallback ([#332](https://github.com/Kong/volcano-sdk-js/issues/332)) ([e63879e](https://github.com/Kong/volcano-sdk-js/commit/e63879efcf461660e4898eead7cf466d527281e6))
 
 ### Bug Fixes
 
-* **deps:** bump next to 16.4.2 in the Next.js example ([#335](https://github.com/Kong/volcano-sdk-js/issues/335)) ([e9dc770](https://github.com/Kong/volcano-sdk-js/commit/e9dc770098754469aa0ba2530d80045441a74111))
-* **deps:** clear the qs and deepmerge advisories in tooling ([#354](https://github.com/Kong/volcano-sdk-js/issues/354)) ([cb2dbfd](https://github.com/Kong/volcano-sdk-js/commit/cb2dbfdea4d7554d54228f6b386bf371ca6335cf))
-* **deps:** patch undici, fast-uri, and zod advisories in tooling ([#341](https://github.com/Kong/volcano-sdk-js/issues/341)) ([4f75dfa](https://github.com/Kong/volcano-sdk-js/commit/4f75dfa265ad924f650ae61e97a5553dcd563156))
+- **deps:** bump next to 16.4.2 in the Next.js example ([#335](https://github.com/Kong/volcano-sdk-js/issues/335)) ([e9dc770](https://github.com/Kong/volcano-sdk-js/commit/e9dc770098754469aa0ba2530d80045441a74111))
+- **deps:** clear the qs and deepmerge advisories in tooling ([#354](https://github.com/Kong/volcano-sdk-js/issues/354)) ([cb2dbfd](https://github.com/Kong/volcano-sdk-js/commit/cb2dbfdea4d7554d54228f6b386bf371ca6335cf))
+- **deps:** patch undici, fast-uri, and zod advisories in tooling ([#341](https://github.com/Kong/volcano-sdk-js/issues/341)) ([4f75dfa](https://github.com/Kong/volcano-sdk-js/commit/4f75dfa265ad924f650ae61e97a5553dcd563156))
 
 ## [2.1.0](https://github.com/Kong/volcano-sdk-js/compare/v2.0.1...v2.1.0) (2026-10-16)
 
