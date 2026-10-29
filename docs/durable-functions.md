@@ -5,7 +5,7 @@ description: 'Write functions that checkpoint their progress and resume where th
 
 A durable function records its progress as it runs. When it suspends on a wait, or an attempt crashes, it resumes from the last completed operation instead of starting over — so one execution can run for up to a year, far longer than a single invocation is allowed.
 
-`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. Following an execution afterwards — `get`, `list`, `stop` — and deciding the [approvals](#ctxwaitforapprovalname-options) it asks for are owner-scoped, so they belong on your backend, the [CLI](/cli/durable-functions), or the dashboard. [Messages](#sending-and-reading-messages) are the exception: an app sends them to an execution, and reads what it publishes, with the credential it already holds.
+`@volcano.dev/sdk/durable` is what you write that function against, and `volcano.durable.start` is how an app starts one. The app then [reads and stops](#reading-and-stopping-from-the-application) the executions it started, and [messages](#sending-and-reading-messages) them, with the credential it already holds. Listing executions, following any of them by project, and deciding the [approvals](#ctxwaitforapprovalname-options) they ask for are owner-scoped, so they belong on your backend, the [CLI](/cli/durable-functions), or the dashboard.
 
 ```javascript
 const { durable } = require('@volcano.dev/sdk/durable');
@@ -736,7 +736,7 @@ if (error || !data) {
   throw error ?? new Error('Durable start returned no execution');
 }
 console.log(data.id, data.status); // 'running'
-console.log(data.client_token); // lets a browser reach this execution's messages
+console.log(data.client_token); // lets a browser read, stop, and message this execution
 ```
 
 The execution name is the idempotency key: starting again under the same name
@@ -757,12 +757,48 @@ for a project with too many executions in flight for its plan or out of either
 durable allowance, and `503` where durable execution is unavailable. `409` is
 the one to expect right after a deploy: retry once the function is `active`.
 
-Besides [sending and reading messages](#sending-and-reading-messages), starting
-is the only durable operation an application credential can perform. Reading an
-execution, listing them and stopping one are owner-scoped. Use a
-separate backend client with the project owner's platform user token or a
-project access token; a `read_only` token can read and list but not stop.
-Auth-user sessions, anon keys, and service keys are not accepted.
+### Reading and stopping from the application
+
+`getFromApplication` and `stopFromApplication` follow an execution with the
+credential that started it. An anon key, or a signed-in user who did not start
+the execution, also passes the `clientToken` its start returned:
+
+```javascript
+const { data, error } = await volcano.durable.getFromApplication('order-pipeline', execution.id, {
+  clientToken: execution.client_token,
+});
+
+if (!error && data?.status === 'succeeded') {
+  console.log(data.result); // what the function returned
+}
+
+// Asks for the execution to stop; completed steps are not undone.
+await volcano.durable.stopFromApplication('order-pipeline', execution.id, {
+  clientToken: execution.client_token,
+});
+```
+
+| Credential               | Reaches                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- |
+| Service key              | Any execution of the project                                                |
+| Signed-in user's session | Executions that user started, and any execution whose client token it sends |
+| Anon key                 | Only executions whose client token it sends                                 |
+
+The function's
+[visibility](/platform/functions/durable-functions#who-can-start-executions)
+has to admit the caller too, as it does for a start. While an execution is
+still `pending`, only a service key reaches it, and stopping it answers `409`.
+An execution the caller cannot reach answers `404`, like one that does not
+exist, and a read never returns `client_token`. Reads and stops count against
+the function's rate limit with starts, so poll every few seconds rather than in
+a tight loop.
+
+### Following executions by project
+
+Listing executions, and reading or stopping one without a client token, are
+owner-scoped. Use a separate backend client with the project owner's platform
+user token or a project access token; a `read_only` token can read and list but
+not stop. Auth-user sessions, anon keys, and service keys are not accepted.
 
 ```javascript
 import { VolcanoClient } from '@volcano.dev/sdk';
@@ -814,13 +850,14 @@ Listing reports the status the platform last observed rather than polling each
 execution, so read a single one for its live state. It pages one page at a
 time: raise `page` while `has_more` is true.
 
-`stop` is accepted rather than awaited. Cancellation happens behind it, so the
-execution it resolves with is the one read back after asking and often still
-says `running`; `get` is how you watch it reach `stopped`. Stopping is safe to
+`stop` and `stopFromApplication` are accepted rather than awaited.
+Cancellation happens behind them, so the execution they resolve with is the one
+read back after asking and often still says `running`; `get` or
+`getFromApplication` is how you watch it reach `stopped`. Stopping is safe to
 repeat, and one that has already finished reports the state it is in.
 
-All three answer the same `{ data, status, error }` envelope as `start`, with
-`404` for an execution or durable function this project does not have.
+Each of these answers the same `{ data, status, error }` envelope as `start`,
+with `404` for an execution or durable function this project does not have.
 
 Project IDs, function names, execution IDs and approval IDs are URL path
 segments. The SDK trims and percent-encodes each one. It refuses one that is

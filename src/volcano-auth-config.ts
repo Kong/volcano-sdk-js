@@ -8,6 +8,7 @@ import {
   getDurableApproval,
   getDurableApprovalStats,
   getDurableExecution,
+  getDurableExecutionFromApplication,
   listDurableApprovals,
   listDurableExecutions,
   listDurableMessages,
@@ -17,6 +18,7 @@ import {
   sendDurableMessageFromApplication,
   startDurableExecutionFromApplication,
   stopDurableExecution,
+  stopDurableExecutionFromApplication,
   uploadStorageObject,
 } from './generated/client.ts';
 import { isBrowser } from './next/request.ts';
@@ -37,6 +39,7 @@ export const GENERATED_TRANSPORT = {
   getDurableApproval,
   getDurableApprovalStats,
   getDurableExecution,
+  getDurableExecutionFromApplication,
   listDurableApprovals,
   listDurableExecutions,
   listDurableMessages,
@@ -47,14 +50,17 @@ export const GENERATED_TRANSPORT = {
   sendDurableMessageFromApplication,
   startDurableExecutionFromApplication,
   stopDurableExecution,
+  stopDurableExecutionFromApplication,
   uploadStorageObject,
 };
 
 type DurableTransportMethod =
   | 'startDurableExecutionFromApplication'
   | 'getDurableExecution'
+  | 'getDurableExecutionFromApplication'
   | 'listDurableExecutions'
   | 'stopDurableExecution'
+  | 'stopDurableExecutionFromApplication'
   | 'listDurableApprovals'
   | 'getDurableApprovalStats'
   | 'getDurableApproval'

@@ -32,6 +32,7 @@ const sdkOperations = new Set([
   'getDurableApproval',
   'getDurableApprovalStats',
   'getDurableExecution',
+  'getDurableExecutionFromApplication',
   'listDurableApprovals',
   'listDurableExecutions',
   'listDurableMessages',
@@ -42,6 +43,7 @@ const sdkOperations = new Set([
   'sendDurableMessageFromApplication',
   'startDurableExecutionFromApplication',
   'stopDurableExecution',
+  'stopDurableExecutionFromApplication',
   'uploadStorageObject',
 ]);
 

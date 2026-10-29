@@ -14,10 +14,10 @@ export interface Durable {
    *
    * A durable function is never invoked synchronously: it can run for up to 366 days, so
    * the platform accepts the start and answers with an execution to poll.
-   * Besides messaging an execution through `durable.messages`, starting is the
-   * only durable operation an application credential may perform — reading a
-   * result or stopping an execution needs the project owner's platform user
-   * token, so poll from your own backend or with the CLI.
+   * The start that creates the execution also returns its `client_token`; a
+   * repeat under the same name does not. Pass it to `getFromApplication`,
+   * `stopFromApplication`, and `durable.messages` so an anon key, or a user who
+   * did not start the execution, can reach it.
    *
    * @param functionName - Durable function name, or its id.
    * @param input - JSON-serializable input handed to the function.
@@ -50,12 +50,13 @@ export interface Durable {
   }>;
 
   /**
-   * Read an execution, including its `result` once it has succeeded. This is
-   * how you find out how a started execution went.
+   * Read an execution, including its `result` once it has succeeded, on the
+   * project-scoped route.
    *
    * Owner-scoped: it takes the project id and needs the project owner's
    * platform user token or a project access token. Auth-user sessions, anon
-   * keys, and service keys are rejected. Poll it from your backend, not a browser.
+   * keys, and service keys are rejected. Call it from your backend; an
+   * application reads the executions it started with `getFromApplication`.
    *
    * @example
    * ```typescript
@@ -69,6 +70,36 @@ export interface Durable {
     projectId: string,
     functionName: string,
     executionId: string,
+  ): Promise<{
+    data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+
+  /**
+   * Read an execution with the credential that started it, including its
+   * `result` once it has succeeded. Poll this to wait for an execution to finish.
+   *
+   * It uses the client's credential, as `start` does. A service key reaches any
+   * execution of the project, and a signed-in user the executions they started.
+   * An anon key, or a user who did not start it, needs `options.clientToken`:
+   * the `client_token` its start returned. An execution the caller cannot reach
+   * answers 404, like one that does not exist.
+   *
+   * @example
+   * ```typescript
+   * const { data, error } = await volcano.durable.getFromApplication('order-pipeline', execution.id, {
+   *   clientToken: execution.client_token,
+   * });
+   * if (!error && data?.status === 'succeeded') {
+   *   console.log(data.result);
+   * }
+   * ```
+   */
+  getFromApplication(
+    functionName: string,
+    executionId: string,
+    options?: { clientToken?: string },
   ): Promise<{
     data: DurableExecution | null;
     status: number | null;
@@ -101,6 +132,23 @@ export interface Durable {
     projectId: string,
     functionName: string,
     executionId: string,
+  ): Promise<{
+    data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+
+  /**
+   * Ask a running execution to stop, with the credential that started it.
+   * Reaches the same executions as `getFromApplication`, with the same
+   * `options.clientToken`. Accepted rather than awaited, like `stop`: poll
+   * `getFromApplication` to see it reach `stopped`. Only a service key reaches
+   * an execution that is still `pending`, and stopping one answers 409.
+   */
+  stopFromApplication(
+    functionName: string,
+    executionId: string,
+    options?: { clientToken?: string },
   ): Promise<{
     data: DurableExecution | null;
     status: number | null;

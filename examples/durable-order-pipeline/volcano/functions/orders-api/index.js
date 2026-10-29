@@ -1,10 +1,9 @@
 // The standard function around the durable one: it starts executions, reports
 // on them, and records a review decision.
 //
-// Nothing in the durable module starts an execution, and reading one is
-// owner-scoped, so this is where the API calls live. Keeping them here also
-// keeps the platform token out of the browser: the browser calls this function,
-// this function calls Volcano.
+// Nothing in the durable module starts an execution, so this is where the API
+// calls live. Keeping them here also keeps the service key out of the browser:
+// the browser calls this function, this function calls Volcano.
 const { client, serviceKey, starter, unwrap } = require('./volcano');
 
 /**

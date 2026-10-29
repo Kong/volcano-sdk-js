@@ -54,6 +54,36 @@ async function followDurableExecution(): Promise<unknown> {
   return { result, executions, more, status: stopped.status };
 }
 
+// The application half: the credential that started an execution reads and
+// stops it, with the client token its start returned when it needs one.
+async function followFromApplication(): Promise<unknown> {
+  const read = await durable.getFromApplication('order-pipeline', 'exec-1', { clientToken: 'ct-1' });
+  const result: DurableExecution | null = read.data;
+  await durable.getFromApplication('order-pipeline', 'exec-1');
+  const stopped = await durable.stopFromApplication('order-pipeline', 'exec-1', { clientToken: 'ct-1' });
+  // @ts-expect-error the client token is a string
+  void durable.stopFromApplication('order-pipeline', 'exec-1', { clientToken: 7 });
+  return { result, status: stopped.status };
+}
+
+// durable.getFromApplication and durable.stopFromApplication call these
+// routes, which hosting#2364 adds. A sync from a hosting main without them
+// fails here instead of dropping them.
+type ApplicationRead = OpenAPIOperations['getDurableExecutionFromApplication'];
+type ApplicationStop = OpenAPIOperations['stopDurableExecutionFromApplication'];
+type _ApplicationReadTakesTheClientToken = Assert<
+  Equal<keyof NonNullable<ApplicationRead['parameters']['header']>, 'X-Volcano-Client-Token'>
+>;
+type _ApplicationStopTakesTheClientToken = Assert<
+  Equal<keyof NonNullable<ApplicationStop['parameters']['header']>, 'X-Volcano-Client-Token'>
+>;
+type _ApplicationReadAnswersTheExecution = Assert<
+  Equal<ApplicationRead['responses'][200]['content']['application/json'], DurableExecution>
+>;
+type _ApplicationStopAnswersTheExecution = Assert<
+  Equal<ApplicationStop['responses'][200]['content']['application/json'], DurableExecution>
+>;
+
 type _DurableMessageComesOffTheWire = Assert<Equal<DurableMessage, OpenAPIComponents['schemas']['DurableMessage']>>;
 
 // ctx.waitForCallback() registers its step with POST /durable-callbacks, which
@@ -106,10 +136,15 @@ export type OpenApiDurableContractChecks = [
   _DurableMessageComesOffTheWire,
   _WaitForCallbackSendsTheRegistration,
   _WaitForCallbackReadsItsToken,
+  _ApplicationReadTakesTheClientToken,
+  _ApplicationStopTakesTheClientToken,
+  _ApplicationReadAnswersTheExecution,
+  _ApplicationStopAnswersTheExecution,
 ];
 
 export const durableContractOperations = {
   startDurableExecution,
   followDurableExecution,
+  followFromApplication,
   exchangeDurableMessages,
 };

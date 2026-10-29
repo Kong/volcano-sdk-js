@@ -1,3 +1,4 @@
+import { targetOf } from './durable-messages-request.ts';
 import { durablePathSegments } from './durable-paths.ts';
 import { isDurableExecution, isDurablePage } from './durable-response.ts';
 import type { DurableExecution, PaginatedDurableExecutions } from './sdk-public-types.ts';
@@ -21,8 +22,10 @@ export interface DurableClient {
   readonly _transport: {
     startDurableExecutionFromApplication(name: string, input: unknown, options: unknown): Promise<unknown>;
     getDurableExecution(projectId: string, name: string, executionId: string, options: unknown): Promise<unknown>;
+    getDurableExecutionFromApplication(name: string, executionId: string, options: unknown): Promise<unknown>;
     listDurableExecutions(projectId: string, name: string, params: DurableOptions, options: unknown): Promise<unknown>;
     stopDurableExecution(projectId: string, name: string, executionId: string, options: unknown): Promise<unknown>;
+    stopDurableExecutionFromApplication(name: string, executionId: string, options: unknown): Promise<unknown>;
   };
   _completeOAuthExchange(): Promise<unknown>;
   _captureAuthContext(): { accessToken: string | null };
@@ -45,14 +48,39 @@ export class DurableFacade {
     if (executionName.error !== null) {
       return failure(executionName.error);
     }
-    await this.client._completeOAuthExchange();
-    const mode = credentialMode(this.client._captureAuthContext().accessToken);
+    const request = await this.applicationOptions(executionHeaders(executionName.name));
     return durableResult('Failed to start durable execution', isDurableExecution, () =>
-      this.client._transport.startDurableExecutionFromApplication(
-        path.segments.functionName,
-        input,
-        this.client._generatedOptions(mode, executionHeaders(executionName.name)),
-      ),
+      this.client._transport.startDurableExecutionFromApplication(path.segments.functionName, input, request),
+    );
+  }
+
+  async getFromApplication(
+    functionName: unknown,
+    executionId: unknown,
+    options: { clientToken?: unknown } = {},
+  ): Promise<DurableResult<DurableExecution>> {
+    const target = targetOf({ functionName, executionId, clientToken: options.clientToken });
+    if (target instanceof Error) {
+      return failure(target);
+    }
+    const request = await this.applicationOptions(clientTokenHeaders(target.clientToken));
+    return durableResult('Failed to read durable execution', isDurableExecution, () =>
+      this.client._transport.getDurableExecutionFromApplication(target.functionName, target.executionId, request),
+    );
+  }
+
+  async stopFromApplication(
+    functionName: unknown,
+    executionId: unknown,
+    options: { clientToken?: unknown } = {},
+  ): Promise<DurableResult<DurableExecution>> {
+    const target = targetOf({ functionName, executionId, clientToken: options.clientToken });
+    if (target instanceof Error) {
+      return failure(target);
+    }
+    const request = await this.applicationOptions(clientTokenHeaders(target.clientToken));
+    return durableResult('Failed to stop durable execution', isDurableExecution, () =>
+      this.client._transport.stopDurableExecutionFromApplication(target.functionName, target.executionId, request),
     );
   }
 
@@ -120,6 +148,14 @@ export class DurableFacade {
       ),
     );
   }
+
+  // The data-plane routes take whichever credential the client holds, as an
+  // invoke does: the user's session when there is one, otherwise the key.
+  private async applicationOptions(headers: Record<string, string> | undefined): Promise<unknown> {
+    await this.client._completeOAuthExchange();
+    const mode = credentialMode(this.client._captureAuthContext().accessToken);
+    return this.client._generatedOptions(mode, headers);
+  }
 }
 
 export function failure<T>(error: Error): DurableResult<T> {
@@ -151,6 +187,10 @@ export function credentialMode(token: string | null): 'anon' | 'session' {
 
 function executionHeaders(name: string | null): Record<string, string> | undefined {
   return name === null ? undefined : { 'X-Volcano-Execution-Name': name };
+}
+
+function clientTokenHeaders(token: string | null): Record<string, string> | undefined {
+  return token === null ? undefined : { 'X-Volcano-Client-Token': token };
 }
 
 function listParams(options: DurableOptions): DurableOptions {

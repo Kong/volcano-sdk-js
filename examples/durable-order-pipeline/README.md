@@ -168,9 +168,9 @@ the same execution, taking the other branch, with the refund guarded by
   `volcano.durable.start(functionName, input, { executionName: 'order-<id>' })`,
   so a client that retries the submit resolves to the execution that already
   exists rather than starting a second pipeline.
-- **The platform token never leaves the backend.** Starting an execution is
-  allowed with a service key; reading one is owner-scoped. The browser calls
-  `orders-api`, which reads the order row the pipeline keeps up to date.
+- **The service key never leaves the backend.** `orders-api` starts each
+  execution with it. The browser calls `orders-api`, which reads the order row
+  the pipeline keeps up to date.
 - **The signal is a row, not a callback.** A reviewer writes `review_status`, and
   the execution's `waitUntil` notices on its next check. Nothing has to reach
   into the execution.

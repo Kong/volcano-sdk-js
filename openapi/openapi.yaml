@@ -23,8 +23,8 @@ tags:
     description: Project-scoped log search and activity APIs
   - name: Issues
     description: 'Preview, not generally available: runtime errors grouped into issues. Where issues are not available, every endpoint answers `404` with code `feature_unavailable`.'
-  - name: Autofix
-    description: 'Preview, not generally available: AI diagnosis of a project''s issues and draft pull requests that fix them. Where autofix is not available, turning it on, or any request for a project that never saved settings, answers `404` with code `feature_unavailable`. Autofix is not available in local mode.'
+  - name: LavaFlow
+    description: 'Preview, not generally available: AI diagnosis of a project''s issues and draft pull requests that fix them. Where LavaFlow is not available, turning it on and starting a run answer `404` with code `feature_unavailable`, and so do reading or saving settings for a project that never saved any. Saved settings stay readable and can still turn LavaFlow off, and runs stay readable. LavaFlow is not available in local mode.'
   - name: Functions
     description: Function deployment and management
   - name: Durable Functions
@@ -2996,7 +2996,8 @@ paths:
             The source has already been exported, the repository has already
             taken over as the source of truth, the confirmed production branch
             is stale, a function or frontend deployment is still in progress,
-            or the project has no stored source to export
+            a preview is serving one of the project's frontends, or the project
+            has no stored source to export
           content:
             application/json:
               schema:
@@ -3107,8 +3108,15 @@ paths:
         to be pushed — the case a repository created empty depends on.
 
         Setting the branch here marks it as the project's own choice, so a later
-        default-branch rename on GitHub no longer moves it. Projects that never
+        default-branch rename on GitHub no longer moves it, and the response
+        reports `production_branch_follows_default: false`. Projects that never
         set one keep following the repository's default branch.
+
+        An empty string undoes that choice: the project deploys from the
+        repository's default branch again and follows later renames. Volcano
+        reads the default branch from GitHub through the project owner's
+        connection, and the response carries it with
+        `production_branch_follows_default: true`.
       operationId: setProjectGitProductionBranch
       security:
         - UserToken: []
@@ -3130,8 +3138,11 @@ paths:
                 $ref: '#/components/schemas/ProjectGitConnection'
         '400':
           description: |
-            Malformed request body, or a production_branch that is not a valid
-            Git branch name
+            Malformed request body, a production_branch that is not a valid
+            Git branch name, or an empty one for a repository with no commits
+            yet. Code `feature_unavailable` means this Volcano deployment has
+            no GitHub integration, so an empty production_branch cannot read
+            the default branch.
           content:
             application/json:
               schema:
@@ -3158,7 +3169,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: A Git source transition is pending
+          description: |
+            A Git source transition is pending, or an empty production_branch
+            could not read the default branch because the project owner's
+            GitHub connection needs reconnecting or lost access to the
+            repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: GitHub rate limited reading the default branch for an empty production_branch. Try again shortly.
           content:
             application/json:
               schema:
@@ -3176,8 +3197,8 @@ paths:
         - Git Connections
       summary: Set the directory a project builds from
       description: |
-        Changes only the root directory, leaving the repository and production
-        branch alone. Unlike PUT /projects/{id}/git-connection, this accepts a
+        Changes only the root directory, leaving the repository, the production
+        branch and `production_branch_follows_default` alone. Unlike PUT /projects/{id}/git-connection, this accepts a
         project access token, so CI or an agent can move a project within its
         repository without being able to change the repository.
 
@@ -3252,6 +3273,11 @@ paths:
         - Projects
         - Git Connections
       summary: Get a project's repo connection
+      description: |
+        Returns the repository binding. `production_branch_follows_default`
+        tells a branch that tracks the repository's default from one the
+        project pinned: a client rebinding the same repository sends a pinned
+        branch back to keep it.
       operationId: getProjectGitConnection
       security:
         - UserToken: []
@@ -3303,6 +3329,12 @@ paths:
         accessible through installation_id via connection_id's stored GitHub
         user token, then persists repository metadata only from that validated
         GitHub response.
+
+        Omitting production_branch follows the repository's default and
+        discards a pinned branch. To keep a pin when rebinding the same
+        repository, read the connection first and send production_branch back
+        when `production_branch_follows_default` is false. The response reports
+        the result in the same field.
 
         Project access tokens are refused. Which repository a project deploys
         from is a person's decision, made with a platform token or in the
@@ -4072,6 +4104,10 @@ paths:
                   type: string
                   description: |
                     JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged.
+                commit:
+                  type: string
+                  description: |
+                    JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`.
       responses:
         '200':
           description: Existing function updated; its deployment was started or queued
@@ -4088,7 +4124,8 @@ paths:
         '400':
           description: |
             Bad request (invalid file, too large, etc.), an unknown
-            `visibility`, or `visibility` and `is_public` disagree
+            `visibility`, `visibility` and `is_public` disagree, or a
+            malformed `commit`
           content:
             application/json:
               schema:
@@ -4474,10 +4511,11 @@ paths:
         A `private` durable function answers every credential but a service key
         exactly as a missing one, with 404.
 
-        Starting is all this endpoint does. Reading a result or stopping an
-        execution requires the project owner's token, because an anon key is
-        shared by everyone who loads the page and an execution is addressed by
-        id alone.
+        The start returns a `client_token`. An anon key, or a user who did not
+        start the execution, sends it as `X-Volcano-Client-Token` to read the
+        execution, stop it, and reach its messages. An anon key is shared by
+        everyone who loads the page, so the id alone never reaches an
+        execution. Listing executions requires the project owner's token.
 
         Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
         a start with the same name returns the existing execution instead of
@@ -4592,6 +4630,177 @@ paths:
             plan terms for the start could not be read. The first means the
             capability is paused or this deployment cannot serve it, so it is
             not one to retry in a loop; the second is transient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /durable-functions/{functionId}/executions/{executionId}:
+    get:
+      tags:
+        - Durable Functions
+      summary: Get a durable execution from an application
+      description: |
+        Returns the execution's current state with the credential that started
+        it, including its `result` once it has succeeded. Poll this to wait for
+        an execution to finish.
+
+        **With a service key:** any execution in the project.
+
+        **With an auth user token:** an execution the user started, or one
+        whose `X-Volcano-Client-Token` the request carries, of a durable
+        function whose `visibility` is `authenticated` or `public`.
+
+        **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+        request carries, of a function with `visibility: public`.
+
+        Only the service key reaches an execution that is still `pending`. Any
+        other execution answers `404`, as a missing one does.
+
+        The response is the one `GET
+        /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+        returns. It never carries `client_token`.
+      operationId: getDurableExecutionFromApplication
+      security:
+        - AnonKey: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/DurableFunctionId'
+        - $ref: '#/components/parameters/DurableExecutionId'
+        - $ref: '#/components/parameters/DurableClientToken'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DurableExecution'
+        '401':
+          description: Missing or invalid credential
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: |
+            The anon key lacks `functions.invoke`, the service key is scoped
+            without it, or the function is `authenticated` and the request
+            carries an anon key. Also returned when the request's origin is
+            refused by the project's CORS policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: |
+            Durable function or execution not found, or the credential cannot
+            reach the execution. A `private` function answers every credential
+            but a service key this way.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: |
+            The function's or the project's function rate limit, which reads
+            share with invocations and starts, or the project is over its
+            bandwidth cap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: |
+            Durable execution is not available in this environment, or the plan
+            terms for the request could not be read. The first is not one to
+            retry in a loop; the second is transient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /durable-functions/{functionId}/executions/{executionId}/stop:
+    post:
+      tags:
+        - Durable Functions
+      summary: Stop a durable execution from an application
+      description: |
+        Cancels a running execution with the credential that started it. Its
+        completed steps are not undone.
+
+        Access follows the same rules as reading the execution.
+
+        The call is accepted rather than awaited: the response reports the
+        execution as it was read back and may still say `running`. Poll
+        `GET /durable-functions/{functionId}/executions/{executionId}` to see
+        it settle into `stopped`.
+
+        Stopping an execution that already finished is not an error: the
+        response carries the state it settled in.
+      operationId: stopDurableExecutionFromApplication
+      security:
+        - AnonKey: []
+        - ServiceRoleKey: []
+        - AuthUserAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/DurableFunctionId'
+        - $ref: '#/components/parameters/DurableExecutionId'
+        - $ref: '#/components/parameters/DurableClientToken'
+      responses:
+        '200':
+          description: |
+            Stop accepted. The body is the execution as it was read back, which
+            may still report `running`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DurableExecution'
+        '401':
+          description: Missing or invalid credential
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: |
+            The anon key lacks `functions.invoke`, the service key is scoped
+            without it, or the function is `authenticated` and the request
+            carries an anon key. Also returned when the request's origin is
+            refused by the project's CORS policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: |
+            Durable function or execution not found, or the credential cannot
+            reach the execution. A `private` function answers every credential
+            but a service key this way.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: |
+            The execution has not started yet. Only a service key can reach an
+            execution in that state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: |
+            The function's or the project's function rate limit, which stops
+            share with invocations and starts, or the project is over its
+            bandwidth cap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: |
+            Durable execution is not available in this environment, or the plan
+            terms for the request could not be read. The first is not one to
+            retry in a loop; the second is transient.
           content:
             application/json:
               schema:
@@ -5121,6 +5330,8 @@ paths:
                     JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
 
                     Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
+
+                    Each entry may also carry `commit`, the commit its source came from, as an object: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. It takes the same values as the `commit` field of a single function upload; `null` or `""` reports no commit. The request is rejected with 400 before anything is deployed if an entry's commit is malformed or names a repository not on GitHub.
                 code_0:
                   type: string
                   format: binary
@@ -5726,6 +5937,10 @@ paths:
                   type: string
                   description: |
                     JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged.
+                commit:
+                  type: string
+                  description: |
+                    JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`.
       responses:
         '200':
           description: Existing durable function updated; its deployment was started or queued
@@ -5742,8 +5957,9 @@ paths:
         '400':
           description: |
             Bad request (invalid archive, unsupported runtime, invalid name, an
-            unknown `visibility`, `visibility` and `is_public` disagree, or a
-            project region that does not offer durable execution — a durable
+            unknown `visibility`, `visibility` and `is_public` disagree, a
+            malformed `commit`, or a project region that does not offer durable
+            execution — a durable
             function deploys to every region of its project)
           content:
             application/json:
@@ -6846,7 +7062,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DurableCallbackOutcome'
         '400':
-          description: The token is missing, or `result` is missing, null, not JSON, or larger than 64 KiB
+          description: The token is missing or malformed, or `result` is missing, null, not JSON, or larger than 64 KiB
           content:
             application/json:
               schema:
@@ -6924,7 +7140,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DurableCallbackOutcome'
         '400':
-          description: The token is missing, or the error's `type` or `message` is invalid
+          description: The token is missing or malformed, or the error's `type` or `message` is invalid
           content:
             application/json:
               schema:
@@ -6989,7 +7205,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DurableCallbackOutcome'
         '400':
-          description: The token is missing
+          description: The token is missing or malformed
           content:
             application/json:
               schema:
@@ -7244,19 +7460,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /projects/{id}/autofix:
+  /projects/{id}/lavaflow:
     get:
       tags:
-        - Autofix
-      summary: Get autofix settings
+        - LavaFlow
+      summary: Get LavaFlow settings
       description: |
         Returns whether Volcano diagnoses the project's issues with AI and how
         far a run may go. A project that never saved settings returns the
-        defaults, with autofix off.
+        defaults, with LavaFlow off.
 
-        Where autofix is not available, saved settings stay readable. A project
+        LavaFlow works in the repository a person turned it on for. When the
+        project points at another one, or its repository is disconnected,
+        `repository_changed` is true and no run starts until a person turns
+        LavaFlow on again.
+
+        Where LavaFlow is not available, saved settings stay readable. A project
         that never saved any answers `404` with code `feature_unavailable`.
-      operationId: getAutofixSettings
+      operationId: getLavaFlowSettings
       security:
         - UserToken: []
         - ProjectAccessToken: []
@@ -7268,15 +7489,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AutofixSettings'
+                $ref: '#/components/schemas/LavaFlowSettings'
         '404':
-          description: Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings.
+          description: Project not found. Code `feature_unavailable` means LavaFlow is not available in this environment and the project never saved settings.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '501':
-          description: Autofix is not available in local mode.
+          description: LavaFlow is not available in local mode.
           content:
             application/json:
               schema:
@@ -7287,30 +7508,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-    put:
+    patch:
       tags:
-        - Autofix
-      summary: Save autofix settings
+        - LavaFlow
+      summary: Update LavaFlow settings
       description: |
-        Saves the project's autofix settings. An omitted `max_stage` or
-        `auto_trigger` keeps its saved value, or takes its default when the
-        project has no saved settings, so `{"enabled": true}` on a new project
-        diagnoses every new or regressed issue and opens a draft pull request
-        with each fix. Set `max_stage` and `auto_trigger` to stop at a diagnosis
-        or to start runs only on request. Volcano picks the models a run uses.
+        Changes the fields the request names. An omitted field keeps its saved
+        value, or takes its default when the project has no saved settings, so
+        `{"enabled": true}` on a new project diagnoses each issue that happens a
+        second time or regresses, within the run limits, and opens a draft pull
+        request with each fix. Set `max_stage` and
+        `auto_trigger` to stop at a diagnosis or to start runs only on request.
+        Volcano picks the models a run uses.
 
-        Project access tokens are refused. Autofix opens pull requests in the
+        Project access tokens are refused. LavaFlow opens pull requests in the
         project's repository, so a person turns it on with a platform token.
 
-        During the preview, turning autofix on needs the SUPERAGENT plan, and
+        `{"enabled": true}` records the repository the project points at as
+        LavaFlow's, even when LavaFlow is already on. That is how a person
+        resumes LavaFlow after `repository_changed`.
+
+        During the preview, turning LavaFlow on needs the SUPERAGENT plan, and
         nothing is charged yet. Settings that are already on stay stored after
         a downgrade, and saving them again is not refused, but no run starts
-        until the plan allows autofix again. Other saves need no plan.
+        until the plan allows LavaFlow again. Other saves need no plan.
 
-        Where autofix is not available, a project with saved settings can
-        still change them with `enabled: false`. Saving `enabled: true`
-        answers `404` with code `feature_unavailable`.
-      operationId: updateAutofixSettings
+        Where LavaFlow is not available, a project with saved settings can
+        still save a change that leaves LavaFlow off, such as
+        `{"enabled": false}`. A change that leaves it on, and a project's
+        first save, answer `404` with code `feature_unavailable`.
+      operationId: updateLavaFlowSettings
       security:
         - UserToken: []
       parameters:
@@ -7320,64 +7547,68 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateAutofixSettingsRequest'
+              $ref: '#/components/schemas/UpdateLavaFlowSettingsRequest'
       responses:
         '200':
           description: Saved
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AutofixSettings'
+                $ref: '#/components/schemas/LavaFlowSettings'
         '400':
-          description: The request body is invalid.
+          description: The request body is invalid or names no field.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: The owner's plan does not allow autofix (during the preview it needs the SUPERAGENT plan), or the request used a project access token. Only a person changes autofix settings.
+          description: The owner's plan does not allow LavaFlow (code `plan_required`; during the preview it needs the SUPERAGENT plan), or the request used a project access token. Only a person changes LavaFlow settings.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: Project not found. Code `feature_unavailable` means autofix is not available in this environment, which refuses turning it on and a project's first save.
+          description: Project not found. Code `feature_unavailable` means LavaFlow is not available in this environment, which refuses a change that leaves it on and a project's first save.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '501':
-          description: Autofix is not available in local mode.
+          description: LavaFlow is not available in local mode.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: Turning autofix on needs the owner's plan, which could not be resolved. Nothing was saved. Retry later.
+          description: A change that leaves LavaFlow on needs the owner's plan, which could not be resolved. Nothing was saved. Retry later.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /projects/{id}/issues/{issueId}/autofix-runs:
+  /projects/{id}/issues/{issueId}/lavaflow-runs:
     post:
       tags:
-        - Autofix
+        - LavaFlow
       summary: Diagnose an issue
       description: |
         Queues a run that diagnoses the issue with AI. The run reads the
-        issue's runtime logs and, when a push to the project's connected
-        repository built the deployment that was live when the issue was
-        last seen, its source at that commit. Poll the run until its status is
-        `succeeded`, `failed`, or `canceled`.
+        issue's runtime logs and, when the deployment that was live when the
+        issue was last seen came from the project's connected repository, its
+        source at that commit. That holds when a push to the repository built
+        the deployment, or when the deploy client reported the commit and
+        Volcano verified it with `dirty: false`. Poll the run until its status
+        is `succeeded`, `failed`, or `canceled`.
 
-        Autofix must be on for the project. An issue has at most one queued or
-        running run, a project runs one at a time, and a project starts at most
-        25 runs, manual and automatic, in any 24 hours.
+        LavaFlow must be on for the project, and the project must still point
+        at the repository it was turned on for. An issue has at most one queued
+        or running run, and a project runs one at a time. In any 24 hours, an
+        issue starts at most 5 runs and a project at most 200, manual and
+        automatic together.
 
         Project access tokens are refused. A run can open a pull request in
         the project's repository, so a person starts it with a platform token
         or in the dashboard.
-      operationId: startAutofixRun
+      operationId: startLavaFlowRun
       security:
         - UserToken: []
       parameters:
@@ -7389,7 +7620,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AutofixRun'
+                $ref: '#/components/schemas/LavaFlowRun'
         '400':
           description: The request is invalid.
           content:
@@ -7397,31 +7628,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: The owner's plan does not include autofix, or the request used a project access token.
+          description: The owner's plan does not include LavaFlow (code `plan_required`), or the request used a project access token.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: Project or issue not found. Code `feature_unavailable` means autofix is not available in this environment.
+          description: Project or issue not found. Code `feature_unavailable` means LavaFlow is not available in this environment.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Autofix is off for the project, or the issue already has a queued or running run.
+          description: LavaFlow is off for the project, or the issue already has a queued or running run. Code `repository_changed` means the project points at a different repository than when LavaFlow was turned on, or its repository is disconnected; turn LavaFlow on again.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: The project started its limit of runs in the last 24 hours.
+          description: 'The issue or the project reached its run limit for the last 24 hours. `code` names which: `issue_run_limit` or `project_run_limit`.'
+          headers:
+            Retry-After:
+              description: Seconds until a run can start.
+              required: true
+              schema:
+                type: integer
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '501':
-          description: Autofix is not available in local mode.
+          description: LavaFlow is not available in local mode.
           content:
             application/json:
               schema:
@@ -7432,17 +7669,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /projects/{id}/autofix-runs:
+  /projects/{id}/lavaflow-runs:
     get:
       tags:
-        - Autofix
-      summary: List autofix runs
+        - LavaFlow
+      summary: List LavaFlow runs
       description: |
-        Lists the project's autofix runs, newest first. Runs stay readable after
-        autofix is turned off, and where autofix is not available.
+        Lists the project's LavaFlow runs, newest first. Runs stay readable after
+        LavaFlow is turned off, and where LavaFlow is not available.
 
         Project access tokens can list runs, including read-only ones.
-      operationId: listAutofixRuns
+      operationId: listLavaFlowRuns
       security:
         - UserToken: []
         - ProjectAccessToken: []
@@ -7462,14 +7699,14 @@ paths:
           required: false
           description: Return only runs in this status.
           schema:
-            $ref: '#/components/schemas/AutofixRunStatus'
+            $ref: '#/components/schemas/LavaFlowRunStatus'
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedAutofixRuns'
+                $ref: '#/components/schemas/PaginatedLavaFlowRuns'
         '400':
           description: A filter or the cursor is invalid
           content:
@@ -7483,36 +7720,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '501':
-          description: Autofix is not available in local mode.
+          description: LavaFlow is not available in local mode.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /projects/{id}/autofix-runs/{runId}:
+  /projects/{id}/lavaflow-runs/{runId}:
     get:
       tags:
-        - Autofix
-      summary: Get an autofix run
+        - LavaFlow
+      summary: Get a LavaFlow run
       description: |
         Returns one run: its status, the diagnosis once it succeeds, and why it
-        failed or was canceled. Runs stay readable where autofix is not
+        failed or was canceled. Runs stay readable where LavaFlow is not
         available.
 
         Project access tokens can read runs, including read-only ones.
-      operationId: getAutofixRun
+      operationId: getLavaFlowRun
       security:
         - UserToken: []
         - ProjectAccessToken: []
       parameters:
         - $ref: '#/components/parameters/ProjectId'
-        - $ref: '#/components/parameters/AutofixRunId'
+        - $ref: '#/components/parameters/LavaFlowRunId'
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AutofixRun'
+                $ref: '#/components/schemas/LavaFlowRun'
         '404':
           description: Project or run not found.
           content:
@@ -7520,7 +7757,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '501':
-          description: Autofix is not available in local mode.
+          description: LavaFlow is not available in local mode.
           content:
             application/json:
               schema:
@@ -7934,6 +8171,10 @@ paths:
                   type: string
                   format: binary
                   description: ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
+                commit:
+                  type: string
+                  description: |
+                    JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false, "root": "apps/web"}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. `root` is the uploaded directory's path from the repository root, `""` for the root itself. `repository`, `sha`, and `dirty` are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano checks the commit against the project's connected repository and each uploaded file against the commit's file at `root`, and returns the result in the deployment's `commit.verified`; an uploaded file in the project's root directory that the commit does not hold sets `commit.dirty`, and one outside it leaves the commit unverified. A commit it cannot verify is still recorded and never fails the deploy.
       responses:
         '200':
           description: Existing frontend updated; its deployment was started or queued
@@ -7972,7 +8213,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict - frontend deletion is queued or running
+          description: 'Conflict. `code: frontend_served_by_candidate` - a promoted Candidate serves the existing frontend; roll back to the frontend''s own runtime before deploying it. Without a code, the frontend''s deletion is queued or running.'
           content:
             application/json:
               schema:
@@ -8151,7 +8392,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Conflict - frontend deletion is queued or running
+          description: 'Conflict. `code: frontend_served_by_candidate` - a promoted Candidate serves the frontend; roll back to the frontend''s own runtime before redeploying it. Without a code, the frontend''s deletion is queued or running.'
           content:
             application/json:
               schema:
@@ -8771,7 +9012,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: 'Conflict. `code: build_variables_differ` names the build-time variables whose values differ. `code: source_deployment_not_active` refuses a deployment that is not `active` or `degraded`. `code: source_build_unavailable` refuses a deployment made before Volcano kept builds, or whose build is no longer kept; redeploy the source frontend once and deploy from that deployment. `code: frontend_incompatible` refuses a different framework or app root. Without a code, the frontend''s deletion is queued or running, or the project''s source is managed by Git, where deploys come from a push to the production branch.'
+          description: 'Conflict. `code: build_variables_differ` names the build-time variables whose values differ. `code: source_deployment_not_active` refuses a deployment that is not `active` or `degraded`. `code: source_build_unavailable` refuses a deployment made before Volcano kept builds, or whose build is no longer kept; redeploy the source frontend once and deploy from that deployment. `code: frontend_incompatible` refuses a different framework or app root. `code: frontend_served_by_candidate` refuses a frontend a promoted Candidate serves; roll back to the frontend''s own runtime first. Without a code, the frontend''s deletion is queued or running, or the project''s source is managed by Git, where deploys come from a push to the production branch.'
           content:
             application/json:
               schema:
@@ -8796,6 +9037,602 @@ paths:
                 $ref: '#/components/schemas/Error'
         '503':
           description: Service unavailable - frontend workflow configuration missing, or the build-minutes check is temporarily unavailable; retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/candidates:
+    get:
+      tags:
+        - Frontends
+      summary: List a frontend's Candidates
+      description: |
+        Returns the frontend's Candidates, oldest first, each with its latest deployment. A frontend
+        has at most 20 live Candidates. Reading never depends on the `frontends.candidates` capability.
+      operationId: listFrontendCandidates
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+      responses:
+        '200':
+          description: The frontend's Candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendCandidateList'
+        '400':
+          description: Bad request - invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - Frontends
+      summary: Create a frontend Candidate
+      description: |
+        Builds a copy of the frontend from the uploaded archive, with the frontend's own variable
+        selection, and deploys it to one region: the first region the frontend deploys to, or the
+        project's first region by name if it has not deployed yet. The Candidate is served at its own
+        URL, so it can be checked without changing what the frontend serves. The URL is reachable by
+        anyone who holds it and is not indexed; a Candidate is never public and does not claim to be
+        private. The response is `202` while the first deployment runs; read the Candidate for its
+        `status` and `url`.
+
+        Creating a Candidate is available while the `frontends.candidates` capability is. While it is
+        not, this operation, redeploying, promoting and rolling back to a Candidate answer `404` with
+        code `feature_unavailable`; reading and deleting existing Candidates, and rolling back to the
+        frontend's own runtime, keep working.
+
+        A Candidate builds like any deploy and spends the project's build minutes. A frontend has at
+        most 20 live Candidates, and each name is unique within the frontend. Without `ttl_seconds` a
+        Candidate is kept until it is deleted.
+      operationId: createFrontendCandidate
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - archive
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Names the Candidate within the frontend. Cannot be `production`.
+                ttl_seconds:
+                  type: integer
+                  minimum: 1
+                  maximum: 2592000
+                  description: Deletes the Candidate this many seconds after it is created, at most 30 days. Omit to keep it until deleted.
+                archive:
+                  type: string
+                  format: binary
+                  description: ZIP or tar.gz archive of the frontend project, as for creating a frontend. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB.
+      responses:
+        '202':
+          description: Candidate created; its first deployment is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendCandidate'
+        '400':
+          description: Bad request - invalid name, expiry, identifier or archive, a variable the frontend declares has no value, or the resolved variables are too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict. `code: candidate_name_taken` - the name is taken. `code: candidate_limit_reached` - the frontend has the maximum Candidates. `code: configuration_changed` - the frontend''s configuration changed during the deploy; retry. `code: frontend_deleting` or `code: project_deleting` - the frontend or project is being deleted.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is larger than the archive limit, SOURCE_ARCHIVE_SIZE_LIMIT_MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests - the project's build minutes for the billing cycle are used up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable - frontend deployments are not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/candidates/{candidateId}:
+    get:
+      tags:
+        - Frontends
+      summary: Get a frontend Candidate
+      operationId: getFrontendCandidate
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+        - $ref: '#/components/parameters/FrontendCandidateId'
+      responses:
+        '200':
+          description: The Candidate with its latest deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendCandidate'
+        '400':
+          description: Bad request - invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend or Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Frontends
+      summary: Delete a frontend Candidate
+      description: |
+        Starts deleting the Candidate: its regional runtime, images, edge state and stored source are
+        removed once any running deployment finishes. Asking again for a Candidate that is already being
+        deleted is the same request. The Candidate answers `404` once it is gone.
+
+        A Candidate the frontend serves cannot be deleted: roll back first. A Candidate the frontend only
+        keeps as the runtime a rollback returns to can be deleted, and doing so gives up that rollback;
+        rolling back to the frontend's own runtime stays possible.
+      operationId: deleteFrontendCandidate
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+        - $ref: '#/components/parameters/FrontendCandidateId'
+      responses:
+        '202':
+          description: Deletion started
+        '400':
+          description: Bad request - invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend or Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: '`code: candidate_in_use` - the frontend serves this Candidate.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/candidates/{candidateId}/deployments:
+    post:
+      tags:
+        - Frontends
+      summary: Deploy a new archive to a frontend Candidate
+      description: |
+        Builds the uploaded archive with the frontend's own variable selection and deploys it to the
+        Candidate. The Candidate keeps serving its previous deployment until this one succeeds, and a
+        failed deployment leaves it on the previous one. A Candidate takes one deployment at a time.
+        While the `frontends.candidates` capability is unavailable, it answers `404` with code
+        `feature_unavailable`.
+      operationId: redeployFrontendCandidate
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+        - $ref: '#/components/parameters/FrontendCandidateId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - archive
+              properties:
+                archive:
+                  type: string
+                  format: binary
+                  description: ZIP or tar.gz archive of the frontend project, as for creating a frontend.
+      responses:
+        '202':
+          description: The deployment is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendCandidateDeployment'
+        '400':
+          description: Bad request - invalid identifier or archive, a variable the frontend declares has no value, or the resolved variables are too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend or Candidate not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict. `code: deployment_in_progress` - a deployment is already running; retry once it finishes. `code: candidate_not_deployable` - the Candidate is being deleted or is not ready to deploy to. `code: candidate_in_use` - the frontend serves it or keeps it for a rollback. `code: configuration_changed` - the frontend''s configuration changed during the deploy; retry. `code: frontend_deleting` or `code: project_deleting` - the frontend or project is being deleted.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is larger than the archive limit, SOURCE_ARCHIVE_SIZE_LIMIT_MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests - the project's build minutes for the billing cycle are used up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable - frontend deployments are not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/serving:
+    get:
+      tags:
+        - Frontends
+      summary: Get what a frontend serves
+      description: |
+        Reports whether the frontend serves its own runtime or a promoted Candidate's, and the
+        revision a promotion or rollback must name.
+      operationId: getFrontendServing
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+      responses:
+        '200':
+          description: What the frontend serves
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendServing'
+        '400':
+          description: Bad request - invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/serving/rollback:
+    post:
+      tags:
+        - Frontends
+      summary: Roll a frontend back to the runtime it served before
+      description: |
+        Returns the frontend's traffic to the runtime it served before the last activation, or to its
+        own runtime with `to_production`. A rollback is a new activation, so what it leaves becomes the
+        runtime a further rollback returns to, and it can itself be undone. It names the revision the
+        caller read; a competing activation makes it fail with `409`.
+
+        Rolling back to a Candidate promotes it again and is refused with `409` when promoting it would
+        be. Rolling back to the frontend's own runtime is not.
+      operationId: rollbackFrontendServing
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expected_revision
+              properties:
+                expected_revision:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                to_production:
+                  type: boolean
+                  default: false
+                  description: Return to the frontend's own runtime whatever it served before.
+      responses:
+        '200':
+          description: The frontend serves the runtime it was rolled back to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendServing'
+        '400':
+          description: Bad request - invalid identifier or body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend not found, or `feature_unavailable` when the release gate is off and the rollback would make a candidate serve again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict. `code: stale_revision` - the revision is stale; read `serving` again. `code: nothing_to_roll_back` - there is no earlier runtime to return to. `code: rollback_unavailable` - the runtime to roll back to is gone. `code: configuration_changed` - the Candidate to roll back to was built with a different configuration. `code: deployment_in_progress` - a deployment of the Candidate or of the frontend itself is still running; retry once it finishes. `code: source_managed_by_git` - the project''s repository is the source of truth; roll back to the frontend''s own runtime.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is larger than 4 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /projects/{id}/frontends/{frontendId}/candidates/{candidateId}/promote:
+    post:
+      tags:
+        - Frontends
+      summary: Promote a frontend Candidate
+      description: |
+        Makes the Candidate what the frontend serves. Nothing is rebuilt or copied: the frontend's
+        traffic is routed to the Candidate's runtime, its own custom domains and metering are
+        unchanged, and what it served becomes the runtime a rollback returns to.
+
+        The Candidate must be ready and serving an active deployment, and that deployment must have
+        been built with the variables the frontend selects now. A Candidate that serves stops expiring and cannot be deleted. While one
+        serves, deploying the frontend itself answers `409`; roll back to the frontend's own runtime
+        first. Promotion names the revision the caller read from `serving`; a competing activation
+        makes it fail with `409`. Once the project's repository is the source of truth, promotion
+        is refused with `409`, as a direct deploy is, and so is rolling back to a Candidate; rolling
+        back to the frontend's own runtime is not. While the `frontends.candidates` capability is
+        unavailable, promotion and rolling back to a Candidate answer `404` with code
+        `feature_unavailable`; rolling back to the frontend's own runtime does not.
+      operationId: promoteFrontendCandidate
+      security:
+        - UserToken: []
+        - ProjectAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/FrontendId'
+        - $ref: '#/components/parameters/FrontendCandidateId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expected_revision
+              properties:
+                expected_revision:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: The frontend serves the Candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontendServing'
+        '400':
+          description: Bad request - invalid identifier or body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - project ownership required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Frontend or Candidate not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 'Conflict. `code: stale_revision` - the revision is stale; read `serving` again. `code: candidate_not_ready` - the Candidate is not ready. `code: configuration_changed` - it was built with a different configuration; redeploy it. `code: already_serving` - it already serves. `code: deployment_in_progress` - a deployment of the Candidate or of the frontend itself is still running; retry once it finishes. `code: source_managed_by_git` - the project''s repository is the source of truth. `code: frontend_not_deployed` - the frontend has no deployment of its own to roll back to; deploy it first.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is larger than 4 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -10105,9 +10942,9 @@ paths:
         Returns every backup of the database, newest first, together with the
         window a point-in-time restore may target.
 
-        Both backups you took and backups the schedule produced are listed;
-        `source` tells them apart. Only manual backups count against the plan's
-        backup allowance.
+        Backups you took, backups the schedule produced, and backups taken
+        before migrations are all listed; `source` tells them apart. Only manual
+        backups count against the plan's backup allowance.
       operationId: listDatabaseBackups
       security:
         - UserToken: []
@@ -15451,6 +16288,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnonKey'
+        '400':
+          description: Invalid key name or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Key with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/anon-keys/{keyId}:
     get:
       tags:
@@ -15541,6 +16390,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnonKey'
+        '404':
+          description: Anon key not found, including deletion before the updated key can be returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/anon-keys/{keyId}/set-default:
     post:
       tags:
@@ -15572,6 +16427,10 @@ paths:
           description: Forbidden
         '404':
           description: Anon key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
           content:
@@ -16010,8 +16869,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceKey'
+        '400':
+          description: Invalid key name or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '409':
           description: Key with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /projects/{id}/service-keys/{keyId}:
     get:
       tags:
@@ -17276,9 +18145,10 @@ paths:
         | `sandboxes.sessions` | Starting and resuming sessions, and one-shot executions |
         | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
         | `issues` | The Issues API: listing, reading, and updating grouped runtime errors |
-        | `autofix` | The Autofix API: a project's AI diagnosis and fix settings |
+        | `lavaflow` | The LavaFlow API: a project's AI diagnosis and fix settings |
         | `functions.response_streaming` | Streaming an HTTP-mode function's response on its own URL as the function writes it |
         | `frontend_routes` | Creating and changing Frontend routes; listing, deleting, and serving existing ones work either way |
+        | `frontends.candidates` | Creating, redeploying, promoting and rolling back to a frontend Candidate; reading, deleting and rolling back to the frontend's own runtime always work |
 
         A capability missing from the list is unavailable, and a capability under
         another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
@@ -17311,12 +18181,14 @@ paths:
                     status: unavailable
                   - id: issues
                     status: available
-                  - id: autofix
+                  - id: lavaflow
                     status: available
                   - id: functions.response_streaming
                     status: available
                   - id: frontend_routes
                     status: available
+                  - id: frontends.candidates
+                    status: unavailable
   /openapi.json:
     get:
       tags:
@@ -17728,6 +18600,14 @@ components:
         type: string
         format: uuid
       description: Frontend ID
+    FrontendCandidateId:
+      name: candidateId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Frontend Candidate ID
     FrontendFunctionRouteId:
       name: routeId
       in: path
@@ -17801,14 +18681,14 @@ components:
       description: |
         Opaque cursor from a previous response's `next_cursor`. Pages forward;
         keep the same filters while paging.
-    AutofixRunId:
+    LavaFlowRunId:
       name: runId
       in: path
       required: true
       schema:
         type: string
         format: uuid
-      description: Autofix run ID
+      description: LavaFlow run ID
     DurableApprovalFunctionFilter:
       name: function
       in: query
@@ -18649,7 +19529,7 @@ components:
       properties:
         id:
           type: string
-          description: Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, `sandboxes.custom_templates`, `issues`, or `autofix`. New IDs may appear at any time.
+          description: Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, `sandboxes.custom_templates`, `issues`, or `lavaflow`. New IDs may appear at any time.
           example: sandboxes.sessions
         status:
           $ref: '#/components/schemas/CapabilityStatus'
@@ -19608,7 +20488,9 @@ components:
           type: string
           description: |
             Backup name, unique within the database. Names beginning with
-            `volcano-` are reserved for the platform's own snapshots.
+            `volcano-` are reserved for the platform's own snapshots, and names
+            beginning with `before-migration-` for the backups migration runs
+            take.
           pattern: ^[a-z0-9][a-z0-9_-]{0,62}$
           maxLength: 63
           example: before_migration
@@ -19619,7 +20501,10 @@ components:
       properties:
         name:
           type: string
-          description: Branch name (must be unique within the parent database)
+          description: |
+            Branch name, unique within the parent database. Names beginning
+            with `migration_rehearsal_` are reserved for the branches migration
+            runs rehearse on.
           pattern: ^[a-z0-9_]+$
           maxLength: 64
           example: feature_checkout
@@ -20161,10 +21046,11 @@ components:
           enum:
             - manual
             - scheduled
+            - migration
           description: |
-            Whether the backup was requested explicitly or produced by the
-            backup schedule. Only `manual` backups count against the plan's
-            backup allowance.
+            Whether the backup was requested explicitly, produced by the backup
+            schedule, or taken before migrations were applied to the database.
+            Only `manual` backups count against the plan's backup allowance.
         size_bytes:
           type: integer
           format: int64
@@ -20812,9 +21698,6 @@ components:
           format: date-time
       required:
         - template_type
-        - subject
-        - html_body
-        - text_body
     Error:
       type: object
       properties:
@@ -21340,27 +22223,21 @@ components:
       required:
         - installations
     GitRepository:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Stable GitHub repository id (repository.id), unchanged by renames.
-        full_name:
-          type: string
-        default_branch:
-          type: string
-        private:
-          type: boolean
-        is_empty:
-          type: boolean
-          description: Whether the repository has no commits and can receive an initial source export.
-      required:
-        - id
-        - full_name
-        - default_branch
-        - private
-        - is_empty
+      allOf:
+        - $ref: '#/components/schemas/GitRepositoryReference'
+        - type: object
+          properties:
+            default_branch:
+              type: string
+            private:
+              type: boolean
+            is_empty:
+              type: boolean
+              description: Whether the repository has no commits and can receive an initial source export.
+          required:
+            - default_branch
+            - private
+            - is_empty
     GitRepositoriesResponse:
       type: object
       properties:
@@ -21387,6 +22264,9 @@ components:
         production_branch:
           type: string
           description: The branch a push must land on to deploy. Follows the repository's GitHub default branch unless the project set its own, which a default-branch rename on GitHub then leaves alone.
+        production_branch_follows_default:
+          type: boolean
+          description: True when `production_branch` follows the repository's default branch and moves with a default-branch rename on GitHub. False when the project pinned a branch, even one that matches the current default. Pin a branch with `PUT /projects/{id}/git-connection/production-branch`; send an empty `production_branch` there to follow the default again.
         updated_at:
           type: string
           format: date-time
@@ -21397,6 +22277,7 @@ components:
         - repo_full_name
         - root_directory
         - production_branch
+        - production_branch_follows_default
         - updated_at
     ProjectGitDeploySettings:
       type: object
@@ -21599,9 +22480,8 @@ components:
       properties:
         production_branch:
           type: string
-          minLength: 1
           maxLength: 255
-          description: The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet.
+          description: The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. An empty string follows the repository's default branch, including later renames.
       required:
         - production_branch
     SetProjectGitRootDirectoryRequest:
@@ -21708,6 +22588,16 @@ components:
           type: string
           format: uuid
           description: Newest queued deployment that will run after the current operation
+        serving_candidate_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: |
+            The promoted Candidate whose runtime receives this frontend's traffic, the same as
+            `candidate_id` in `serving`. Null when the frontend serves its own runtime. While it is
+            set, `current_deployment_id` and `status` describe a deployment that receives no traffic,
+            and deploying the frontend is refused until it is rolled back.
         site_url:
           type: string
         custom_domain:
@@ -21761,10 +22651,151 @@ components:
         - framework
         - status
         - deployed_regions
+        - serving_candidate_id
         - function_routes
         - frontend_routes
         - created_at
         - updated_at
+    FrontendCandidate:
+      type: object
+      additionalProperties: false
+      description: |
+        A copy of a frontend built from an uploaded archive with the frontend's own configuration, so
+        it can be checked before anything is promoted. A Candidate is reachable by anyone who holds its
+        URL and is not indexed or listed; it is never public, and it does not claim to be private.
+      properties:
+        id:
+          type: string
+          format: uuid
+        frontend_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - creating
+            - ready
+            - deleting
+            - error
+          description: |
+            `creating` until its first deployment succeeds, `ready` while it serves, `deleting` while
+            its runtime is removed, and `error` when its deletion gave up and needs an operator.
+        url:
+          type: string
+          format: uri
+          description: Where the Candidate is served. Absent until its first deployment succeeds.
+        expires_at:
+          type: string
+          format: date-time
+          description: When the Candidate is deleted on its own. Absent when it is kept until deleted.
+        current_deployment_id:
+          type: string
+          format: uuid
+          description: |
+            The deployment the Candidate serves. Absent until its first
+            deployment succeeds. It differs from `deployment` while a redeploy runs or after one failed.
+        deployment:
+          $ref: '#/components/schemas/FrontendCandidateDeployment'
+        configuration_status:
+          type: string
+          enum:
+            - current
+            - changed
+          description: |
+            Present while the Candidate serves a deployment. `current` means that deployment was built
+            with the variables the frontend selects now; `changed` means they differ, or can no longer
+            be resolved. Promotion refuses a Candidate whose status is `changed`.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - frontend_id
+        - name
+        - status
+        - created_at
+        - updated_at
+    FrontendCandidateDeployment:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - provisioning
+            - active
+            - failed
+          description: |
+            `provisioning` while the build and deploy run, `active` once the Candidate serves this
+            deployment, and `failed` when it could not be built or deployed. A failed deployment of a
+            Candidate that already served keeps the previous deployment serving.
+        configuration_digest:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$
+          description: Identifies the resolved configuration the deployment was built with. It carries no value.
+        error_message:
+          type: string
+          description: Why a failed deployment failed.
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          description: Set once the deployment is no longer provisioning.
+      required:
+        - id
+        - status
+        - configuration_digest
+        - created_at
+    FrontendServing:
+      type: object
+      additionalProperties: false
+      description: |
+        What a frontend serves. Until a Candidate is promoted it serves its own runtime and
+        `candidate_id` is null. After a promotion, the frontend's traffic is routed to that
+        Candidate's runtime, nothing is rebuilt or copied, and `previous_candidate_id` is the runtime a
+        rollback returns to (null when that is the frontend's own). A Candidate that serves cannot be
+        deleted and does not expire. One kept only as the runtime a rollback returns to does not
+        expire either, but it can be deleted, which gives up that rollback; the frontend's own
+        runtime stays one `to_production` rollback away.
+      properties:
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Counts changes to what the frontend serves or can roll back to — promotions, rollbacks, and deleting the Candidate kept for a rollback. A promotion or rollback names the revision it read, so one that read before such a change fails with `409` instead of overwriting it; read the serving state again and retry.
+        candidate_id:
+          type: string
+          format: uuid
+          nullable: true
+        previous_candidate_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+        - revision
+        - candidate_id
+        - previous_candidate_id
+    FrontendCandidateList:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrontendCandidate'
+      required:
+        - data
     FrontendFunctionRoute:
       type: object
       additionalProperties: false
@@ -22141,6 +23172,8 @@ components:
         initiated_by:
           type: string
           description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+        commit:
+          $ref: '#/components/schemas/DeploymentCommit'
         source_deployment_id:
           type: string
           format: uuid
@@ -22755,9 +23788,10 @@ components:
         client_token:
           type: string
           description: |
-            Lets a browser read and send the execution's messages. Returned only
-            by the start whose input the execution runs, never by a repeat under
-            the same name or by a read. Send it as `X-Volcano-Client-Token`.
+            Lets a browser read the execution, stop it, and read and send its
+            messages. Returned only by the start whose input the execution runs,
+            never by a repeat under the same name or by a read. Send it as
+            `X-Volcano-Client-Token`.
       required:
         - id
         - function_id
@@ -23064,6 +24098,8 @@ components:
         initiated_by:
           type: string
           description: Platform user that triggered a request-initiated deployment; absent for git and system deployments.
+        commit:
+          $ref: '#/components/schemas/DeploymentCommit'
         build_duration_seconds:
           type: integer
           format: int64
@@ -24382,9 +25418,10 @@ components:
           format: date-time
           nullable: true
           description: |
-            When the waiting step times out and the token stops working. Null
-            when the workflow set no timeout, in which case the token works
-            until the execution ends.
+            When the waiting step's `timeout` passes and the token stops
+            working. Null when the workflow set no `timeout`. A step with a
+            heartbeat timeout also ends once that long passes without a
+            heartbeat, which can be before this time.
       required:
         - token
         - expires_at
@@ -24452,7 +25489,7 @@ components:
           description: The exception class, such as `TypeError`. Omitted when the error has none.
         culprit:
           type: string
-          description: The innermost frame of your code in the stack, as `function (file)`. Omitted without a stack.
+          description: The innermost frame of your code in the stack, as `function (file)`. For a frontend's Next.js build output, the outermost route or page file of the build in the stack, such as `.next/server/app/checkout/route.js`, or without one, the outermost file of the build. Omitted without a stack.
         status:
           $ref: '#/components/schemas/IssueStatus'
         event_count:
@@ -24580,60 +25617,82 @@ components:
             $ref: '#/components/schemas/NotificationTestDelivery'
       required:
         - deliveries
-    AutofixSettings:
+    LavaFlowSettings:
       type: object
       additionalProperties: false
+      description: LavaFlow settings. The path names what they belong to, so the object carries no project fields.
       properties:
-        project_id:
-          type: string
-          format: uuid
         enabled:
           type: boolean
           description: Whether Volcano diagnoses the project's issues with AI.
         max_stage:
           allOf:
-            - $ref: '#/components/schemas/AutofixStage'
+            - $ref: '#/components/schemas/LavaFlowStage'
           description: How far a run goes. Defaults to `pull_request`.
         auto_trigger:
           type: boolean
-          description: Whether a new or regressed issue starts a run on its own. Defaults to true. When false, runs start only on request.
-        plan_includes_autofix:
+          description: Whether an issue starts a run on its own when it happens a second time or regresses. Defaults to true. When false, runs start only on request.
+        plan_allows_lavaflow:
           type: boolean
-          description: Whether the owner's plan includes autofix. When false, saved settings stay stored and no run starts. Absent when a save that needed no plan succeeded but the plan could not be resolved.
+          readOnly: true
+          description: Whether the owner's plan allows turning LavaFlow on. LavaFlow is in preview. During the preview, it needs the SUPERAGENT plan. When false, saved settings stay stored and no run starts. Absent when a save that needed no plan succeeded but the plan could not be resolved.
         updated_at:
           type: string
           format: date-time
           description: When the settings were last saved. Absent until the first save.
+        enabled_repository:
+          allOf:
+            - $ref: '#/components/schemas/GitRepositoryReference'
+          readOnly: true
+          description: The repository the project was connected to when a person last turned LavaFlow on. LavaFlow reads source from and opens pull requests in this repository only. While the project still points at it, `full_name` is the repository's current name. Absent while LavaFlow is off, or when no repository was connected then.
+        repository_changed:
+          type: boolean
+          readOnly: true
+          description: 'Whether the project now points at a different repository than `enabled_repository`, or has none connected, including a repository connected after LavaFlow was turned on with none. While true, no run starts, and a run already queued reads no source and opens no pull request. A person turning LavaFlow on again (`enabled: true`) records the current repository. A rename or a transfer keeps the repository.'
       required:
-        - project_id
         - enabled
         - max_stage
         - auto_trigger
-    AutofixStage:
+        - repository_changed
+    GitRepositoryReference:
+      type: object
+      description: A GitHub repository, by its stable id and its name.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: GitHub's repository id. It stays the same through a rename or a transfer.
+        full_name:
+          type: string
+          description: The repository's owner and name, such as `acme/shop`.
+      required:
+        - id
+        - full_name
+    LavaFlowStage:
       type: string
       enum:
         - diagnose
         - pull_request
       x-enum-varnames:
-        - AutofixStageDiagnose
-        - AutofixStagePullRequest
+        - LavaFlowStageDiagnose
+        - LavaFlowStagePullRequest
       description: How far a run may go. `diagnose` stops at a root-cause diagnosis. `pull_request` may also open a draft pull request with a fix in the project's connected repository.
-    UpdateAutofixSettingsRequest:
+    UpdateLavaFlowSettingsRequest:
       type: object
+      description: The fields to change. An omitted field keeps its saved value, or takes its default when the project has no saved settings.
       additionalProperties: false
+      minProperties: 1
       properties:
         enabled:
           type: boolean
         max_stage:
           allOf:
-            - $ref: '#/components/schemas/AutofixStage'
+            - $ref: '#/components/schemas/LavaFlowStage'
           description: How far a run goes. Omitted, it keeps the saved value, or is `pull_request` when the project has no saved settings.
         auto_trigger:
           type: boolean
-          description: Whether a new or regressed issue starts a run on its own. Omitted, it keeps the saved value, or is `true` when the project has no saved settings.
-      required:
-        - enabled
-    AutofixRunStatus:
+          description: Whether an issue starts a run on its own when it happens a second time or regresses. Omitted, it keeps the saved value, or is `true` when the project has no saved settings.
+    LavaFlowRunStatus:
       type: string
       enum:
         - queued
@@ -24642,24 +25701,64 @@ components:
         - failed
         - canceled
       x-enum-varnames:
-        - AutofixRunStatusQueued
-        - AutofixRunStatusRunning
-        - AutofixRunStatusSucceeded
-        - AutofixRunStatusFailed
-        - AutofixRunStatusCanceled
-      description: Where a run is. `canceled` means the project's settings or plan stopped allowing the run before it finished; `failure_code` says which.
-    AutofixRunTrigger:
+        - LavaFlowRunStatusQueued
+        - LavaFlowRunStatusRunning
+        - LavaFlowRunStatusSucceeded
+        - LavaFlowRunStatusFailed
+        - LavaFlowRunStatusCanceled
+      description: Where a run is. `canceled` means the project's settings or plan stopped allowing the run before it finished; `failure_code` says which. When LavaFlow pauses its runs, an attempt in progress stops at any stage and its run returns to `queued` with `failure_code` `feature_paused`, without spending an attempt. A `running` run waiting to retry a failed attempt keeps its status and waits until runs resume.
+    LavaFlowRunTrigger:
+      description: What started the run, named by `type`. Every run today has `type` `issue`. Other types will carry their own fields, so treat a `type` you do not know as another kind of trigger, not as an error.
+      oneOf:
+        - $ref: '#/components/schemas/LavaFlowIssueTrigger'
+      discriminator:
+        propertyName: type
+        mapping:
+          issue: '#/components/schemas/LavaFlowIssueTrigger'
+    LavaFlowIssueTrigger:
+      type: object
+      additionalProperties: false
+      description: A run for one of the project's issues.
+      properties:
+        type:
+          type: string
+          enum:
+            - issue
+          x-enum-varnames:
+            - LavaFlowIssueTriggerTypeIssue
+        reason:
+          $ref: '#/components/schemas/LavaFlowIssueTriggerReason'
+        issue:
+          $ref: '#/components/schemas/LavaFlowTriggerIssue'
+      required:
+        - type
+        - reason
+        - issue
+    LavaFlowIssueTriggerReason:
       type: string
       enum:
         - manual
         - new_issue
         - regression
       x-enum-varnames:
-        - AutofixRunTriggerManual
-        - AutofixRunTriggerNewIssue
-        - AutofixRunTriggerRegression
-      description: What started the run. `manual` is a request; `new_issue` and `regression` are automatic runs for an issue that appeared or reopened.
-    AutofixEvidence:
+        - LavaFlowIssueTriggerReasonManual
+        - LavaFlowIssueTriggerReasonNewIssue
+        - LavaFlowIssueTriggerReasonRegression
+      description: Why the run started. `manual` is a request; `new_issue` and `regression` are automatic runs for an issue that appeared or reopened.
+    LavaFlowTriggerIssue:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: The issue's title, as the issues API reports it.
+      required:
+        - id
+        - title
+    LavaFlowEvidence:
       type: object
       additionalProperties: false
       properties:
@@ -24670,9 +25769,9 @@ components:
             - code
             - other
           x-enum-varnames:
-            - AutofixEvidenceKindLog
-            - AutofixEvidenceKindCode
-            - AutofixEvidenceKindOther
+            - LavaFlowEvidenceKindLog
+            - LavaFlowEvidenceKindCode
+            - LavaFlowEvidenceKindOther
         detail:
           type: string
         location:
@@ -24681,7 +25780,7 @@ components:
       required:
         - kind
         - detail
-    AutofixDiagnosis:
+    LavaFlowDiagnosis:
       type: object
       additionalProperties: false
       properties:
@@ -24693,7 +25792,7 @@ components:
         evidence:
           type: array
           items:
-            $ref: '#/components/schemas/AutofixEvidence'
+            $ref: '#/components/schemas/LavaFlowEvidence'
         suggested_fix:
           type: string
         confidence:
@@ -24703,9 +25802,9 @@ components:
             - medium
             - high
           x-enum-varnames:
-            - AutofixConfidenceLow
-            - AutofixConfidenceMedium
-            - AutofixConfidenceHigh
+            - LavaFlowConfidenceLow
+            - LavaFlowConfidenceMedium
+            - LavaFlowConfidenceHigh
         fixable:
           type: boolean
           description: Whether a change to the project's code would fix the issue.
@@ -24722,7 +25821,7 @@ components:
         - confidence
         - fixable
         - files
-    AutofixEdit:
+    LavaFlowEdit:
       type: object
       additionalProperties: false
       description: One exact text replacement. An empty `old_text` creates the file.
@@ -24737,7 +25836,7 @@ components:
         - path
         - old_text
         - new_text
-    AutofixPatch:
+    LavaFlowPatch:
       type: object
       additionalProperties: false
       description: The fix the model proposed, applied to the deployed commit. Present whenever the run opened a pull request, and when a valid fix could not be published.
@@ -24747,21 +25846,21 @@ components:
         edits:
           type: array
           items:
-            $ref: '#/components/schemas/AutofixEdit'
+            $ref: '#/components/schemas/LavaFlowEdit'
       required:
         - title
         - edits
-    AutofixPullRequestState:
+    LavaFlowPullRequestState:
       type: string
       enum:
         - open
         - merged
         - closed
       x-enum-varnames:
-        - AutofixPullRequestStateOpen
-        - AutofixPullRequestStateMerged
-        - AutofixPullRequestStateClosed
-    AutofixPullRequest:
+        - LavaFlowPullRequestStateOpen
+        - LavaFlowPullRequestStateMerged
+        - LavaFlowPullRequestStateClosed
+    LavaFlowPullRequest:
       type: object
       additionalProperties: false
       description: The draft pull request the run opened on the connected repository.
@@ -24774,9 +25873,9 @@ components:
           format: uri
         branch:
           type: string
-          description: The branch the fix is on, `volcano/autofix/<run id>`.
+          description: The branch the fix is on, `volcano/lavaflow/<run id>`. Runs that opened their pull request before LavaFlow was renamed report `volcano/autofix/<run id>`.
         state:
-          $ref: '#/components/schemas/AutofixPullRequestState'
+          $ref: '#/components/schemas/LavaFlowPullRequestState'
         closed_at:
           type: string
           format: date-time
@@ -24790,7 +25889,7 @@ components:
         - url
         - branch
         - state
-    AutofixPullRequestSkipped:
+    LavaFlowPullRequestSkipped:
       type: string
       enum:
         - source_unavailable
@@ -24801,17 +25900,21 @@ components:
         - permission_missing
         - repository_changed
         - publish_failed
+        - possible_credential
+        - possible_personal_data
       x-enum-varnames:
-        - AutofixPullRequestSkippedSourceUnavailable
-        - AutofixPullRequestSkippedPullRequestOpen
-        - AutofixPullRequestSkippedNotFixable
-        - AutofixPullRequestSkippedLowConfidence
-        - AutofixPullRequestSkippedNoPatch
-        - AutofixPullRequestSkippedPermissionMissing
-        - AutofixPullRequestSkippedRepositoryChanged
-        - AutofixPullRequestSkippedPublishFailed
+        - LavaFlowPullRequestSkippedSourceUnavailable
+        - LavaFlowPullRequestSkippedPullRequestOpen
+        - LavaFlowPullRequestSkippedNotFixable
+        - LavaFlowPullRequestSkippedLowConfidence
+        - LavaFlowPullRequestSkippedNoPatch
+        - LavaFlowPullRequestSkippedPermissionMissing
+        - LavaFlowPullRequestSkippedRepositoryChanged
+        - LavaFlowPullRequestSkippedPublishFailed
+        - LavaFlowPullRequestSkippedPossibleCredential
+        - LavaFlowPullRequestSkippedPossiblePersonalData
       description: Why a run whose `max_stage` is `pull_request` opened no pull request. The diagnosis stands either way.
-    AutofixRun:
+    LavaFlowRun:
       type: object
       additionalProperties: false
       properties:
@@ -24821,31 +25924,35 @@ components:
         project_id:
           type: string
           format: uuid
-        issue_id:
-          type: string
-          format: uuid
+          description: The project the run belongs to.
         trigger:
-          $ref: '#/components/schemas/AutofixRunTrigger'
+          $ref: '#/components/schemas/LavaFlowRunTrigger'
         status:
-          $ref: '#/components/schemas/AutofixRunStatus'
+          $ref: '#/components/schemas/LavaFlowRunStatus'
         max_stage:
-          $ref: '#/components/schemas/AutofixStage'
+          allOf:
+            - $ref: '#/components/schemas/LavaFlowStage'
+          description: How far the run may go. Lowered to `diagnose` when the project lowers its `max_stage` before the run publishes; it never rises.
         stage_reached:
-          $ref: '#/components/schemas/AutofixStage'
+          allOf:
+            - $ref: '#/components/schemas/LavaFlowStage'
+          description: 'The furthest stage the run reached: `diagnose` once it has a diagnosis, `pull_request` once it opened a pull request. An attempt saves its diagnosis before opening the pull request, and when it could not confirm the project''s settings and plan after the diagnosis. The run keeps the latest saved diagnosis, and `diagnose`, even if a later attempt fails or the run is canceled; `failure_code` then describes the last attempt. Absent until the run has a diagnosis.'
         diagnosis:
-          $ref: '#/components/schemas/AutofixDiagnosis'
+          $ref: '#/components/schemas/LavaFlowDiagnosis'
         patch:
-          $ref: '#/components/schemas/AutofixPatch'
+          $ref: '#/components/schemas/LavaFlowPatch'
         pull_request:
-          $ref: '#/components/schemas/AutofixPullRequest'
+          $ref: '#/components/schemas/LavaFlowPullRequest'
         pull_request_skipped:
-          $ref: '#/components/schemas/AutofixPullRequestSkipped'
+          $ref: '#/components/schemas/LavaFlowPullRequestSkipped'
         commit_sha:
           type: string
-          description: The commit the diagnosis read, when a push to the connected repository deployed the resource. Absent when the run read logs only.
+          description: 'The commit the diagnosis read: the commit a push to the connected repository deployed, or a deployment''s verified commit with `dirty: false`. Absent when the run read logs only.'
+        commit_origin:
+          $ref: '#/components/schemas/LavaFlowCommitOrigin'
         failure_code:
           type: string
-          description: Why the run failed or was canceled, or why its last attempt will be retried. A queued run paused while Autofix is unavailable reports `feature_unavailable`; it resumes without spending an attempt when Autofix returns. Other values are `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `autofix_disabled`, `plan_required`, `issue_not_found`, or `internal_error`. Runs that ended before Volcano picked the models for every run may also report `api_key_rejected`, `settings_changed`, or `managed_models_unavailable`; no new run reports them.
+          description: 'Why the run failed or was canceled, or why its last attempt will be retried. A queued run paused while LavaFlow is unavailable reports `feature_unavailable`; it resumes without spending an attempt when LavaFlow returns. A queued run waiting while LavaFlow runs are paused, including one a pause stopped mid-run, reports `feature_paused`; it resumes without spending an attempt when runs resume. A run paused after it saved a fix keeps its `diagnosis`, `patch`, and `commit_sha`, and opens its pull request on resume; one paused before that diagnoses again. Other values are `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `lavaflow_disabled`, `plan_required`, `issue_not_found`, or `internal_error`. Older runs may also report codes no new run does: `autofix_disabled` (now `lavaflow_disabled`), and `api_key_rejected`, `settings_changed`, or `managed_models_unavailable` from before Volcano picked the models for every run.'
         failure_message:
           type: string
         created_at:
@@ -24859,19 +25966,17 @@ components:
           format: date-time
       required:
         - id
-        - project_id
-        - issue_id
         - trigger
         - status
         - max_stage
         - created_at
-    PaginatedAutofixRuns:
+    PaginatedLavaFlowRuns:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/AutofixRun'
+            $ref: '#/components/schemas/LavaFlowRun'
         limit:
           type: integer
           description: Number of items per page
@@ -25232,8 +26337,8 @@ components:
             $ref: '#/components/schemas/ProjectConfigBucket'
         realtime:
           $ref: '#/components/schemas/ProjectConfigRealtime'
-        autofix:
-          $ref: '#/components/schemas/ProjectConfigAutofix'
+        lavaflow:
+          $ref: '#/components/schemas/ProjectConfigLavaFlow'
         notifications:
           $ref: '#/components/schemas/ProjectConfigNotifications'
         auth:
@@ -26030,7 +27135,7 @@ components:
           type: boolean
         postgres_changes_enabled:
           type: boolean
-    ProjectConfigAutofix:
+    ProjectConfigLavaFlow:
       type: object
       additionalProperties: false
       description: 'AI diagnosis and fix settings. Omitted fields keep their current value; a project that never saved settings starts from `max_stage: pull_request` and `auto_trigger: true`.'
@@ -26038,7 +27143,7 @@ components:
         enabled:
           type: boolean
         max_stage:
-          $ref: '#/components/schemas/AutofixStage'
+          $ref: '#/components/schemas/LavaFlowStage'
         auto_trigger:
           type: boolean
     ProjectConfigScheduler:
@@ -27052,6 +28157,7 @@ components:
         to_email:
           type: string
           format: email
+          x-go-type: string
           description: Recipient address for the diagnostic email.
         subject:
           type: string
@@ -28230,6 +29336,29 @@ components:
       required:
         - channel
         - delivered
+    DeploymentCommit:
+      type: object
+      description: The commit a deploy client reported for the deployment's source. Absent when the client reported none. A frontend deployment that publishes another deployment's build carries that deployment's commit.
+      properties:
+        repository:
+          type: string
+          description: GitHub repository as `owner/name`, normalized from what the client sent.
+          example: acme/app
+        sha:
+          type: string
+          pattern: ^[0-9a-f]{40}$
+          description: Full commit ID.
+        dirty:
+          type: boolean
+          description: '`true` when the client reported that the uploaded files differ from the commit, or Volcano found an uploaded file in the project''s root directory that the commit does not hold, so the deployed code may differ from the commit.'
+        verified:
+          type: boolean
+          description: '`true` when Volcano confirmed, through the project''s GitHub connection, that `repository` is the project''s connected repository, `sha` is on its production branch, every uploaded file is the commit''s file at its path, and the upload holds the commit''s files under its root but those deploy clients leave out. Only frontend uploads are checked; a function deployment''s commit, one the client reports dirty, and one from another branch, repository, or a project without a connection, is recorded unverified. LavaFlow reads source and opens pull requests only for a verified commit with `dirty: false`.'
+      required:
+        - repository
+        - sha
+        - dirty
+        - verified
     DurableMessageWaitStatus:
       type: string
       enum:
@@ -28287,6 +29416,15 @@ components:
       required:
         - type
       additionalProperties: false
+    LavaFlowCommitOrigin:
+      type: string
+      enum:
+        - push
+        - client_reported
+      x-enum-varnames:
+        - LavaFlowCommitOriginPush
+        - LavaFlowCommitOriginClientReported
+      description: How `commit_sha` reached Volcano. `push` is a commit a push to the connected repository deployed. `client_reported` is a commit the deploy client reported, which Volcano verified against the uploaded files.
     DurableApprovalFunction:
       type: object
       description: |
