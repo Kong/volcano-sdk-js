@@ -12,7 +12,7 @@ const { VolcanoClient } = require('@volcano.dev/sdk');
  */
 
 /**
- * A row of `orders`, as volcano/migrations/001_orders.sql defines it.
+ * A row of `orders`, as volcano/migrations/001_create_orders.sql defines it.
  *
  * @typedef {object} OrderRow
  * @property {string} id
