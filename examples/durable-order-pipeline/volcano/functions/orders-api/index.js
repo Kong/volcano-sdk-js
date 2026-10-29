@@ -38,7 +38,7 @@ const { client, serviceKey, starter, unwrap } = require('./volcano');
  */
 
 /**
- * A row of `orders`, as volcano/migrations/001_create_orders.sql defines it.
+ * A row of `orders`, as volcano/migrations/001_orders.sql defines it.
  *
  * @typedef {object} OrderRow
  * @property {string} id

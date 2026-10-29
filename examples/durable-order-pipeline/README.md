@@ -75,7 +75,8 @@ volcano cloud durable deploy -f order-pipeline
 volcano cloud functions deploy --all
 
 # 4. Visibility, then the schema. Volcano runs each migration file as one
-#    query, so each file holds one statement and is safe to run again.
+#    query, so each file is one DO block that applies a table, its RLS, and
+#    its policies together. Any file can run again on its own.
 volcano cloud config deploy
 volcano cloud migrations deploy --all -d app
 ```
