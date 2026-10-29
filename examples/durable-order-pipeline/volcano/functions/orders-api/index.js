@@ -157,8 +157,9 @@ async function submitOrder(auth, input) {
 }
 
 // A service key can start an execution, which is what makes this callable from
-// any backend. Reading one cannot, so `orderStatus` reads the row this pipeline
-// keeps up to date instead.
+// any backend. `orderStatus` reads the row this pipeline keeps up to date rather
+// than the execution: the row carries the review state and tracking as they
+// change, and an execution reports what it produced only once it finishes.
 /**
  * @param {string} orderId
  * @returns {Promise<DurableExecution>}

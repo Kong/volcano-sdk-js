@@ -233,6 +233,49 @@ function surfacesRefusalsOverTheWire(): void {
   });
 }
 
+// A service key scoped without `*` reaches an execution only with its client
+// token, so the header goes out beside the key.
+function sendsTheClientTokenWithAServiceKey(): void {
+  test('sends a service key and the client token together', async () => {
+    jest.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(Response.json(execution)));
+    const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'sk-scoped' });
+
+    await volcano.durable.getFromApplication('order-pipeline', 'exec-1', { clientToken: 'ct-1' });
+    await volcano.durable.stopFromApplication('order-pipeline', 'exec-1', { clientToken: 'ct-1' });
+
+    for (const index of [0, 1]) {
+      const headers = new Headers(fetchCall(index)[1]?.headers);
+      expect(headers.get('authorization')).toBe('Bearer sk-scoped');
+      expect(headers.get('x-volcano-client-token')).toBe('ct-1');
+    }
+  });
+}
+
+// A throttled read of the execution's state answers 503 with Retry-After, and
+// a stop answered that way may already have been sent.
+function surfacesThrottlingOverTheWire(): void {
+  test.each([
+    ['read', 'getFromApplication'],
+    ['stop', 'stopFromApplication'],
+  ] as const)('surfaces a throttled %s with its retry delay', async (_operation, method) => {
+    jest
+      .mocked(globalThis.fetch)
+      .mockResolvedValue(
+        Response.json(
+          { error: 'durable execution reads are throttled' },
+          { status: 503, headers: { 'Retry-After': '3' } },
+        ),
+      );
+    const volcano = new VolcanoClient({ apiUrl: 'https://api.test.com', anonKey: 'ak-durable' });
+
+    const result = await volcano.durable[method]('order-pipeline', 'exec-1', { clientToken: 'ct-1' });
+
+    expect(result.data).toBeNull();
+    expect(result.status).toBe(503);
+    expect(result.error).toMatchObject({ status: 503, retryAfter: 3 });
+  });
+}
+
 // The transport tests above settle the credential and the validation; the
 // route, the method, and the headers are the real transport's work.
 describe('durable application reads and stops over the wire', () => {
@@ -241,5 +284,7 @@ describe('durable application reads and stops over the wire', () => {
   });
 
   readsAndStopsOverTheWire();
+  sendsTheClientTokenWithAServiceKey();
   surfacesRefusalsOverTheWire();
+  surfacesThrottlingOverTheWire();
 });

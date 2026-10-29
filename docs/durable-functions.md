@@ -760,8 +760,9 @@ the one to expect right after a deploy: retry once the function is `active`.
 ### Reading and stopping from the application
 
 `getFromApplication` and `stopFromApplication` follow an execution with the
-credential that started it. An anon key, or a signed-in user who did not start
-the execution, also passes the `clientToken` its start returned:
+credential that started it. An anon key, a signed-in user who did not start the
+execution, or a service key scoped without `*` also passes the `clientToken` its
+start returned:
 
 ```javascript
 const { data, error } = await volcano.durable.getFromApplication('order-pipeline', execution.id, {
@@ -778,27 +779,33 @@ await volcano.durable.stopFromApplication('order-pipeline', execution.id, {
 });
 ```
 
-| Credential               | Reaches                                                                     |
-| ------------------------ | --------------------------------------------------------------------------- |
-| Service key              | Any execution of the project                                                |
-| Signed-in user's session | Executions that user started, and any execution whose client token it sends |
-| Anon key                 | Only executions whose client token it sends                                 |
+| Credential                               | Reaches                                                                     |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| Service key holding `*` (the default)    | Any execution of the project                                                |
+| Service key scoped to a list without `*` | Only executions whose client token it sends                                 |
+| Signed-in user's session                 | Executions that user started, and any execution whose client token it sends |
+| Anon key                                 | Only executions whose client token it sends                                 |
 
 The function's
 [visibility](/platform/functions/durable-functions#who-can-start-executions)
-has to admit the caller too, as it does for a start. While an execution is
-still `pending`, only a service key reaches it, and stopping it answers `409`.
-An execution the caller cannot reach answers `404`, like one that does not
-exist, and a read never returns `client_token`. Reads and stops count against
-the function's rate limit with starts, so poll every few seconds rather than in
-a tight loop.
+has to admit the caller too, as it does for a start, and a scoped service key
+needs `functions.invoke`. While an execution is still `pending`, only a service
+key holding `*` reaches it, and stopping it answers `409`. An execution the
+caller cannot reach answers `404`, like one that does not exist, and a read
+never returns `client_token`. Reads and stops count against the function's rate
+limit with starts, so poll every few seconds rather than in a tight loop.
+
+Both answer `503` where durable execution is unavailable, and also when reads of
+the execution's state are throttled. A throttled answer sets `error.retryAfter`,
+the seconds to wait before reading again. A stop answered that way may already
+have been sent, so read the execution before stopping it again.
 
 ### Following executions by project
 
-Listing executions, and reading or stopping one without a client token, are
-owner-scoped. Use a separate backend client with the project owner's platform
-user token or a project access token; a `read_only` token can read and list but
-not stop. Auth-user sessions, anon keys, and service keys are not accepted.
+`get`, `list`, and `stop` take the project id and are owner-scoped. Use a
+separate backend client with the project owner's platform user token or a
+project access token; a `read_only` token can read and list but not stop.
+Auth-user sessions, anon keys, and service keys are not accepted.
 
 ```javascript
 import { VolcanoClient } from '@volcano.dev/sdk';

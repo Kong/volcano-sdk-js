@@ -17,7 +17,8 @@ export interface Durable {
    * The start that creates the execution also returns its `client_token`; a
    * repeat under the same name does not. Pass it to `getFromApplication`,
    * `stopFromApplication`, and `durable.messages` so an anon key, or a user who
-   * did not start the execution, can reach it.
+   * did not start the execution, can reach it. A service key scoped to a list
+   * without `*` also needs it to read and stop the execution.
    *
    * @param functionName - Durable function name, or its id.
    * @param input - JSON-serializable input handed to the function.
@@ -80,11 +81,14 @@ export interface Durable {
    * Read an execution with the credential that started it, including its
    * `result` once it has succeeded. Poll this to wait for an execution to finish.
    *
-   * It uses the client's credential, as `start` does. A service key reaches any
-   * execution of the project, and a signed-in user the executions they started.
-   * An anon key, or a user who did not start it, needs `options.clientToken`:
-   * the `client_token` its start returned. An execution the caller cannot reach
-   * answers 404, like one that does not exist.
+   * It uses the client's credential, as `start` does. A service key holding
+   * `*`, the default, reaches any execution of the project, and a signed-in
+   * user the executions they started. An anon key, a user who did not start
+   * it, or a service key scoped to a list without `*` needs
+   * `options.clientToken`: the `client_token` its start returned. An execution
+   * the caller cannot reach answers 404, like one that does not exist. A 503
+   * with `error.retryAfter` means reads of the execution are throttled; wait
+   * that many seconds before reading again.
    *
    * @example
    * ```typescript
@@ -142,8 +146,11 @@ export interface Durable {
    * Ask a running execution to stop, with the credential that started it.
    * Reaches the same executions as `getFromApplication`, with the same
    * `options.clientToken`. Accepted rather than awaited, like `stop`: poll
-   * `getFromApplication` to see it reach `stopped`. Only a service key reaches
-   * an execution that is still `pending`, and stopping one answers 409.
+   * `getFromApplication` to see it reach `stopped`. Only a service key holding
+   * `*` reaches an execution that is still `pending`, and stopping one answers
+   * 409. A 503 with `error.retryAfter` means reads of the execution are
+   * throttled; the stop may already have been sent, so read the execution
+   * before stopping it again.
    */
   stopFromApplication(
     functionName: string,

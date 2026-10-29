@@ -1453,9 +1453,11 @@ export interface paths {
          *
          *     The start returns a `client_token`. An anon key, or a user who did not
          *     start the execution, sends it as `X-Volcano-Client-Token` to read the
-         *     execution, stop it, and reach its messages. An anon key is shared by
+         *     execution, stop it, and reach its messages. A service key scoped to a
+         *     list without `*` sends it to read and stop the execution. An anon key is shared by
          *     everyone who loads the page, so the id alone never reaches an
-         *     execution. Listing executions requires the project owner's token.
+         *     execution. Listing executions takes the project owner's token or a
+         *     project access token.
          *
          *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
          *     a start with the same name returns the existing execution instead of
@@ -1487,7 +1489,10 @@ export interface paths {
          *     it, including its `result` once it has succeeded. Poll this to wait for
          *     an execution to finish.
          *
-         *     **With a service key:** any execution in the project.
+         *     **With a service key:** any execution in the project when the key holds
+         *     `*`, the default. A key scoped to a list without `*` reaches an
+         *     execution whose `X-Volcano-Client-Token` the request carries, as an
+         *     anon key does; the start returns that token.
          *
          *     **With an auth user token:** an execution the user started, or one
          *     whose `X-Volcano-Client-Token` the request carries, of a durable
@@ -1496,8 +1501,8 @@ export interface paths {
          *     **With an anon key:** an execution whose `X-Volcano-Client-Token` the
          *     request carries, of a function with `visibility: public`.
          *
-         *     Only the service key reaches an execution that is still `pending`. Any
-         *     other execution answers `404`, as a missing one does.
+         *     Only a service key holding `*` reaches an execution that is still
+         *     `pending`. Any other execution answers `404`, as a missing one does.
          *
          *     The response is the one `GET
          *     /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
@@ -3794,6 +3799,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/databases/{databaseName}/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a database's migration history
+         * @description Returns the migrations the database has recorded, in name order, read
+         *     from the database's own `_volcano_migrations.history` table. The history
+         *     is empty until a migration run or a baseline first records a file.
+         *
+         *     `active_run_id` is the run that is queued or running, if any.
+         *
+         *     If the history table is gone from a database where migrations ran,
+         *     answers `409` with code `history_missing`, and every run fails with
+         *     that code, rather than running files again. Record a baseline of the
+         *     files that were already applied to rebuild it. Dropping the whole
+         *     `_volcano_migrations` schema is not supported: the database then reads
+         *     as new, and the next run applies every file again.
+         *
+         *     Volcano reads at most 1,000 history entries, as many files as one run
+         *     may carry. A history with more answers `409` with code
+         *     `history_too_large`. A baseline is refused with that code, and a run
+         *     fails with it. Deleting the entries of files no longer among your
+         *     migrations brings the history back under the bound.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["getDatabaseMigrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migrations/baseline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record migrations as applied without running them
+         * @description Records each file in the database's migration history as applied,
+         *     without running it. Use it once for a database whose schema already
+         *     reflects the files, such as one migrated before Volcano tracked its
+         *     migrations, so later runs apply only newer files. It is refused while
+         *     a run is queued or running, and no run starts while it records. It
+         *     does not queue: while another request is changing the database, or the
+         *     database holds it up, such as with a lock on the migration history, it
+         *     answers `409` with code `database_busy`.
+         *
+         *     Files the history already records with the same checksum are skipped, so
+         *     repeating the request changes nothing. A file recorded with a different
+         *     checksum is refused, and nothing is recorded.
+         *
+         *     It also rebuilds a history that was lost (`history_missing`): send
+         *     exactly the files that were already applied, and later runs apply only
+         *     the rest.
+         *
+         *     Where migration runs are not available, answers `404` with code
+         *     `feature_unavailable`.
+         */
+        post: operations["baselineDatabaseMigrations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migration-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's migration runs
+         * @description Returns the database's 50 most recent migration runs, newest first,
+         *     without their files; get a run for its files. There is no pagination.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["listDatabaseMigrationRuns"];
+        put?: never;
+        /**
+         * Apply migrations to a database
+         * @description Starts a migration run: Volcano compares the files with the database's
+         *     history, rehearses the pending ones on a short-lived branch of the
+         *     database, takes a backup, and applies them in name order. Files the
+         *     history already records with the same checksum are skipped.
+         *
+         *     Asynchronous: the response is `202` with the run `queued`. Poll the run
+         *     until its `status` is `succeeded` or `failed`.
+         *
+         *     Send `Idempotency-Key` to make a retry safe: a repeat with a key this
+         *     database has seen returns that run with `200` and starts nothing. A
+         *     database runs one migration run at a time.
+         *
+         *     Where migration runs are not available, answers `404` with code
+         *     `feature_unavailable`.
+         */
+        post: operations["createDatabaseMigrationRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migration-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a migration run
+         * @description Returns the run with each file's outcome. Poll this after starting a
+         *     run.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["getDatabaseMigrationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/databases/{databaseName}/reset-password": {
         parameters: {
             query?: never;
@@ -3915,7 +4060,7 @@ export interface paths {
          *
          *     **Authentication:** Requires auth user access token (from signup/signin)
          *
-         *     **Row-Level Security:** Automatically enforced - you see only data you have access to
+         *     **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
          *
          *     **Use Cases:**
          *     - Query from browser/mobile apps
@@ -4059,7 +4204,7 @@ export interface paths {
          *
          *     **Authentication:** Requires auth user access token (from signup/signin)
          *
-         *     **Row-Level Security:** Automatically enforced - you see only data you have access to
+         *     **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
          *
          *     **Use Cases:**
          *     - Query from browser/mobile apps
@@ -6505,6 +6650,7 @@ export interface paths {
          *     | `functions.response_streaming` | Streaming an HTTP-mode function's response on its own URL as the function writes it |
          *     | `frontend_routes` | Creating and changing Frontend routes; listing, deleting, and serving existing ones work either way |
          *     | `frontends.candidates` | Creating, redeploying, promoting and rolling back to a frontend Candidate; reading, deleting and rolling back to the frontend's own runtime always work |
+         *     | `databases.migrations` | Starting migration runs and recording a baseline; reading history and runs works either way |
          *
          *     A capability missing from the list is unavailable, and a capability under
          *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
@@ -8223,6 +8369,261 @@ export interface components {
              */
             latest_restore_at?: string;
         };
+        /**
+         * @description A restore refused by the database's state. With code
+         *     `migration_run_in_progress`, `run_id` names the migration run backing up
+         *     or applying to the database.
+         */
+        DatabaseRestoreConflictError: components["schemas"]["Error"] & {
+            /** Format: uuid */
+            run_id?: string;
+        };
+        /** @description One migration file and its SQL. */
+        DatabaseMigrationFile: {
+            /**
+             * @description The file's path under `volcano/migrations/`: a file name such as
+             *     `001_create_users.sql`, or `<database>/001_create_users.sql` in a
+             *     project with more than one database, where `<database>` must be
+             *     this database. Every file in a request takes the same form. Files
+             *     run in byte order of their file name, which the history records.
+             * @example 001_create_users.sql
+             */
+            name: string;
+            /**
+             * @description The file's SQL, at most 1 MiB. A file may hold several statements
+             *     and runs in one transaction. A file cannot commit, roll back, use
+             *     savepoints, or `COPY` from the client, and statements that cannot
+             *     run in a transaction, such as `CREATE INDEX CONCURRENTLY`, are not
+             *     supported yet; such a file fails with `migration_failed`.
+             */
+            sql: string;
+        };
+        DatabaseMigrationFilesRequest: {
+            files: components["schemas"]["DatabaseMigrationFile"][];
+        };
+        /** @description One file the database's migration history records. */
+        DatabaseMigrationHistoryEntry: {
+            /** @example 001_create_users.sql */
+            name: string;
+            /**
+             * @description `sha256:` and the hex digest of the file as recorded, with a leading
+             *     byte order mark removed and CRLF line endings converted to LF.
+             * @example sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            checksum: string;
+            /**
+             * @description `applied`: a run ran the file and it committed. `baselined`: the file
+             *     was recorded as applied without running.
+             * @enum {string}
+             */
+            status: "applied" | "baselined";
+            /** Format: date-time */
+            applied_at: string;
+            /**
+             * Format: uuid
+             * @description The run that recorded the file. Absent for a baseline.
+             */
+            run_id?: string;
+        };
+        DatabaseMigrations: {
+            /** @description Every file the history records, in name order. */
+            history: components["schemas"]["DatabaseMigrationHistoryEntry"][];
+            /**
+             * Format: uuid
+             * @description The run that is queued or running, if any.
+             */
+            active_run_id?: string;
+        };
+        DatabaseMigrationBaseline: {
+            /**
+             * @description The files this request recorded, in name order. Empty when the
+             *     history already recorded every file.
+             */
+            recorded: string[];
+        };
+        /**
+         * @description A migration request refused by the database's state. With code
+         *     `migration_run_in_progress`, `run_id` names the run that is queued or
+         *     running.
+         */
+        DatabaseMigrationConflictError: components["schemas"]["Error"] & {
+            /** Format: uuid */
+            run_id?: string;
+        };
+        DatabaseMigrationRunFile: {
+            /** @example 001_create_users.sql */
+            name: string;
+            /**
+             * @description `pending`: not settled yet, including a file the run will try again
+             *     on its next attempt. `already_applied`: the history already recorded
+             *     it, so it did not run; a file can also end this way in `apply`, when
+             *     another session applied or baselined it after the run planned.
+             *     `applied`: this run applied it. `failed`: its own SQL failed and
+             *     its transaction rolled back, in the rehearsal or in the database as
+             *     the run's `phase` says, including when the run's time limit stopped
+             *     it; a file whose `COMMIT` failed is `unknown` instead. `not_run`:
+             *     the run ended before the file committed, without its SQL failing:
+             *     before `apply`, after an earlier file failed or lost its `COMMIT`,
+             *     or after the connection was lost or Volcano's own statements around
+             *     the file failed, which rolled it back. `unknown`: the run ended
+             *     in `apply` without confirming whether the file ran, for example
+             *     because its attempts ran out or its `COMMIT` failed or was cut
+             *     short. The file may have committed; the database's history says,
+             *     and the next run's plan applies it only if it is not recorded.
+             *     While the run is `queued` or `running`, each attempt reads the
+             *     history again before it runs a file, and sets every file the run
+             *     has not applied from it: `already_applied` if the history holds
+             *     it, `pending` otherwise.
+             * @enum {string}
+             */
+            outcome: "pending" | "already_applied" | "applied" | "failed" | "not_run" | "unknown";
+            error?: components["schemas"]["DatabaseMigrationFileError"];
+        };
+        /**
+         * @description The database's error for a failed file. `message` is the database's own
+         *     message and can quote values from the file or the data.
+         */
+        DatabaseMigrationFileError: {
+            /**
+             * @description At most 8 KiB (8,192 bytes). A longer message is cut and ends with
+             *     ` … [truncated]`. Volcano reads each reply the database sends about
+             *     the file up to 4 MiB, which leaves room for a reply that quotes the
+             *     whole file twice. A larger reply is not read: the file fails, and
+             *     this message says so instead.
+             * @example column "email" of relation "users" already exists
+             */
+            message: string;
+            /**
+             * @description The Postgres error code, when the database reported one.
+             * @example 42701
+             */
+            sqlstate?: string;
+            /** @description The line of the file the database reported, when known. */
+            line?: number;
+        };
+        /** @description A condition the run reports that did not stop it. */
+        DatabaseMigrationWarning: {
+            /**
+             * @description `out_of_order`: a pending file sorts before one the history already
+             *     records; it still ran. `missing_file`: the history records a file
+             *     the run did not include. `rehearsal_skipped`: the files were not
+             *     rehearsed, because branches are not available here or on the plan.
+             *     `backup_skipped`: no backup was taken, because backups are not
+             *     available here or on the plan. `backup_prune_failed`: Volcano
+             *     could not delete older migration backups beyond the 20 it keeps;
+             *     the run's outcome is unaffected, and the next run that takes a
+             *     backup tries again. `warnings_truncated`: the run raised more than
+             *     100 warnings; it is the last one, and its message says how many
+             *     more were not kept.
+             * @enum {string}
+             */
+            code: "out_of_order" | "missing_file" | "rehearsal_skipped" | "backup_skipped" | "backup_prune_failed" | "warnings_truncated";
+            /** @description The file the warning is about, when it is about one. */
+            file?: string;
+            message: string;
+        };
+        /** @description Why the run failed, or why its last attempt did. */
+        DatabaseMigrationRunError: {
+            /**
+             * @description Stable machine-readable reason. `migration_failed`: a file's SQL,
+             *     or its `COMMIT`, failed; `phase` says whether in the rehearsal,
+             *     leaving the database untouched, or in the database, where the files
+             *     before it stay applied. `checksum_mismatch`: an applied file changed.
+             *     `history_missing`: the database's history table is gone though
+             *     migrations ran there; record a baseline of the files already
+             *     applied. Dropping the whole `_volcano_migrations` schema is not
+             *     supported and not detected: the database reads as new, and the run
+             *     applies every file again. `history_too_large`: the history has
+             *     more than the 1,000 entries Volcano reads. `invalid_file`: a file
+             *     Volcano refuses to run. `invalid_layout`: file paths that do not map
+             *     to the database.
+             *     `plan_changed`: the history changed after the rehearsal.
+             *     `branch_limit`: the rehearsal branch would exceed the plan's branch
+             *     allowance. `backup_failed` and `rehearsal_unavailable`: Volcano
+             *     could not take the backup or prepare the rehearsal.
+             *     `restore_in_progress` and `database_unavailable`: the database could
+             *     not take the run. `locked`: another session held the migration lock,
+             *     or a file waited too long for a lock. `connection_failed`: the
+             *     database could not be reached, or the connection was lost,
+             *     including while a file ran. `internal_error`: Volcano failed for a
+             *     reason of its own, such as its own statements around a file.
+             *     `timeout` and `attempts_exhausted`: the run could not finish.
+             * @enum {string}
+             */
+            code: "migration_failed" | "checksum_mismatch" | "history_missing" | "history_too_large" | "invalid_file" | "invalid_layout" | "plan_changed" | "branch_limit" | "rehearsal_unavailable" | "backup_failed" | "restore_in_progress" | "database_unavailable" | "locked" | "connection_failed" | "timeout" | "attempts_exhausted" | "internal_error";
+            /**
+             * @description What happened, naming files and Postgres error codes. The
+             *     database's own message is on the failed file.
+             */
+            message: string;
+        };
+        /**
+         * @description One application of migration files to a database. A run plans the files
+         *     against the database's history, rehearses the pending ones on a
+         *     short-lived branch, takes a backup, and applies them.
+         */
+        DatabaseMigrationRun: {
+            /** Format: uuid */
+            id: string;
+            database: components["schemas"]["ResourceReference"];
+            /**
+             * @description `queued` and `running` mean the run has not ended; a run waiting
+             *     to retry stays `running`. `succeeded`: every pending file was
+             *     applied, or none was pending. `failed`: `error` says why.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /**
+             * @description The step the run is on, or the one it ended on. `plan` compares the
+             *     files with the history. `rehearse` applies the pending files to a
+             *     short-lived branch of the database, which is deleted afterwards.
+             *     `backup` takes the backup named by `backup_name`. `apply` applies
+             *     the files to the database.
+             * @enum {string}
+             */
+            phase: "plan" | "rehearse" | "backup" | "apply";
+            /**
+             * @description What started the run.
+             * @enum {string}
+             */
+            source: "git_deploy" | "api";
+            /** @description The commit whose files the run applies. Present for `git_deploy` runs. */
+            commit_sha?: string;
+            /**
+             * @description The backup the run takes before it applies the files, named once
+             *     the run starts taking it. It is listed with the database's backups
+             *     with `source: migration`. A run that ended in its `backup` phase
+             *     may name a backup that was never created.
+             * @example before-migration-7f3a1c2e-5d4b-4a91-8c6f-2b1e9d0a4c73
+             */
+            backup_name?: string;
+            /**
+             * @description The run's files, in the order they run, with what became of each.
+             *     Absent when listing runs.
+             */
+            files?: components["schemas"]["DatabaseMigrationRunFile"][];
+            /**
+             * @description A run keeps at most 100 warnings, keeping those about the run, such
+             *     as a skipped backup, ahead of those about files. A run that raised
+             *     more ends the list with a `warnings_truncated` warning.
+             */
+            warnings: components["schemas"]["DatabaseMigrationWarning"][];
+            error?: components["schemas"]["DatabaseMigrationRunError"];
+            /**
+             * Format: date-time
+             * @description When a worker first picked the run up.
+             */
+            started_at?: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatabaseMigrationRunList: {
+            data: components["schemas"]["DatabaseMigrationRun"][];
+        };
         DatabaseStats: {
             /**
              * Format: int64
@@ -9378,11 +9779,18 @@ export interface components {
             provisioning_started_at?: string;
             /**
              * @description Who may start executions of this function through
-             *     `POST /durable-functions/{functionId}/executions`: service keys at
-             *     every level, signed-in users of the project from `authenticated`,
-             *     and anon keys holding `functions.invoke` only at `public`. Reading
-             *     and stopping an execution always require the project owner's
-             *     token, whatever this is set to.
+             *     `POST /durable-functions/{functionId}/executions`, and read and stop
+             *     them through `GET /durable-functions/{functionId}/executions/{executionId}`
+             *     and its `/stop`: service keys at every level (a scoped key needs
+             *     `functions.invoke`), signed-in users of the project from
+             *     `authenticated`, and anon keys holding `functions.invoke` only at
+             *     `public`. On the read and stop routes a service key holding `*`,
+             *     the default, reaches every execution. A service key scoped to a
+             *     list without `*` and an anon key reach the ones whose client token
+             *     they send, which the start returns, and a signed-in user also the
+             *     ones they started. The project-scoped routes under
+             *     `/projects/{id}/durable-functions` take the project owner's token or
+             *     a project access token, whatever this is set to.
              *
              *     Set it when the function is deployed. Durable functions have no
              *     update endpoint, so changing visibility later means redeploying.
@@ -9445,7 +9853,10 @@ export interface components {
              * Format: int64
              * @description How long a finished execution's result and history are retained, for
              *     as long as the function exists. Deleting the function, or its
-             *     project, ends retention early and takes the history with it.
+             *     project, ends retention early and takes the history with it. A
+             *     result or error Volcano has just read is kept in memory for up to
+             *     five minutes, so a read can still return it for up to five minutes
+             *     after retention ends.
              */
             retention_days: number;
         };
@@ -9469,7 +9880,8 @@ export interface components {
              * @description Whatever the function returned, verbatim. Absent while the execution
              *     is still running, absent when the result was too large to return and
              *     was checkpointed instead, and absent once the retention period has
-             *     lapsed.
+             *     lapsed. A result Volcano has just read can still be returned for up
+             *     to five minutes after that.
              */
             result?: unknown;
             /**
@@ -9492,7 +9904,8 @@ export interface components {
             completed_at?: string;
             /**
              * @description Lets a browser read the execution, stop it, and read and send its
-             *     messages. Returned only by the start whose input the execution runs,
+             *     messages, and a service key scoped to a list without `*` read and
+             *     stop it. Returned only by the start whose input the execution runs,
              *     never by a repeat under the same name or by a read. Send it as
              *     `X-Volcano-Client-Token`.
              */
@@ -10496,6 +10909,14 @@ export interface components {
             /** @description The innermost frame of your code in the stack, as `function (file)`. For a frontend's Next.js build output, the outermost route or page file of the build in the stack, such as `.next/server/app/checkout/route.js`, or without one, the outermost file of the build. Omitted without a stack. */
             culprit?: string;
             status: components["schemas"]["IssueStatus"];
+            /**
+             * @description Whether the issue holds an exception: one your code threw, or one it
+             *     logged with `console.error(err)` or Python's `logger.exception()`.
+             *     Only these start LavaFlow runs on their own. `false` for an error
+             *     logged any other way, such as a structured log line, a logger's
+             *     error line, or a printed traceback. Once `true`, it stays `true`.
+             */
+            exception: boolean;
             /**
              * Format: int64
              * @description Errors counted in this issue. A retried delivery can count an error twice.
@@ -13003,7 +13424,8 @@ export interface components {
         DurableMessageIdempotencyKey: string;
         /**
          * @description The `client_token` the execution's start returned. Lets an anon key,
-         *     or a user who did not start the execution, reach it.
+         *     or a user who did not start the execution, reach it, and a service key
+         *     scoped to a list without `*` read and stop it.
          */
         DurableClientToken: string;
         /** @description Return only messages travelling this way. */
@@ -13079,6 +13501,8 @@ export interface components {
         Search: string;
         /** @description Database restore ID */
         RestoreId: string;
+        /** @description Database migration run ID */
+        MigrationRunId: string;
         /** @description Function scheduler ID */
         SchedulerId: string;
         /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
@@ -18022,7 +18446,8 @@ export interface operations {
             header?: {
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -18095,12 +18520,19 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment, or the plan
-             *     terms for the request could not be read. The first is not one to
-             *     retry in a loop; the second is transient.
+             * @description Durable execution is not available in this environment, the plan
+             *     terms for the request could not be read, or reads of the
+             *     execution's state in its region are throttled. The first is not one
+             *     to retry in a loop; the others are transient, and a throttled read
+             *     carries `Retry-After`.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -18115,7 +18547,8 @@ export interface operations {
             header?: {
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -18178,8 +18611,8 @@ export interface operations {
                 };
             };
             /**
-             * @description The execution has not started yet. Only a service key can reach an
-             *     execution in that state.
+             * @description The execution has not started yet. Only a service key holding `*`
+             *     can reach an execution in that state.
              */
             409: {
                 headers: {
@@ -18203,12 +18636,21 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment, or the plan
-             *     terms for the request could not be read. The first is not one to
-             *     retry in a loop; the second is transient.
+             * @description Durable execution is not available in this environment, the plan
+             *     terms for the request could not be read, or the execution's state
+             *     could not be read back because reads in its region are throttled.
+             *     The first is not one to retry in a loop; the others are transient,
+             *     and a throttled read carries `Retry-After`. A stop answered with a
+             *     throttle may already have been sent, so read the execution before
+             *     stopping it again.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -18232,7 +18674,8 @@ export interface operations {
             header?: {
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -18336,7 +18779,8 @@ export interface operations {
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -20132,12 +20576,19 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Either the
-             *     capability is paused or this deployment cannot serve it, so the
-             *     request is not one to retry in a loop.
+             * @description Durable execution is not available in this environment, or reads of
+             *     the execution's state in its region are throttled. The first means
+             *     the capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop. A throttled read is transient
+             *     and carries `Retry-After`.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -20251,12 +20702,21 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Either the
-             *     capability is paused or this deployment cannot serve it, so the
-             *     request is not one to retry in a loop.
+             * @description Durable execution is not available in this environment, or the
+             *     execution's state could not be read back because reads in its region
+             *     are throttled. The first means the capability is paused or this
+             *     deployment cannot serve it, so the request is not one to retry in a
+             *     loop. A throttled read is transient and carries `Retry-After`; the
+             *     stop may already have been sent, so read the execution before
+             *     stopping it again.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -25800,7 +26260,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackup"];
                 };
             };
-            /** @description Invalid backup name */
+            /** @description Invalid backup name, or one with a reserved prefix */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -26268,16 +26728,19 @@ export interface operations {
                 };
             };
             /**
-             * @description A restore is already in progress, the database is not active,
-             *     another database operation is still running, or the database is
-             *     holding as many pre-restore branches as it may.
+             * @description Code `migration_run_in_progress`: a migration run is backing up or
+             *     applying to the database, named by `run_id`. Wait for it to end,
+             *     then send the request again. Without a code: a restore is already
+             *     in progress, the database is not active, another database operation
+             *     is still running, or the database is holding as many pre-restore
+             *     branches as it may.
              */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["DatabaseRestoreConflictError"];
                 };
             };
             /** @description Backups are temporarily unavailable */
@@ -26336,6 +26799,330 @@ export interface operations {
             };
             /** @description Backups are temporarily unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrations"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Code `history_missing`: the history table is gone from a database
+             *     where migrations ran; record a baseline of the files that were
+             *     already applied. Code `history_too_large`: the history has more
+             *     than 1,000 entries. Without a code: the database is not active, so
+             *     its history cannot be read.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano could not reach the database */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    baselineDatabaseMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseMigrationFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description The files are recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationBaseline"];
+                };
+            };
+            /**
+             * @description A file breaks a rule: too many files, a file over 1 MiB, a name that
+             *     is not a `.sql` file, a name repeated, or a directory other than
+             *     this database's. Nothing is recorded or queued. Code
+             *     `invalid_layout`: a path does not map to this database. Code
+             *     `invalid_file`: a name is repeated or too long. A request the
+             *     schema refuses carries no code. Without a code, the message
+             *     starting `storage limit reached`: the database is over its storage
+             *     allowance, so its writes are blocked, as they are over a
+             *     connection.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or database not found, or migration runs are not available
+             *     here (code `feature_unavailable`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Nothing was recorded. Code `checksum_mismatch`: a file is already
+             *     recorded with a different checksum. Code
+             *     `migration_run_in_progress`: a run is queued or running, named by
+             *     `run_id`. Code `history_too_large`: the history has more than 1,000
+             *     entries. Code `database_busy`: another request is changing the
+             *     database, or the database held the baseline up, such as with a lock
+             *     on its migration history; try again. Without a code: the database is not active or changed
+             *     while the request ran, or another session holds its migration
+             *     lock.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationConflictError"];
+                };
+            };
+            /** @description The request body is larger than 4 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano could not reach the database */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDatabaseMigrationRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRunList"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes the request safe to retry. A repeat with a key this database
+                 *     has seen returns the run it started. Reusing a key for different
+                 *     files answers `409`. Up to 255 printable ASCII characters.
+                 */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseMigrationFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description A run with this `Idempotency-Key` already exists; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /** @description Run accepted and queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /**
+             * @description A file breaks a rule: too many files, a file over 1 MiB, a name that
+             *     is not a `.sql` file, a name repeated, or a directory other than
+             *     this database's. Nothing is recorded or queued. Code
+             *     `invalid_layout`: a path does not map to this database. Code
+             *     `invalid_file`: a name is repeated or too long. A request the
+             *     schema refuses carries no code. Without a code, the message
+             *     starting `storage limit reached`: the database is over its storage
+             *     allowance, so its writes are blocked, as they are over a
+             *     connection.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or database not found, or migration runs are not available
+             *     here (code `feature_unavailable`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Code `migration_run_in_progress`: a run is already queued or running
+             *     for this database, named by `run_id`. Wait for it to end, then send
+             *     the request again. Without a code: the `Idempotency-Key` already
+             *     started a run of different files.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationConflictError"];
+                };
+            };
+            /** @description The request body is larger than 4 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /** @description Database migration run ID */
+                runId: components["parameters"]["MigrationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /** @description Project, database, or run not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -32307,7 +33094,9 @@ export interface operations {
                      *     grants everything. Scope enforcement applies to function invocation,
                      *     storage object operations, project locks, and server-side auth proxy
                      *     metadata (auth.signin, auth.signup, auth.refresh, auth.logout,
-                     *     auth.password_reset).
+                     *     auth.password_reset). A key scoped to a list without "*" reads and
+                     *     stops a durable execution only with the `client_token` its start
+                     *     returned.
                      * @example [
                      *       "functions.invoke",
                      *       "locks.manage"
@@ -33833,6 +34622,10 @@ export interface operations {
                      *         {
                      *           "id": "frontends.candidates",
                      *           "status": "unavailable"
+                     *         },
+                     *         {
+                     *           "id": "databases.migrations",
+                     *           "status": "available"
                      *         }
                      *       ]
                      *     }

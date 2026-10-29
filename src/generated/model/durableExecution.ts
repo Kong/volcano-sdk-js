@@ -28,7 +28,8 @@ export interface DurableExecution {
      * Whatever the function returned, verbatim. Absent while the execution
      * is still running, absent when the result was too large to return and
      * was checkpointed instead, and absent once the retention period has
-     * lapsed.
+     * lapsed. A result Volcano has just read can still be returned for up
+     * to five minutes after that.
      */
   result?: unknown;
   /**
@@ -47,7 +48,8 @@ export interface DurableExecution {
   completed_at?: string;
   /**
      * Lets a browser read the execution, stop it, and read and send its
-     * messages. Returned only by the start whose input the execution runs,
+     * messages, and a service key scoped to a list without `*` read and
+     * stop it. Returned only by the start whose input the execution runs,
      * never by a repeat under the same name or by a read. Send it as
      * `X-Volcano-Client-Token`.
      */
