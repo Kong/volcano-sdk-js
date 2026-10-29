@@ -17,7 +17,7 @@ machine. Here it is four lines in the middle of the handler.
 | `volcano/functions/order-pipeline/db.js`    | The work each step does, behind one object, so the handler reads as a flow.         |
 | `volcano/functions/orders-api/index.js`     | A standard function that starts executions, reports status, and records reviews.    |
 | `volcano/functions/orders-api/volcano.js`   | The clients `orders-api` calls Volcano with, and where it checks their keys.        |
-| `volcano/migrations/001_orders.sql`         | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.         |
+| `volcano/migrations/`                       | `orders`, `order_items`, `charges`, with RLS so a user sees only their own.         |
 | `volcano/volcano-config.yaml`               | Declares `order-pipeline` as `kind: durable`, and who can call each function.       |
 | `jsconfig.json`                             | Type-checks the functions' JavaScript against the SDK's declarations. Not deployed. |
 
@@ -74,7 +74,9 @@ volcano cloud durable deploy -f order-pipeline
 #    there is no id to record.
 volcano cloud functions deploy --all
 
-# 4. Visibility, then the schema.
+# 4. Visibility, then the schema. Volcano runs each migration file as one
+#    query, so each file is one DO block that applies a table, its RLS, and
+#    its policies together. Any file can run again on its own.
 volcano cloud config deploy
 volcano cloud migrations deploy --all -d app
 ```
