@@ -457,8 +457,9 @@ if (execution.data?.status === 'succeeded') {
 }
 ```
 
-`DurableExecution` is the handle `start`, `get` and `stop` resolve with, and
-`PaginatedDurableExecutions` is what `list` returns. Both are generated from
+`DurableExecution` is the handle `start`, `get`, `getFromApplication`, `stop`
+and `stopFromApplication` resolve with, and `PaginatedDurableExecutions` is
+what `list` returns. Both are generated from
 the API contract, so they follow the wire's snake_case (`function_id`,
 `created_at`, `result_expired`). `result` is `unknown` there — the platform
 returns whatever the handler produced and cannot know its type, so narrow or

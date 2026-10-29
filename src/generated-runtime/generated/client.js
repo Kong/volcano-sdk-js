@@ -919,7 +919,7 @@ export const getQueryDatabaseSelectUrl = (databaseName) => {
  *
  * **Authentication:** Requires auth user access token (from signup/signin)
  *
- * **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
+ * **Row-Level Security:** Automatically enforced - you see only data you have access to
  *
  * **Use Cases:**
  * - Query from browser/mobile apps
