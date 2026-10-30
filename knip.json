@@ -17,6 +17,7 @@
         "scripts/audit-dependencies.mts",
         "scripts/copy-types.mts",
         "scripts/jest-completeness.cts",
+        "scripts/fresh-install-resolver.cts",
         "scripts/check-mutation-report.mts",
         "scripts/node-environment.cts",
         "scripts/browser-environment.cts",

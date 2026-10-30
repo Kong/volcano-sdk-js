@@ -19,13 +19,16 @@ This checklist does not authorize a release, a registry mutation or an environme
 ## Dependabot updates
 
 Dependabot titles every update `chore(deps)` or `chore(deps-dev)`, so merging one
-does not start a release. When an update changes what the package ships, edit
-the squash commit title to `fix(deps): ...` when merging so Release Please
-releases it:
+does not start a release. It cannot title runtime updates `fix` itself: it splits
+prefixes only between `dependencies` and `devDependencies`, and `dependencies`
+also covers the unpublished example app. When an update changes what the package
+ships, edit the squash commit title to `fix(deps): ...` when merging so Release
+Please releases it:
 
-- A change to the `dependencies` range in the root `package.json`, such as a
-  major `centrifuge` or `ws` update. In-range bumps change only
-  `pnpm-lock.yaml`, and the example app's `package.json` is not published.
+- A change to the `dependencies` range in the root `package.json`. `centrifuge`
+  is pinned exactly, so every `centrifuge` update changes it; `ws` changes only
+  for a new major. Other in-range bumps change only `pnpm-lock.yaml`, and the
+  example app's `package.json` is not published.
 - A change to `src/generated` after regenerating, because the build bundles it
   into `dist`.
 

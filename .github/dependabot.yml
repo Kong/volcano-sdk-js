@@ -16,7 +16,8 @@ updates:
       default-days: 5
       semver-major-days: 14
     # Keep a range that already allows the new version, so in-range bumps
-    # change only pnpm-lock.yaml.
+    # change only pnpm-lock.yaml. centrifuge's exact pin never does, so each of
+    # its updates rewrites the published range.
     versioning-strategy: 'increase-if-necessary'
     ignore:
       # @types/node tracks the oldest supported Node (`engines.node` >=22).
