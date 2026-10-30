@@ -19,21 +19,34 @@ type TransportMock = jest.Mock<TransportOperation>;
 
 interface DurableTransport {
   getDurableExecution: TransportMock;
+  getDurableExecutionFromApplication: TransportMock;
   listDurableExecutions: TransportMock;
   stopDurableExecution: TransportMock;
+  stopDurableExecutionFromApplication: TransportMock;
 }
 
-type ClientWithTransport = (overrides?: Partial<DurableTransport>) => {
+type ClientWithTransport = (
+  overrides?: Partial<DurableTransport>,
+  credentials?: { accessToken?: string },
+) => {
   volcano: VolcanoClient;
   transport: DurableTransport;
 };
 
+const owner = { accessToken: 'owner-token' };
+
 export function mockClientFactory(Client: typeof VolcanoClient): ClientWithTransport {
-  return (overrides = {}) => {
+  return (overrides = {}, credentials = owner) => {
     const transport = {
       getDurableExecution: jest.fn<TransportOperation>().mockResolvedValue({ data: execution, status: 200 }),
+      getDurableExecutionFromApplication: jest
+        .fn<TransportOperation>()
+        .mockResolvedValue({ data: execution, status: 200 }),
       listDurableExecutions: jest.fn<TransportOperation>().mockResolvedValue({ data: page, status: 200 }),
       stopDurableExecution: jest
+        .fn<TransportOperation>()
+        .mockResolvedValue({ data: { ...execution, status: 'stopped' }, status: 200 }),
+      stopDurableExecutionFromApplication: jest
         .fn<TransportOperation>()
         .mockResolvedValue({ data: { ...execution, status: 'stopped' }, status: 200 }),
       ...overrides,
@@ -41,7 +54,7 @@ export function mockClientFactory(Client: typeof VolcanoClient): ClientWithTrans
     const options = {
       apiUrl: 'https://api.test.com',
       anonKey: 'ak-durable',
-      accessToken: 'owner-token',
+      ...credentials,
       transportFactory: () => transport,
     };
     const volcano = new Client(options);

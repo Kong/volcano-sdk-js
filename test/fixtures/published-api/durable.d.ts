@@ -50,6 +50,17 @@ export interface Durable {
     status: number | null;
     error: Error | null;
   }>;
+  getFromApplication(
+    functionName: string,
+    executionId: string,
+    options?: {
+      clientToken?: string;
+    },
+  ): Promise<{
+    data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
   list(
     projectId: string,
     functionName: string,
@@ -67,6 +78,17 @@ export interface Durable {
     projectId: string,
     functionName: string,
     executionId: string,
+  ): Promise<{
+    data: DurableExecution | null;
+    status: number | null;
+    error: Error | null;
+  }>;
+  stopFromApplication(
+    functionName: string,
+    executionId: string,
+    options?: {
+      clientToken?: string;
+    },
   ): Promise<{
     data: DurableExecution | null;
     status: number | null;

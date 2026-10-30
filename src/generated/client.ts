@@ -1333,10 +1333,13 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId: string,) 
  * A `private` durable function answers every credential but a service key
  * exactly as a missing one, with 404.
  *
- * Starting is all this endpoint does. Reading a result or stopping an
- * execution requires the project owner's token, because an anon key is
- * shared by everyone who loads the page and an execution is addressed by
- * id alone.
+ * The start returns a `client_token`. An anon key, or a user who did not
+ * start the execution, sends it as `X-Volcano-Client-Token` to read the
+ * execution, stop it, and reach its messages. A service key scoped to a
+ * list without `*` sends it to read and stop the execution. An anon key is shared by
+ * everyone who loads the page, so the id alone never reaches an
+ * execution. Listing executions takes the project owner's token or a
+ * project access token.
  *
  * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
  * a start with the same name returns the existing execution instead of
@@ -1372,6 +1375,175 @@ return volcanoFetch<startDurableExecutionFromApplicationResponse>(getStartDurabl
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(startDurableExecutionFromApplicationBody)
+  }
+);}
+
+
+
+export type getDurableExecutionFromApplicationResponse200 = {
+  data: DurableExecution
+  status: 200
+}
+
+export type getDurableExecutionFromApplicationResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type getDurableExecutionFromApplicationResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type getDurableExecutionFromApplicationResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type getDurableExecutionFromApplicationResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type getDurableExecutionFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type getDurableExecutionFromApplicationResponseSuccess = (getDurableExecutionFromApplicationResponse200) & {
+  headers: Headers;
+};
+export type getDurableExecutionFromApplicationResponseError = (getDurableExecutionFromApplicationResponse401 | getDurableExecutionFromApplicationResponse403 | getDurableExecutionFromApplicationResponse404 | getDurableExecutionFromApplicationResponse429 | getDurableExecutionFromApplicationResponse503) & {
+  headers: Headers;
+};
+
+export type getDurableExecutionFromApplicationResponse = (getDurableExecutionFromApplicationResponseSuccess | getDurableExecutionFromApplicationResponseError)
+
+export const getGetDurableExecutionFromApplicationUrl = (functionId: string,
+    executionId: string,) => {
+
+
+
+
+  return `/durable-functions/${functionId}/executions/${executionId}`
+}
+
+/**
+ * Returns the execution's current state with the credential that started
+ * it, including its `result` once it has succeeded. Poll this to wait for
+ * an execution to finish.
+ *
+ * **With a service key:** any execution in the project when the key holds
+ * `*`, the default. A key scoped to a list without `*` reaches an
+ * execution whose `X-Volcano-Client-Token` the request carries, as an
+ * anon key does; the start returns that token.
+ *
+ * **With an auth user token:** an execution the user started, or one
+ * whose `X-Volcano-Client-Token` the request carries, of a durable
+ * function whose `visibility` is `authenticated` or `public`.
+ *
+ * **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+ * request carries, of a function with `visibility: public`.
+ *
+ * Only a service key holding `*` reaches an execution that is still
+ * `pending`. Any other execution answers `404`, as a missing one does.
+ *
+ * The response is the one `GET
+ * /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+ * returns. It never carries `client_token`.
+ * @summary Get a durable execution from an application
+ */
+export const getDurableExecutionFromApplication = async (functionId: string,
+    executionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<getDurableExecutionFromApplicationResponse> => {
+
+  return volcanoFetch<getDurableExecutionFromApplicationResponse>(getGetDurableExecutionFromApplicationUrl(functionId,executionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type stopDurableExecutionFromApplicationResponse200 = {
+  data: DurableExecution
+  status: 200
+}
+
+export type stopDurableExecutionFromApplicationResponse401 = {
+  data: Error
+  status: 401
+}
+
+export type stopDurableExecutionFromApplicationResponse403 = {
+  data: Error
+  status: 403
+}
+
+export type stopDurableExecutionFromApplicationResponse404 = {
+  data: Error
+  status: 404
+}
+
+export type stopDurableExecutionFromApplicationResponse409 = {
+  data: Error
+  status: 409
+}
+
+export type stopDurableExecutionFromApplicationResponse429 = {
+  data: Error
+  status: 429
+}
+
+export type stopDurableExecutionFromApplicationResponse503 = {
+  data: Error
+  status: 503
+}
+
+export type stopDurableExecutionFromApplicationResponseSuccess = (stopDurableExecutionFromApplicationResponse200) & {
+  headers: Headers;
+};
+export type stopDurableExecutionFromApplicationResponseError = (stopDurableExecutionFromApplicationResponse401 | stopDurableExecutionFromApplicationResponse403 | stopDurableExecutionFromApplicationResponse404 | stopDurableExecutionFromApplicationResponse409 | stopDurableExecutionFromApplicationResponse429 | stopDurableExecutionFromApplicationResponse503) & {
+  headers: Headers;
+};
+
+export type stopDurableExecutionFromApplicationResponse = (stopDurableExecutionFromApplicationResponseSuccess | stopDurableExecutionFromApplicationResponseError)
+
+export const getStopDurableExecutionFromApplicationUrl = (functionId: string,
+    executionId: string,) => {
+
+
+
+
+  return `/durable-functions/${functionId}/executions/${executionId}/stop`
+}
+
+/**
+ * Cancels a running execution with the credential that started it. Its
+ * completed steps are not undone.
+ *
+ * Access follows the same rules as reading the execution.
+ *
+ * The call is accepted rather than awaited: the response reports the
+ * execution as it was read back and may still say `running`. Poll
+ * `GET /durable-functions/{functionId}/executions/{executionId}` to see
+ * it settle into `stopped`.
+ *
+ * Stopping an execution that already finished is not an error: the
+ * response carries the state it settled in.
+ * @summary Stop a durable execution from an application
+ */
+export const stopDurableExecutionFromApplication = async (functionId: string,
+    executionId: string, options?: Parameters<typeof volcanoFetch>[1]): Promise<stopDurableExecutionFromApplicationResponse> => {
+
+  return volcanoFetch<stopDurableExecutionFromApplicationResponse>(getStopDurableExecutionFromApplicationUrl(functionId,executionId),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

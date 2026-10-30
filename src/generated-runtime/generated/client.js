@@ -475,10 +475,13 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
  * A `private` durable function answers every credential but a service key
  * exactly as a missing one, with 404.
  *
- * Starting is all this endpoint does. Reading a result or stopping an
- * execution requires the project owner's token, because an anon key is
- * shared by everyone who loads the page and an execution is addressed by
- * id alone.
+ * The start returns a `client_token`. An anon key, or a user who did not
+ * start the execution, sends it as `X-Volcano-Client-Token` to read the
+ * execution, stop it, and reach its messages. A service key scoped to a
+ * list without `*` sends it to read and stop the execution. An anon key is shared by
+ * everyone who loads the page, so the id alone never reaches an
+ * execution. Listing executions takes the project owner's token or a
+ * project access token.
  *
  * Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
  * a start with the same name returns the existing execution instead of
@@ -512,6 +515,64 @@ export const startDurableExecutionFromApplication = async (functionId, startDura
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
         body: JSON.stringify(startDurableExecutionFromApplicationBody)
+    });
+};
+export const getGetDurableExecutionFromApplicationUrl = (functionId, executionId) => {
+    return `/durable-functions/${functionId}/executions/${executionId}`;
+};
+/**
+ * Returns the execution's current state with the credential that started
+ * it, including its `result` once it has succeeded. Poll this to wait for
+ * an execution to finish.
+ *
+ * **With a service key:** any execution in the project when the key holds
+ * `*`, the default. A key scoped to a list without `*` reaches an
+ * execution whose `X-Volcano-Client-Token` the request carries, as an
+ * anon key does; the start returns that token.
+ *
+ * **With an auth user token:** an execution the user started, or one
+ * whose `X-Volcano-Client-Token` the request carries, of a durable
+ * function whose `visibility` is `authenticated` or `public`.
+ *
+ * **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+ * request carries, of a function with `visibility: public`.
+ *
+ * Only a service key holding `*` reaches an execution that is still
+ * `pending`. Any other execution answers `404`, as a missing one does.
+ *
+ * The response is the one `GET
+ * /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+ * returns. It never carries `client_token`.
+ * @summary Get a durable execution from an application
+ */
+export const getDurableExecutionFromApplication = async (functionId, executionId, options) => {
+    return volcanoFetch(getGetDurableExecutionFromApplicationUrl(functionId, executionId), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getStopDurableExecutionFromApplicationUrl = (functionId, executionId) => {
+    return `/durable-functions/${functionId}/executions/${executionId}/stop`;
+};
+/**
+ * Cancels a running execution with the credential that started it. Its
+ * completed steps are not undone.
+ *
+ * Access follows the same rules as reading the execution.
+ *
+ * The call is accepted rather than awaited: the response reports the
+ * execution as it was read back and may still say `running`. Poll
+ * `GET /durable-functions/{functionId}/executions/{executionId}` to see
+ * it settle into `stopped`.
+ *
+ * Stopping an execution that already finished is not an error: the
+ * response carries the state it settled in.
+ * @summary Stop a durable execution from an application
+ */
+export const stopDurableExecutionFromApplication = async (functionId, executionId, options) => {
+    return volcanoFetch(getStopDurableExecutionFromApplicationUrl(functionId, executionId), {
+        ...options,
+        method: 'POST'
     });
 };
 export const getSendDurableMessageFromApplicationUrl = (functionId, executionId) => {

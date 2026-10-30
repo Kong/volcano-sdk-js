@@ -1432,10 +1432,13 @@ export interface paths {
          *     A `private` durable function answers every credential but a service key
          *     exactly as a missing one, with 404.
          *
-         *     Starting is all this endpoint does. Reading a result or stopping an
-         *     execution requires the project owner's token, because an anon key is
-         *     shared by everyone who loads the page and an execution is addressed by
-         *     id alone.
+         *     The start returns a `client_token`. An anon key, or a user who did not
+         *     start the execution, sends it as `X-Volcano-Client-Token` to read the
+         *     execution, stop it, and reach its messages. A service key scoped to a
+         *     list without `*` sends it to read and stop the execution. An anon key is shared by
+         *     everyone who loads the page, so the id alone never reaches an
+         *     execution. Listing executions takes the project owner's token or a
+         *     project access token.
          *
          *     Send `X-Volcano-Execution-Name` to make the start idempotent: repeating
          *     a start with the same name returns the existing execution instead of
@@ -1448,6 +1451,78 @@ export interface paths {
          *     operations allowance when it finishes.
          */
         post: operations["startDurableExecutionFromApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-functions/{functionId}/executions/{executionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a durable execution from an application
+         * @description Returns the execution's current state with the credential that started
+         *     it, including its `result` once it has succeeded. Poll this to wait for
+         *     an execution to finish.
+         *
+         *     **With a service key:** any execution in the project when the key holds
+         *     `*`, the default. A key scoped to a list without `*` reaches an
+         *     execution whose `X-Volcano-Client-Token` the request carries, as an
+         *     anon key does; the start returns that token.
+         *
+         *     **With an auth user token:** an execution the user started, or one
+         *     whose `X-Volcano-Client-Token` the request carries, of a durable
+         *     function whose `visibility` is `authenticated` or `public`.
+         *
+         *     **With an anon key:** an execution whose `X-Volcano-Client-Token` the
+         *     request carries, of a function with `visibility: public`.
+         *
+         *     Only a service key holding `*` reaches an execution that is still
+         *     `pending`. Any other execution answers `404`, as a missing one does.
+         *
+         *     The response is the one `GET
+         *     /projects/{id}/durable-functions/{functionId}/executions/{executionId}`
+         *     returns. It never carries `client_token`.
+         */
+        get: operations["getDurableExecutionFromApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/durable-functions/{functionId}/executions/{executionId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a durable execution from an application
+         * @description Cancels a running execution with the credential that started it. Its
+         *     completed steps are not undone.
+         *
+         *     Access follows the same rules as reading the execution.
+         *
+         *     The call is accepted rather than awaited: the response reports the
+         *     execution as it was read back and may still say `running`. Poll
+         *     `GET /durable-functions/{functionId}/executions/{executionId}` to see
+         *     it settle into `stopped`.
+         *
+         *     Stopping an execution that already finished is not an error: the
+         *     response carries the state it settled in.
+         */
+        post: operations["stopDurableExecutionFromApplication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9003,11 +9078,18 @@ export interface components {
             provisioning_started_at?: string;
             /**
              * @description Who may start executions of this function through
-             *     `POST /durable-functions/{functionId}/executions`: service keys at
-             *     every level, signed-in users of the project from `authenticated`,
-             *     and anon keys holding `functions.invoke` only at `public`. Reading
-             *     and stopping an execution always require the project owner's
-             *     token, whatever this is set to.
+             *     `POST /durable-functions/{functionId}/executions`, and read and stop
+             *     them through `GET /durable-functions/{functionId}/executions/{executionId}`
+             *     and its `/stop`: service keys at every level (a scoped key needs
+             *     `functions.invoke`), signed-in users of the project from
+             *     `authenticated`, and anon keys holding `functions.invoke` only at
+             *     `public`. On the read and stop routes a service key holding `*`,
+             *     the default, reaches every execution. A service key scoped to a
+             *     list without `*` and an anon key reach the ones whose client token
+             *     they send, which the start returns, and a signed-in user also the
+             *     ones they started. The project-scoped routes under
+             *     `/projects/{id}/durable-functions` take the project owner's token or
+             *     a project access token, whatever this is set to.
              *
              *     Set it when the function is deployed. Durable functions have no
              *     update endpoint, so changing visibility later means redeploying.
@@ -9070,7 +9152,10 @@ export interface components {
              * Format: int64
              * @description How long a finished execution's result and history are retained, for
              *     as long as the function exists. Deleting the function, or its
-             *     project, ends retention early and takes the history with it.
+             *     project, ends retention early and takes the history with it. A
+             *     result or error Volcano has just read is kept in memory for up to
+             *     five minutes, so a read can still return it for up to five minutes
+             *     after retention ends.
              */
             retention_days: number;
         };
@@ -9094,7 +9179,8 @@ export interface components {
              * @description Whatever the function returned, verbatim. Absent while the execution
              *     is still running, absent when the result was too large to return and
              *     was checkpointed instead, and absent once the retention period has
-             *     lapsed.
+             *     lapsed. A result Volcano has just read can still be returned for up
+             *     to five minutes after that.
              */
             result?: unknown;
             /**
@@ -9116,9 +9202,11 @@ export interface components {
              */
             completed_at?: string;
             /**
-             * @description Lets a browser read and send the execution's messages. Returned only
-             *     by the start whose input the execution runs, never by a repeat under
-             *     the same name or by a read. Send it as `X-Volcano-Client-Token`.
+             * @description Lets a browser read the execution, stop it, and read and send its
+             *     messages, and a service key scoped to a list without `*` read and
+             *     stop it. Returned only by the start whose input the execution runs,
+             *     never by a repeat under the same name or by a read. Send it as
+             *     `X-Volcano-Client-Token`.
              */
             client_token?: string;
         };
@@ -10076,9 +10164,10 @@ export interface components {
             token: components["schemas"]["DurableCallbackToken"];
             /**
              * Format: date-time
-             * @description When the waiting step times out and the token stops working. Null
-             *     when the workflow set no timeout, in which case the token works
-             *     until the execution ends.
+             * @description When the waiting step's `timeout` passes and the token stops
+             *     working. Null when the workflow set no `timeout`. A step with a
+             *     heartbeat timeout also ends once that long passes without a
+             *     heartbeat, which can be before this time.
              */
             expires_at: string | null;
         };
@@ -12568,7 +12657,8 @@ export interface components {
         DurableMessageIdempotencyKey: string;
         /**
          * @description The `client_token` the execution's start returned. Lets an anon key,
-         *     or a user who did not start the execution, reach it.
+         *     or a user who did not start the execution, reach it, and a service key
+         *     scoped to a list without `*` read and stop it.
          */
         DurableClientToken: string;
         /** @description Return only messages travelling this way. */
@@ -17560,6 +17650,225 @@ export interface operations {
             };
         };
     };
+    getDurableExecutionFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution. A `private` function answers every credential
+             *     but a service key this way.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function's or the project's function rate limit, which reads
+             *     share with invocations and starts, or the project is over its
+             *     bandwidth cap.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment, the plan
+             *     terms for the request could not be read, or reads of the
+             *     execution's state in its region are throttled. The first is not one
+             *     to retry in a loop; the others are transient, and a throttled read
+             *     carries `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stopDurableExecutionFromApplication: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The `client_token` the execution's start returned. Lets an anon key,
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
+                 */
+                "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
+            };
+            path: {
+                /** @description Durable function ID, or its name within the project */
+                functionId: components["parameters"]["DurableFunctionId"];
+                /** @description Durable execution ID */
+                executionId: components["parameters"]["DurableExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Stop accepted. The body is the execution as it was read back, which
+             *     may still report `running`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DurableExecution"];
+                };
+            };
+            /** @description Missing or invalid credential */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The anon key lacks `functions.invoke`, the service key is scoped
+             *     without it, or the function is `authenticated` and the request
+             *     carries an anon key. Also returned when the request's origin is
+             *     refused by the project's CORS policy.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable function or execution not found, or the credential cannot
+             *     reach the execution. A `private` function answers every credential
+             *     but a service key this way.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The execution has not started yet. Only a service key holding `*`
+             *     can reach an execution in that state.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The function's or the project's function rate limit, which stops
+             *     share with invocations and starts, or the project is over its
+             *     bandwidth cap.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable execution is not available in this environment, the plan
+             *     terms for the request could not be read, or the execution's state
+             *     could not be read back because reads in its region are throttled.
+             *     The first is not one to retry in a loop; the others are transient,
+             *     and a throttled read carries `Retry-After`. A stop answered with a
+             *     throttle may already have been sent, so read the execution before
+             *     stopping it again.
+             */
+            503: {
+                headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listDurableMessagesFromApplication: {
         parameters: {
             query?: {
@@ -17575,7 +17884,8 @@ export interface operations {
             header?: {
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -17679,7 +17989,8 @@ export interface operations {
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
                 /**
                  * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it.
+                 *     or a user who did not start the execution, reach it, and a service key
+                 *     scoped to a list without `*` read and stop it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -18857,6 +19168,8 @@ export interface operations {
                     variable_scope?: "all" | "scoped";
                     /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
                     variables?: string;
+                    /** @description JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`. */
+                    commit?: string;
                 };
             };
         };
@@ -18881,8 +19194,9 @@ export interface operations {
             };
             /**
              * @description Bad request (invalid archive, unsupported runtime, invalid name, an
-             *     unknown `visibility`, `visibility` and `is_public` disagree, or a
-             *     project region that does not offer durable execution — a durable
+             *     unknown `visibility`, `visibility` and `is_public` disagree, a
+             *     malformed `commit`, or a project region that does not offer durable
+             *     execution — a durable
              *     function deploys to every region of its project)
              */
             400: {
@@ -19470,12 +19784,19 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Either the
-             *     capability is paused or this deployment cannot serve it, so the
-             *     request is not one to retry in a loop.
+             * @description Durable execution is not available in this environment, or reads of
+             *     the execution's state in its region are throttled. The first means
+             *     the capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop. A throttled read is transient
+             *     and carries `Retry-After`.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -19589,12 +19910,21 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment. Either the
-             *     capability is paused or this deployment cannot serve it, so the
-             *     request is not one to retry in a loop.
+             * @description Durable execution is not available in this environment, or the
+             *     execution's state could not be read back because reads in its region
+             *     are throttled. The first means the capability is paused or this
+             *     deployment cannot serve it, so the request is not one to retry in a
+             *     loop. A throttled read is transient and carries `Retry-After`; the
+             *     stop may already have been sent, so read the execution before
+             *     stopping it again.
              */
             503: {
                 headers: {
+                    /**
+                     * @description Seconds to wait before reading again. Sent only when reads in
+                     *     the execution's region are throttled.
+                     */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -20215,7 +20545,7 @@ export interface operations {
                     "application/json": components["schemas"]["DurableCallbackOutcome"];
                 };
             };
-            /** @description The token is missing, or `result` is missing, null, not JSON, or larger than 64 KiB */
+            /** @description The token is missing or malformed, or `result` is missing, null, not JSON, or larger than 64 KiB */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -20311,7 +20641,7 @@ export interface operations {
                     "application/json": components["schemas"]["DurableCallbackOutcome"];
                 };
             };
-            /** @description The token is missing, or the error's `type` or `message` is invalid */
+            /** @description The token is missing or malformed, or the error's `type` or `message` is invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -20392,7 +20722,7 @@ export interface operations {
                     "application/json": components["schemas"]["DurableCallbackOutcome"];
                 };
             };
-            /** @description The token is missing */
+            /** @description The token is missing or malformed */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -30886,7 +31216,9 @@ export interface operations {
                      *     grants everything. Scope enforcement applies to function invocation,
                      *     storage object operations, project locks, and server-side auth proxy
                      *     metadata (auth.signin, auth.signup, auth.refresh, auth.logout,
-                     *     auth.password_reset).
+                     *     auth.password_reset). A key scoped to a list without "*" reads and
+                     *     stops a durable execution only with the `client_token` its start
+                     *     returned.
                      * @example [
                      *       "functions.invoke",
                      *       "locks.manage"

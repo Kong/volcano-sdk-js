@@ -22,11 +22,14 @@ function durableMessages(facade: DurableMessagesFacade): DurableMessages {
 }
 
 export function durableApi(client: VolcanoAuth): Durable {
+  const facade = client._durableFacade;
   return {
     start: client.startDurableExecution.bind(client),
     get: client.getDurableExecution.bind(client),
+    getFromApplication: facade.getFromApplication.bind(facade),
     list: client.listDurableExecutions.bind(client),
     stop: client.stopDurableExecution.bind(client),
+    stopFromApplication: facade.stopFromApplication.bind(facade),
     approvals: durableApprovals(new DurableApprovalsFacade(client)),
     messages: durableMessages(new DurableMessagesFacade(client)),
   };

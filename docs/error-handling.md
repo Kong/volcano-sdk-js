@@ -422,7 +422,13 @@ console.log(data.id, data.status);
 `get`, `list` and `stop` are owner-scoped, so they refuse with `status: null`
 and `No active session` when the client holds no session rather than spending a
 round trip on the `401`. Call them from a backend signed in with the project's
-token.
+token. `getFromApplication` and `stopFromApplication` send the client's own
+credential, as `start` does, and answer `404` for an execution it cannot reach.
+A service key scoped without `*` reaches an execution only with its
+`clientToken`, as an anon key does. When reads of the execution's state are
+throttled, they answer `503` with `error.retryAfter` in seconds; a stop answered
+that way may already have been sent, so read the execution before stopping it
+again.
 
 An execution that ran and failed is not an error here: the call succeeds and
 `data.status` is `failed` or `timed_out`, with `data.error` carrying the
