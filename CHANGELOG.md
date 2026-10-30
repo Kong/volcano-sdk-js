@@ -51,6 +51,16 @@ All notable changes to the Volcano SDK will be documented in this file.
   message is unchanged, so existing handling still works. Locks rely on this to
   distinguish contention from a rate limit, and every other method benefits.
 
+## [2.3.0](https://github.com/Kong/volcano-sdk-js/compare/v2.2.0...v2.3.0) (2026-10-30)
+
+### Features
+
+- **durable:** read and stop executions with the application credential ([#357](https://github.com/Kong/volcano-sdk-js/issues/357)) ([a174c88](https://github.com/Kong/volcano-sdk-js/commit/a174c88d943113aa9862e8a6365a515d137946ed))
+
+### Bug Fixes
+
+- **examples:** split the order pipeline's migration into one statement per file ([#356](https://github.com/Kong/volcano-sdk-js/issues/356)) ([f7604a6](https://github.com/Kong/volcano-sdk-js/commit/f7604a614f2611ae1c2624722f5400a71ad44f4d))
+
 ## [2.2.0](https://github.com/Kong/volcano-sdk-js/compare/v2.1.0...v2.2.0) (2026-10-28)
 
 ### Features
