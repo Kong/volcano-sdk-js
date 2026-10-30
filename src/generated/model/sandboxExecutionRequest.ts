@@ -17,7 +17,7 @@ export type SandboxExecutionRequest = (unknown & {
   /** Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits. */
   memory_mb?: SandboxExecutionRequestMemoryMb;
   /**
-     * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
+     * Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`.
      * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
      */
   region: string;
