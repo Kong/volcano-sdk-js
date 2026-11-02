@@ -145,7 +145,7 @@
     "jest-environment-node": "30.5.2",
     "knip": "6.42.1",
     "openapi-typescript": "7.13.0",
-    "orval": "8.44.0",
+    "orval": "8.45.0",
     "oxfmt": "0.74.0",
     "oxlint": "1.88.0",
     "oxlint-tsgolint": "7.0.2005",
