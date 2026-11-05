@@ -9,6 +9,7 @@ import type {
   EmailChangeResponse,
   GetSessionsOptions,
   LinkProviderResponse,
+  ConfirmEmailResponse,
   MessageResponse,
   OAuthAPIParams,
   OAuthAPIResponse,
@@ -70,7 +71,7 @@ export interface Auth {
 
   // Email confirmation methods
   /** Confirm email address with token from signup email */
-  confirmEmail(token: string): Promise<MessageResponse>;
+  confirmEmail(token: string): Promise<ConfirmEmailResponse>;
   /** Resend email confirmation link */
   resendConfirmation(email: string): Promise<MessageResponse>;
 

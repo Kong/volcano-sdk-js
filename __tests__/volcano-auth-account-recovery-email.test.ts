@@ -33,9 +33,17 @@ function confirmsEmails(): void {
 
     const result = await volcano.auth.confirmEmail('confirmation-token');
 
-    expect(result).toEqual({ message: null, error: null });
+    expect(result).toEqual({ message: null, redirectTo: null, error: null });
     expect(volcano.accessToken).toBe('unrelated-access-token');
     expect(volcano.refreshToken).toBe('unrelated-refresh-token');
+  });
+
+  it('should return the redirect stored at signup', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { message: 'Email confirmed successfully', redirect_to: '/welcome' }));
+
+    const result = await volcano.auth.confirmEmail('confirm-token-123');
+
+    expect(result).toEqual({ message: 'Email confirmed successfully', redirectTo: '/welcome', error: null });
   });
 
   it('should return error on confirm email failure', async () => {

@@ -49,8 +49,19 @@ async function messageRequest(
     : { message: null, error: result.error };
 }
 
-export function confirmEmail(host: AccountEmailHost, token: string): Promise<MessageResult> {
-  return messageRequest(host, '/auth/confirm', { token });
+export interface ConfirmEmailResult extends MessageResult {
+  redirectTo: string | null;
+}
+
+export async function confirmEmail(host: AccountEmailHost, token: string): Promise<ConfirmEmailResult> {
+  const result = await host._anonFetch('/auth/confirm', { method: 'POST', body: JSON.stringify({ token }) });
+  return result.ok === true
+    ? {
+        message: optionalStringField(result.data, 'message'),
+        redirectTo: optionalStringField(result.data, 'redirect_to'),
+        error: null,
+      }
+    : { message: null, redirectTo: null, error: result.error };
 }
 
 export function resendConfirmation(host: AccountEmailHost, email: string): Promise<MessageResult> {

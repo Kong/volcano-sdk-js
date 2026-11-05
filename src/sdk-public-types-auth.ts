@@ -93,6 +93,13 @@ export interface SignUpOptions {
    * account is still created).
    */
   signInWhenAllowed?: boolean;
+  /**
+   * Where to send the user after they confirm their email: a path on your
+   * confirm page's site, such as `/welcome`, or a URL in the project's allowed
+   * redirect URLs. {@link VolcanoAuth.confirmEmail} returns it as `redirectTo`.
+   * The server stores it only when the signup creates the account.
+   */
+  redirectTo?: string;
 }
 
 export interface SignInOptions {
@@ -119,6 +126,11 @@ export interface ResetPasswordOptions {
 export interface MessageResponse {
   message: string | null;
   error: AuthError | null;
+}
+
+export interface ConfirmEmailResponse extends MessageResponse {
+  /** The `redirectTo` given at signup, or `null`. Returned once. */
+  redirectTo: string | null;
 }
 
 export interface EmailChangeResponse {
