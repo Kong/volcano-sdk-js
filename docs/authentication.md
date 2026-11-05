@@ -590,6 +590,22 @@ if (error) {
 
 Confirmation does not sign in the confirmed account or change an unrelated local session.
 
+### Return the User After Confirmation
+
+Pass `redirectTo` at signup to say where the user should go after they confirm. Use a path on your confirm page's site, or a URL in the project's allowed redirect URLs. The server keeps it with the account, so it works when the email is opened on another device, and a resent confirmation keeps it.
+
+```javascript
+await volcano.auth.signUp({ email, password, redirectTo: '/onboarding?plan=pro' });
+
+// On the confirm page:
+const { redirectTo, error } = await volcano.auth.confirmEmail(token);
+if (!error) {
+  window.location.assign(redirectTo ?? '/login');
+}
+```
+
+`redirectTo` is returned once. Check a full URL before you navigate to it.
+
 ### Resend Confirmation Email
 
 If the user didn't receive the email:
