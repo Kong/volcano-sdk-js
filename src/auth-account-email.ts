@@ -1,5 +1,5 @@
 import type { ContextRequest, RequestResult } from './auth-request.ts';
-import { optionalStringField, optionalTokenField, requiredField } from './auth-response.ts';
+import { optionalField, optionalStringField, optionalTokenField, requiredField } from './auth-response.ts';
 import type { AuthContext } from './auth-session-lifecycle.ts';
 import { assertAuthUser } from './auth-validation.ts';
 import { AuthSessionChangedError } from './errors.ts';
@@ -55,13 +55,18 @@ export interface ConfirmEmailResult extends MessageResult {
 
 export async function confirmEmail(host: AccountEmailHost, token: string): Promise<ConfirmEmailResult> {
   const result = await host._anonFetch('/auth/confirm', { method: 'POST', body: JSON.stringify({ token }) });
-  return result.ok === true
-    ? {
-        message: optionalStringField(result.data, 'message'),
-        redirectTo: optionalStringField(result.data, 'redirect_to'),
-        error: null,
-      }
-    : { message: null, redirectTo: null, error: result.error };
+  if (result.ok !== true) {
+    return { message: null, redirectTo: null, error: result.error };
+  }
+  // The server has already confirmed the email and dropped the one-time
+  // target, so a malformed redirect_to is reported as absent rather than
+  // turning a completed confirmation into a rejection.
+  const redirectTo = optionalField(result.data, 'redirect_to');
+  return {
+    message: optionalStringField(result.data, 'message'),
+    redirectTo: typeof redirectTo === 'string' ? redirectTo : null,
+    error: null,
+  };
 }
 
 export function resendConfirmation(host: AccountEmailHost, email: string): Promise<MessageResult> {

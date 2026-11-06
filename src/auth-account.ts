@@ -81,10 +81,12 @@ export async function signUp(
   message: string | null;
   error: Error | null;
 }> {
-  const { email, password, metadata = {}, redirectTo } = options;
+  const { email, password, metadata = {} } = options;
+  const trimmedRedirect = options.redirectTo?.trim();
+  const redirect_to = trimmedRedirect === '' ? undefined : trimmedRedirect;
   const result = await host._anonFetch('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ email, password, user_metadata: metadata, redirect_to: redirectTo }),
+    body: JSON.stringify({ email, password, user_metadata: metadata, redirect_to }),
   });
   if (result.ok !== true) {
     return {

@@ -80,15 +80,35 @@ function sendsConfirmationRedirects(): void {
     await volcano.auth.signUp({
       email: 'test@example.com',
       password: 'password123',
-      redirectTo: '/welcome?step=2',
+      redirectTo: 'https://app.example.com/welcome?step=2',
     });
 
     expect(JSON.parse(fetchBody(0))).toEqual({
       email: 'test@example.com',
       password: 'password123',
       user_metadata: {},
-      redirect_to: '/welcome?step=2',
+      redirect_to: 'https://app.example.com/welcome?step=2',
     });
+  });
+
+  it('should trim redirectTo before sending it', async () => {
+    fetchMock.mockResolvedValueOnce(reply(201, { confirmation_required: true, message: 'sent' }));
+
+    await volcano.auth.signUp({
+      email: 'test@example.com',
+      password: 'password123',
+      redirectTo: '  https://app.example.com/welcome  ',
+    });
+
+    expect(JSON.parse(fetchBody(0))).toHaveProperty('redirect_to', 'https://app.example.com/welcome');
+  });
+
+  it('should leave redirect_to out when redirectTo is blank', async () => {
+    fetchMock.mockResolvedValueOnce(reply(201, { confirmation_required: true, message: 'sent' }));
+
+    await volcano.auth.signUp({ email: 'test@example.com', password: 'password123', redirectTo: '   ' });
+
+    expect(JSON.parse(fetchBody(0))).not.toHaveProperty('redirect_to');
   });
 
   it('should leave redirect_to out when redirectTo is not set', async () => {
