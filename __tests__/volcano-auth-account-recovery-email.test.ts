@@ -33,7 +33,7 @@ function confirmsEmails(): void {
 
     const result = await volcano.auth.confirmEmail('confirmation-token');
 
-    expect(result).toEqual({ message: null, error: null });
+    expect(result).toEqual({ message: null, redirectTo: null, error: null });
     expect(volcano.accessToken).toBe('unrelated-access-token');
     expect(volcano.refreshToken).toBe('unrelated-refresh-token');
   });
@@ -45,6 +45,30 @@ function confirmsEmails(): void {
 
     expect(result.message).toBeNull();
     expect(result.error?.message).toBe('Invalid or expired token');
+  });
+}
+
+function returnsConfirmationRedirects(): void {
+  it('should return the redirect stored at signup', async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply(200, { message: 'Email confirmed successfully', redirect_to: 'https://app.example.com/welcome' }),
+    );
+
+    const result = await volcano.auth.confirmEmail('confirm-token-123');
+
+    expect(result).toEqual({
+      message: 'Email confirmed successfully',
+      redirectTo: 'https://app.example.com/welcome',
+      error: null,
+    });
+  });
+
+  it('should treat a non-string redirect as absent instead of failing the confirmation', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { message: 'Email confirmed successfully', redirect_to: 42 }));
+
+    const result = await volcano.auth.confirmEmail('confirm-token-123');
+
+    expect(result).toEqual({ message: 'Email confirmed successfully', redirectTo: null, error: null });
   });
 }
 
@@ -163,6 +187,7 @@ function rejectsFailedPasswordRecovery(): void {
 describe('VolcanoAuth account recovery', () => {
   describe('Email Confirmation', () => {
     confirmsEmails();
+    returnsConfirmationRedirects();
     resendsConfirmations();
   });
 

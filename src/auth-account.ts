@@ -72,6 +72,7 @@ export async function signUp(
     password: string;
     metadata?: Record<string, unknown>;
     signInWhenAllowed?: boolean;
+    redirectTo?: string;
   },
 ): Promise<{
   user: User | null;
@@ -81,9 +82,11 @@ export async function signUp(
   error: Error | null;
 }> {
   const { email, password, metadata = {} } = options;
+  const trimmedRedirect = options.redirectTo?.trim();
+  const redirect_to = trimmedRedirect === '' ? undefined : trimmedRedirect;
   const result = await host._anonFetch('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ email, password, user_metadata: metadata }),
+    body: JSON.stringify({ email, password, user_metadata: metadata, redirect_to }),
   });
   if (result.ok !== true) {
     return {

@@ -61,6 +61,7 @@ export interface SignUpOptions {
   password: string;
   metadata?: UserMetadata;
   signInWhenAllowed?: boolean;
+  redirectTo?: string;
 }
 export interface SignInOptions {
   email: string;
@@ -82,6 +83,9 @@ export interface ResetPasswordOptions {
 export interface MessageResponse {
   message: string | null;
   error: AuthError | null;
+}
+export interface ConfirmEmailResponse extends MessageResponse {
+  redirectTo: string | null;
 }
 export interface EmailChangeResponse {
   message: string | null;
@@ -180,7 +184,7 @@ export interface Auth {
   signInAnonymously(metadata?: UserMetadata): Promise<AuthResponse>;
   signUpAnonymous(metadata?: UserMetadata): Promise<AuthResponse>;
   convertAnonymous(options: ConvertAnonymousOptions): Promise<UserResponse>;
-  confirmEmail(token: string): Promise<MessageResponse>;
+  confirmEmail(token: string): Promise<ConfirmEmailResponse>;
   resendConfirmation(email: string): Promise<MessageResponse>;
   resetPasswordForEmail(email: string): Promise<MessageResponse>;
   forgotPassword(email: string): Promise<MessageResponse>;

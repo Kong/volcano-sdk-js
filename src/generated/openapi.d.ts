@@ -4302,7 +4302,8 @@ export interface paths {
          *     Returns generic message to prevent email enumeration.
          *     No email is sent when the account does not exist or is already confirmed.
          *     If the account exists and is unconfirmed, a new token is generated and
-         *     any previous confirmation token is invalidated.
+         *     any previous confirmation token is invalidated. The `redirect_to` given
+         *     at signup carries over to the new token.
          */
         post: operations["authResendConfirmation"];
         delete?: never;
@@ -26631,6 +26632,15 @@ export interface operations {
                     user_metadata?: {
                         [key: string]: unknown;
                     };
+                    /**
+                     * @description Where to send the user after they confirm their email: a
+                     *     URL in the project's allowed redirect URLs, or a path on
+                     *     the Volcano site, such as `/login`. Stored only when the
+                     *     signup creates the account and the project requires email
+                     *     confirmation. Returned once by `POST /auth/confirm`, and
+                     *     shown as a Continue link on the managed verify page.
+                     */
+                    redirect_to?: string;
                 };
             };
         };
@@ -26647,7 +26657,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSignupResponse"];
                 };
             };
-            /** @description Invalid input (bad email/password format) */
+            /** @description Invalid input (bad email/password format, or a redirect_to the project does not allow) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -26668,8 +26678,9 @@ export interface operations {
             /**
              * @description Forbidden - Signups disabled, anon key lacks signup permission, or the
              *     email domain is not in `allowed_email_domains`. The internal
-             *     `anonymous.volcano.internal` domain is reserved for anonymous
-             *     accounts and is refused whatever the project allows.
+             *     `anonymous.volcano.internal` and `volcano.local` domains are reserved
+             *     for the anonymous and Builder debug accounts Volcano creates, and are
+             *     refused whatever the project allows.
              */
             403: {
                 headers: {
@@ -27089,6 +27100,12 @@ export interface operations {
                     "application/json": {
                         /** @enum {string} */
                         message?: "Email confirmed successfully" | "Email already confirmed";
+                        /**
+                         * @description The `redirect_to` given at signup, as a full URL: a
+                         *     path is joined to the Volcano site URL. Returned once;
+                         *     the next confirm call does not return it.
+                         */
+                        redirect_to?: string;
                     };
                 };
             };
