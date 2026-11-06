@@ -592,7 +592,11 @@ Confirmation does not sign in the confirmed account or change an unrelated local
 
 ### Return the User After Confirmation
 
-Pass `redirectTo` at signup to say where the user should go after they confirm. Use a URL in the project's allowed redirect URLs. The server keeps it with the account, so it works when the email is opened on another device, and a resent confirmation keeps it. The managed verify page shows it as a Continue link.
+Pass `redirectTo` at signup to say where the user should go after they confirm. Pass a full URL from the project's allowed redirect URLs. A path such as `/onboarding` resolves against the Volcano site (the dashboard), not your app, and the server may accept paths only for Volcano's own project. The server keeps the URL with the account, so it works when the email is opened on another device, and a resent confirmation keeps it. The managed verify page shows it as a Continue link.
+
+- The server stores `redirectTo` only when the signup creates the account and the project requires email confirmation. Otherwise it is ignored.
+- A `redirectTo` the project does not allow fails the whole signup with a 400 error.
+- The SDK trims surrounding whitespace and does not send a blank value.
 
 ```javascript
 await volcano.auth.signUp({ email, password, redirectTo: 'https://app.example.com/onboarding' });
@@ -604,7 +608,7 @@ if (!error) {
 }
 ```
 
-`redirectTo` is returned once, as a full URL.
+`confirmEmail` returns `redirectTo` as a full URL. Only the first successful confirmation returns it; after that, and when none was stored, it is `null`.
 
 ### Resend Confirmation Email
 

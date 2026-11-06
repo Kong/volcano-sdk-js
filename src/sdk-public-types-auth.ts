@@ -94,10 +94,18 @@ export interface SignUpOptions {
    */
   signInWhenAllowed?: boolean;
   /**
-   * Where to send the user after they confirm their email: a URL in the
-   * project's allowed redirect URLs. {@link VolcanoAuth.confirmEmail} returns it
-   * as `redirectTo`, and the managed verify page links to it. The server stores
-   * it only when the signup creates the account.
+   * Where to send the user after they confirm their email. Pass a full URL from
+   * the project's allowed redirect URLs, such as
+   * `https://app.example.com/onboarding`. A path such as `/onboarding` resolves
+   * against the Volcano site (the dashboard), not your app, and the server may
+   * accept paths only for Volcano's own project.
+   *
+   * The server stores it only when this signup creates the account and the
+   * project requires email confirmation; otherwise it is ignored. A value the
+   * project does not allow fails the whole signup with a 400. Surrounding
+   * whitespace is trimmed, and a blank value is not sent.
+   * {@link VolcanoAuth.confirmEmail} returns it as `redirectTo`, and the managed
+   * verify page links to it.
    */
   redirectTo?: string;
 }
@@ -129,7 +137,10 @@ export interface MessageResponse {
 }
 
 export interface ConfirmEmailResponse extends MessageResponse {
-  /** The `redirectTo` given at signup as a full URL, or `null`. Returned once. */
+  /**
+   * The `redirectTo` given at signup, as a full URL. Returned by the first
+   * successful confirmation only; `null` afterwards, and when none was stored.
+   */
   redirectTo: string | null;
 }
 
