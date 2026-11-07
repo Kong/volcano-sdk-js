@@ -8,6 +8,9 @@
  * OpenAPI spec version: 3.0.0
  */
 import type { CreateSandboxSessionRequestMemoryMb } from './createSandboxSessionRequestMemoryMb';
+import type { SandboxSessionExecutions } from './sandboxSessionExecutions';
+import type { SandboxSessionLimits } from './sandboxSessionLimits';
+import type { SandboxSessionNetworkRequest } from './sandboxSessionNetworkRequest';
 
 export type CreateSandboxSessionRequest = (unknown & {
   /** Preset ID from the available Sandbox preset catalog. */
@@ -16,7 +19,7 @@ export type CreateSandboxSessionRequest = (unknown & {
   /** Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits. */
   memory_mb?: CreateSandboxSessionRequestMemoryMb;
   /**
-     * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
+     * Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`.
      * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
      */
   region: string;
@@ -26,4 +29,7 @@ export type CreateSandboxSessionRequest = (unknown & {
      * @maximum 2147483647
      */
   max_duration_seconds?: number;
+  network?: SandboxSessionNetworkRequest;
+  executions?: SandboxSessionExecutions;
+  limits?: SandboxSessionLimits;
 });

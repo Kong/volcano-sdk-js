@@ -22,4 +22,6 @@ export interface SandboxCommandRequest {
      */
   timeout_seconds?: number;
   environment?: SandboxCommandRequestEnvironment;
+  /** Set false to keep no output. stdout and stderr are returned once in this response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with `output_kept` false and empty streams, without running the command again. Omit it to use the session's `executions.keep_output`. True in a session that keeps no output is refused with 400 and code `sandbox_session_keeps_no_output`. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable. */
+  keep_output?: boolean;
 }
