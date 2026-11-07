@@ -165,6 +165,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sandbox-session-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workspace files
+         * @description Lists a directory in a Sandbox session's workspace, one page at a time. The listing never follows a symlink and never leaves the workspace. It is not a snapshot: a file that changes while it runs can appear before or after the change. Sessions started on an image built before file listing answer 409 with code `sandbox_image_outdated`; start a new session, after redeploying a custom template.
+         */
+        get: operations["listSandboxSessionFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sandbox-sessions/{sessionId}": {
         parameters: {
             query?: never;
@@ -262,6 +282,102 @@ export interface paths {
         put?: never;
         /** Write a workspace file */
         post: operations["writeSandboxSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-file-archives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract a tar archive into a session's workspace
+         * @description Extracts a tar archive into a directory of a session's workspace. Send `multipart/form-data`
+         *     with `project_id`, `session_id` and `path`, in any order, then the archive as the file part
+         *     `archive`. The archive may be gzip-compressed; Volcano detects compression from its first bytes.
+         *     The request streams to the session, so the archive is never held whole in memory.
+         *
+         *     Each call accepts at most 32 MiB of archive, 10,000 files and directories, and 256 MiB of
+         *     uncompressed archive, counting tar headers, and has 2 minutes to send its archive; a slower
+         *     call fails and writes nothing. Split larger trees into several archives and create one after
+         *     another. For a single file larger than 8 MiB, use `POST /sandbox-file-parts`.
+         *
+         *     `path` must name a directory below the workspace root; a path that resolves to the root or to
+         *     `/`, such as `.`, `./`, `/`, `/workspace` or `/workspace/.`, is refused with
+         *     `sandbox_archive_invalid`. The archive may contain only regular files and directories. Entry
+         *     names are relative to `path`, which is created when missing; an absolute name, a `..`
+         *     component, a symbolic link, a
+         *     hard link, a sparse file, or a device refuses the whole archive. File and directory modes keep their
+         *     permission bits; setuid, setgid and sticky bits are dropped. A file replaces an existing file or
+         *     symbolic link at its path. Existing directories keep their modes. A symbolic link in the
+         *     destination is never followed.
+         *
+         *     The archive is checked and staged before the workspace changes, so a refused archive writes
+         *     nothing, and one that fails part way is undone. If a session process moves or removes a
+         *     directory while the archive is written, the call answers `409`, a file the archive replaced
+         *     there is kept in a `.sandbox-archive-*` directory at the workspace root, and files the
+         *     archive already placed can stay. Read-only directories the session user
+         *     owns still take new entries and keep their modes. Code `sandbox_archive_invalid` (400) means the archive or form is malformed or holds an
+         *     entry that is not allowed. Code `sandbox_archive_too_large` (413) means it exceeds a limit
+         *     above. Code `sandbox_path_conflict` (409) means the destination has a symbolic link or a file
+         *     where the archive needs a directory, a directory where it has a file, or a directory the
+         *     session user cannot write. Code
+         *     `sandbox_disk_full` (409) means the session's disk has no room for it; free space and retry. Code
+         *     `sandbox_image_outdated` (409) means the session started from an image that predates archive
+         *     writes; start a new session from a current preset, or redeploy the template. A session outside
+         *     `project_id`, or a project the caller cannot reach, answers 404 like an unknown session.
+         */
+        post: operations["createSandboxFileArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sandbox-file-parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write one part of a large workspace file
+         * @description Writes a file of up to 1 GiB into a session's workspace in parts of at most 8 MiB. Each part
+         *     names its `offset` in the file, the whole file's `size`, and the whole file's lowercase hex
+         *     `sha256`. Parts collect in a hidden staging file beside `path`; nothing appears at `path` until
+         *     the part that ends at `size` arrives. That part checks the whole file's size and SHA-256, then
+         *     moves the file into place in one step, so a partial file is never visible at `path`. The
+         *     response's `complete` says which part finished the file. Missing parent directories are created,
+         *     and a symbolic link among them is never followed. The finished file is readable and writable
+         *     only by the session user.
+         *
+         *     A part may start anywhere up to the bytes already received, so a failed part can be resent. A
+         *     part at offset 0 starts the file again. Resending the part that finished the file answers the
+         *     same completion while the file at `path` still matches `size` and `sha256`. Code `sandbox_file_part_out_of_order` (409) means the
+         *     part starts past the bytes received; resend from the last part that succeeded. Code
+         *     `sandbox_file_part_mismatch` (409) means the finished file differs from `size` or `sha256`; its
+         *     parts are discarded, so start again at offset 0. Code `sandbox_path_conflict` (409) means a
+         *     directory is at `path`, a file or symbolic link is where a parent directory belongs, or the
+         *     session user cannot write the parent directory, or, when parents are missing, the nearest
+         *     one that exists. Read-only directories the session user owns still take new entries and
+         *     keep their modes. Code
+         *     `sandbox_disk_full` (409) means the session's disk has no room; free space and retry. Code
+         *     `sandbox_image_outdated` (409) means the session started from an image that predates parted
+         *     writes. A staging file stays until its file completes, a part at offset 0 restarts it, or the
+         *     session ends. A session outside `project_id`, or a project the caller cannot reach, answers 404
+         *     like an unknown session.
+         */
+        post: operations["createSandboxFilePart"];
         delete?: never;
         options?: never;
         head?: never;
@@ -624,6 +740,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/tokens/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke the calling platform token
+         * @description Revokes the platform token that authenticates this request, and ends
+         *     the sign-in session it was created from, if any. Ending the session
+         *     also revokes every other token created from it. Every later request
+         *     with the token answers `401`.
+         *
+         *     Only a platform token (`pk-`) can call it. A project access token is
+         *     refused with `403`.
+         */
+        delete: operations["revokeCurrentUserToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your account's sign-in sessions
+         * @description Lists the sign-in sessions of the account that owns the calling
+         *     platform token: dashboard sign-ins (`kind: browser`) and CLI logins
+         *     (`kind: cli`). The session the calling token was exchanged from is
+         *     marked `is_current: true`. A token created in the dashboard or through
+         *     the management API, rather than by signing in, has no session, so no
+         *     session is current.
+         *
+         *     Ordering and pagination match `GET /auth/user/sessions`.
+         *
+         *     Only a platform token (`pk-`) can call it. A project access token is
+         *     refused with `403`.
+         */
+        get: operations["listAccountSessions"];
+        put?: never;
+        post?: never;
+        /**
+         * Sign out every other session
+         * @description Ends every session of the account except the one the calling token
+         *     was exchanged from, and revokes the platform tokens exchanged from
+         *     them. When the calling token has no session, every session ends.
+         *
+         *     Platform tokens that were never linked to a session, such as one
+         *     created in the dashboard or through the management API, keep working.
+         *     Revoke each with `DELETE /user/tokens/current`.
+         */
+        delete: operations["revokeOtherAccountSessions"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out one session
+         * @description Ends one of the account's sessions and revokes the platform tokens
+         *     exchanged from it. A session that is not the account's, or does not
+         *     exist, answers `404`.
+         */
+        delete: operations["revokeAccountSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/github/callback": {
         parameters: {
             query?: never;
@@ -635,8 +839,158 @@ export interface paths {
          * Complete a GitHub App connection callback
          * @description Public GitHub App callback. The signed state and callback binding cookie
          *     bind the provider authorization to the browser that started the flow.
+         *
+         *     GitHub also sends a browser here without `state` when someone installs
+         *     the App, changes its repository access, or asks an organization owner
+         *     to install it, on GitHub itself. That request connects nothing: Volcano
+         *     ignores `code` and `installation_id`, and redirects to the dashboard's
+         *     Git settings page when `setup_action` is `install`, `update`, or
+         *     `request`. Any other request without `state` returns 400. An empty or
+         *     invalid `state` is refused as before and never redirects there.
          */
         get: operations["gitConnectCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/slack/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start installing the Volcano Slack app
+         * @description Starts an installation of the Volcano app in a Slack workspace, so
+         *     LavaFlow can take problems reported there, and returns its Add to Slack
+         *     URL. Send the browser to it; Slack returns it to `GET /slack/callback`,
+         *     which saves the installation. Installing again replaces the workspace's
+         *     installation. Enterprise Grid org-wide installs are refused. The
+         *     callback finishes only in the browser that started the installation.
+         *
+         *     The response also sets a short-lived HttpOnly cookie that binds the
+         *     callback to this browser. Installing and connecting each set their
+         *     own, so starting one leaves the other's callback working.
+         */
+        post: operations["startSlackInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/slack/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List connected Slack identities
+         * @description Lists the caller's connected Slack identities. It answers whether or
+         *     not reporting problems from Slack is available in this environment, so
+         *     turning it off strands no connection.
+         */
+        get: operations["listSlackConnections"];
+        put?: never;
+        /**
+         * Start connecting a Slack identity
+         * @description Starts connecting the caller's Slack identity to their Volcano account
+         *     and returns its Sign in with Slack URL. LavaFlow acts on a person's
+         *     Slack mention only for projects owned by an account their identity is
+         *     connected to. The callback finishes only in the browser that started
+         *     the connection, so a link forwarded to anyone else connects no one.
+         *     One Slack identity may connect to several accounts, and one account may
+         *     have several identities connected. The identity is also tied to the
+         *     caller's sign-in session: the channel picker and binding act only as
+         *     the identities this session signed in as, so on an account several
+         *     people share, nobody picks or binds as another person's identity. An
+         *     API token has no session, so it can connect an identity that reports,
+         *     but not pick or bind channels with it. Volcano stores the workspace and
+         *     user IDs, and no Slack token.
+         *
+         *     The response also sets a short-lived HttpOnly cookie that binds the
+         *     callback to this browser. Installing and connecting each set their
+         *     own, so starting one leaves the other's callback working.
+         */
+        post: operations["startSlackConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/slack/connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect a Slack identity
+         * @description Disconnects one Slack identity from the caller's account. LavaFlow
+         *     stops acting on its mentions for the account's projects at its next
+         *     check, which also cancels reports still queued. It works whether or not
+         *     reporting problems from Slack is available in this environment.
+         */
+        delete: operations["deleteSlackConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/slack/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a workspace's channels for binding
+         * @description Lists the channels in a workspace, public and private, that the Volcano
+         *     app and one of the Slack identities the caller's sign-in session signed
+         *     in as are both in, to choose which ones report problems to LavaFlow.
+         *     Invite the app to a channel in Slack to list it. Slack Connect, shared
+         *     and archived channels are left out.
+         */
+        get: operations["listSlackChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/slack/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete a Slack install or connection
+         * @description Public callback Slack sends the browser to after Add to Slack or Sign
+         *     in with Slack. The signed `state` names the flow and the Volcano user
+         *     who started it, and the callback cookie binds it to the browser that
+         *     started it. Redirects to the flow's `redirect`, or to the dashboard,
+         *     adding `slack_connect_error=1` when the flow failed.
+         */
+        get: operations["slackCallback"];
         put?: never;
         post?: never;
         delete?: never;
@@ -933,11 +1287,12 @@ export interface paths {
          *     ordinary Git auto-deploy flow. Direct source writes remain frozen until
          *     that deployment succeeds and the repository becomes the source of truth.
          *
-         *     The caller confirms the production branch shown before export. Starting
-         *     export pins that branch: later GitHub default-branch changes do not
-         *     repoint the project. If the configured branch changed after the caller
-         *     read it, the request fails without exporting so the caller can show and
-         *     confirm the new value.
+         *     The caller confirms the production branch shown before export, and
+         *     optionally the repository by its `repo_id`. Starting export pins that
+         *     branch: later GitHub default-branch changes do not repoint the project.
+         *     If the connected repository or the configured branch changed after the
+         *     caller read it, the request fails without exporting so the caller can
+         *     show and confirm the new value.
          *
          *     The response lists what the export could not carry: resources with no
          *     successful deployment to take source from (`skipped`), and things no
@@ -964,6 +1319,253 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/share-previews/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview what a deploy link deploys
+         * @description Public: needs no credential, because the link id is the credential. Answers
+         *     the link's current release: when it was published, its digest, the functions
+         *     and frontends installing it creates, the variables the visitor supplies, and
+         *     the functions that receive the new project's service key. Show it to a
+         *     visitor before they confirm, and send its `release.id` when creating the
+         *     project.
+         *
+         *     Counts the visit for the link's owner, unless the request comes from a
+         *     crawler or link preview. A link that does not exist, was switched off, or has
+         *     not been published yet all answer the same `404`.
+         */
+        get: operations["getSharePreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's deploy links
+         * @description Deploy links let anyone deploy a release the project's owner published as
+         *     their own new project. A link's public address is
+         *     `https://volcano.dev/deploy/<id>`; the address carries no release, so it
+         *     cannot be edited to point at other code.
+         */
+        get: operations["listShares"];
+        put?: never;
+        /**
+         * Create a deploy link
+         * @description Creates a draft link for the project. It offers nothing to visitors, and its
+         *     preview answers `404`, until its owner publishes a release to it with
+         *     `POST /share-releases`. Any project can have
+         *     links, whether it deploys from the CLI, the dashboard or Git.
+         */
+        post: operations["createShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a deploy link */
+        get: operations["getShare"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a deploy link
+         * @description Deletes the link, its releases and its recorded events. The address stops
+         *     working. Installs the link started that have not finished, including ones
+         *     still queued, fail at their next step. The visitor keeps the project, with
+         *     its installation failed. A link Volcano took down (`disabled_reason`
+         *     `operator`) cannot be deleted until that is lifted; deleting its project
+         *     still removes it.
+         */
+        delete: operations["deleteShare"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit or switch a deploy link on or off
+         * @description Changes the suggested name, the status, or both. An owner can always switch a
+         *     link off: it works even while deploy links are not available in this
+         *     environment, and while the owner's account is read-only. Setting
+         *     `allow_reshare` to false also works in both cases, alone or with a
+         *     switch-off, since like a switch-off it only shares less; for a read-only
+         *     account these are the only changes allowed. While deploy links are not
+         *     available, a request that sends back the values the link already has,
+         *     including `status` `active` on an active link, changes nothing and answers
+         *     `200`.
+         *
+         *     Switching a link off also stops the installs it started that have not
+         *     finished, including ones still queued: each fails at its next step. The
+         *     visitor keeps the project, with its installation failed. Switching the link
+         *     back on lets only installs that have not failed yet go ahead.
+         *
+         *     A link Volcano took down (`disabled_reason` `operator`) cannot be switched
+         *     back on; other edits still work, and it stays down. While any of the
+         *     project's links is taken down, no link of the project can be switched on or
+         *     allowed to be re-shared.
+         *
+         *     A request that switches the link off together with an edit while deploy links
+         *     are not available, or that also allows re-sharing on a copy whose source does
+         *     not allow it, still switches the link off, but answers `400` with code
+         *     `edit_dropped`: the link is off and the edit was not applied. While the
+         *     account is read-only, a request that switches the link off or sets
+         *     `allow_reshare` to false together with another edit is answered the same way:
+         *     the switch-off and the re-sharing change are saved, and the other edit is not.
+         *     A `status` the link already has is no edit, so sending the fetched link back
+         *     with `allow_reshare` false answers `200`; a switch-on is such another edit.
+         */
+        patch: operations["updateShare"];
+        trace?: never;
+    };
+    "/share-release-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show what publishing a deploy link would release
+         * @description Builds the project's deployed functions and frontends the way a release
+         *     would, without storing anything, and reports what it would carry: the
+         *     functions and frontends, the project variables every project created from
+         *     the release gets (empty unless the visitor gives a value), the functions
+         *     whose code reads `VOLCANO_SERVICE_KEY`, and what is left out (resources with
+         *     no stored source, databases, sandboxes, dotenv and key files). Review it,
+         *     then publish with its `draft_id`, and its variables and service key
+         *     functions confirmed.
+         *
+         *     Every call runs a full build and counts against the account's hourly
+         *     release build budget, which drafts and publishes share. Fetch it when the
+         *     owner opens the publish step, not on every focus or poll.
+         */
+        get: operations["getShareReleaseDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share-releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a deploy link's releases
+         * @description Pages the link's releases, newest first. Follow `next_cursor` while
+         *     `has_more` is true.
+         */
+        get: operations["listShareReleases"];
+        put?: never;
+        /**
+         * Publish a deploy link release
+         * @description Snapshots the project's deployed functions and frontends into an immutable
+         *     release and makes it the link's current release in one step, so visitors see
+         *     either the previous release or this one. Visitors install exactly the stored
+         *     release; later deploys to the project change nothing until the owner
+         *     publishes again.
+         *
+         *     Send the reviewed draft's `draft_id`, its variables and the functions that
+         *     receive the new project's `VOLCANO_SERVICE_KEY`, as confirmed from the
+         *     draft. Both lists must be exactly the draft's: a release carries every
+         *     variable, since leaving one out would only break the code that reads it. If
+         *     a fresh build is not the reviewed draft, because the project was redeployed
+         *     or changed since, or the lists differ from it, nothing is published and the
+         *     answer is `409` with code `draft_changed` and the new draft. A
+         *     release carries variable names, never values, and no database. A publish is
+         *     a full build and counts against the account's hourly release build budget,
+         *     which it shares with the draft.
+         */
+        post: operations["publishShareRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/share-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a deploy link's click and deploy counts
+         * @description Counts what happened at the link: clicks, previews, confirmations, projects
+         *     created, and how many became ready or failed. Informational only. Visitors
+         *     are counted from a salted hash and no address is stored. Events are kept
+         *     for 90 days, so a `days` above 90 is rejected with `400`.
+         */
+        get: operations["getShareStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/forks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fork a share into a project of your own
+         * @description Creates a project in the caller's account from the release a share offers,
+         *     and queues its install: the release's functions and frontends, never the
+         *     owner's data, variable values, keys or sign-in settings. Every variable the
+         *     release declares is created; one the visitor gives no value for is created
+         *     empty. Installation is asynchronous: poll the project until
+         *     `template_installation.status` is `ready`. A `201` without
+         *     `template_installation` means nothing is being installed.
+         *
+         *     The fork is checked against what the release recorded when it was published
+         *     (its functions, frontends and variables, and the plan's room for them); the
+         *     release's archive is read and checked by the install. A stored archive that
+         *     fails those checks fails the install with `failure_code` `source_invalid`
+         *     rather than refusing the request.
+         *
+         *     Send the `release_id` that `GET /share-previews/{share_id}` returned. If the
+         *     share moved to a new release since, nothing is created and the answer is
+         *     `409` with code `release_changed`.
+         */
+        post: operations["createFork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/git-connection/production-branch": {
         parameters: {
             query?: never;
@@ -985,8 +1587,15 @@ export interface paths {
          *     to be pushed — the case a repository created empty depends on.
          *
          *     Setting the branch here marks it as the project's own choice, so a later
-         *     default-branch rename on GitHub no longer moves it. Projects that never
+         *     default-branch rename on GitHub no longer moves it, and the response
+         *     reports `production_branch_follows_default: false`. Projects that never
          *     set one keep following the repository's default branch.
+         *
+         *     An empty string undoes that choice: the project deploys from the
+         *     repository's default branch again and follows later renames. Volcano
+         *     reads the default branch from GitHub through the project owner's
+         *     connection, and the response carries it with
+         *     `production_branch_follows_default: true`.
          */
         put: operations["setProjectGitProductionBranch"];
         post?: never;
@@ -1006,8 +1615,8 @@ export interface paths {
         get?: never;
         /**
          * Set the directory a project builds from
-         * @description Changes only the root directory, leaving the repository and production
-         *     branch alone. Unlike PUT /projects/{id}/git-connection, this accepts a
+         * @description Changes only the root directory, leaving the repository, the production
+         *     branch and `production_branch_follows_default` alone. Unlike PUT /projects/{id}/git-connection, this accepts a
          *     project access token, so CI or an agent can move a project within its
          *     repository without being able to change the repository.
          *
@@ -1023,6 +1632,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/git-connection/owner-push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check whether the project owner can push to the connected repository
+         * @description Answers whether the project owner's GitHub account can push to the
+         *     repository the project is connected to. Volcano makes the same check
+         *     before it writes to that repository for the project. The repository is
+         *     always the project's connected one; the route takes no repository.
+         *
+         *     When `can_push` is false, `reason` says why. The answer can be a few
+         *     seconds old: repeated checks within that time are answered without
+         *     asking GitHub again.
+         *
+         *     Checks that ask GitHub draw on an hourly budget for the project and
+         *     another for its owner, shared by all of the owner's projects. Over
+         *     either, the route answers `429` with `Retry-After`.
+         */
+        get: operations["getProjectGitOwnerPush"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/git-connection": {
         parameters: {
             query?: never;
@@ -1030,7 +1670,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a project's repo connection */
+        /**
+         * Get a project's repo connection
+         * @description Returns the repository binding. `production_branch_follows_default`
+         *     tells a branch that tracks the repository's default from one the
+         *     project pinned: a client rebinding the same repository sends a pinned
+         *     branch back to keep it.
+         */
         get: operations["getProjectGitConnection"];
         /**
          * Connect or update a project's repo connection
@@ -1043,12 +1689,25 @@ export interface paths {
          *     user token, then persists repository metadata only from that validated
          *     GitHub response.
          *
+         *     Omitting production_branch follows the repository's default and
+         *     discards a pinned branch. To keep a pin when rebinding the same
+         *     repository, read the connection first and send production_branch back
+         *     when `production_branch_follows_default` is false. The response reports
+         *     the result in the same field.
+         *
          *     Project access tokens are refused. Which repository a project deploys
          *     from is a person's decision, made with a platform token or in the
          *     dashboard. A project access token can still change the root directory
          *     and production branch through PUT
          *     /projects/{id}/git-connection/root-directory and PUT
          *     /projects/{id}/git-connection/production-branch.
+         *
+         *     Connecting a repository to a project with none, while LavaFlow is on
+         *     and was turned on with no repository, makes it the one LavaFlow works
+         *     in, unless the LavaFlow settings' `fix_blocker` asks to turn it on
+         *     again after the link. Any later change of repository pauses LavaFlow until the owner
+         *     turns it on again; binding the repository LavaFlow works in again
+         *     resumes it with no new turn-on.
          */
         put: operations["connectProjectGit"];
         post?: never;
@@ -1081,8 +1740,64 @@ export interface paths {
          *     saved before any repository was connected. Frontend settings are off
          *     until set here; the frontend need not exist when they are saved, since
          *     frontend_name is resolved at deploy time.
+         *
+         *     apply_migrations is the exception to the full replace: omitting it
+         *     leaves the saved value unchanged. It is off until set here.
          */
         put: operations["updateProjectGitDeploySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/git-deployment-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's Git deployment runs
+         * @description Lists the deployment runs Git auto deploy recorded for the project,
+         *     newest push first. Each push to the production branch records one run,
+         *     which says whether the push deployed and, when it failed or was
+         *     skipped, why.
+         *
+         *     A run that applied migrations names the migration run it started on
+         *     each database. Get one at
+         *     `GET /projects/{id}/databases/{databaseName}/migration-runs/{runId}`
+         *     for its files.
+         *
+         *     Project access tokens can list runs, including read-only ones.
+         */
+        get: operations["listGitDeploymentRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/git-deployment-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a Git deployment run
+         * @description Returns one deployment run: the commit it deployed, its status, the
+         *     migration runs it started, and why it failed or was skipped.
+         *
+         *     Project access tokens can read runs, including read-only ones.
+         */
+        get: operations["getGitDeploymentRun"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1432,11 +2147,11 @@ export interface paths {
          *     A `private` durable function answers every credential but a service key
          *     exactly as a missing one, with 404.
          *
-         *     The start returns a `client_token`. An anon key, or a user who did not
-         *     start the execution, sends it as `X-Volcano-Client-Token` to read the
-         *     execution, stop it, and reach its messages. A service key scoped to a
-         *     list without `*` sends it to read and stop the execution. An anon key is shared by
-         *     everyone who loads the page, so the id alone never reaches an
+         *     The start returns a `client_token`. An anon key, a service key scoped
+         *     to a list without `*`, or a user who did not start the execution,
+         *     sends it as `X-Volcano-Client-Token` to read the execution, stop it,
+         *     and reach its messages. An anon key is shared by everyone who loads
+         *     the page, so the id alone never reaches an
          *     execution. Listing executions takes the project owner's token or a
          *     project access token.
          *
@@ -1557,7 +2272,11 @@ export interface paths {
          *     Messages never decide an approval: a workflow waiting in
          *     `ctx.waitForApproval` is not resumed by one.
          *
-         *     **With a service key:** any execution in the project.
+         *     **With a service key:** any execution in the project when the key holds
+         *     `*`, the default. A key scoped to a list without `*`, such as
+         *     `["functions.invoke"]`, reaches an execution whose
+         *     `X-Volcano-Client-Token` the request carries, as an anon key does; the
+         *     start returns that token.
          *
          *     **With an auth user token:** an execution the user started, or one
          *     whose `X-Volcano-Client-Token` the request carries, of a durable
@@ -2464,6 +3183,711 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's capabilities
+         * @description Lists which product capabilities accept new work for this project. It
+         *     has the same entries as `GET /capabilities`, and answers each one as it
+         *     does, except for capabilities a project can have when another can't:
+         *
+         *     | ID | Available for this project when |
+         *     | --- | --- |
+         *     | `lavaflow` | LavaFlow is released, offered to the project's owner, and included in the owner's plan |
+         *     | `lavaflow.merge` | `lavaflow` is, and LavaFlow's merging is released in this environment |
+         *     | `lavaflow.lineage` | `lavaflow` is, and fix lineage is released in this environment |
+         *     | `lavaflow.code_quality` | `lavaflow` is, Code Quality is released in this environment, and the owner's plan allows Code Quality findings; with an allowance of 0 it is `unavailable` with `code` `plan_required` |
+         *     | `lavaflow.slack` | `lavaflow` is, the Volcano Slack app is set up in this environment, and Slack reports have launched in it |
+         *
+         *     Where `lavaflow` isn't available, a project with LavaFlow settings or
+         *     runs lists it `read_only`: its LavaFlow reads answer, and its owner can
+         *     turn LavaFlow off. A project without them lists it `unavailable`, with
+         *     `code` `plan_required` when the owner's plan leaves LavaFlow out.
+         *
+         *     Check it to decide what to offer for a project, instead of calling a
+         *     route to see whether it fails. Project access tokens can read it,
+         *     including read-only ones.
+         */
+        get: operations["listProjectCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get LavaFlow settings
+         * @description Returns whether LavaFlow works on the project's issues, how far it goes
+         *     on its own, and its saved context and instructions, which runs do not
+         *     use yet. A project
+         *     that never saved settings returns the defaults, with LavaFlow off.
+         *     LavaFlow sends this project's logs and source code to an AI service
+         *     that Volcano operates.
+         *
+         *     `can_update` says whether the caller can save the settings: only the
+         *     project's owner can, with a platform token. Project access tokens can
+         *     read the settings, including read-only ones.
+         */
+        get: operations["getLavaflowSettings"];
+        /**
+         * Update LavaFlow settings (deprecated)
+         * @deprecated
+         * @description Deprecated: use `PATCH /lavaflow/settings`, which takes the same body.
+         *     This operation keeps working, and refuses every project access token
+         *     before it reads the body.
+         *
+         *     Changes the fields the request names for the project `project_id`
+         *     names; an omitted field keeps its saved value, or its default when
+         *     nothing is saved. `{"project_id": "…", "enabled": true}` turns LavaFlow
+         *     on for every function, frontend and durable function in the project,
+         *     and records the repository the project points at as the one LavaFlow
+         *     works in. A request carrying `"enabled": true` is a turn-on, even while
+         *     LavaFlow is on. When the project points at no repository at a turn-on,
+         *     the first repository it connects afterwards is recorded. A request
+         *     that omits `enabled` never changes which repository is recorded.
+         *     LavaFlow sends this project's logs
+         *     and source code to an AI service that Volcano operates.
+         *
+         *     Turning LavaFlow on, from off, also starts runs for up to 5 open issues
+         *     with `exception: true` and an `event_count` of at least 2, last seen in
+         *     the past 7 days, most recently seen first, leaving out any issue
+         *     LavaFlow already ran; runs LavaFlow queued on its own and hasn't
+         *     started count toward the 5. They start like any run LavaFlow starts on
+         *     its own, one at a time per project. Only the owner's save with a
+         *     `volcano login` token whose sign-in is live, or a platform token that
+         *     expires, starts them; any other save turns LavaFlow on without them. A save while LavaFlow is on starts none, and neither
+         *     does LavaFlow becoming available to the project.
+         *
+         *     Only the project's owner can save, with a platform token, while their
+         *     account is active. A full-scope project access token, its save that
+         *     turns skill learning off included, or a request made through MCP,
+         *     gets `403` with code `person_required`; a token sends that save with
+         *     `PATCH`. A read-only project access token is refused as read-only
+         *     first, without a code, and so is the owner of a read-only account.
+         *
+         *     `autonomy: merge` needs the project's `lavaflow.merge` capability.
+         *     Without it, a save that sets `autonomy` to `merge`, or changes
+         *     `merge_policy`, answers `400` with code `feature_unavailable`. A save
+         *     that sends the saved values again passes this check, though it can
+         *     still need the owner's check below, and a project at `merge` can
+         *     still change to another autonomy.
+         *
+         *     Changing `autonomy` to `merge` lets LavaFlow merge with no one else
+         *     looking. So does turning `enabled` on while `autonomy` stays `merge`,
+         *     and changing `merge_policy`, `custom_context` or `system_prompt`, to
+         *     any value, while `autonomy` is, or becomes, `merge`. Under settings
+         *     saved with automatic runs off before this API, the runs LavaFlow
+         *     starts on its own stop at a draft pull request. Sending `enabled:
+         *     true` or `autonomy: merge` again, while LavaFlow is on and `autonomy`
+         *     is `merge`, lets them merge, so it needs the same check. Turning
+         *     `allow_ungated_workflows` on lets LavaFlow open a fix
+         *     where a workflow could run it with the repository's secrets before a
+         *     person approves it. Turning `skill_learning` up, from `off` to
+         *     `review` or `auto` or from `review` to `auto`, lets what LavaFlow
+         *     learns steer later runs with less review. Only the owner can make
+         *     these changes, with a
+         *     credential of their own that expires: a `volcano
+         *     login` token whose sign-in is live, or a platform token with an
+         *     expiry. The owner's GitHub account must also be able to push to the
+         *     project's repository. A project access token, MCP, a platform token
+         *     that never expires, a sign-in that ended, an owner who can't push, and
+         *     a project with no repository get `403` with code `person_required`,
+         *     and nothing is saved. Turning LavaFlow or `allow_ungated_workflows`
+         *     off, and turning `skill_learning` down or off, needs no check.
+         *     Nothing is saved either when the push check can't be answered (`429`
+         *     or `503`, with `Retry-After`). When the project points at another
+         *     repository, reaches its repository through another Volcano GitHub App
+         *     installation, or points at none, `autonomy` changes from `merge` to
+         *     `open_pr`; pointing back doesn't change it back. Reconnecting after a
+         *     reinstall of the App counts as another installation.
+         *
+         *     Turning LavaFlow on needs a plan that includes it (`403`, code
+         *     `plan_required`). LavaFlow is available where the project's
+         *     `lavaflow` capability is, which includes the owner's plan. Where it is
+         *     not, a project with LavaFlow records can still turn LavaFlow, Code
+         *     Quality or skill learning off, or several of them: a save that sends
+         *     `enabled: false`, `code_quality: {enabled: false}`,
+         *     `skill_learning: off` or several of them, and otherwise only
+         *     `allow_ungated_workflows: false` sent with `enabled` or
+         *     `skill_learning`. Any other save,
+         *     and any save for a project without records, answers `404` with code
+         *     `feature_unavailable` while LavaFlow is not offered to the project, and
+         *     `403` with code `plan_required` when it is but the owner's plan does
+         *     not include it.
+         */
+        put: operations["updateLavaflowSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update LavaFlow settings
+         * @description Changes the fields the request names for the project `project_id`
+         *     names; an omitted field keeps its saved value, or its default when
+         *     nothing is saved. `{"project_id": "…", "enabled": true}` turns LavaFlow
+         *     on for every function, frontend and durable function in the project,
+         *     and records the repository the project points at as the one LavaFlow
+         *     works in. A request carrying `"enabled": true` is a turn-on, even while
+         *     LavaFlow is on. When the project points at no repository at a turn-on,
+         *     the first repository it connects afterwards is recorded. A request
+         *     that omits `enabled` never changes which repository is recorded.
+         *     LavaFlow sends this project's logs and source code to an AI service
+         *     that Volcano operates.
+         *
+         *     Turning LavaFlow on, from off, also starts runs for up to 5 open issues
+         *     with `exception: true` and an `event_count` of at least 2, last seen in
+         *     the past 7 days, most recently seen first, leaving out any issue
+         *     LavaFlow already ran; runs LavaFlow queued on its own and hasn't
+         *     started count toward the 5. They start like any run LavaFlow starts on
+         *     its own, one at a time per project. Only the owner's save with a
+         *     `volcano login` token whose sign-in is live, or a platform token that
+         *     expires, starts them; any other save turns LavaFlow on without them. A save while LavaFlow is on starts none, and neither
+         *     does LavaFlow becoming available to the project.
+         *
+         *     Only the project's owner can save, with a platform token, while their
+         *     account is active. A full-scope project access token can only turn
+         *     settings off: a body with `project_id` and one or both of
+         *     `"code_quality": {"enabled": false}` and `"skill_learning": "off"`,
+         *     each field spelled exactly and sent once, and nothing else. Any other
+         *     body from a project access token, including one that turns a setting
+         *     on, adds a field, sends `null`, or names a field the schema doesn't
+         *     have, gets `403` with code `person_required`, as does a request made
+         *     through MCP. A read-only project access token is refused as read-only
+         *     first, without a code,
+         *     and so is the owner of a read-only account.
+         *
+         *     `code_quality.enabled: true` turns on LavaFlow Code Quality, which
+         *     reviews the lines each production deploy of a frontend changes and
+         *     turns what it confirms into issues and pull requests. Function deploys
+         *     ask for no scan yet. It needs the project's `lavaflow.code_quality`
+         *     capability: while Code Quality isn't released here the save answers
+         *     `400` with code `feature_unavailable`, and while the owner's plan
+         *     allows no Code Quality findings it answers `403` with code
+         *     `plan_required`. Only the owner can turn it on, with the check below.
+         *     Turning it off always works, and drops the deploys waiting to be
+         *     scanned.
+         *
+         *     `autonomy: merge` needs the project's `lavaflow.merge` capability.
+         *     Without it, a save that sets `autonomy` to `merge`, or changes
+         *     `merge_policy`, answers `400` with code `feature_unavailable`. A save
+         *     that sends the saved values again passes this check, though it can
+         *     still need the owner's check below, and a project at `merge` can
+         *     still change to another autonomy.
+         *
+         *     Changing `autonomy` to `merge` lets LavaFlow merge with no one else
+         *     looking. So does turning `enabled` on while `autonomy` stays `merge`,
+         *     and changing `merge_policy`, `custom_context` or `system_prompt`, to
+         *     any value, while `autonomy` is, or becomes, `merge`. Under settings
+         *     saved with automatic runs off before this API, the runs LavaFlow
+         *     starts on its own stop at a draft pull request. Sending `enabled:
+         *     true` or `autonomy: merge` again, while LavaFlow is on and `autonomy`
+         *     is `merge`, lets them merge, so it needs the same check. Turning
+         *     `allow_ungated_workflows` on lets LavaFlow open a fix
+         *     where a workflow could run it with the repository's secrets before a
+         *     person approves it. Turning `code_quality` on starts work on every
+         *     frontend production deploy with no incident behind it, and turning
+         *     `skill_learning` up, from `off` to `review` or `auto` or from `review`
+         *     to `auto`, lets what LavaFlow learns steer later runs with less
+         *     review. Only the owner can make these changes, with a credential of
+         *     their own that expires: a `volcano login` token
+         *     whose sign-in is live, or a platform token with an expiry. The owner's
+         *     GitHub account must also be able to push to the project's repository.
+         *     A project access token, MCP, a platform token that never expires, a
+         *     sign-in that ended, an owner who can't push, and a project with no
+         *     repository get `403` with code `person_required`, and nothing is
+         *     saved. Turning LavaFlow, `allow_ungated_workflows` or `code_quality`
+         *     off, and turning `skill_learning` down or off, needs no check.
+         *     Nothing is saved either when the push check can't be answered (`429`
+         *     or `503`, with `Retry-After`). When the project points at another
+         *     repository, reaches its repository through another Volcano GitHub App
+         *     installation, or points at none, `autonomy` changes from `merge` to
+         *     `open_pr`; pointing back doesn't change it back. Reconnecting after a
+         *     reinstall of the App counts as another installation.
+         *
+         *     Turning LavaFlow on needs a plan that includes it (`403`, code
+         *     `plan_required`). LavaFlow is available where the project's
+         *     `lavaflow` capability is, which includes the owner's plan. Where it is
+         *     not, a project with LavaFlow records can still turn LavaFlow, Code
+         *     Quality or skill learning off, or several of them: a save that sends
+         *     `enabled: false`, `code_quality: {enabled: false}`,
+         *     `skill_learning: off` or several of them, and otherwise only
+         *     `allow_ungated_workflows: false` sent with `enabled` or
+         *     `skill_learning`. Any other save,
+         *     and any save for a project without records, answers `404` with code
+         *     `feature_unavailable` while LavaFlow is not offered to the project, and
+         *     `403` with code `plan_required` when it is but the owner's plan does
+         *     not include it.
+         */
+        patch: operations["patchLavaflowSettings"];
+        trace?: never;
+    };
+    "/lavaflow/slack-channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the project's Slack channels
+         * @description Lists the Slack channels that report problems to LavaFlow for the
+         *     project. In a listed channel, someone whose Slack identity is connected
+         *     to the project owner's account can mention the Volcano app to report a
+         *     problem. Project access tokens can read the list, including read-only
+         *     ones, and so can MCP, as `get_lavaflow_slack_channels`. The list
+         *     answers whether or not the project's `lavaflow.slack` capability is
+         *     available.
+         */
+        get: operations["listLavaflowSlackChannels"];
+        put?: never;
+        /**
+         * Add a Slack channel to the project
+         * @description Binds a Slack channel, so it reports problems to LavaFlow for the
+         *     project, and answers `201`. Binding a channel that is already bound
+         *     answers `200` with that binding, and makes the current owner the one
+         *     who bound it, so a retry is safe. The workspace must have the
+         *     Volcano app installed, and one of the Slack identities the caller's
+         *     sign-in session signed in as must belong to it and be a member of the
+         *     channel, so on an account several people share, each binds only
+         *     channels they are in. The channel must be one the picker lists: one
+         *     the Volcano app is in, and not archived, a Slack Connect channel, or
+         *     shared across an organization.
+         *
+         *     Only the project's owner can bind, with a platform token. A project
+         *     access token, or a request made through MCP, gets `403` with code
+         *     `person_required`. Binding needs the project's `lavaflow.slack`
+         *     capability: where it is unavailable, this answers `404` with code
+         *     `feature_unavailable`, or `403` with code `plan_required` when the
+         *     owner's plan does not include LavaFlow.
+         */
+        post: operations["bindLavaflowSlackChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/slack-channels/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a Slack channel from the project
+         * @description Stops a Slack channel reporting problems for its project. Reports from
+         *     it still queued are canceled at their next check. The binding's own
+         *     project authorizes the request. Only the project's owner can remove
+         *     one, with a platform token. A project access token or MCP gets `403`
+         *     with code `person_required` for a binding of its own project, and
+         *     `404` for another project's, as for an unknown one. Removing works
+         *     whether or not the project's `lavaflow.slack` capability is available.
+         */
+        delete: operations["unbindLavaflowSlackChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List LavaFlow Code Quality scans
+         * @description Pages the project's Code Quality scans, newest first. The first page
+         *     starts with the project's waiting scan, if it has one: the deploys
+         *     that went live since the last scan, with `status: waiting` and the
+         *     bound it waits at in `waiting_reason`. A bound never drops a deploy:
+         *     the waiting scan covers every commit since the last one when it
+         *     starts.
+         *
+         *     Each scan shows the commits it compared, the resources whose deploys
+         *     it covers, what it did with what it found, and the findings whose
+         *     runs were billed. Scans stay readable while LavaFlow or Code Quality
+         *     is off. Project access tokens can read them, including read-only
+         *     ones.
+         */
+        get: operations["listLavaflowScans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get LavaFlow stats
+         * @description Counts the issues LavaFlow took on and the pull requests it opened per
+         *     UTC day, oldest first, with every day in the window present. Merges
+         *     never count. The window ends today, which is partial. The totals equal
+         *     the sum of `days` and of the per-resource counts from
+         *     `GET /lavaflow/resources` for the same project, `days` and `category`.
+         *
+         *     `category` counts only runs in that category. These counts are issues
+         *     taken on and pull requests opened, while `GET /lavaflow/runs` counts
+         *     runs, so the two need not match.
+         */
+        get: operations["getLavaflowStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List LavaFlow's resources
+         * @description Lists every function, durable function and frontend in the project with
+         *     LavaFlow's activity in the window, zeros included, sorted by name. A
+         *     removed resource is listed when it has activity in the window (in that
+         *     category, with `category` set), so the counts add up to
+         *     `GET /lavaflow/stats`.
+         *
+         *     `anomaly.flagged` is true when the last 24 hours have at least 3
+         *     issues opened for the resource and at least 3 times its daily average
+         *     over the 29 days before, counting that average as at least 1.
+         *
+         *     `category` counts, and flags anomalies from, only runs in that
+         *     category; every current resource is still listed, and
+         *     `last_analyzed_at` counts every run.
+         */
+        get: operations["listLavaflowResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List LavaFlow runs
+         * @description Pages the project's LavaFlow runs, newest first unless `order` says
+         *     otherwise. A page carries no run text; read a run for its diagnosis,
+         *     log lines and diff. Each run names its category, the resources it
+         *     involves and its issue.
+         *
+         *     Every filter narrows the list, and filters combine. `include=counts`
+         *     adds `counts`, computed from the same filters: ask for them on the
+         *     first page, since they don't depend on the cursor. Keep the filters
+         *     and `order` while paging.
+         */
+        get: operations["listLavaflowRuns"];
+        put?: never;
+        /**
+         * Start a LavaFlow run
+         * @description Starts a run on one of the project's issues. LavaFlow starts runs on
+         *     its own only for issues with `exception: true`, and only while it is
+         *     on. Start one here for any other issue, or for one recorded before
+         *     LavaFlow was turned on. The run follows the project's settings, as
+         *     one LavaFlow starts on its own does, and answers `202` while it is
+         *     `queued`; read it with `GET /lavaflow/runs/{run_id}`.
+         *
+         *     Only the project's owner can start a run, as a person, while their
+         *     account is active: with a platform token that expires, or `volcano
+         *     login`. A platform token that never expires, a `volcano login` token
+         *     whose sign-in ended, a full-scope project access token, and a request
+         *     made through MCP get `403` with code `person_required`; a read-only
+         *     project access token is refused as read-only first, without a code,
+         *     and so is the owner of a read-only account.
+         *
+         *     Every start counts toward the run limits: 5 runs per issue and 200 per
+         *     project in any 24 hours. An issue has one run in progress at a time,
+         *     so sending the request again while the first run is in progress
+         *     answers `409` with code `lavaflow_run_in_progress`.
+         *
+         *     A run on a Code Quality issue is a Code Quality run. It starts only
+         *     while Code Quality is available to the project, as
+         *     `lavaflow.code_quality` in `GET /capabilities` reports, and on for it.
+         */
+        post: operations["createLavaflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a LavaFlow run
+         * @description Returns a run, with its diagnosis, the log lines it cites, its diff and
+         *     its review, including the findings the review left open and what it
+         *     asks a person to decide. The run's project authorizes the read, so
+         *     `project_id` is optional. The text holds the project's logs and source
+         *     code, so this endpoint takes the same access as the project's log
+         *     endpoints.
+         *
+         *     A run held because the repository's workflows could run its fix with
+         *     the repository's secrets before a person approves it
+         *     (`pull_request_skipped: ungated_workflows`) lists every such job in
+         *     `held_workflows`, beside the fix's `diff` and `diff_sha256`.
+         */
+        get: operations["getLavaflowRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/held-fix-opens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a held LavaFlow fix
+         * @description Opens the pull request for a fix LavaFlow held because the
+         *     repository's workflows could run it with the repository's secrets
+         *     before a person approves it (`pull_request_skipped:
+         *     ungated_workflows`). Read the run first: send its `id` as `run_id`,
+         *     with the `diff_sha256` and `held_workflows.jobs_sha256` it served, to
+         *     say you read that diff and that list of jobs. LavaFlow opens the fix it
+         *     saved, exactly as reviewed, past those jobs only. It writes no new
+         *     fix.
+         *
+         *     Right before it queues the run, LavaFlow serves the diff again and
+         *     reads the workflows again. A diff served differently since you read
+         *     it, or a job list or a commit the workflows were read at that changed,
+         *     answers `409` with code `run_changed`; read the run again, which lists
+         *     what LavaFlow found. The response is the run, `202` while it is
+         *     `queued`. LavaFlow reads the workflows again before it opens the pull
+         *     request, and once more as it pushes the fix: a job you didn't read, a
+         *     new commit on a branch the workflows were read on, even one that
+         *     changes no job, or a production branch other than the one you read
+         *     them on holds the fix again with a new list.
+         *
+         *     Opening a fix lets its pull request open, nothing more. LavaFlow
+         *     starts no CI on it and never merges it, as for every fix opened past
+         *     ungated workflows; a person pushes to the branch or merges it. The
+         *     pull request's description names who opened it and lists the jobs.
+         *     One exception: when LavaFlow's read before the pull request opens
+         *     finds no job that runs the fix before a person approves it, because
+         *     the workflows were gated since you read them, the fix opens as any
+         *     other fix and follows the project's merge settings. A run whose
+         *     `held_workflows` lists no job opens the same way.
+         *
+         *     Only the project's owner can open a fix, as a person, while their
+         *     account is active: with a `volcano login` token
+         *     whose sign-in is live, or a platform token that expires. Their GitHub
+         *     account must be able to push to the project's repository. A project
+         *     access token, a request made through MCP, a platform token that never
+         *     expires, and a sign-in that ended get `403` with code
+         *     `person_required`. Opening a fix uses one of the run's attempts: the
+         *     attempt that opens it is one of the run's, so a run held again on its
+         *     last attempt can't be opened again. It starts no new run and counts
+         *     toward no run limit.
+         */
+        post: operations["createLavaflowHeldFixOpen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List LavaFlow skills
+         * @description Lists the project's skills, newest first: short, cited notes on how
+         *     the project wants something done, with each one's active version,
+         *     counts and source. A project skill belongs to its project and never
+         *     leaves it. Filter by `status`. The list holds at most 350 skills, so
+         *     it has no pages.
+         *
+         *     LavaFlow doesn't yet learn skills from corrections to its fixes or
+         *     load them into runs; both come in a later release.
+         *
+         *     Project access tokens can list skills, including read-only ones.
+         *     Skills stay readable while the project's `lavaflow.skills` capability
+         *     is unavailable.
+         */
+        get: operations["listLavaflowSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a LavaFlow skill
+         * @description Returns one of a project's skills with its active version. The skill's
+         *     project authorizes the read, so `project_id` is optional. Project
+         *     access tokens can read skills, including read-only ones.
+         */
+        get: operations["getLavaflowSkill"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a LavaFlow skill
+         * @description Deletes a skill and every version of its text. A record that it
+         *     existed stays, without its text. Only the project's owner deletes a
+         *     skill, signed in as a person: with a `volcano
+         *     login` token whose sign-in is live, or a platform token with an
+         *     expiry. A project access token, MCP, a platform token that never
+         *     expires, and a sign-in that ended get `403` with code
+         *     `person_required`. Deleting needs no repository, and works while the
+         *     project's `lavaflow.skills` capability is unavailable.
+         */
+        delete: operations["deleteLavaflowSkill"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a LavaFlow skill
+         * @description Changes only the fields you send: a skill's `description`, `body` or
+         *     `applies_to`, or its `status`: `active` activates a proposed skill or
+         *     restores a retired one, and `retired` retires it. `applies_to` merges
+         *     member by member: an omitted member keeps its value, and a list you
+         *     send replaces it, so `[]` clears it. Citations can't be changed.
+         *     A skill is a standing instruction to LavaFlow, so only the project's
+         *     owner changes one, signed in as a person: with a
+         *     `volcano login` token whose sign-in is live, or a platform token with
+         *     an expiry. A change other than retiring also needs the owner's GitHub
+         *     account to be able to push to the project's repository. A project
+         *     access token, MCP, a platform token that never expires, a sign-in
+         *     that ended, an owner who can't push, and a project with no repository
+         *     get `403` with code `person_required`, and nothing is saved. Retiring
+         *     needs no repository. Nothing is saved either when the push check
+         *     can't be answered (`429` or `503`, with `Retry-After`).
+         *
+         *     A project keeps its 200 most recently retired skills: retiring
+         *     another deletes the oldest retired skill and its versions.
+         *
+         *     Every change but retiring passes the skill check. Only a change to
+         *     the text adds a version; activating or restoring doesn't. Text that
+         *     holds a credential, a project secret value, an email address, a link
+         *     or a host name, an invisible or control character, a CI-skip
+         *     directive, or an instruction to skip or weaken tests, CI or
+         *     LavaFlow's rules answers `400` with code `skill_refused` and the
+         *     `rules` it failed; nothing is saved, and the text is not kept. When
+         *     the check can't run, the change answers `503` with code
+         *     `scan_unavailable` and `Retry-After`.
+         *
+         *     Retiring works while the project's `lavaflow.skills` capability is
+         *     unavailable. Any other change answers `400` with code
+         *     `feature_unavailable` then.
+         */
+        patch: operations["updateLavaflowSkill"];
+        trace?: never;
+    };
+    "/lavaflow/skill-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a LavaFlow skill's versions
+         * @description Lists a skill's versions, newest first, each with its text, source and
+         *     content hash. A skill keeps its 20 newest versions and its active one.
+         *     Project access tokens can list them, including read-only ones.
+         */
+        get: operations["listLavaflowSkillVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lavaflow/global-skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Volcano's global skills
+         * @description Lists the skills Volcano wrote for every project. Volcano writes and
+         *     reviews each one, and none holds customer content. They belong to no
+         *     project, so items carry `scope` and no `project_id`; `project_id`
+         *     authorizes the caller. While the project's `lavaflow.skills`
+         *     capability is unavailable, the list is empty.
+         *
+         *     Project access tokens can list them, including read-only ones.
+         */
+        get: operations["listLavaflowGlobalSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/issues": {
         parameters: {
             query?: never;
@@ -2517,131 +3941,6 @@ export interface paths {
          *     Setting the status an issue already has is safe to repeat.
          */
         patch: operations["updateIssue"];
-        trace?: never;
-    };
-    "/projects/{id}/autofix": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get autofix settings
-         * @description Returns whether Volcano diagnoses the project's issues with AI and how
-         *     far a run may go. A project that never saved settings returns the
-         *     defaults, with autofix off.
-         *
-         *     Where autofix is not available, saved settings stay readable. A project
-         *     that never saved any answers `404` with code `feature_unavailable`.
-         */
-        get: operations["getAutofixSettings"];
-        /**
-         * Save autofix settings
-         * @description Saves the project's autofix settings. An omitted `max_stage` or
-         *     `auto_trigger` keeps its saved value, or takes its default when the
-         *     project has no saved settings, so `{"enabled": true}` on a new project
-         *     diagnoses every new or regressed issue and opens a draft pull request
-         *     with each fix. Set `max_stage` and `auto_trigger` to stop at a diagnosis
-         *     or to start runs only on request. Volcano picks the models a run uses.
-         *
-         *     Project access tokens are refused. Autofix opens pull requests in the
-         *     project's repository, so a person turns it on with a platform token.
-         *
-         *     During the preview, turning autofix on needs the SUPERAGENT plan, and
-         *     nothing is charged yet. Settings that are already on stay stored after
-         *     a downgrade, and saving them again is not refused, but no run starts
-         *     until the plan allows autofix again. Other saves need no plan.
-         *
-         *     Where autofix is not available, a project with saved settings can
-         *     still change them with `enabled: false`. Saving `enabled: true`
-         *     answers `404` with code `feature_unavailable`.
-         */
-        put: operations["updateAutofixSettings"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/issues/{issueId}/autofix-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Diagnose an issue
-         * @description Queues a run that diagnoses the issue with AI. The run reads the
-         *     issue's runtime logs and, when a push to the project's connected
-         *     repository built the deployment that was live when the issue was
-         *     last seen, its source at that commit. Poll the run until its status is
-         *     `succeeded`, `failed`, or `canceled`.
-         *
-         *     Autofix must be on for the project. An issue has at most one queued or
-         *     running run, a project runs one at a time, and a project starts at most
-         *     25 runs, manual and automatic, in any 24 hours.
-         *
-         *     Project access tokens are refused. A run can open a pull request in
-         *     the project's repository, so a person starts it with a platform token
-         *     or in the dashboard.
-         */
-        post: operations["startAutofixRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/autofix-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List autofix runs
-         * @description Lists the project's autofix runs, newest first. Runs stay readable after
-         *     autofix is turned off, and where autofix is not available.
-         *
-         *     Project access tokens can list runs, including read-only ones.
-         */
-        get: operations["listAutofixRuns"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{id}/autofix-runs/{runId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get an autofix run
-         * @description Returns one run: its status, the diagnosis once it succeeds, and why it
-         *     failed or was canceled. Runs stay readable where autofix is not
-         *     available.
-         *
-         *     Project access tokens can read runs, including read-only ones.
-         */
-        get: operations["getAutofixRun"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/projects/{id}/durable-approvals": {
@@ -2811,7 +4110,7 @@ export interface paths {
          *     22.x or 24.x. The Node.js runtime is inferred from
          *     `package.json` `engines.node`; if omitted, Volcano uses Node.js 22.x.
          *     The selected Node.js family must also satisfy the installed Next.js package's
-         *     `engines.node` constraint. Volcano tests Next 15.5.28 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.4.2 (`>=20.9.0`).
+         *     `engines.node` constraint. Volcano tests Next 15.5.29 (`^18.18.0 || ^19.8.0 || >=20.0.0`) and Next 16.4.5 (`>=20.9.0`).
          *     Source archive size is enforced by the API with `SOURCE_ARCHIVE_SIZE_LIMIT_MB`; the CLI
          *     does not apply its own source archive size limit. After the final container images are
          *     built, the publish build enforces `LAMBDA_TARGET_CONTAINER_SIZE_LIMIT_MB` before pushing.
@@ -3027,6 +4326,176 @@ export interface paths {
          *     without a retry, its `error_message` starting with the refusal's code.
          */
         post: operations["createFrontendDeployment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a frontend's Candidates
+         * @description Returns the frontend's Candidates, oldest first, each with its latest deployment. A frontend
+         *     has at most 20 live Candidates. Reading never depends on the `frontends.candidates` capability.
+         */
+        get: operations["listFrontendCandidates"];
+        put?: never;
+        /**
+         * Create a frontend Candidate
+         * @description Builds a copy of the frontend from the uploaded archive, with the frontend's own variable
+         *     selection, and deploys it to one region: the first region the frontend deploys to, or the
+         *     project's first region by name if it has not deployed yet. The Candidate is served at its own
+         *     URL, so it can be checked without changing what the frontend serves. The URL is reachable by
+         *     anyone who holds it and is not indexed; a Candidate is never public and does not claim to be
+         *     private. The response is `202` while the first deployment runs; read the Candidate for its
+         *     `status` and `url`.
+         *
+         *     Creating a Candidate is available while the `frontends.candidates` capability is. While it is
+         *     not, this operation, redeploying, promoting and rolling back to a Candidate answer `404` with
+         *     code `feature_unavailable`; reading and deleting existing Candidates, and rolling back to the
+         *     frontend's own runtime, keep working.
+         *
+         *     A Candidate builds like any deploy and spends the project's build minutes. A frontend has at
+         *     most 20 live Candidates, and each name is unique within the frontend. Without `ttl_seconds` a
+         *     Candidate is kept until it is deleted.
+         */
+        post: operations["createFrontendCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/candidates/{candidateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a frontend Candidate */
+        get: operations["getFrontendCandidate"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a frontend Candidate
+         * @description Starts deleting the Candidate: its regional runtime, images, edge state and stored source are
+         *     removed once any running deployment finishes. Asking again for a Candidate that is already being
+         *     deleted is the same request. The Candidate answers `404` once it is gone.
+         *
+         *     A Candidate the frontend serves cannot be deleted: roll back first. A Candidate the frontend only
+         *     keeps as the runtime a rollback returns to can be deleted, and doing so gives up that rollback;
+         *     rolling back to the frontend's own runtime stays possible.
+         */
+        delete: operations["deleteFrontendCandidate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/candidates/{candidateId}/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deploy a new archive to a frontend Candidate
+         * @description Builds the uploaded archive with the frontend's own variable selection and deploys it to the
+         *     Candidate. The Candidate keeps serving its previous deployment until this one succeeds, and a
+         *     failed deployment leaves it on the previous one. A Candidate takes one deployment at a time.
+         *     While the `frontends.candidates` capability is unavailable, it answers `404` with code
+         *     `feature_unavailable`.
+         */
+        post: operations["redeployFrontendCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/serving": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get what a frontend serves
+         * @description Reports whether the frontend serves its own runtime or a promoted Candidate's, and the
+         *     revision a promotion or rollback must name.
+         */
+        get: operations["getFrontendServing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/serving/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Roll a frontend back to the runtime it served before
+         * @description Returns the frontend's traffic to the runtime it served before the last activation, or to its
+         *     own runtime with `to_production`. A rollback is a new activation, so what it leaves becomes the
+         *     runtime a further rollback returns to, and it can itself be undone. It names the revision the
+         *     caller read; a competing activation makes it fail with `409`.
+         *
+         *     Rolling back to a Candidate promotes it again and is refused with `409` when promoting it would
+         *     be. Rolling back to the frontend's own runtime is not.
+         */
+        post: operations["rollbackFrontendServing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/frontends/{frontendId}/candidates/{candidateId}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote a frontend Candidate
+         * @description Makes the Candidate what the frontend serves. Nothing is rebuilt or copied: the frontend's
+         *     traffic is routed to the Candidate's runtime, its own custom domains and metering are
+         *     unchanged, and what it served becomes the runtime a rollback returns to.
+         *
+         *     The Candidate must be ready and serving an active deployment, and that deployment must have
+         *     been built with the variables the frontend selects now. A Candidate that serves stops expiring and cannot be deleted. While one
+         *     serves, deploying the frontend itself answers `409`; roll back to the frontend's own runtime
+         *     first. Promotion names the revision the caller read from `serving`; a competing activation
+         *     makes it fail with `409`. Once the project's repository is the source of truth, promotion
+         *     is refused with `409`, as a direct deploy is, and so is rolling back to a Candidate; rolling
+         *     back to the frontend's own runtime is not. While the `frontends.candidates` capability is
+         *     unavailable, promotion and rolling back to a Candidate answer `404` with code
+         *     `feature_unavailable`; rolling back to the frontend's own runtime does not.
+         */
+        post: operations["promoteFrontendCandidate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3459,9 +4928,9 @@ export interface paths {
          * @description Returns every backup of the database, newest first, together with the
          *     window a point-in-time restore may target.
          *
-         *     Both backups you took and backups the schedule produced are listed;
-         *     `source` tells them apart. Only manual backups count against the plan's
-         *     backup allowance.
+         *     Backups you took, backups the schedule produced, and backups taken
+         *     before migrations are all listed; `source` tells them apart. Only manual
+         *     backups count against the plan's backup allowance.
          */
         get: operations["listDatabaseBackups"];
         put?: never;
@@ -3595,6 +5064,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/databases/{databaseName}/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a database's migration history
+         * @description Returns the migrations the database has recorded, in name order, read
+         *     from the database's own `_volcano_migrations.history` table. The history
+         *     is empty until a migration run or a baseline first records a file.
+         *
+         *     `active_run_id` is the run that is queued or running, if any.
+         *
+         *     If the history table is gone from a database where migrations ran,
+         *     answers `409` with code `history_missing`, and every run fails with
+         *     that code, rather than running files again. Record a baseline of the
+         *     files that were already applied to rebuild it. Dropping the whole
+         *     `_volcano_migrations` schema is not supported: the database then reads
+         *     as new, and the next run applies every file again.
+         *
+         *     Volcano reads at most 1,000 history entries, as many files as one run
+         *     may carry. A history with more answers `409` with code
+         *     `history_too_large`. A baseline is refused with that code, and a run
+         *     fails with it. Deleting the entries of files no longer among your
+         *     migrations brings the history back under the bound.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["getDatabaseMigrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migrations/baseline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record migrations as applied without running them
+         * @description Records each file in the database's migration history as applied,
+         *     without running it. Use it once for a database whose schema already
+         *     reflects the files, such as one migrated before Volcano tracked its
+         *     migrations, so later runs apply only newer files. It is refused while
+         *     a run is queued or running, and no run starts while it records. It
+         *     does not queue: while another request is changing the database, or the
+         *     database holds it up, such as with a lock on the migration history, it
+         *     answers `409` with code `database_busy`.
+         *
+         *     Files the history already records with the same checksum are skipped, so
+         *     repeating the request changes nothing. A file recorded with a different
+         *     checksum is refused, and nothing is recorded.
+         *
+         *     It also rebuilds a history that was lost (`history_missing`): send
+         *     exactly the files that were already applied, and later runs apply only
+         *     the rest.
+         *
+         *     Where migration runs are not available, answers `404` with code
+         *     `feature_unavailable`.
+         */
+        post: operations["baselineDatabaseMigrations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migration-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a database's migration runs
+         * @description Returns the database's 50 most recent migration runs, newest first,
+         *     without their files; get a run for its files. There is no pagination.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["listDatabaseMigrationRuns"];
+        put?: never;
+        /**
+         * Apply migrations to a database
+         * @description Starts a migration run: Volcano compares the files with the database's
+         *     history, rehearses the pending ones on a short-lived branch of the
+         *     database, takes a backup, and applies them in name order. Files the
+         *     history already records with the same checksum are skipped.
+         *
+         *     Asynchronous: the response is `202` with the run `queued`. Poll the run
+         *     until its `status` is `succeeded` or `failed`.
+         *
+         *     Send `Idempotency-Key` to make a retry safe: a repeat with a key this
+         *     database has seen returns that run with `200` and starts nothing. A
+         *     database runs one migration run at a time.
+         *
+         *     Where migration runs are not available, answers `404` with code
+         *     `feature_unavailable`.
+         */
+        post: operations["createDatabaseMigrationRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/databases/{databaseName}/migration-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a migration run
+         * @description Returns the run with each file's outcome. Poll this after starting a
+         *     run.
+         *
+         *     Available whether or not migration runs are.
+         */
+        get: operations["getDatabaseMigrationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/databases/{databaseName}/reset-password": {
         parameters: {
             query?: never;
@@ -3716,7 +5325,7 @@ export interface paths {
          *
          *     **Authentication:** Requires auth user access token (from signup/signin)
          *
-         *     **Row-Level Security:** Automatically enforced - you see only data you have access to
+         *     **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
          *
          *     **Use Cases:**
          *     - Query from browser/mobile apps
@@ -3860,7 +5469,7 @@ export interface paths {
          *
          *     **Authentication:** Requires auth user access token (from signup/signin)
          *
-         *     **Row-Level Security:** Automatically enforced - you see only data you have access to
+         *     **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
          *
          *     **Use Cases:**
          *     - Query from browser/mobile apps
@@ -5400,7 +7009,11 @@ export interface paths {
         };
         /**
          * List user's linked providers
-         * @description Get list of OAuth providers linked to current user
+         * @description Lists the OAuth providers linked to the signed-in user, with the
+         *     user's own account ID at each provider. Match on `provider_user_id`,
+         *     which never changes, rather than on the login or email. For
+         *     GitHub, it is the numeric user ID that GitHub reports elsewhere, such
+         *     as a webhook's `sender.id`.
          */
         get: operations["authListOAuthProviders"];
         put?: never;
@@ -5444,8 +7057,10 @@ export interface paths {
         post?: never;
         /**
          * Unlink OAuth provider
-         * @description Remove OAuth provider from user's account.
-         *     Cannot unlink if it's the only authentication method.
+         * @description Remove OAuth provider from user's account. Refused when the account would
+         *     have no other way to sign in: another linked OAuth provider that's enabled
+         *     for the project, or a password while email/password sign-in is on for the
+         *     project (`enable_email_password`).
          */
         delete: operations["authUnlinkOAuthProvider"];
         options?: never;
@@ -6301,10 +7916,19 @@ export interface paths {
          *     | `sandboxes` | The Sandbox API: presets, templates, sessions, and executions |
          *     | `sandboxes.sessions` | Starting and resuming sessions, and one-shot executions |
          *     | `sandboxes.custom_templates` | Deploying a custom template; its validation waits while `sandboxes.sessions` is unavailable |
+         *     | `sandboxes.network_isolation` | Creating sessions and one-shot executions with `network.egress` `deny_all`; existing `deny_all` sessions work either way |
+         *     | `sandboxes.output_not_kept` | Commands that keep no output: `keep_output: false` on a command, and `executions.keep_output: false` on a session; commands that keep output work either way |
          *     | `issues` | The Issues API: listing, reading, and updating grouped runtime errors |
-         *     | `autofix` | The Autofix API: a project's AI diagnosis and fix settings |
+         *     | `lavaflow` | LavaFlow, which diagnoses a project's issues and opens pull requests that fix them. Here it reports only whether LavaFlow is released in this environment; whether a project has it comes from `GET /projects/{id}/capabilities` |
+         *     | `lavaflow.merge` | LavaFlow merging its fixes, with `autonomy: merge`. Here it reports only whether merging is released in this environment; whether a project has it comes from `GET /projects/{id}/capabilities` |
+         *     | `lavaflow.lineage` | LavaFlow following up its fixes: linking a fix's recurrence or a new issue its deploy caused to the fix, the follow-up runs, and the lineage holds. Here it reports only whether fix lineage is released in this environment; whether a project has it comes from `GET /projects/{id}/capabilities` |
+         *     | `lavaflow.code_quality` | LavaFlow Code Quality, which reviews the code each frontend production deploy changes. Here it reports only whether Code Quality is released in this environment; whether a project has it comes from `GET /projects/{id}/capabilities` |
+         *     | `lavaflow.slack` | Reporting problems to LavaFlow from Slack: installing the Volcano Slack app, connecting Slack identities, and binding channels to projects. Here it reports whether LavaFlow is released, the Slack app is set up, and Slack reports have launched in this environment; whether a project has it comes from `GET /projects/{id}/capabilities` |
          *     | `functions.response_streaming` | Streaming an HTTP-mode function's response on its own URL as the function writes it |
          *     | `frontend_routes` | Creating and changing Frontend routes; listing, deleting, and serving existing ones work either way |
+         *     | `frontends.candidates` | Creating, redeploying, promoting and rolling back to a frontend Candidate; reading, deleting and rolling back to the frontend's own runtime always work |
+         *     | `databases.migrations` | Starting migration runs and recording a baseline; reading history and runs works either way |
+         *     | `shares` | Creating, switching on and publishing shares, and forking one |
          *
          *     A capability missing from the list is unavailable, and a capability under
          *     another, such as `sandboxes.sessions`, is unavailable whenever its parent is.
@@ -6312,7 +7936,8 @@ export interface paths {
          *     or `400` with code `feature_unavailable`; refresh this list when you receive
          *     that code. Reading, deleting, and terminating what already exists keep
          *     working unless the whole feature is absent from the environment. Every caller
-         *     in an environment gets the same answer.
+         *     in an environment gets the same answer; `GET /projects/{id}/capabilities`
+         *     answers for one project.
          *
          *     `functions.response_streaming` refuses nothing: while it is unavailable, a
          *     function's own URL still answers and sends a streamed response whole, once
@@ -6430,6 +8055,89 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A sign-in to your Volcano account, from the CLI or a browser. */
+        AccountSession: {
+            /**
+             * Format: uuid
+             * @description Unique session identifier
+             */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The sign-in identity (auth user) the session belongs to. This is
+             *     not your account ID: an identity linked to your account has its
+             *     own ID.
+             */
+            user_id: string;
+            /**
+             * @description How the session was created: `email`, `google`, `github`,
+             *     `microsoft`, `apple`, or `device:<client_id>` for a device-code
+             *     login such as the `volcano` CLI. More values may be added; use
+             *     `kind` to tell CLI logins from browser sign-ins.
+             * @example github
+             */
+            provider: string;
+            /**
+             * @description `cli` for a device-code login, such as `volcano login`, and
+             *     `browser` for every other sign-in.
+             * @example cli
+             * @enum {string}
+             */
+            kind: "cli" | "browser";
+            /** @description Browser/device user agent string */
+            user_agent?: string;
+            /** @description IP address of the client when the session was created */
+            ip_address?: string;
+            /** @description IP address of the most recent activity (token refresh) */
+            last_ip_address?: string;
+            /**
+             * Format: date-time
+             * @description When this session expires
+             */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Last activity timestamp
+             */
+            last_activity_at?: string;
+            /**
+             * Format: date-time
+             * @description When the session was created
+             */
+            session_started_at?: string;
+            /** @description Whether the session is currently active (not expired) */
+            is_active: boolean;
+            /** @description Whether this is the session making the current request */
+            is_current: boolean;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        /**
+         * @description A page of sessions. Without `sort` the body is the legacy
+         *     `sessions`/`total`/`page`/`limit`/`total_pages` shape; with
+         *     `sort=created_at` and a cursor it is the shared `data` envelope.
+         */
+        AccountSessionList: {
+            sessions?: components["schemas"]["AccountSession"][];
+            /** @description Total number of sessions */
+            total?: number;
+            /** @description Current page number */
+            page?: number;
+            /** @description Number of sessions per page */
+            limit?: number;
+            /** @description Total number of pages */
+            total_pages?: number;
+            /** @description Sessions for this page (cursor pagination only) */
+            data?: components["schemas"]["AccountSession"][];
+            /** @description Whether a further page exists (cursor pagination only) */
+            has_more?: boolean;
+            /** @description Opaque cursor for the next page (cursor pagination only) */
+            next_cursor?: string;
+            /** @description Opaque cursor for the previous page (cursor pagination only). Send as `ending_before`. */
+            prev_cursor?: string;
+        };
         SandboxPreset: {
             id: string;
             runtime: string;
@@ -6469,6 +8177,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             project_id: string;
+            /** @description Last recorded lifecycle reason, such as sandbox_run_hook_timeout or sandbox_authority_or_expiry. Historical information, not a current error; use state for the current session state. Retained when later observations supply no reason, including after termination or recovery. Omitted when no reason is known. Values may be added; this field does not imply whether a command ran or whether it can be retried. */
+            last_error_code?: string;
             /**
              * Format: uuid
              * @description Explicit template used to create the session. Null when created directly from a preset.
@@ -6489,6 +8199,29 @@ export interface components {
              * @description Absolute VM expiry. Null means unlimited in local mode.
              */
             expires_at: string | null;
+            network: components["schemas"]["SandboxSessionNetwork"];
+            executions: components["schemas"]["SandboxSessionExecutions"];
+            limits?: components["schemas"]["SandboxSessionAppliedLimits"];
+        };
+        SandboxSessionNetwork: {
+            /**
+             * @description The outbound network policy the session was created with. It never changes.
+             * @enum {string}
+             */
+            egress: "default" | "deny_all";
+            /**
+             * @description The outbound network policy Volcano last observed on the session's VM, never the request alone. It is `unknown` until the session is first observed, from a suspend or resume request until it is observed again, briefly while Volcano rolls out an update, and whenever the observation does not match the request. A terminated session keeps what Volcano last observed, so a `deny_all` session ended because Volcano observed outbound access reads `default`. A session first reports `state` `running` only once its network has been observed. To depend on `deny_all`, wait for `running`, then terminate the session unless `applied` is `deny_all`. Act on `applied` only while the session is `running`, and on a later `unknown` only while `desired_state` is `running`.
+             * @enum {string}
+             */
+            applied: "default" | "deny_all" | "unknown";
+        };
+        /** @description Outbound network policy for the session. Omitting `network` is the same as `egress` `default`. */
+        SandboxSessionNetworkRequest: {
+            /**
+             * @description `default` gives the session the region's standard outbound internet access. `deny_all` gives it no outbound network for its whole lifetime: DNS lookups, internet and link-local addresses, and connections back out through Volcano all fail, and the session accepts no port access. Commands, files and the rest of the session API work as usual. The policy cannot be changed after creation; suspend and resume keep it. Check `network.applied` before relying on it. Where `GET /capabilities` lists `sandboxes.network_isolation` as unavailable, `deny_all` answers `400` with code `feature_unavailable`.
+             * @enum {string}
+             */
+            egress: "default" | "deny_all";
         };
         CreateSandboxSessionRequest: {
             /** @description Preset ID from the available Sandbox preset catalog. */
@@ -6500,11 +8233,54 @@ export interface components {
              * @enum {integer}
              */
             memory_mb?: 1024 | 2048;
-            /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
+            /** @description Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`. */
             region: string;
             /** @description Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. */
             max_duration_seconds?: number;
+            network?: components["schemas"]["SandboxSessionNetworkRequest"];
+            executions?: components["schemas"]["SandboxSessionExecutions"];
+            limits?: components["schemas"]["SandboxSessionLimits"];
         } & (unknown | unknown);
+        /**
+         * @description Caps the session's code runs under, enforced inside the session. Each
+         *     cap is an upper bound; the session's own size still bounds both.
+         */
+        SandboxSessionLimits: {
+            /**
+             * @description CPU time the session's commands and template service may use
+             *     together, in vCPUs. A 1024 MiB session has 2 vCPUs and a 2048 MiB
+             *     session has 4; asking for more answers 400 with code
+             *     `sandbox_limits_exceed_session`.
+             */
+            vcpus?: number;
+            /**
+             * @description Space the session can write beyond its image's contents, in MiB.
+             *     It covers every path commands and the template service can write,
+             *     including `/workspace` and `/tmp`. A write past it fails with
+             *     `ENOSPC`. `/dev/shm` is memory, capped separately at 64 MiB.
+             */
+            disk_mib?: number;
+        };
+        /**
+         * @description The caps the session enforces, as the session reports them. Present only
+         *     when the session was created with `limits`. The session stays
+         *     `starting` until `applied` is known.
+         */
+        SandboxSessionAppliedLimits: {
+            /** @description Enforced vCPU cap. Never higher than requested; lower when the session has fewer vCPUs. */
+            vcpus?: number;
+            /** @description Enforced disk cap in MiB. Never higher than requested; lower when the session's disk has less free space. */
+            disk_mib?: number;
+            applied: components["schemas"]["SandboxLimitsApplied"];
+        };
+        /**
+         * @description `enforced` when every requested cap is enforced, `not_enforced` when the
+         *     session could not enforce them, and `unknown` until the session reports.
+         *     Terminate a session that reports anything but `enforced` if you rely on
+         *     the caps.
+         * @enum {string}
+         */
+        SandboxLimitsApplied: "enforced" | "not_enforced" | "unknown";
         SandboxCommandRequest: {
             command: string;
             /** @description Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work. */
@@ -6512,6 +8288,8 @@ export interface components {
             environment?: {
                 [key: string]: string;
             };
+            /** @description Set false to keep no output. stdout and stderr are returned once in this response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with `output_kept` false and empty streams, without running the command again. Omit it to use the session's `executions.keep_output`. True in a session that keeps no output is refused with 400 and code `sandbox_session_keeps_no_output`. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable. */
+            keep_output?: boolean;
         };
         SandboxExecutionRequest: {
             /** @description Preset ID from the available Sandbox preset catalog. */
@@ -6523,7 +8301,7 @@ export interface components {
              * @enum {integer}
              */
             memory_mb?: 1024 | 2048;
-            /** @description Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted. */
+            /** @description Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`. */
             region: string;
             /** @description Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes. */
             max_duration_seconds?: number;
@@ -6533,22 +8311,40 @@ export interface components {
             environment?: {
                 [key: string]: string;
             };
+            network?: components["schemas"]["SandboxSessionNetworkRequest"];
+            /**
+             * @description Set false to keep no output. stdout and stderr are returned once in this response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with `output_kept` false and empty streams, without running the command again. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable.
+             * @default true
+             */
+            keep_output?: boolean;
         } & (unknown | unknown);
         SandboxCommandResult: {
+            /** @description The first 1 MiB (1,048,576 bytes) the command wrote to stdout. Empty in a replay of a command that kept no output. */
             stdout: string;
+            /** @description The first 1 MiB (1,048,576 bytes) the command wrote to stderr. Empty in a replay of a command that kept no output. */
             stderr: string;
             exit_code: number;
+            /** @description True when the command wrote more than 1 MiB to stdout. False in a replay of a command that kept no output. */
             stdout_truncated: boolean;
+            /** @description True when the command wrote more than 1 MiB to stderr. False in a replay of a command that kept no output. */
             stderr_truncated: boolean;
             timed_out: boolean;
+            /** @description False when the command kept no output. Its streams appear only in the response to the request that ran it, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns them empty. */
+            output_kept: boolean;
         };
         SandboxExecutionResult: {
+            /** @description The first 1 MiB (1,048,576 bytes) the command wrote to stdout. Empty in a replay of a command that kept no output. */
             stdout: string;
+            /** @description The first 1 MiB (1,048,576 bytes) the command wrote to stderr. Empty in a replay of a command that kept no output. */
             stderr: string;
             exit_code: number;
+            /** @description True when the command wrote more than 1 MiB to stdout. False in a replay of a command that kept no output. */
             stdout_truncated: boolean;
+            /** @description True when the command wrote more than 1 MiB to stderr. False in a replay of a command that kept no output. */
             stderr_truncated: boolean;
             timed_out: boolean;
+            /** @description False when the command kept no output. Its streams appear only in the response to the request that ran it, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns them empty. */
+            output_kept: boolean;
             /** Format: uuid */
             session_id: string;
             region: string;
@@ -6566,6 +8362,125 @@ export interface components {
         SandboxFileResult: {
             /** Format: byte */
             data: string;
+        };
+        /** @description Send `project_id`, `session_id` and `path`, in any order, then the `archive` part. */
+        SandboxFileArchiveForm: {
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** @description Workspace directory to extract into, relative to `/workspace`. It must name a directory below the workspace root; a path that resolves to the root or to `/`, such as `.`, `./`, `/`, `/workspace` or `/workspace/.`, is refused. */
+            path: string;
+            /**
+             * Format: binary
+             * @description A tar archive, optionally gzip-compressed.
+             */
+            archive: string;
+        };
+        SandboxFileArchive: {
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id: string;
+            path: string;
+            /**
+             * Format: int64
+             * @description Regular files written.
+             */
+            files: number;
+            /**
+             * Format: int64
+             * @description Bytes of file content written.
+             */
+            bytes: number;
+        };
+        SandboxFilePartRequest: {
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** @description Workspace file to write, relative to `/workspace`. */
+            path: string;
+            /**
+             * Format: int64
+             * @description Byte offset of this part's data in the file.
+             */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Size of the whole file in bytes, at most 1 GiB.
+             */
+            size: number;
+            /** @description Lowercase hex SHA-256 of the whole file. */
+            sha256: string;
+            /**
+             * Format: byte
+             * @description This part's bytes, at most 8 MiB.
+             */
+            data: string;
+        };
+        SandboxFilePart: {
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id: string;
+            path: string;
+            /** Format: int64 */
+            offset: number;
+            /** Format: int64 */
+            size: number;
+            /**
+             * Format: int64
+             * @description Bytes of the file received through the end of this part.
+             */
+            received: number;
+            /** @description True when this part finished the file and it is now at `path`. */
+            complete: boolean;
+        };
+        SandboxFileEntry: {
+            /** @description Path relative to the workspace root, usable with the read and write file routes. */
+            path: string;
+            /**
+             * @description Entry type from the entry itself. A symlink is reported, never followed.
+             * @enum {string}
+             */
+            type: "file" | "directory" | "symlink" | "other";
+            /**
+             * Format: int64
+             * @description Size in bytes of a regular file; 0 for every other type.
+             */
+            size: number;
+            /** @description Permission bits, including setuid, setgid and sticky (`st_mode & 07777`). For example, 420 is `0644` and 493 is `0755`. */
+            mode: number;
+            /** @description Lowercase hex SHA-256 of a regular file's content, present only when `include_sha256` is true and the file could be hashed. */
+            sha256?: string;
+            /**
+             * @description Why a regular file has no `sha256` when `include_sha256` is true. `budget` is a file over 256 MiB. `changing` is a file that changed while it was hashed or kept changing; list it again later. `unreadable` is a file the session user doesn't own, whose owner-read bit (`0400`) is clear, or that has more than one hard link. Treat such a file as unverified.
+             * @enum {string}
+             */
+            sha256_skipped?: "budget" | "changing" | "unreadable";
+            /** @description True on a directory the session user can't list; the listing doesn't enter it. The user's permission bits on the directory lack read or execute: the owner bits when the user owns it, the group bits when it belongs to the user's group, and the other bits otherwise. Absent on every other entry. */
+            unreadable?: boolean;
+            /** @description In a recursive listing, how many names directly inside this directory no entry can carry: names that are not UTF-8, or whose path would pass 4096 bytes. The listing skips them and everything below them. Absent when there are none. */
+            unsupported_names?: number;
+        };
+        SandboxFileListResult: {
+            /**
+             * Format: uuid
+             * @description The project the session belongs to.
+             */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description The session listed.
+             */
+            session_id: string;
+            /** @description Entries sorted by path, compared one path element at a time by bytes, so a directory comes right before its contents. */
+            entries: components["schemas"]["SandboxFileEntry"][];
+            /** @description How many names directly inside the listed directory no entry can carry: names that are not UTF-8, or whose path would pass 4096 bytes. The listing skips them and everything below them. Every page reports it. Absent when there are none. */
+            unsupported_names?: number;
+            /** @description Present when more entries remain. Pass it as `cursor` to get the next page. */
+            next_cursor?: string;
         };
         SandboxSubjectGrantRequest: {
             /** Format: date-time */
@@ -6624,17 +8539,22 @@ export interface components {
         /** @description A product capability and whether it accepts new work in this environment. */
         Capability: {
             /**
-             * @description Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, `sandboxes.custom_templates`, `issues`, or `autofix`. New IDs may appear at any time.
+             * @description Stable capability ID, such as `sandboxes`, `sandboxes.sessions`, `sandboxes.custom_templates`, or `issues`. New IDs may appear at any time.
              * @example sandboxes.sessions
              */
             id: string;
             status: components["schemas"]["CapabilityStatus"];
+            /**
+             * @description Why an `unavailable` capability refuses new work, named like the error code its requests answer with, such as `plan_required`. Absent on any other status, and when requests answer `feature_unavailable`. Treat an unknown code as absent.
+             * @example plan_required
+             */
+            code?: string;
         };
         /**
-         * @description `available` means the capability accepts new work; a temporary outage still answers `503`. `unavailable` means requests that start new work answer `404` or `400` with code `feature_unavailable`. Treat any other value as `unavailable`.
+         * @description `available` means the capability accepts new work; a temporary outage still answers `503`. `unavailable` means requests that start new work answer `404` or `400` with code `feature_unavailable`, or with the capability's `code` when it has one; while the owner's plan can't be read, they answer `403` without a code. `read_only` means the capability takes no new work for the project, but what the project already has stays readable; only a project's list reports it. Treat any other value as `unavailable`.
          * @enum {string}
          */
-        CapabilityStatus: "available" | "unavailable";
+        CapabilityStatus: "available" | "unavailable" | "read_only";
         CapabilityList: {
             data: components["schemas"]["Capability"][];
         };
@@ -6829,6 +8749,13 @@ export interface components {
              * @default 86400
              */
             cors_max_age?: number;
+            /**
+             * @description Allow the exact origins of the project's own live frontend previews in its CORS checks, in addition to `cors_allowed_origins`. A preview's origin stops being allowed within seconds of the preview being deleted or expiring, with no configuration change.
+             * @default false
+             */
+            cors_allow_frontend_previews?: boolean;
+            /** @description Origins of the project's live frontend previews that its CORS checks currently allow. Empty unless `cors_allow_frontend_previews` is true. Omitted when the live previews could not be read; the rest of the response, and any update it answers, is unaffected. */
+            readonly frontend_preview_origins?: string[];
             /**
              * @description Require users to confirm email before sign-in. Can only be true when email_enabled is true.
              * @default false
@@ -7273,14 +9200,18 @@ export interface components {
         CreateDatabaseBackupRequest: {
             /**
              * @description Backup name, unique within the database. Names beginning with
-             *     `volcano-` are reserved for the platform's own snapshots.
+             *     `volcano-` are reserved for the platform's own snapshots, and names
+             *     beginning with `before-migration-` for the backups migration runs
+             *     take.
              * @example before_migration
              */
             name: string;
         };
         CreateDatabaseBranchRequest: {
             /**
-             * @description Branch name (must be unique within the parent database)
+             * @description Branch name, unique within the parent database. Names beginning
+             *     with `migration_rehearsal_` are reserved for the branches migration
+             *     runs rehearse on.
              * @example feature_checkout
              */
             name: string;
@@ -7438,7 +9369,8 @@ export interface components {
         /** @description Request to create a new project */
         CreateProjectRequest: {
             /**
-             * @description Project name (must be unique).
+             * @description Project name. A name you already use is not refused: the project is
+             *     created with a short random suffix added to it.
              *     Can only contain letters, numbers, underscores, and hyphens.
              * @example my-awesome-app
              */
@@ -7658,12 +9590,12 @@ export interface components {
              */
             name: string;
             /**
-             * @description Whether the backup was requested explicitly or produced by the
-             *     backup schedule. Only `manual` backups count against the plan's
-             *     backup allowance.
+             * @description Whether the backup was requested explicitly, produced by the backup
+             *     schedule, or taken before migrations were applied to the database.
+             *     Only `manual` backups count against the plan's backup allowance.
              * @enum {string}
              */
-            source: "manual" | "scheduled";
+            source: "manual" | "scheduled" | "migration";
             /**
              * Format: int64
              * @description Storage the backup occupies. Absent until the provider has costed
@@ -8019,6 +9951,288 @@ export interface components {
              */
             latest_restore_at?: string;
         };
+        /**
+         * @description A restore refused by the database's state. With code
+         *     `migration_run_in_progress`, `run_id` names the migration run backing up
+         *     or applying to the database.
+         */
+        DatabaseRestoreConflictError: components["schemas"]["Error"] & {
+            /** Format: uuid */
+            run_id?: string;
+        };
+        /** @description One migration file and its SQL. */
+        DatabaseMigrationFile: {
+            /**
+             * @description The file's path under `volcano/migrations/`: a file name such as
+             *     `001_create_users.sql`, or `<database>/001_create_users.sql` in a
+             *     project with more than one database, where `<database>` must be
+             *     this database. Every file in a request takes the same form. Files
+             *     run in byte order of their file name, which the history records.
+             * @example 001_create_users.sql
+             */
+            name: string;
+            /**
+             * @description The file's SQL, at most 1 MiB. A file may hold several statements
+             *     and runs in one transaction. A file cannot commit, roll back, use
+             *     savepoints, or `COPY` from the client; such a file fails with
+             *     `migration_failed`. A statement that cannot run in a transaction,
+             *     such as `CREATE INDEX CONCURRENTLY`, goes alone in a file whose
+             *     first line is `-- volcano:no-transaction`. That file runs outside a
+             *     transaction and runs again from its start when a run retries it. A
+             *     run refuses with `invalid_file`, before anything runs, a file with
+             *     the marker on any other line, and a marked file that builds an
+             *     unnamed index with `CREATE INDEX CONCURRENTLY` or starts with
+             *     `COPY`.
+             */
+            sql: string;
+        };
+        DatabaseMigrationFilesRequest: {
+            files: components["schemas"]["DatabaseMigrationFile"][];
+        };
+        /** @description One file the database's migration history records. */
+        DatabaseMigrationHistoryEntry: {
+            /** @example 001_create_users.sql */
+            name: string;
+            /**
+             * @description `sha256:` and the hex digest of the file as recorded, with a leading
+             *     byte order mark removed and CRLF line endings converted to LF.
+             * @example sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            checksum: string;
+            /**
+             * @description `applied`: a run ran the file and it committed. `baselined`: the file
+             *     was recorded as applied without running.
+             * @enum {string}
+             */
+            status: "applied" | "baselined";
+            /** Format: date-time */
+            applied_at: string;
+            /**
+             * Format: uuid
+             * @description The run that recorded the file. Absent for a baseline.
+             */
+            run_id?: string;
+        };
+        DatabaseMigrations: {
+            /** @description Every file the history records, in name order. */
+            history: components["schemas"]["DatabaseMigrationHistoryEntry"][];
+            /**
+             * Format: uuid
+             * @description The run that is queued or running, if any.
+             */
+            active_run_id?: string;
+        };
+        DatabaseMigrationBaseline: {
+            /**
+             * @description The files this request recorded, in name order. Empty when the
+             *     history already recorded every file.
+             */
+            recorded: string[];
+        };
+        /**
+         * @description A migration request refused by the database's state. With code
+         *     `migration_run_in_progress`, `run_id` names the run that is queued or
+         *     running.
+         */
+        DatabaseMigrationConflictError: components["schemas"]["Error"] & {
+            /** Format: uuid */
+            run_id?: string;
+        };
+        DatabaseMigrationRunFile: {
+            /** @example 001_create_users.sql */
+            name: string;
+            /**
+             * @description `pending`: not settled yet, including a file the run will try again
+             *     on its next attempt. `already_applied`: the history already recorded
+             *     it, so it did not run; a file can also end this way in `apply`, when
+             *     another session applied or baselined it after the run planned.
+             *     `applied`: this run applied it. `failed`: its own SQL failed and
+             *     its transaction rolled back, in the rehearsal or in the database as
+             *     the run's `phase` says, including when the run's time limit stopped
+             *     it; a file whose `COMMIT` failed is `unknown` instead. A file whose
+             *     first line is `-- volcano:no-transaction` runs outside a
+             *     transaction, so nothing rolls back what it did before failing, such
+             *     as the invalid index a failed `CREATE INDEX CONCURRENTLY` leaves.
+             *     `not_run`: the run ended before the file committed, without its
+             *     SQL failing: before `apply`, after an earlier file failed or lost
+             *     its `COMMIT`, or after the connection was lost or Volcano's own
+             *     statements around the file failed, which rolled it back. `unknown`:
+             *     the run ended in `apply` without confirming whether the file ran,
+             *     for example because its attempts ran out, its `COMMIT` failed or
+             *     was cut short, or it ran outside a transaction and the connection
+             *     was lost or Volcano's own statements after it failed. The file may
+             *     have committed. The database's history says whether a file that
+             *     ran in a transaction committed, and the next run's plan applies a
+             *     file only if the history does not record it.
+             *     While the run is `queued` or `running`, each attempt reads the
+             *     history again before it runs a file, and sets every file the run
+             *     has not applied from it: `already_applied` if the history holds
+             *     it, `pending` otherwise. The exception is a file that runs outside
+             *     a transaction: it is `unknown` from just before Volcano sends it
+             *     until Volcano confirms what became of it. If it may have run, it
+             *     stays `unknown` until an attempt applies it or the history holds
+             *     it, and keeps the `error` of a later attempt that fails it.
+             * @enum {string}
+             */
+            outcome: "pending" | "already_applied" | "applied" | "failed" | "not_run" | "unknown";
+            error?: components["schemas"]["DatabaseMigrationFileError"];
+        };
+        /**
+         * @description The database's error for a `failed` file, or for an `unknown` file
+         *     that runs outside a transaction, when a later attempt failed it after
+         *     an earlier one may have run it. `message` is the database's own
+         *     message and can quote values from the file or the data.
+         */
+        DatabaseMigrationFileError: {
+            /**
+             * @description At most 8 KiB (8,192 bytes). A longer message is cut and ends with
+             *     ` … [truncated]`. Volcano reads each reply the database sends about
+             *     the file up to 4 MiB, which leaves room for a reply that quotes the
+             *     whole file twice. A larger reply is not read: the file fails, and
+             *     this message says so instead.
+             * @example column "email" of relation "users" already exists
+             */
+            message: string;
+            /**
+             * @description The Postgres error code, when the database reported one.
+             * @example 42701
+             */
+            sqlstate?: string;
+            /** @description The line of the file the database reported, when known. */
+            line?: number;
+        };
+        /** @description A condition the run reports that did not stop it. */
+        DatabaseMigrationWarning: {
+            /**
+             * @description `out_of_order`: a pending file sorts before one the history already
+             *     records; it still ran. `missing_file`: the history records a file
+             *     the run did not include. `rehearsal_skipped`: the files were not
+             *     rehearsed, because branches are not available here or on the plan.
+             *     `backup_skipped`: no backup was taken, because backups are not
+             *     available here or on the plan. `backup_prune_failed`: Volcano
+             *     could not delete older migration backups beyond the 20 it keeps;
+             *     the run's outcome is unaffected, and the next run that takes a
+             *     backup tries again. `warnings_truncated`: the run raised more than
+             *     100 warnings; it is the last one, and its message says how many
+             *     more were not kept.
+             * @enum {string}
+             */
+            code: "out_of_order" | "missing_file" | "rehearsal_skipped" | "backup_skipped" | "backup_prune_failed" | "warnings_truncated";
+            /** @description The file the warning is about, when it is about one. */
+            file?: string;
+            message: string;
+        };
+        /** @description Why the run failed, or why its last attempt did. */
+        DatabaseMigrationRunError: {
+            /**
+             * @description Stable machine-readable reason. `migration_failed`: a file's SQL,
+             *     or its `COMMIT`, failed; `phase` says whether in the rehearsal,
+             *     leaving the database untouched, or in the database, where the files
+             *     before it stay applied. `checksum_mismatch`: an applied file changed.
+             *     `history_missing`: the database's history table is gone though
+             *     migrations ran there; record a baseline of the files already
+             *     applied. Dropping the whole `_volcano_migrations` schema is not
+             *     supported and not detected: the database reads as new, and the run
+             *     applies every file again. `history_too_large`: the history has
+             *     more than the 1,000 entries Volcano reads. `invalid_file`: a file
+             *     Volcano refuses to run. `invalid_layout`: file paths that do not map
+             *     to the database.
+             *     `plan_changed`: the history changed after the rehearsal.
+             *     `branch_limit`: the rehearsal branch would exceed the plan's branch
+             *     allowance. `backup_failed` and `rehearsal_unavailable`: Volcano
+             *     could not take the backup or prepare the rehearsal.
+             *     `restore_in_progress` and `database_unavailable`: the database could
+             *     not take the run. `owner_not_active`: the project owner's account
+             *     was not `active` when Volcano picked the run up, or before its
+             *     `backup` or `apply`, or before a file in `apply` unless held
+             *     `read_only` only for the plan's limits, so the run applied nothing
+             *     further; files it already applied stay applied.
+             *     `locked`: another session held the migration lock,
+             *     or a file, or Volcano's drop of a failed build's index, waited too
+             *     long for a lock. `connection_failed`: the
+             *     database could not be reached, or the connection was lost,
+             *     including while a file ran. `internal_error`: Volcano failed for a
+             *     reason of its own, such as its own statements around a file.
+             *     `timeout` and `attempts_exhausted`: the run could not finish.
+             *     `operator_failed`: Volcano ended a run that stopped making
+             *     progress; read the history to see which files were applied, then
+             *     start a new run.
+             * @enum {string}
+             */
+            code: "migration_failed" | "checksum_mismatch" | "history_missing" | "history_too_large" | "invalid_file" | "invalid_layout" | "plan_changed" | "branch_limit" | "rehearsal_unavailable" | "backup_failed" | "restore_in_progress" | "database_unavailable" | "owner_not_active" | "locked" | "connection_failed" | "timeout" | "attempts_exhausted" | "internal_error" | "operator_failed";
+            /**
+             * @description What happened, naming files and Postgres error codes. The
+             *     database's own message is on the failed file.
+             */
+            message: string;
+        };
+        /**
+         * @description One application of migration files to a database. A run plans the files
+         *     against the database's history, rehearses the pending ones on a
+         *     short-lived branch, takes a backup, and applies them.
+         */
+        DatabaseMigrationRun: {
+            /** Format: uuid */
+            id: string;
+            database: components["schemas"]["ResourceReference"];
+            /**
+             * @description `queued` and `running` mean the run has not ended; a run waiting
+             *     to retry stays `running`. `succeeded`: every pending file was
+             *     applied, or none was pending. `failed`: `error` says why.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /**
+             * @description The step the run is on, or the one it ended on. `plan` compares the
+             *     files with the history. `rehearse` applies the pending files to a
+             *     short-lived branch of the database, which is deleted afterwards.
+             *     `backup` takes the backup named by `backup_name`. `apply` applies
+             *     the files to the database.
+             * @enum {string}
+             */
+            phase: "plan" | "rehearse" | "backup" | "apply";
+            /**
+             * @description What started the run.
+             * @enum {string}
+             */
+            source: "git_deploy" | "api";
+            /** @description The commit whose files the run applies. Present for `git_deploy` runs. */
+            commit_sha?: string;
+            /**
+             * @description The backup the run takes before it applies the files, named once
+             *     the run starts taking it. It is listed with the database's backups
+             *     with `source: migration`. A run that ended in its `backup` phase
+             *     may name a backup that was never created.
+             * @example before-migration-7f3a1c2e-5d4b-4a91-8c6f-2b1e9d0a4c73
+             */
+            backup_name?: string;
+            /**
+             * @description The run's files, in the order they run, with what became of each.
+             *     Absent when listing runs.
+             */
+            files?: components["schemas"]["DatabaseMigrationRunFile"][];
+            /**
+             * @description A run keeps at most 100 warnings, keeping those about the run, such
+             *     as a skipped backup, ahead of those about files. A run that raised
+             *     more ends the list with a `warnings_truncated` warning.
+             */
+            warnings: components["schemas"]["DatabaseMigrationWarning"][];
+            error?: components["schemas"]["DatabaseMigrationRunError"];
+            /**
+             * Format: date-time
+             * @description When a worker first picked the run up.
+             */
+            started_at?: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DatabaseMigrationRunList: {
+            data: components["schemas"]["DatabaseMigrationRun"][];
+        };
         DatabaseStats: {
             /**
              * Format: int64
@@ -8138,11 +10352,11 @@ export interface components {
             /** @enum {string} */
             template_type: "welcome" | "confirmation" | "password_reset" | "password_changed";
             /** @example Confirm your email address */
-            subject: string;
+            subject?: string;
             /** @description HTML template with placeholders */
-            html_body: string;
+            html_body?: string;
             /** @description Plain text template with placeholders */
-            text_body: string;
+            text_body?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -8150,7 +10364,7 @@ export interface components {
         };
         Error: {
             error: string;
-            /** @description Stable machine-readable error code when a specific recovery path is available. `plan_required` (403) means the project owner's plan does not include the requested feature or option; upgrading the plan unlocks it. A 403 without a code leaves the reason unspecified: it can be an access refusal, a reached limit, or a plan check that could not read the owner's plan. Match on the code, not the message text. */
+            /** @description Stable machine-readable error code when a specific recovery path is available. `plan_required` (403) means the project owner's plan does not include the requested feature or option; upgrading the plan unlocks it. `person_required` (403) means a project access token tried to change LavaFlow settings, which only the project's owner changes, with a platform token, or that the change needs the owner's own credential that expires, a project repository, and an owner whose GitHub account can push to it; `error` says which. A 403 without a code leaves the reason unspecified: it can be an access refusal, a reached limit, or a plan check that could not read the owner's plan. Match on the code, not the message text. */
             code?: string;
         };
         /**
@@ -8237,6 +10451,7 @@ export interface components {
             resource: components["schemas"]["ResourceReference"];
             deployment: components["schemas"]["DeploymentReference"];
             status: components["schemas"]["ProjectImportRunStatus"];
+            /** @description Set when `status` is `failed`: `import.deployment_skipped` when the import's deployment was skipped, otherwise the error code of the Git deployment run the import started (see `GitDeploymentRunError.code`), such as `source_invalid`, `deploy_refused`, `child_deploy_failed`, `child_deploy_not_started`, or `deploy_failed`. Treat a code you do not know as a failure. */
             error_code?: string;
             error_message?: string;
             /** Format: date-time */
@@ -8307,6 +10522,67 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description A Slack workspace ID, such as `T0123ABCD`. */
+        SlackTeamId: string;
+        /** @description A Slack channel ID, such as `C0123ABCD`. */
+        SlackChannelId: string;
+        SlackAuthorizationResponse: {
+            /** @description The Slack page to send the browser to. */
+            authorization_url: string;
+        };
+        /** @description A Slack identity connected to the caller's Volcano account. */
+        SlackConnection: {
+            /** Format: uuid */
+            id: string;
+            team_id: components["schemas"]["SlackTeamId"];
+            /** @description The workspace's name, or empty until the Volcano app is installed in it. */
+            team_name: string;
+            /** @description The Slack user ID Slack verified. */
+            slack_user_id: string;
+            /** @description Whether the Volcano app is installed in the workspace. */
+            installed: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        SlackConnectionsResponse: {
+            connections: components["schemas"]["SlackConnection"][];
+        };
+        SlackChannel: {
+            id: components["schemas"]["SlackChannelId"];
+            name: string;
+            is_private: boolean;
+        };
+        SlackChannelsResponse: {
+            channels: components["schemas"]["SlackChannel"][];
+        };
+        /** @description A Slack channel that reports problems to LavaFlow for a project. */
+        LavaflowSlackChannel: {
+            /**
+             * Format: uuid
+             * @description The binding's ID, which removing it takes.
+             */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            team_id: components["schemas"]["SlackTeamId"];
+            /** @description The workspace's name, or empty while the Volcano app is not installed in it. */
+            team_name: string;
+            channel_id: components["schemas"]["SlackChannelId"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        LavaflowSlackChannelsResponse: {
+            channels: components["schemas"]["LavaflowSlackChannel"][];
+        };
+        LavaflowSlackChannelBinding: {
+            /**
+             * Format: uuid
+             * @description The project the channel reports for.
+             */
+            project_id: string;
+            team_id: components["schemas"]["SlackTeamId"];
+            channel_id: components["schemas"]["SlackChannelId"];
+        };
         GitConnectStartResponse: {
             authorization_url: string;
         };
@@ -8340,13 +10616,7 @@ export interface components {
         GitInstallationsResponse: {
             installations: components["schemas"]["GitInstallation"][];
         };
-        GitRepository: {
-            /**
-             * Format: int64
-             * @description Stable GitHub repository id (repository.id), unchanged by renames.
-             */
-            id: number;
-            full_name: string;
+        GitRepository: components["schemas"]["GitRepositoryReference"] & {
             default_branch: string;
             private: boolean;
             /** @description Whether the repository has no commits and can receive an initial source export. */
@@ -8354,6 +10624,333 @@ export interface components {
         };
         GitRepositoriesResponse: {
             repositories: components["schemas"]["GitRepository"][];
+        };
+        Share: {
+            /** @description The link's public identifier. Its address is `https://volcano.dev/deploy/<id>`. */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** @description A project name for clients to offer a visitor as the default. The create request still carries its own `name`; Volcano does not fill one in from the link. */
+            suggested_name: string;
+            /** @description What the project does, in the owner's words, shown to visitors before they deploy. One line of plain text; empty when the owner wrote none. */
+            description: string;
+            /** @description Whether the projects made from this link, and the projects made from those, may be shared again by their owners. False by default, so a copy of this project cannot create, draft, publish or switch on a deploy link of its own, and its links serve nothing. Read at each request, so switching it off stops copies' links that are already on. */
+            allow_reshare: boolean;
+            /**
+             * @description Whether the owner, or Volcano, has the link on. An `active` link can still not serve; see `serving`.
+             * @enum {string}
+             */
+            status: "active" | "disabled";
+            /**
+             * @description Whether the link's address serves its current release now: it is
+             *     `active`, published, and nothing stops it, such as deploy links not being
+             *     available in this environment, the project being deleted, the owner's
+             *     account not allowing traffic, or the project being a copy that may no
+             *     longer be shared. An `active` link that is not serving
+             *     answers visitors as one switched off, and switching it on again changes
+             *     nothing until what stops it is resolved.
+             */
+            serving: boolean;
+            /**
+             * @description Why the link is off. Set only while it is disabled. New reasons can be
+             *     added, so treat an unknown one as disabled. `owner`: its owner switched
+             *     it off. `operator`: Volcano took it down; its owner cannot switch it back
+             *     on or delete it (`PATCH` and `DELETE` answer `403` with code
+             *     `operator_disabled`), but can still edit it. While it is down, its
+             *     project cannot be shared any more (no new link, draft or publish, and no
+             *     link switched on), and no project made from it, or from a copy of it, can
+             *     be shared either.
+             * @example owner
+             */
+            disabled_reason?: string | null;
+            /** @description The release visitors are offered. Null until the first publish; until then the link's preview answers `404`. */
+            current_release: components["schemas"]["ShareReleaseRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ShareReleaseRef: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            published_at: string;
+        };
+        SharesResponse: {
+            shares: components["schemas"]["Share"][];
+        };
+        ShareCreateRequest: {
+            /**
+             * Format: uuid
+             * @description The project to share. A project the caller can't share answers like one that doesn't exist.
+             */
+            project_id: string;
+            /** @description A project name for clients to offer visitors as the default; the create request still carries its own `name`. It may contain only letters, numbers, underscores and hyphens. */
+            suggested_name?: string;
+            /** @description What the project does, shown to visitors before they deploy. One line of plain text with no control characters; surrounding spaces are trimmed. */
+            description?: string;
+            /** @description Lets the projects made from this link be shared again by their owners. Defaults to false. */
+            allow_reshare?: boolean;
+        };
+        ShareUpdateRequest: {
+            suggested_name?: string;
+            /** @description What the project does, shown to visitors before they deploy. One line of plain text with no control characters; surrounding spaces are trimmed. Send an empty string to remove it. */
+            description?: string;
+            /** @description Lets the projects made from this link be shared again by their owners. Switching it off stops their copies, and copies of those, from sharing again, read at each request, including links of theirs that are already on. */
+            allow_reshare?: boolean;
+            /** @enum {string} */
+            status?: "active" | "disabled";
+        };
+        ShareReleaseCreateRequest: {
+            /** @description The share to publish to. Its own project authorizes the publish. */
+            share_id: string;
+            /**
+             * @description The `draft_id` of the draft the owner reviewed. If a fresh build of the
+             *     project is not that draft, nothing is published and the answer is `409`
+             *     `draft_changed` with the new draft.
+             */
+            draft_id: string;
+            /**
+             * @description Every name in the draft's `variables`, which a project created from the
+             *     release gets. Values are never carried: each is created empty unless the
+             *     visitor gives one.
+             */
+            variables: string[];
+            /**
+             * @description The functions that receive the new project's `VOLCANO_SERVICE_KEY`, which
+             *     bypasses row-level security. Must be exactly the draft's
+             *     `service_key_functions`.
+             */
+            service_key_functions: string[];
+        };
+        ForkCreateRequest: {
+            /** @description The share to fork, the id at the end of its deploy URL. */
+            share_id: string;
+            /**
+             * Format: uuid
+             * @description The `release.id` the share's preview returned, so only the release the visitor saw is installed.
+             */
+            release_id: string;
+            /** @description The new project's name, which may contain only letters, numbers, underscores and hyphens. A name you already use gets a short random suffix. An invalid name answers `400` before anything is counted against the share or your hourly fork limit. */
+            name: string;
+            /**
+             * @description Values for the variables the preview lists, by name. Any may be left out
+             *     and is then created empty; only listed names are accepted (`422`
+             *     otherwise). Each value is at most 4096 bytes of UTF-8, since a function's
+             *     environment is limited in bytes; a longer one, or one containing a NUL
+             *     character, answers `400`. Values are never logged, and `Idempotency-Key` compares only the names given a value.
+             */
+            variables?: {
+                [key: string]: string;
+            };
+        };
+        ShareReleaseFunction: {
+            name: string;
+            /** @enum {string} */
+            kind: "standard" | "durable";
+            /** @description The function's invocation visibility, as installed. */
+            visibility?: string;
+            /** @description The function's invocation mode, when it is not the default. */
+            invocation_mode?: string;
+            /**
+             * @description How the function's HTTP invocations authenticate, when its invocation
+             *     settings are not the default; omitted means `volcano`. `none` lets
+             *     anyone call the function without a credential in every project made from
+             *     the release. Releases published before this was recorded omit it.
+             */
+            http_auth_mode?: string;
+            /**
+             * @description The SHA-256 of the function's OpenAPI document as the release carries it,
+             *     when it has one, so a draft shows when the document changed. Releases
+             *     published before this was recorded omit it.
+             */
+            openapi_spec_sha256?: string;
+            /**
+             * @description `scoped` when the function receives only the variables it declares, as
+             *     your project's function does, listed in `variables`. Omitted when it
+             *     receives every variable shared with functions. The service key is not
+             *     part of it: `service_key_functions` says which functions receive that.
+             *     Releases published before this was recorded omit it.
+             * @enum {string}
+             */
+            variable_scope?: "scoped";
+            /** @description For a `scoped` function, the variables it declares that a project made from the release has. */
+            variables?: string[];
+        };
+        /** @description Something a release does not carry. */
+        ShareReleaseOmission: {
+            /**
+             * @description `no_source`: a function or frontend whose current deployment has no stored
+             *     source to carry. `database`: a database; a visitor's project starts without
+             *     one. `sandbox`: a sandbox, which releases do not deploy. `secret_file`: a
+             *     file that may hold credentials, such as a dotenv or `.envrc` file, a tool's
+             *     token file like `.netrc` or an `.npmrc` holding a registry credential, a
+             *     private key, a credential JSON or a Terraform variables file. `unsupported_entry`: a file that is not a regular file,
+             *     such as a symbolic link.
+             * @enum {string}
+             */
+            kind: "no_source" | "database" | "sandbox" | "secret_file" | "unsupported_entry";
+            /** @description The function, frontend, database or sandbox, when there is one. */
+            resource?: string;
+            /** @description The file left out, for a file. */
+            path?: string;
+        };
+        ShareReleaseDraft: {
+            /**
+             * @description Opaque. Names exactly what a release built now would carry: each
+             *     function's and frontend's current deployment, and everything the draft
+             *     lists, including each function's settings (`http_auth_mode`,
+             *     `openapi_spec_sha256`, `variable_scope`), the `variables`, the
+             *     `frontend_variables` and the `omissions`. It stays the same while those
+             *     do, and changes when a function or frontend is redeployed or anything the
+             *     draft lists changes. A sandbox is not part of it, since a release does not
+             *     carry one: rebuilding only a sandbox leaves it unchanged. Send it with the
+             *     publish.
+             */
+            draft_id: string;
+            functions: components["schemas"]["ShareReleaseFunction"][];
+            frontends: string[];
+            /** @description The project's variables a visitor could be asked to supply. Volcano's own, such as `VOLCANO_API_URL`, are never listed. */
+            variables: components["schemas"]["ShareVariable"][];
+            /** @description The functions whose code reads `VOLCANO_SERVICE_KEY`. A release gives them the visitor project's service key once the owner confirms them. */
+            service_key_functions: string[];
+            omissions: components["schemas"]["ShareReleaseOmission"][];
+            /**
+             * @description The draft's variables each frontend receives, by frontend name, as your
+             *     project's frontend of that name selects them by its variable scope now.
+             *     A frontend receives no others.
+             */
+            frontend_variables: {
+                [key: string]: string[];
+            };
+        };
+        ShareDraftChangedError: {
+            error: string;
+            /** @enum {string} */
+            code: "draft_changed";
+            draft: components["schemas"]["ShareReleaseDraft"];
+        };
+        ShareRelease: {
+            /** Format: uuid */
+            id: string;
+            share_id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: date-time */
+            published_at: string;
+            /** @description The id of the user who published the release. */
+            published_by: string;
+            /** @description The digest of the stored release archive. An install refuses an archive that does not match it. */
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            functions: components["schemas"]["ShareReleaseFunction"][];
+            frontends: string[];
+            variables: components["schemas"]["ShareVariable"][];
+            service_key_functions: string[];
+            omissions: components["schemas"]["ShareReleaseOmission"][];
+        };
+        PaginatedShareReleases: {
+            data: components["schemas"]["ShareRelease"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page, present if has_more is true. It works only for the same share_id and limit. */
+            next_cursor?: string;
+        };
+        SharePreview: {
+            id: string;
+            /** @description A project name the link's owner suggests, for clients to offer as the default. The create request still carries its own `name`; Volcano does not fill one in from the link. */
+            suggested_name: string;
+            /** @description What the project does, in the owner's words. Plain text; empty when the owner wrote none. */
+            description: string;
+            release: components["schemas"]["SharePreviewRelease"];
+        };
+        /** @description The release a project created from the link installs. */
+        SharePreviewRelease: {
+            /**
+             * Format: uuid
+             * @description Send it as `release_id` in `POST /forks` to confirm this release.
+             */
+            id: string;
+            /** Format: date-time */
+            published_at: string;
+            /** @description The digest of the stored release archive. */
+            sha256: string;
+            /** @description Names of the frontends installing the release creates. */
+            frontends: string[];
+            /** @description Names of the functions installing the release creates. */
+            functions: string[];
+            /**
+             * @description Names of the functions that receive the new project's `VOLCANO_SERVICE_KEY`,
+             *     which bypasses row-level security. Show them to the visitor before they
+             *     confirm. Empty when no function receives it.
+             */
+            service_key_functions: string[];
+            /**
+             * @description The project variables the new project gets, sorted by name. A visitor may
+             *     give a value for any of them as `variables` when creating
+             *     the fork with `POST /forks`; each one left out is created empty, for the visitor to set
+             *     later. Volcano's own variables, such as `VOLCANO_API_URL`, are never
+             *     listed: the install sets them.
+             */
+            variables: components["schemas"]["ShareVariable"][];
+            /** @description What the release does not carry. A `database` entry means the new project starts without that database. */
+            omissions: components["schemas"]["ShareReleaseOmission"][];
+        };
+        /** @description A project variable a deploy link's release declares. A project created from the link always gets it. */
+        ShareVariable: {
+            /** @description The variable's name. */
+            name: string;
+            /**
+             * @description Always true: a project created from the link always gets this variable,
+             *     created empty when the visitor gives no value. It never means a value must
+             *     be given.
+             */
+            required: boolean;
+            /**
+             * @description Whether to treat the value as a secret: take it masked and never show it back. Only a
+             *     `NEXT_PUBLIC_` name, which a Next.js build copies into the browser, is not secret.
+             */
+            secret: boolean;
+            /**
+             * @description True when the source project gives the variable only to the scoped
+             *     functions that declare it, not to every function, and so does a project
+             *     made from the release. Omitted when false.
+             */
+            unshared?: boolean;
+        };
+        ShareKindCount: {
+            /** @enum {string} */
+            kind: "click" | "preview" | "confirm" | "accepted" | "ready" | "failed";
+            /** Format: int64 */
+            events: number;
+            /**
+             * Format: int64
+             * @description Unique daily visitors among the events that carried one. A visitor is pseudonymised per day, so one who returns on another day counts again.
+             */
+            visitors: number;
+        };
+        ShareDailyCount: {
+            /**
+             * Format: date
+             * @description UTC day.
+             */
+            day: string;
+            /** @enum {string} */
+            kind: "click" | "preview" | "confirm" | "accepted" | "ready" | "failed";
+            /** Format: int64 */
+            events: number;
+        };
+        ShareStats: {
+            /**
+             * Format: date-time
+             * @description Start of the counted window.
+             */
+            since: string;
+            totals: components["schemas"]["ShareKindCount"][];
+            daily: components["schemas"]["ShareDailyCount"][];
         };
         ProjectGitConnection: {
             /** Format: int64 */
@@ -8367,11 +10964,28 @@ export interface components {
             root_directory: string;
             /** @description The branch a push must land on to deploy. Follows the repository's GitHub default branch unless the project set its own, which a default-branch rename on GitHub then leaves alone. */
             production_branch: string;
+            /** @description True when `production_branch` follows the repository's default branch and moves with a default-branch rename on GitHub. False when the project pinned a branch, even one that matches the current default. Pin a branch with `PUT /projects/{id}/git-connection/production-branch`; send an empty `production_branch` there to follow the default again. */
+            production_branch_follows_default: boolean;
             /**
              * Format: date-time
              * @description When the connection last changed: its repository, root directory or production branch. Naming the branch it already uses, and other changes to the project, leave it alone. A connection that has not changed since Volcano began tracking this reports the project's last change before then.
              */
             updated_at: string;
+        };
+        /** @description Whether the project owner can push to the project's connected repository. */
+        ProjectGitOwnerPush: {
+            /**
+             * Format: int64
+             * @description Stable GitHub repository id of the connected repository, the `repo_id` of the project's git connection.
+             */
+            repository_id: number;
+            /** @description True when the project owner's GitHub account can push to the repository. */
+            can_push: boolean;
+            /**
+             * @description Why `can_push` is false; absent when it is true. `owner_not_connected`: the owner has not connected a GitHub account. `owner_reconnect_required`: the owner's GitHub connection expired or was revoked; the owner reconnects GitHub. `repository_access_lost`: the owner's GitHub account can no longer see the repository. `no_push_permission`: the owner's GitHub account can read the repository but not push to it.
+             * @enum {string}
+             */
+            reason?: "owner_not_connected" | "owner_reconnect_required" | "repository_access_lost" | "no_push_permission";
         };
         /** @description A project's GitHub auto-deploy settings: what a push to the connected repo's production branch deploys. All settings are default-off. */
         ProjectGitDeploySettings: {
@@ -8383,20 +10997,81 @@ export interface components {
             frontend_name?: string;
             /** @description App root (subdirectory) the frontend builds from. Omitted for the repo root. */
             frontend_app_root?: string;
+            /** @description Whether a push applies the commit's pending migrations, the SQL files under volcano/migrations, before it deploys anything. Each database gets a migration run with source `git_deploy`; when one fails, nothing from the push deploys and the live version keeps serving. A push starts a migration run only while the project owner's account is `active`; otherwise it starts none, deploys nothing, and fails with code `owner_not_active`. A run an earlier attempt of the push started before the account changed keeps its outcome, but the push still deploys none of its code and fails with `owner_not_active`; its message says the schema changes stay. Nothing retries that push; push again once the account is `active`, and that push skips the migrations already applied. Reads back as saved even where the `databases.migrations` capability is unavailable; there, a push whose commit has migrations deploys nothing. */
+            apply_migrations: boolean;
             /**
              * Format: date-time
              * @description When the settings were last saved, or last changed by connecting a repository. Other changes to the project leave it alone. Settings a connection turned on before Volcano began tracking this report the project's last change before then; settings never saved or changed report when the project was created.
              */
             updated_at: string;
         };
-        /** @description Full replace of a project's Git auto-deploy settings. */
+        /** @description Full replace of a project's Git auto-deploy settings, except apply_migrations, which keeps its saved value when omitted. */
         UpdateProjectGitDeploySettingsRequest: {
             auto_deploy_enabled: boolean;
             deploy_functions: boolean;
-            /** @description Frontend to deploy on push. Omit or empty to deploy no frontend. */
+            /** @description Legacy frontend to deploy on push. In Git mode, explicitly send an empty string to stop deploying the selected frontend; omit frontend_app_root too. This keeps the serving frontend and Git handover intact. Omitting an existing selection or renaming it is refused in Git mode. In platform mode, omit or empty to deploy no frontend. Explicit source-layout mappings are independent of this legacy selection. */
             frontend_name?: string;
             /** @description App root the frontend builds from. Requires frontend_name; omit for the repo root. */
             frontend_app_root?: string;
+            /** @description Apply the commit's pending migrations before each push deploys. Anyone who can push to the production branch can then run any SQL as the database owner, so protect that branch first. Off until set. Omit to leave the saved value unchanged. Turning it on answers `400` with code `feature_unavailable` where the `databases.migrations` capability is unavailable; `false`, or the saved `true` sent back, is accepted even there. While the project owner's account is `read_only`, the request answers `403` whatever it sends; an `inactive` owner's credentials answer `401`. */
+            apply_migrations?: boolean;
+        };
+        /**
+         * @description Where a run is. `pending` and `running` have not ended. `succeeded`: every deployment the run dispatched succeeded, or the commit only had migrations to apply. `failed`: `error` says why. `superseded`: a newer push replaced the run before it started. `skipped`: there was nothing to deploy; `error` says why.
+         * @enum {string}
+         */
+        GitDeploymentRunStatus: "pending" | "running" | "succeeded" | "failed" | "superseded" | "skipped";
+        /** @description Why a run failed or was skipped. */
+        GitDeploymentRunError: {
+            /** @description Stable machine-readable reason. For a failed run: `migration_failed`, `migration_invalid_layout`, `migration_timeout`, `feature_unavailable`, `source_invalid`, `child_deploy_failed`, `child_deploy_not_started`, `deploy_refused`, `typescript_not_compiled`, `deploy_failed`, `max_attempts_exhausted`, `owner_not_active`, or `project_deleting`. `source_invalid`, `deploy_refused`, and `typescript_not_compiled` fail the same way if the same commit is pushed again; `child_deploy_not_started`, `deploy_failed`, and `max_attempts_exhausted` may succeed on another push; for `owner_not_active`, reactivating the owner's account restores deployment eligibility; push again to deploy. `project_deleting` means the project is being deleted. For a skipped run: `auto_deploy_disabled`, `binding_changed`, `disconnected`, `project_missing`, or `nothing_to_deploy`. Treat a code you do not know as a failure. */
+            code: string;
+            /** @description What happened. For `migration_failed`, `migration_invalid_layout`, `source_invalid`, `deploy_refused`, `child_deploy_not_started`, and `typescript_not_compiled` it names the database, files, resource, or setting at fault when Volcano has them. */
+            message: string;
+        };
+        /** @description A migration run a deployment run started. Get it at `GET /projects/{id}/databases/{databaseName}/migration-runs/{runId}` with `database.name` and `id`. */
+        GitDeploymentMigrationRun: {
+            /** Format: uuid */
+            id: string;
+            database: components["schemas"]["ResourceReference"];
+        };
+        /** @description One push's deployment through Git auto deploy. */
+        GitDeploymentRun: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["GitDeploymentRunStatus"];
+            /** @description The branch the push updated, the project's production branch at the time. */
+            branch: string;
+            /** @description The commit the run deploys. */
+            commit_sha: string;
+            /** @description Whether the run applies the commit's migrations: the project's `apply_migrations` Git deploy setting when the push arrived. */
+            apply_migrations: boolean;
+            /** @description The migration runs the run started, one per database, ordered by database name. Empty when it started none. */
+            migration_runs: components["schemas"]["GitDeploymentMigrationRun"][];
+            error?: components["schemas"]["GitDeploymentRunError"];
+            /**
+             * Format: date-time
+             * @description When the push was recorded.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When a worker first picked the run up.
+             */
+            started_at?: string;
+            /**
+             * Format: date-time
+             * @description When the run ended.
+             */
+            completed_at?: string;
+        };
+        PaginatedGitDeploymentRuns: {
+            data: components["schemas"]["GitDeploymentRun"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page (present if has_more is true) */
+            next_cursor?: string;
         };
         ProjectLockLeaseRequest: {
             /**
@@ -8476,6 +11151,14 @@ export interface components {
         ExportProjectSourceRequest: {
             /** @description The currently configured production branch the user confirmed for export. */
             production_branch: string;
+            /**
+             * Format: int64
+             * @description The `repo_id` of the connected repository the user confirmed for
+             *     export, as the git connection reports it. When set, export answers
+             *     `409` if the project is now connected to a different repository, so
+             *     source is written only to the repository the user was shown.
+             */
+            repo_id?: number;
         };
         ProjectSourceExportSkip: {
             /** @description The kind of resource, "function" or "frontend". Deliberately not an enum: the generated constants would collide with an existing resource-type enum and rename its members. */
@@ -8491,7 +11174,7 @@ export interface components {
             path: string;
         };
         SetProjectGitProductionBranchRequest: {
-            /** @description The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. */
+            /** @description The branch a push must land on to deploy. Validated as a Git branch name only — it does not have to exist yet. An empty string follows the repository's default branch, including later renames. */
             production_branch: string;
         };
         SetProjectGitRootDirectoryRequest: {
@@ -8518,7 +11201,7 @@ export interface components {
             repo_full_name?: string;
             /** @description Monorepo subdirectory the project builds from. Omit for the repo root. */
             root_directory?: string;
-            /** @description The branch a push must land on to deploy, with three cases, because this is a full replace and a read-modify-write client sends back whatever it read. Omit it to follow the repository's GitHub default branch, which also discards a branch set earlier. Send back the branch the project already deploys from, when that is the repository's default, and nothing changes either way — a project pinned to that branch stays pinned. Sending the default branch when the project deploys from something else returns it to following the default, including on a rebind, where a pin describes a branch chosen for the repository being left. Any other branch becomes the project's own choice, exempt from later default-branch renames. Validated as a Git branch name only: it does not have to exist yet, so a project can be pointed at a branch about to be pushed. Changing repository and naming a branch other than the new repository's default in one request is refused with 400, because the branch named is almost always the previous repository's, echoed back — connect first, then set the branch. */
+            /** @description The branch a push must land on to deploy, with three cases, because this is a full replace and a read-modify-write client sends back whatever it read. Omit it to follow the repository's GitHub default branch, which also discards a branch set earlier. Send back the branch the project already deploys from, when that is the repository's default, and nothing changes either way — a project pinned to that branch stays pinned. Sending the default branch when the project deploys from something else returns it to following the default, including on a rebind, where a pin describes a branch chosen for the repository being left. Any other branch becomes the project's own choice, exempt from later default-branch renames. Validated as a Git branch name only: it does not have to exist yet, so a project can be pointed at a branch about to be pushed. Changing repository and naming a branch other than the new repository's default in one request is refused with 400, because the branch named is almost always the previous repository's, echoed back — connect first, then set the branch. A repository that reports no default branch, as one with no commits can, is connected only by naming a branch, and any branch is accepted for it, including on a rebind. An empty repository that still reports a default follows the rule above. */
             production_branch?: string;
         };
         Frontend: {
@@ -8565,6 +11248,14 @@ export interface components {
              * @description Newest queued deployment that will run after the current operation
              */
             pending_deployment_id?: string;
+            /**
+             * Format: uuid
+             * @description The promoted Candidate whose runtime receives this frontend's traffic, the same as
+             *     `candidate_id` in `serving`. Null when the frontend serves its own runtime. While it is
+             *     set, `current_deployment_id` and `status` describe a deployment that receives no traffic,
+             *     and deploying the frontend is refused until it is rolled back.
+             */
+            readonly serving_candidate_id: string | null;
             site_url?: string;
             /** @description Active custom domain hostname when configured */
             custom_domain?: string;
@@ -8596,6 +11287,97 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description A copy of a frontend built from an uploaded archive with the frontend's own configuration, so
+         *     it can be checked before anything is promoted. A Candidate is reachable by anyone who holds its
+         *     URL and is not indexed or listed; it is never public, and it does not claim to be private.
+         */
+        FrontendCandidate: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            frontend_id: string;
+            name: string;
+            /**
+             * @description `creating` until its first deployment succeeds, `ready` while it serves, `deleting` while
+             *     its runtime is removed, and `error` when its deletion gave up and needs an operator.
+             * @enum {string}
+             */
+            status: "creating" | "ready" | "deleting" | "error";
+            /**
+             * Format: uri
+             * @description Where the Candidate is served. Absent until its first deployment succeeds.
+             */
+            url?: string;
+            /**
+             * Format: date-time
+             * @description When the Candidate is deleted on its own. Absent when it is kept until deleted.
+             */
+            expires_at?: string;
+            /**
+             * Format: uuid
+             * @description The deployment the Candidate serves. Absent until its first
+             *     deployment succeeds. It differs from `deployment` while a redeploy runs or after one failed.
+             */
+            current_deployment_id?: string;
+            deployment?: components["schemas"]["FrontendCandidateDeployment"];
+            /**
+             * @description Present while the Candidate serves a deployment. `current` means that deployment was built
+             *     with the variables the frontend selects now; `changed` means they differ, or can no longer
+             *     be resolved. Promotion refuses a Candidate whose status is `changed`.
+             * @enum {string}
+             */
+            configuration_status?: "current" | "changed";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        FrontendCandidateDeployment: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description `provisioning` while the build and deploy run, `active` once the Candidate serves this
+             *     deployment, and `failed` when it could not be built or deployed. A failed deployment of a
+             *     Candidate that already served keeps the previous deployment serving.
+             * @enum {string}
+             */
+            status: "provisioning" | "active" | "failed";
+            /** @description Identifies the resolved configuration the deployment was built with. It carries no value. */
+            configuration_digest: string;
+            /** @description Why a failed deployment failed. */
+            error_message?: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Set once the deployment is no longer provisioning.
+             */
+            completed_at?: string;
+        };
+        /**
+         * @description What a frontend serves. Until a Candidate is promoted it serves its own runtime and
+         *     `candidate_id` is null. After a promotion, the frontend's traffic is routed to that
+         *     Candidate's runtime, nothing is rebuilt or copied, and `previous_candidate_id` is the runtime a
+         *     rollback returns to (null when that is the frontend's own). A Candidate that serves cannot be
+         *     deleted and does not expire. One kept only as the runtime a rollback returns to does not
+         *     expire either, but it can be deleted, which gives up that rollback; the frontend's own
+         *     runtime stays one `to_production` rollback away.
+         */
+        FrontendServing: {
+            /**
+             * Format: int64
+             * @description Counts changes to what the frontend serves or can roll back to — promotions, rollbacks, and deleting the Candidate kept for a rollback. A promotion or rollback names the revision it read, so one that read before such a change fails with `409` instead of overwriting it; read the serving state again and retry.
+             */
+            revision: number;
+            /** Format: uuid */
+            candidate_id: string | null;
+            /** Format: uuid */
+            previous_candidate_id: string | null;
+        };
+        FrontendCandidateList: {
+            data: components["schemas"]["FrontendCandidate"][];
         };
         FrontendFunctionRoute: {
             /** Format: uuid */
@@ -8768,6 +11550,7 @@ export interface components {
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
             /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
             initiated_by?: string;
+            commit?: components["schemas"]["DeploymentCommit"];
             /**
              * Format: uuid
              * @description The deployment whose build this deployment published instead of compiling its own source. Absent when the deployment compiled.
@@ -9203,8 +11986,8 @@ export interface components {
             completed_at?: string;
             /**
              * @description Lets a browser read the execution, stop it, and read and send its
-             *     messages, and a service key scoped to a list without `*` read and
-             *     stop it. Returned only by the start whose input the execution runs,
+             *     messages, and a service key scoped to a list without `*` do the
+             *     same. Returned only by the start whose input the execution runs,
              *     never by a repeat under the same name or by a read. Send it as
              *     `X-Volcano-Client-Token`.
              */
@@ -9403,6 +12186,7 @@ export interface components {
             deploy_source: "git" | "cli" | "web" | "api" | "system" | "unknown";
             /** @description Platform user that triggered a request-initiated deployment; absent for git and system deployments. */
             initiated_by?: string;
+            commit?: components["schemas"]["DeploymentCommit"];
             /**
              * Format: int64
              * @description Total build time recorded for this deployment, in seconds.
@@ -10190,7 +12974,7 @@ export interface components {
         DurableCallbackOutcome: {
             status: components["schemas"]["DurableCallbackStatus"];
         };
-        /** @description Runtime errors from one function or frontend, grouped by error type and stack. */
+        /** @description Runtime errors from one function or frontend, grouped by error type and stack, one LavaFlow Code Quality finding, or a user-reported project problem. A report has a project resource, zero runtime occurrences, and report times as its first and last seen times. */
         Issue: {
             /** Format: uuid */
             id: string;
@@ -10204,9 +12988,24 @@ export interface components {
             title: string;
             /** @description The exception class, such as `TypeError`. Omitted when the error has none. */
             error_type?: string;
-            /** @description The innermost frame of your code in the stack, as `function (file)`. Omitted without a stack. */
+            /** @description The innermost frame of your code in the stack, as `function (file)`. For a frontend's Next.js build output, the outermost route or page file of the build in the stack, such as `.next/server/app/checkout/route.js`, or without one, the outermost file of the build. For a minified file of a function's own bundle, the file alone. Omitted without a stack. */
             culprit?: string;
             status: components["schemas"]["IssueStatus"];
+            /**
+             * @description Where the issue came from: `runtime` for errors your code logged, `code_quality` for a LavaFlow Code Quality finding in code a deploy changed, or `report` for a problem reported for the project, such as through Slack. A `code_quality` issue's `error_type` is the finding's rule, its `culprit` the enclosing function and file, and its `event_count` the scans that found it.
+             * @enum {string}
+             */
+            source: "runtime" | "code_quality" | "report";
+            /** @description The finding behind a `code_quality` issue. Absent on a `runtime` issue. */
+            finding?: components["schemas"]["IssueFinding"];
+            /**
+             * @description Whether the issue holds an exception: one your code threw, or one it
+             *     logged with `console.error(err)` or Python's `logger.exception()`.
+             *     `false` for an error logged any other way, such as a structured log
+             *     line, a logger's error line, or a printed traceback, and for every
+             *     `code_quality` issue. Once `true`, it stays `true`.
+             */
+            exception: boolean;
             /**
              * Format: int64
              * @description Errors counted in this issue. A retried delivery can count an error twice.
@@ -10242,7 +13041,9 @@ export interface components {
         };
         /**
          * @description `open` until someone resolves or ignores the issue. A resolved issue
-         *     seen again reopens.
+         *     seen again reopens. A reported problem resolves when its LavaFlow fix
+         *     merges. Volcano ignores one whose report it deleted before any fix
+         *     merged, so it no longer counts toward the project's open issues.
          * @enum {string}
          */
         IssueStatus: "open" | "resolved" | "ignored";
@@ -10257,6 +13058,864 @@ export interface components {
         };
         UpdateIssueRequest: {
             status: components["schemas"]["IssueStatus"];
+        };
+        /**
+         * @description How far LavaFlow goes on its own. `diagnose_only` stops at a diagnosis. `open_pr` also opens a pull request with a fix, and never merges it. `merge` also merges the fix once LavaFlow's reviewers pass it, its required checks pass, and nothing holds it; a held fix is handed to you for good. Turning on merge lets LavaFlow's fixes, including those from runs it starts on its own, run your CI with the secrets your pull request workflows get. Choosing `merge` needs the project's `lavaflow.merge` capability.
+         * @enum {string}
+         */
+        LavaflowAutonomy: "diagnose_only" | "open_pr" | "merge";
+        /** @description Your rules for fixes LavaFlow must never merge. They apply with `autonomy: merge`; at another autonomy they are saved and do nothing. */
+        LavaflowMergePolicy: {
+            /** @description Globs of paths whose change LavaFlow never merges: a fix that changes one is held and handed to you. Paths are relative to the repository root, such as `db/migrations/**`. `*` and `?` match within one directory, `**\/` spans any number of directories, and a final `**` matches the rest. A pattern that starts with `/`, `./` or `../`, ends with `/`, holds an empty, `.` or `..` segment, or holds a NUL character answers `400`. Volcano's own held paths, such as deploy configuration and authentication code, are always held too. Defaults to none. */
+            human_review_paths: string[];
+        };
+        /** @description The merge policy fields to change. An omitted field keeps its saved value. Send `human_review_paths: []` to clear the paths. */
+        LavaflowMergePolicyUpdate: {
+            human_review_paths?: string[];
+        };
+        /**
+         * @description `waiting_for_checks`: LavaFlow waits for the checks on the fix's commit. `queued`: the fix is in the repository's merge queue. `merged`: the pull request merged. `held`: something in `hold_reasons` needs a person. LavaFlow commented on the pull request once and never merges, pushes to, rebases or dequeues it again; review it and merge it yourself if you want it. `stopped`: LavaFlow left the pull request open for you, for `reason`.
+         * @enum {string}
+         */
+        LavaflowMergeStatus: "waiting_for_checks" | "queued" | "merged" | "held" | "stopped";
+        /** @description Why the merge stopped, or what a waiting merge is paused for. `review_unresolved`: LavaFlow's review did not pass the fix. `checks_failed`: a check failed. `checks_timed_out`: checks did not finish in time. `blocked_by_rules`: the repository's rules hold the merge. `not_mergeable`: GitHub can't merge the pull request, for example because it conflicts. `branch_behind`: the base branch requires the fix to be up to date with it, and LavaFlow doesn't update fix branches. `removed_from_queue`: the fix isn't in the merge queue, and LavaFlow can't tell why, for example because its checks failed there or someone removed it. `reads_failed`: LavaFlow failed to read the pull request for about an hour while the fix may have been queued, so it took the fix out of the merge queue, when it could still reach it, and stopped, or failed to read the project's settings or repository for about a day while merging was paused. `handed_off`: someone else changed or took over the pull request. `unreadable`: GitHub's state could not be read. `permission_missing`: the Volcano GitHub App, or the project owner's GitHub account, lacks a permission the merge needs. `repository_changed`: the project now deploys from another repository. `settings_changed`: the project's settings no longer allow the merge. `request_rejected`: GitHub refused LavaFlow's request to start the checks on the fix. `ci_start_commit_mismatch`: GitHub reports a different commit from the one LavaFlow made to start the checks. `branch_refused`: LavaFlow starts checks only on a LavaFlow branch of an open pull request it opened, never the default or production branch, so it didn't start them on this one. `head_unverified`: GitHub doesn't report the fix's head as the signed commit LavaFlow pushed, so LavaFlow didn't start its checks. `checks_not_started`: LavaFlow couldn't give the fix a commit message that runs CI. `queue_carries_ci_skip`: the repository's merge queue could carry an instruction to skip checks, from the fix's commits or its pull request's title or description, into the base branch. `merge_carries_ci_skip`: merging would carry an instruction to skip checks into the base branch, for example because the repository allows no squash merge. Each of these seven hands the fix to you for good. `manual_deploy`: the fix merged and waits for you to deploy it. `paused`: merging is paused, and the merge waits. LavaFlow takes a queued fix out of the merge queue, so it shows `waiting_for_checks`, and queues it again when merging resumes. `paused_too_long`: merging stayed paused for more than 7 days. `cancelled`: the project is being deleted, so LavaFlow stopped waiting on the merge. New reasons may appear. */
+        LavaflowMergeReason: string;
+        /** @description One reason LavaFlow holds the fix for a person. */
+        LavaflowHoldReason: {
+            /** @description Why the fix is held. `client_reported_commit`: the fix is built on a commit Volcano can't tie to a push. `path`: it changes a path in `human_review_paths`, or deploy or infrastructure configuration Volcano always holds, such as `volcano-config.yaml`, Terraform files, a YAML or JSON file that declares a resource, a YAML template that mentions `apiVersion` or `kind`, a file in a Helm chart or Kustomize directory, or, in a repository too large to read in full, any file no other path reason holds. `sensitive_path`: it changes another path Volcano always holds: authentication or authorization code, Next.js middleware included; secret, key, certificate or cryptography files; a coding agent's instructions or settings, or Git hook configuration; CI configuration; a dependency manifest or lockfile, or a `package.json` change to what installs or its install scripts; or runtime, container or other configuration files. `label`: the pull request has the `needs-human-review` label. `no_checks`: no CI ran on it. `required_check_skipped`: a required check was skipped. `no_required_checks`: the base branch requires no check, so passing checks alone don't vouch for the fix. `changes_requested`: a reviewer requested changes. `repository_requires_approval`: the repository requires an approving review. `person_commits`: someone other than LavaFlow pushed to the fix's branch. `rules_bypass`: the Volcano GitHub App can bypass a ruleset on the base branch. `unchecked_rules`: the base branch has a rule LavaFlow doesn't check, such as required signatures. `commit_convention`: no title can meet the repository's commit convention. `ungated_workflows`: the fix opened past workflows that can run it with the repository's secrets before a person approves it, as the project's owner allowed, or LavaFlow couldn't check its workflows, or, when LavaFlow was about to start its CI or add it to a merge queue, a workflow could run it with those secrets before a person approves it or couldn't be read, so LavaFlow takes it no further and never merges it. `ci_outside_actions`: when LavaFlow was about to start the fix's CI, the repository could run CI, a build or a preview outside GitHub Actions: the root of the fix's tree or its base branch's holds another service's configuration, such as `.travis.yml`, `.circleci/` or `netlify.toml`, which `paths` names, another app reported checks or statuses on the base branch, or LavaFlow couldn't read them in full. LavaFlow starts CI only when it finds no sign of CI outside GitHub Actions, so it never starts this fix's CI or merges it. `lineage_undoes_parent`: the fix follows up an earlier LavaFlow fix and deletes or changes lines that fix added, which could undo it. `lineage_cap`: the fix's lineage opened as many pull requests as it may. `lineage_held`: an earlier pull request in the fix's lineage was held, stopped or closed. `recent_regressions`: fixes LavaFlow merged in the project recently caused new errors. Other codes name a concern LavaFlow's reviewers raised. New codes may appear. */
+            code: string;
+            /** @description What a person decides before merging the fix, written to show as given. */
+            question: string;
+            /** @description The changed paths that matched, for a path code. For `ci_outside_actions`, the entries at the repository's root that another CI or preview service reads, whether or not the fix changes them. */
+            paths: string[];
+        };
+        /** @description Where the run's merge stands. Present for a run that may merge its fix, once its pull request opens. */
+        LavaflowMerge: {
+            status: components["schemas"]["LavaflowMergeStatus"];
+            reason: components["schemas"]["LavaflowMergeReason"] | null;
+            /** @description Why LavaFlow holds the fix. Empty unless `status` is `held`. */
+            hold_reasons: components["schemas"]["LavaflowHoldReason"][];
+            /** @description Whether LavaFlow made the merge: `true` when it merged the fix's commit itself or through the merge queue, `false` when someone else merged the pull request while LavaFlow waited. `null` unless `status` is `merged`. */
+            merged_by_lavaflow: boolean | null;
+        };
+        /** @description A resource a run involves, and how. */
+        LavaflowInvolvedResource: {
+            resource: components["schemas"]["LavaflowResourceReference"];
+            /** @description `issue`: the issue came from it. `cause`: the issue came from it, or code the diagnosis cites as evidence is in its source. `fix`: the diagnosis proposes changing its source, or the fix changes it; a change to code that every function shares involves every function. */
+            roles: ("issue" | "cause" | "fix")[];
+        };
+        /** @description The project issue a run works on. */
+        LavaflowIssueSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description The issue's title: the error type and message, a Code Quality finding's title, or a reported problem's title. */
+            title: string;
+            /** @description The innermost frame of your code, as `function (file)`; for a Code Quality finding, the symbol and file it is in, as `symbol (file)`, or the file alone. Null for an error without a stack and for a reported problem. */
+            culprit: string | null;
+            status: components["schemas"]["IssueStatus"];
+            /**
+             * Format: int64
+             * @description Errors the issue has grouped so far; for a Code Quality finding, the scans that saw it; 0 for a reported problem.
+             */
+            event_count: number;
+            /** Format: date-time */
+            last_seen_at: string;
+            /**
+             * Format: date-time
+             * @description When the issue was resolved; null unless it is resolved now.
+             */
+            resolved_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the issue was last seen again after it was resolved, and reopened; null if it never was.
+             */
+            regressed_at: string | null;
+            /**
+             * Format: int64
+             * @description LavaFlow runs on this issue, this one included.
+             */
+            run_count: number;
+        };
+        /** @description A project's LavaFlow settings. LavaFlow sends this project's logs and source code to an AI service that Volcano operates. */
+        LavaflowSettings: {
+            /**
+             * Format: uuid
+             * @description The project the settings belong to.
+             */
+            project_id: string;
+            /** @description Whether LavaFlow works on the project's issues. Off by default. */
+            enabled: boolean;
+            autonomy: components["schemas"]["LavaflowAutonomy"];
+            merge_policy: components["schemas"]["LavaflowMergePolicy"];
+            skill_learning: components["schemas"]["LavaflowSkillLearning"];
+            /** @description Context about the project for LavaFlow's runs. Empty when unset. Saved, but runs do not use it yet. */
+            custom_context: string;
+            /** @description Instructions for LavaFlow's runs, to follow after LavaFlow's own, which take precedence. Empty when unset. Saved, but runs do not use it yet. */
+            system_prompt: string;
+            code_quality: components["schemas"]["LavaflowCodeQualitySettings"];
+            /** @description Whether LavaFlow opens a fix's pull request even where a workflow could run it, or put its text into a command, with the repository's secrets before a person approves it. Off by default; while off, such a fix stays on its run and no pull request opens. Only the project's owner turns it on, signed in as a person: with the platform token `volcano login` stores, or another platform token that expires. It applies to the repository their GitHub account can push to. Connecting the project to another repository, or disconnecting it, turns it off, and connecting the first one again doesn't turn it back on. Workflows in the repository may then run LavaFlow's pull requests, or put their text into commands, with the repository's secrets before a person reviews them. LavaFlow writes those changes from the project's error logs, which its users can influence. Turn it on only if those workflows keep secrets away from untrusted code; gating them on a label a person adds is safer. */
+            allow_ungated_workflows: boolean;
+            /**
+             * Format: date-time
+             * @description When the settings were last saved, or last changed by connecting a repository. Null until they first are.
+             */
+            updated_at: string | null;
+            /** @description The user ID of the person who made the last save; null when no person made it, such as a project access token. */
+            updated_by: string | null;
+            /** @description Whether the caller can save the settings: true only for the project's owner with a platform token while the owner's account is active; false for any project access token and for a read-only account. */
+            can_update: boolean;
+            /** @description The GitHub repository the project is linked to, as `GET /projects/{id}/git-connection` reports it. LavaFlow opens fix pull requests there, against `production_branch`. Null when the project has none. */
+            repository: components["schemas"]["ProjectGitConnectionSummary"] | null;
+            /** @description What in the project's repository setup stops LavaFlow from fixing issues although it is on. Null when the repository setup doesn't, and while the project's `lavaflow` capability isn't available; null doesn't mean nothing else stops LavaFlow. `message` is text to show as given. `repository_required`: the project has no linked repository. With `autonomy` `open_pr` or `merge`, LavaFlow diagnoses issues but fixes none; turned on for a repository the project no longer links, it starts no runs. Link a repository with `PUT /projects/{id}/git-connection` or `volcano git connect <git-url>`. Turned on with none, LavaFlow fixes issues in the first one linked, unless `message` asks to turn it on again after the link; linking the one it was turned on for resumes it. `repository_changed`: the project is linked to a repository LavaFlow wasn't turned on for. LavaFlow starts no runs until the owner turns it on again, with `{"enabled": true}` or `volcano cloud lavaflow enable`, which makes the linked repository the one it fixes. New codes may appear; show the `message` of one you don't know. */
+            fix_blocker: components["schemas"]["LavaflowFailure"] | null;
+        };
+        /** @description The project, and at least one field to change. An omitted field keeps its saved value. */
+        LavaflowSettingsUpdate: {
+            /**
+             * Format: uuid
+             * @description The project whose settings to change.
+             */
+            project_id: string;
+            enabled?: boolean;
+            autonomy?: components["schemas"]["LavaflowAutonomy"];
+            merge_policy?: components["schemas"]["LavaflowMergePolicyUpdate"];
+            /** @description Only the project's owner turns learning up, from `off` to `review` or `auto` or from `review` to `auto`, signed in as a person: with a `volcano login` token whose sign-in is live, or a platform token with an expiry, and with a GitHub account that can push to the project's repository. Any other credential gets `403` with code `person_required`. Turning it down or off, or sending the saved value, needs no check. A project access token may send `off` with `project_id`, alone or with `code_quality` turned off, and nothing else; any other save it makes gets `403` with code `person_required`. */
+            skill_learning?: components["schemas"]["LavaflowSkillLearning"];
+            custom_context?: string;
+            system_prompt?: string;
+            code_quality?: components["schemas"]["LavaflowCodeQualityUpdate"];
+            /** @description Turns on opening fixes past ungated workflows, for the repository the project is connected to now; it applies only to that repository. Only the project's owner turns it on, signed in as a person: with the platform token `volcano login` stores, or another platform token that expires. Their GitHub account must be able to push to that repository. A project access token, a platform token that never expires, or anyone else gets `403` with `person_required`. Any of the owner's credentials turns it off. Workflows in the repository may then run LavaFlow's pull requests, or put their text into commands, with the repository's secrets before a person reviews them. LavaFlow writes those changes from the project's error logs, which its users can influence. Turn it on only if those workflows keep secrets away from untrusted code; gating them on a label a person adds is safer. While LavaFlow is not available, only `false` is saved, and only with `enabled: false`, `skill_learning: off` or both. */
+            allow_ungated_workflows?: boolean;
+        };
+        /** @description The project, and the issue to start a run on. */
+        LavaflowRunCreate: {
+            /**
+             * Format: uuid
+             * @description The project the issue belongs to.
+             */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description The issue to start a run on.
+             */
+            issue_id: string;
+        };
+        /** @description The project, the run, and the diff and jobs of the held fix you read, by the digests the run served them with. */
+        LavaflowHeldFixOpen: {
+            /**
+             * Format: uuid
+             * @description The project the run belongs to.
+             */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description The run whose held fix to open.
+             */
+            run_id: string;
+            /**
+             * @description The run's `diff_sha256`, as it served it.
+             * @example 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            diff_sha256: string;
+            /**
+             * @description The run's `held_workflows.jobs_sha256`, as it served it.
+             * @example 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
+             */
+            jobs_sha256: string;
+        };
+        LavaflowDayCounts: {
+            /** Format: date */
+            date: string;
+            /**
+             * Format: int64
+             * @description Issues LavaFlow took on that UTC day.
+             */
+            issues_opened: number;
+            /**
+             * Format: int64
+             * @description Pull requests with a fix LavaFlow opened that UTC day.
+             */
+            pull_requests_opened: number;
+        };
+        LavaflowStats: {
+            /**
+             * Format: uuid
+             * @description The project the counts are for.
+             */
+            project_id: string;
+            /**
+             * Format: date
+             * @description The first UTC day in the window.
+             */
+            window_start: string;
+            /**
+             * Format: date
+             * @description The last UTC day in the window, today.
+             */
+            window_end: string;
+            /** @description One entry per UTC day, oldest first, zeros included. */
+            days: components["schemas"]["LavaflowDayCounts"][];
+            totals: {
+                /** Format: int64 */
+                issues_opened: number;
+                /** Format: int64 */
+                pull_requests_opened: number;
+            };
+        };
+        /** @description A function, durable function or frontend in the project, or the project of a user-reported problem. */
+        LavaflowResourceReference: {
+            /** @enum {string} */
+            type: "function" | "durable_function" | "frontend" | "project";
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        LavaflowAnomaly: {
+            flagged: boolean;
+            /** @description Why the resource is flagged, null when it is not. */
+            reason: string | null;
+        };
+        LavaflowResource: {
+            /**
+             * Format: uuid
+             * @description The project the resource belongs to.
+             */
+            project_id: string;
+            resource: components["schemas"]["LavaflowResourceReference"];
+            /**
+             * Format: date-time
+             * @description When a LavaFlow run last started on the resource, null if never.
+             */
+            last_analyzed_at: string | null;
+            /**
+             * Format: int64
+             * @description Issues LavaFlow took on in the window.
+             */
+            issues_opened: number;
+            /**
+             * Format: int64
+             * @description Pull requests with a fix LavaFlow opened in the window.
+             */
+            pull_requests_opened: number;
+            anomaly: components["schemas"]["LavaflowAnomaly"];
+        };
+        LavaflowResourceList: {
+            data: components["schemas"]["LavaflowResource"][];
+        };
+        /**
+         * @description Where a run is. `diagnosing`, `fixing` and `reviewing` are the stages of a running run. `pr_open` means its pull request is open; `completed` means it finished, with no pull request or one that was merged or closed.
+         * @enum {string}
+         */
+        LavaflowRunStatus: "queued" | "diagnosing" | "fixing" | "reviewing" | "pr_open" | "completed" | "failed" | "cancelled";
+        LavaflowPullRequest: {
+            /** Format: int64 */
+            number: number;
+            /** Format: uri */
+            url: string;
+            /** @enum {string} */
+            state: "open" | "merged" | "closed";
+            /**
+             * Format: date-time
+             * @description When the run opened the pull request, null for one opened before LavaFlow recorded the time.
+             */
+            opened_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the pull request merged; null unless `state` is `merged`.
+             */
+            merged_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the merged fix went live: the first live deployment of the issue's resource that includes it finished. When more than 20 deployments went live between the merge and the one LavaFlow found the fix in, LavaFlow can't tell which first included it, and this is the merge time. Null until LavaFlow finds the fix live, and for a pull request that didn't merge. LavaFlow watches the resource's deployments for a week after the merge.
+             */
+            deployed_at: string | null;
+            /** @description Whether the pull request is a draft, as GitHub last reported it to LavaFlow. Null for one opened before LavaFlow recorded it. */
+            draft: boolean | null;
+            /** @description Why the pull request is a draft, null unless `draft` is true. */
+            draft_reason: components["schemas"]["LavaflowDraftReason"] | null;
+        };
+        /**
+         * @description What the run works on: `live` for an issue seen in the project's logs, `code_quality` for a Code Quality finding.
+         * @enum {string}
+         */
+        LavaflowRunMode: "live" | "code_quality";
+        /**
+         * @description What kind of problem the run works on. `bug`: the project's code is wrong. `performance`: the code is too slow or uses too much. `security`: the code exposes data or access it shouldn't. `improvement`: the code mishandles an edge case or an outside failure. `configuration`: a setting, variable or manifest value is wrong or missing. `dependency`: a package or its version causes it. `external`: a service outside the project fails and no repository change is right. A Code Quality run's is its finding's, `bug` or `improvement`. Any other run's is `dependency` or `configuration` for a fix that changes only such files, else the kind its diagnosis names. New values may appear; treat an unknown value as uncategorized.
+         * @enum {string}
+         */
+        LavaflowRunCategory: "bug" | "performance" | "security" | "improvement" | "configuration" | "dependency" | "external";
+        /**
+         * @description Why a run's pull request is a draft. `open_pr`: LavaFlow doesn't merge the fix, because the project's autonomy is `open_pr`, merging was unavailable when it opened, LavaFlow started the run on its own under settings saved with automatic runs off before this API (sending `autonomy: merge` again as the owner lifts that), or it was already a draft when the run took it on; it waits for a person to review it and mark it ready. `review_unresolved`: LavaFlow's review didn't pass the fix, so LavaFlow never merges it; a person decides whether to finish it. `converted_to_draft`: LavaFlow opened it ready for review, and someone made it a draft since.
+         * @enum {string}
+         */
+        LavaflowDraftReason: "open_pr" | "review_unresolved" | "converted_to_draft";
+        /**
+         * @description Why a finished run opened no pull request, with what you can do next. `diagnose_only`: the project's `autonomy` was `diagnose_only` when the run was queued, or became it before the pull request opened, so LavaFlow only diagnosed the issue; read the diagnosis, and set `autonomy` to `open_pr` or `merge` for later runs to open pull requests. `not_fixable`: the diagnosis found no change in the code that fixes the error, for example because the cause is outside it; read the diagnosis. `low_confidence`: the diagnosis is not confident enough to propose a fix; read the diagnosis. `no_patch`: LavaFlow proposed no change; read the diagnosis. `possible_credential`: the fix or its description held what looks like a credential or a project secret, so LavaFlow pushed nothing; apply the fix yourself from the diagnosis. `possible_personal_data`: the fix adds an email address the repository lacks, and the repository isn't private, so LavaFlow pushed nothing; apply the fix yourself. `ungated_workflows`: a workflow could run the fix with the repository's secrets before a person approves it; gate the workflow on a label a person adds, or turn on `allow_ungated_workflows`. `convention_unsatisfiable`: LavaFlow would merge the fix, but no title can meet the repository's commit convention, so it kept the fix on the run; apply the fix yourself, or relax the convention. `pull_request_open`: another LavaFlow pull request for the issue is open; review or close it first. `source_unavailable`: LavaFlow couldn't read the repository at the deployed commit, or the production branch no longer holds it; check the project's repository connection and that the commit exists on that branch. `permission_missing`: the Volcano GitHub App, or the project owner's GitHub account, lacks a permission LavaFlow needs; grant the App's requested permissions and make sure the owner can push to the repository. `repository_changed`: the project no longer deploys from the repository the run read; a new run uses the current one. `publish_failed`: opening the pull request failed; a new run tries again. `lineage_cap`: LavaFlow opened as many pull requests in this fix's lineage as it may; review the lineage's pull requests and fix the rest yourself. `lineage_held`: an earlier pull request in this fix's lineage was held, stopped or closed, so LavaFlow opens no more in it; apply the fix yourself from the diagnosis. `review_unresolved`: LavaFlow's review didn't pass a Code Quality fix; read the diagnosis. `duplicate_in_repository`: another project on the repository has the open Code Quality pull request for the same finding. `security_finding`: the finding has security impact and the repository isn't private, so the fix would disclose it; fix it yourself. New reasons may appear.
+         * @enum {string}
+         */
+        LavaflowSkipReason: "diagnose_only" | "not_fixable" | "low_confidence" | "no_patch" | "possible_credential" | "possible_personal_data" | "ungated_workflows" | "convention_unsatisfiable" | "pull_request_open" | "source_unavailable" | "permission_missing" | "repository_changed" | "publish_failed" | "lineage_cap" | "lineage_held" | "review_unresolved" | "duplicate_in_repository" | "security_finding";
+        LavaflowRunSummary: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The project the run belongs to.
+             */
+            project_id: string;
+            status: components["schemas"]["LavaflowRunStatus"];
+            resource: components["schemas"]["LavaflowResourceReference"];
+            /** Format: uuid */
+            issue_id: string;
+            /** @description Names the problem the run worked on, in at most 80 characters: its diagnosis' title, else the title of the fix it proposed, else the first line or sentence of its diagnosis' summary. Null while none is known. */
+            title: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+            pull_request: components["schemas"]["LavaflowPullRequest"] | null;
+            merge: components["schemas"]["LavaflowMerge"] | null;
+            mode: components["schemas"]["LavaflowRunMode"];
+            /** @description A Code Quality run carries its finding's from the start. Any other run's is null until LavaFlow records a diagnosis. Runs from before categories get one when their diagnosis names one or their saved fix's paths imply one, and stay null only when neither does. */
+            category: components["schemas"]["LavaflowRunCategory"] | null;
+            /** @description Every resource the run involves: the issue's first, then by name. A run without a recorded diagnosis lists only the issue's. For a run whose report came from what it saved rather than its source, such as one from before involved resources were recorded, the list may leave out frontends and the functions involved through shared code or the build root's dependency files. */
+            resources: components["schemas"]["LavaflowInvolvedResource"][];
+            /** @description Null only for a run that works on no issue. */
+            issue: components["schemas"]["LavaflowIssueSummary"] | null;
+            /** @description Where a run LavaFlow is still working on stands; null once it has nothing left to do. */
+            progress: components["schemas"]["LavaflowRunProgress"] | null;
+            /** @description Why a finished run opened no pull request. A `completed` run without `pull_request` always has one; it is `diagnose_only` when the project's `autonomy` stopped the run at its diagnosis. Null when the run opened a pull request, while it is queued or runs, and when it failed or was cancelled. */
+            pull_request_skipped: components["schemas"]["LavaflowSkipReason"] | null;
+            /** @description The fix lineage the run belongs to. Null for a run in no lineage. */
+            lineage: components["schemas"]["LavaflowLineage"] | null;
+            /** @description How the run's merged fix fared once it went live. Null until a merged fix goes live with the `lavaflow.lineage` capability on. */
+            fix_outcome: components["schemas"]["LavaflowFixOutcome"] | null;
+        };
+        LavaflowLogLine: {
+            /** Format: date-time */
+            timestamp: string | null;
+            level: string;
+            message: string;
+        };
+        LavaflowDiagnosis: {
+            summary: string;
+            root_cause: string;
+            evidence: string[];
+            /** @description Empty for now. `evidence` cites the log lines the diagnosis relies on. */
+            log_lines: components["schemas"]["LavaflowLogLine"][];
+        };
+        LavaflowReview: {
+            /**
+             * @description The last review round's verdict. `blocked` means a critical or major finding stops the fix; `changes_requested` means only minor findings do; `error` means a reviewer failed without a blocking finding, or no reviewer could run.
+             * @enum {string}
+             */
+            verdict: "passed" | "changes_requested" | "blocked" | "error";
+            /** @description The review rounds that ran, 0 when no reviewer could run. */
+            rounds: number;
+            /** @description Why the review ended without passing the fix, null when it passed the fix or when the run saved no fix. */
+            stopped: components["schemas"]["LavaflowReviewStop"] | null;
+            /** @description The findings the review saved with the fix left open. Absent when the review passed the fix, left none open, or the run saved no fix. */
+            open_findings?: components["schemas"]["LavaflowReviewFinding"][];
+            /** @description What the review saved with the fix asks a person to decide before the fix merges. Absent when it asks nothing or the run saved no fix. */
+            person_reasons?: components["schemas"]["LavaflowReviewPersonReason"][];
+        };
+        /** @description A finding the review left open, in the reviewer's words. `explanation` reads `LavaFlow left this explanation out because it may contain a credential` when it may contain a credential, holds one of the project's secret values, or is over 4,000 characters; when the run is held with `possible_credential`; and when `diff` withholds the changes to its file, even past a truncated diff's cut, the run saved no `diff` and the finding has a `file`, or `file` is `""`. */
+        LavaflowReviewFinding: {
+            /** @enum {string} */
+            severity: "nit" | "minor" | "major" | "critical";
+            /** @description The file the finding is about, null when it is about no file. `""` when the path itself may contain a credential, holds a project secret value, or is over 4,000 characters. */
+            file: string | null;
+            /** @description The line of `file` the finding is about, null when it is about no one line. */
+            line: number | null;
+            explanation: string;
+        };
+        /** @description One decision the review leaves to a person. `question` reads `LavaFlow left this question out because it may contain a credential` when it may contain a credential, holds one of the project's secret values, or is over 4,000 characters, and when the run is held with `possible_credential`. */
+        LavaflowReviewPersonReason: {
+            /** @description `irreversible`: the fix deletes or migrates data, or does what a revert can't undo. `trust_boundary`: it changes authentication, authorization, secrets, or who can reach what. `breaks_contract`: it changes an interface other code or users depend on. `billing`: it touches payments, pricing, metering, or charges. `unexplained`: it changes behavior its context doesn't explain. `not_reviewable`: it couldn't be reviewed closely. New kinds may appear. */
+            kind: string;
+            /** @description What the person decides, written to show as given. */
+            question: string;
+        };
+        /**
+         * @description Why a run's review ended without passing its fix. `rounds`: the last review round still found problems. `no_revision`: LavaFlow gave no revised fix. `budget_exhausted`: the run used its token budget before LavaFlow could revise the fix; this is the run's own budget, not the project's daily spend limit. `context_limit`: the fix's conversation grew too long for the model before LavaFlow could revise it. `timed_out`: the run's time for review ran out. `reviewers_failed`: no reviewer of the last round finished. `too_few_reviewers`: fewer reviewers could run than a round needs to pass the fix. `unreadable`: a retried run could not read the review saved with its fix, so a person must review it. More values may be added: treat a value you don't know as other.
+         * @enum {string}
+         */
+        LavaflowReviewStop: "rounds" | "no_revision" | "budget_exhausted" | "context_limit" | "timed_out" | "reviewers_failed" | "too_few_reviewers" | "unreadable";
+        LavaflowFailure: {
+            /** @description Stable code, such as `timed_out` or `feature_paused`. */
+            code: string;
+            /** @description Text to show for the code. */
+            message: string;
+        };
+        /** @description Whether LavaFlow ran the repository's own checks, such as its tests, on a fix itself, before it opened a pull request or held the fix. CI that runs on the pull request afterwards is the repository's own. */
+        LavaflowRepositoryChecks: {
+            /** @description `not_run`: LavaFlow did not run the repository's checks on the fix, for the reason `reason` names. Treat a status you don't know as `not_run`. */
+            status: string;
+            /** @description Stable code for why the checks did not run. `sandbox_unavailable`: LavaFlow cannot run a repository's checks itself yet. */
+            reason: string;
+            /** @description Text to show for the status and reason. It names the pull request when one opened. */
+            message: string;
+        };
+        LavaflowRun: components["schemas"]["LavaflowRunSummary"] & {
+            /** @description The commit the run read the code at. Null when it read none, as for a run that diagnosed from the logs alone. */
+            source_commit: components["schemas"]["LavaflowSourceCommit"] | null;
+            diagnosis: components["schemas"]["LavaflowDiagnosis"] | null;
+            /** @description The fix LavaFlow saved, as the unified diff its reviewers read, cut short past 256 KiB as they read it, with a last line that starts with `[diff truncated`. When a file's content, before or after the fix, or any change to it may hold a credential, or the file is too long for LavaFlow to read whole (over 64 KiB, or past 256 KiB across the fix's files), every change to that file is left out, with one line in their place that starts with `# LavaFlow withheld` and names the file. A run held with `possible_credential` leaves out every file. Null for a run with no saved fix, or one saved before LavaFlow kept its diff. */
+            diff: string | null;
+            /**
+             * @description The SHA-256, in hex, of `diff` exactly as served, its UTF-8 bytes. Null whenever `diff` is.
+             * @example 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            diff_sha256: string | null;
+            /** @description `diff` was cut short, so it does not show the whole fix. False when `diff` is null. */
+            diff_truncated: boolean;
+            /** @description The files whose changes `diff` leaves out, by path, as its `# LavaFlow withheld` lines name them; an empty string for a file whose path may itself hold a credential. Empty when `diff` shows every file, or is null. */
+            diff_withheld: string[];
+            /** @description The review of the run's fix. When no reviewer could run, it still says why in `stopped`. Null when no review ran. */
+            review: components["schemas"]["LavaflowReview"] | null;
+            /** @description Whether LavaFlow ran the repository's own checks on the fix itself. Null for a run with no fix. */
+            repository_checks: components["schemas"]["LavaflowRepositoryChecks"] | null;
+            /** @description Why the run stopped or waits, null when nothing went wrong. */
+            failure: components["schemas"]["LavaflowFailure"] | null;
+            /** @description Repository paths the fix changes, sorted; empty without a fix. A path that may itself hold a credential is listed as "", as `diff_withheld` lists it, and so is every path when `diff` can't tell the fix's files apart. A file past a truncated `diff`'s cut is listed. */
+            changed_files: string[];
+            /** @description The workflow jobs the run's pull request opened past because the project's owner allowed ungated workflows, the first one on each branch or commit checked. Empty when none or when the run opened no pull request. Null when there is no record of the workflows its pull request opened past, as for pull requests opened before LavaFlow recorded them. Under the merge stage, LavaFlow holds such a fix as unchecked, with `ungated_workflows`. */
+            ungated_workflows: components["schemas"]["LavaflowAllowedWorkflow"][] | null;
+            /** @description What tied the run's issue to a recent LavaFlow fix's deploy. Null when nothing did, and for a recurrence, whose issue came back after the fix. */
+            lineage_evidence: components["schemas"]["LavaflowLineageEvidence"] | null;
+            /** @description For a run whose `pull_request_skipped` is `ungated_workflows`, every workflow job that held its fix. Null for any other run, and for a held run whose workflows LavaFlow couldn't read to the end, such as one with a workflow it couldn't parse, or more than 256 such jobs. */
+            held_workflows: components["schemas"]["LavaflowHeldWorkflows"] | null;
+        };
+        /** @description A workflow job that could run a fix's pull request with the repository's secrets before a person approves it. */
+        LavaflowAllowedWorkflow: {
+            /**
+             * @description The branch or commit whose workflows run it.
+             * @example main
+             */
+            source: string;
+            /** @example .github/workflows/preview.yml */
+            path: string;
+            /**
+             * @description The job, absent for a workflow that could not be read.
+             * @example deploy-preview
+             */
+            job?: string;
+            /**
+             * @description The event that runs it, absent for a workflow that could not be read.
+             * @example pull_request_target
+             */
+            trigger?: string;
+        };
+        /** @description Every workflow job that could run a held fix's pull request with the repository's secrets before a person approves it, as LavaFlow found them when it held the fix, and the commits it read the workflows at. */
+        LavaflowHeldWorkflows: {
+            /** @description Each branch or commit whose workflows LavaFlow read: the project's production branch, the repository's default branch, and the commit the fix is cut from. */
+            read_at: components["schemas"]["LavaflowWorkflowSource"][];
+            /** @description Every such job, at most 256, sorted by source, path and job. Empty when LavaFlow read every workflow to the end and found none, such as when they changed between the hold and the read. */
+            jobs: components["schemas"]["LavaflowAllowedWorkflow"][];
+            /**
+             * @description Identifies `read_at` and `jobs` together. Treat it as opaque: it changes when a listed job, or a commit the workflows were read at, does.
+             * @example 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
+             */
+            jobs_sha256: string;
+        };
+        /** @description A branch or commit whose workflows LavaFlow read, and the commit it read them at. */
+        LavaflowWorkflowSource: {
+            /**
+             * @description The branch, or the commit SHA for a commit.
+             * @example main
+             */
+            source: string;
+            /**
+             * @description The commit LavaFlow read the workflows at.
+             * @example 3f786850e387550fdab836ed7e6dc881de23001b
+             */
+            commit_sha: string;
+        };
+        PaginatedLavaflowRuns: {
+            data: components["schemas"]["LavaflowRunSummary"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page, present if has_more is true. It works only for the same project_id, caller and order. */
+            next_cursor?: string;
+            /** @description Present with `include=counts`. */
+            counts?: components["schemas"]["LavaflowRunCounts"];
+        };
+        /**
+         * @description `proposed` waits for the owner to activate it. `active` is in force. `retired` is set aside and can be restored.
+         * @enum {string}
+         */
+        LavaflowSkillStatus: "proposed" | "active" | "retired";
+        /**
+         * @description Why a skill retired. `repository_changed`: the project points at another repository, or none. `owner`: the owner retired it. `harmful`, `unused`, `stale` and `gate` are reserved for retirement LavaFlow does on its own, which comes in a later release.
+         * @enum {string}
+         */
+        LavaflowSkillRetiredReason: "harmful" | "unused" | "stale" | "repository_changed" | "gate" | "owner";
+        /**
+         * @description `project` skills belong to this project and never leave it. `volcano` skills are written by Volcano for every project.
+         * @enum {string}
+         */
+        LavaflowSkillScope: "project" | "volcano";
+        /** @description Where a skill applies. Empty lists apply it to the whole project. */
+        LavaflowSkillAppliesTo: {
+            /** @description Functions, durable functions and frontends it applies to. */
+            resource_ids: string[];
+            /** @description Repository path globs it applies to, relative to the repository root. */
+            paths: string[];
+        };
+        /** @description Repository code a skill rests on: a path and a string the file holds. */
+        LavaflowSkillCitation: {
+            path: string;
+            anchor: string;
+        };
+        /** @description Where a version came from: a writer's act on a fix's pull request, or the owner's edit. */
+        LavaflowSkillSource: {
+            /** @enum {string} */
+            kind: "run" | "person";
+            /**
+             * Format: uuid
+             * @description The run whose pull request taught it, for `run`.
+             */
+            run_id: string | null;
+            /**
+             * Format: int64
+             * @description That run's pull request number.
+             */
+            pull_request: number | null;
+            /**
+             * @description The writer's act it came from, for `run`.
+             * @enum {string|null}
+             */
+            act: "commit" | "review" | "comment" | null;
+            /** @description The person who edited it, for `person`. */
+            user_id: string | null;
+        };
+        LavaflowSkillCounts: {
+            /**
+             * Format: int64
+             * @description Fixes that used the skill and merged as LavaFlow left them.
+             */
+            helpful: number;
+            /**
+             * Format: int64
+             * @description Fixes that used the skill and a writer corrected or closed, or whose issue came back.
+             */
+            harmful: number;
+            /**
+             * Format: int64
+             * @description Runs that loaded the skill's body.
+             */
+            used: number;
+        };
+        /** @description A project skill with its active version. */
+        LavaflowSkill: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            scope: components["schemas"]["LavaflowSkillScope"];
+            /** @description Unique in the project. */
+            name: string;
+            status: components["schemas"]["LavaflowSkillStatus"];
+            /** @description Why it retired, null unless `status` is `retired`. */
+            retired_reason: components["schemas"]["LavaflowSkillRetiredReason"] | null;
+            /**
+             * Format: int64
+             * @description The active version.
+             */
+            version: number;
+            /** @description When the skill applies. */
+            description: string;
+            /** @description Markdown, at most 2 KiB. */
+            body: string;
+            applies_to: components["schemas"]["LavaflowSkillAppliesTo"];
+            citations: components["schemas"]["LavaflowSkillCitation"][];
+            /** @description The hash of the active version's text, as a run records it. */
+            content_sha256: string;
+            source: components["schemas"]["LavaflowSkillSource"];
+            counts: components["schemas"]["LavaflowSkillCounts"];
+            /** Format: date-time */
+            last_used_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the skill was created, or last renewed by the owner's edit, activation or restore.
+             */
+            last_renewed_at: string;
+            /** Format: date-time */
+            retired_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        LavaflowSkillList: {
+            data: components["schemas"]["LavaflowSkill"][];
+        };
+        LavaflowSkillVersion: {
+            /** Format: uuid */
+            skill_id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: int64 */
+            version: number;
+            description: string;
+            body: string;
+            applies_to: components["schemas"]["LavaflowSkillAppliesTo"];
+            citations: components["schemas"]["LavaflowSkillCitation"][];
+            content_sha256: string;
+            source: components["schemas"]["LavaflowSkillSource"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        LavaflowSkillVersionList: {
+            data: components["schemas"]["LavaflowSkillVersion"][];
+        };
+        /** @description The members of `applies_to` to change. An omitted member keeps its value, and a list you send replaces it, so `[]` clears it. */
+        LavaflowSkillAppliesToUpdate: {
+            /** @description Functions, durable functions and frontends it applies to. */
+            resource_ids?: string[];
+            /** @description Repository path globs it applies to, relative to the repository root. */
+            paths?: string[];
+        };
+        /** @description The fields to change. An omitted field keeps its value. */
+        LavaflowSkillUpdate: {
+            description?: string;
+            body?: string;
+            applies_to?: components["schemas"]["LavaflowSkillAppliesToUpdate"];
+            /**
+             * @description `active` activates a proposed skill or restores a retired one. `retired` retires it.
+             * @enum {string}
+             */
+            status?: "active" | "retired";
+        };
+        /** @description An error, with the rules a refused skill failed. */
+        LavaflowSkillError: {
+            error: string;
+            /** @description `skill_refused` means the skill check refused the text. `feature_unavailable` means the change needs the project's `lavaflow.skills` capability. */
+            code?: string;
+            /** @description With `skill_refused`, the rules the text failed. The answer never repeats the text. */
+            rules?: ("characters" | "shape" | "credential_scan" | "sanitizer" | "credential" | "secret" | "read_value" | "email" | "link" | "directive" | "policy")[];
+        };
+        /** @description Where a global skill applies. Empty lists apply it to every project. */
+        LavaflowGlobalSkillAppliesTo: {
+            runtimes: string[];
+            frameworks: string[];
+            resource_types: string[];
+        };
+        /** @description A skill Volcano wrote for every project. It holds no customer content. */
+        LavaflowGlobalSkill: {
+            scope: components["schemas"]["LavaflowSkillScope"];
+            /** @description Runs list it as `volcano:<name>`. */
+            name: string;
+            description: string;
+            body: string;
+            applies_to: components["schemas"]["LavaflowGlobalSkillAppliesTo"];
+            /** @description The hash of the skill's file, which identifies its version. */
+            content_sha256: string;
+        };
+        LavaflowGlobalSkillList: {
+            data: components["schemas"]["LavaflowGlobalSkill"][];
+        };
+        /** @description How far an active run has come. The steps are `queued`, `diagnosing`, `fixing`, `reviewing`, `waiting_for_checks` and `merge_queued`, in that order, and a run takes as many as its autonomy when it was queued allows: 2 for `diagnose_only`, 4 for `open_pr` (opening the pull request ends it), 6 for `merge` (the merge ends it). */
+        LavaflowRunProgress: {
+            /**
+             * @description New stages may appear.
+             * @enum {string}
+             */
+            stage: "queued" | "diagnosing" | "fixing" | "reviewing" | "waiting_for_checks" | "merge_queued";
+            /** @description The stage's place among the run's steps, from 1. */
+            step: number;
+            /** @description How many steps the run takes. */
+            steps: number;
+        };
+        /** @description Runs that match the request. `total` applies every filter. Each breakdown applies every filter but its own, so it shows what picking another value would return. */
+        LavaflowRunCounts: {
+            /** Format: int64 */
+            total: number;
+            status: components["schemas"]["LavaflowRunStatusCounts"];
+            category: components["schemas"]["LavaflowCategoryCounts"];
+            pull_request_state: components["schemas"]["LavaflowPullRequestStateCounts"];
+            /** @description Resources involved in at least one matching run, most runs first, then by name; at most 50. A run counts once per resource it involves. A run whose report came from what it saved rather than its source, such as one from before involved resources were recorded, may leave out frontends and the functions involved through shared code or the build root's dependency files, so these counts can undercount them. */
+            involved_resources: components["schemas"]["LavaflowInvolvedResourceCount"][];
+        };
+        /** @description Matching runs in each status, zeros included. */
+        LavaflowRunStatusCounts: {
+            /** Format: int64 */
+            queued: number;
+            /** Format: int64 */
+            diagnosing: number;
+            /** Format: int64 */
+            fixing: number;
+            /** Format: int64 */
+            reviewing: number;
+            /** Format: int64 */
+            pr_open: number;
+            /** Format: int64 */
+            completed: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            cancelled: number;
+        };
+        /** @description Matching runs in each category, zeros included. `uncategorized` counts runs whose `category` is null. */
+        LavaflowCategoryCounts: {
+            /** Format: int64 */
+            bug: number;
+            /** Format: int64 */
+            performance: number;
+            /** Format: int64 */
+            security: number;
+            /** Format: int64 */
+            improvement: number;
+            /** Format: int64 */
+            configuration: number;
+            /** Format: int64 */
+            dependency: number;
+            /** Format: int64 */
+            external: number;
+            /** Format: int64 */
+            uncategorized: number;
+        };
+        /** @description Matching runs by the state of their pull request, zeros included. `none` counts runs without one. */
+        LavaflowPullRequestStateCounts: {
+            /** Format: int64 */
+            open: number;
+            /** Format: int64 */
+            merged: number;
+            /** Format: int64 */
+            closed: number;
+            /** Format: int64 */
+            none: number;
+        };
+        /** @description A resource and how many matching runs involve it. */
+        LavaflowInvolvedResourceCount: {
+            resource: components["schemas"]["LavaflowResourceReference"];
+            /** Format: int64 */
+            runs: number;
+        };
+        /** @description LavaFlow Code Quality: whether LavaFlow reviews the code each production deploy changes and opens pull requests that fix what it confirms. */
+        LavaflowCodeQualitySettings: {
+            /** @description Whether Code Quality reviews the project's deploys. Off by default. It reads as off while the project points at another repository than the one it was turned on for, and works only while LavaFlow is on. */
+            enabled: boolean;
+        };
+        /** @description Turns Code Quality on or off. Only the project's owner, signed in, can turn it on; any credential that can save the settings can turn it off. */
+        LavaflowCodeQualityUpdate: {
+            enabled: boolean;
+        };
+        /**
+         * @description Where the scan stands. `waiting` is the project's next scan: deploys that went live since the last one, waiting out a short settle window or a bound named by `waiting_reason`.
+         * @enum {string}
+         */
+        LavaflowScanStatus: "waiting" | "running" | "completed" | "failed" | "cancelled";
+        /** @description A resource whose production deploy the scan covers. Only frontend deploys ask for a scan for now. */
+        LavaflowScanResource: {
+            /** @enum {string} */
+            resource_type: "function" | "frontend";
+            /** Format: uuid */
+            resource_id: string;
+            /** Format: uuid */
+            deployment_id: string;
+        };
+        /** @description What the scan did with the problems it found. */
+        LavaflowScanCounts: {
+            /**
+             * Format: int64
+             * @description Candidates the scan found in the changed lines.
+             */
+            found: number;
+            /**
+             * Format: int64
+             * @description New issues the scan opened.
+             */
+            created: number;
+            /**
+             * Format: int64
+             * @description Candidates that matched an issue the project already has, or a finding the scan already kept.
+             */
+            duplicate: number;
+            /**
+             * Format: int64
+             * @description Candidates a person had already turned down, by closing their pull request or ignoring their issue.
+             */
+            suppressed: number;
+            /**
+             * Format: int64
+             * @description Confirmed findings past the plan's findings per scan, which no later scan reports again.
+             */
+            capped: number;
+            /**
+             * Format: int64
+             * @description Candidates LavaFlow's second check didn't confirm, or that it couldn't report.
+             */
+            rejected: number;
+        };
+        /** @description A finding of the scan whose Code Quality runs were billed. */
+        LavaflowScanBilledFinding: {
+            /**
+             * Format: uuid
+             * @description The finding's issue. Its `finding` says where the problem is and why.
+             */
+            issue_id: string;
+            /** @description The rule the finding is about. */
+            rule: string;
+            title: string;
+            /** @description How many billable events of each kind the finding's runs recorded, keyed by kind, such as `issue_diagnosed` and `pull_request_opened`. */
+            billable_events: {
+                [key: string]: number;
+            };
+        };
+        /** @description One Code Quality scan of the code a project's deploys changed. */
+        LavaflowScan: {
+            /**
+             * Format: uuid
+             * @description The scan's ID, null while it is waiting.
+             */
+            id: string | null;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * @description What asked for the scan.
+             * @enum {string}
+             */
+            source: "deployment";
+            status: components["schemas"]["LavaflowScanStatus"];
+            /** @description How a finished scan ended: `scanned`; `no_changes` when the deploy changed nothing since the last scan, as after a redeploy or a rollback; `no_base` when there was no earlier commit to compare against, so the head became the starting point; `unreachable` when the head commit is on neither the project's production branch nor the repository's default branch; `repository_changed`; `failed`; or `cancelled`. Null until it ends. */
+            outcome: string | null;
+            /** @description The bound a waiting scan waits at: `findings_limit`, `pull_request_limit`, `spend_limit`, `scan_limit` or `feature_unavailable`. Null while it only waits out its settle window, and for a scan that started. A waiting scan skips no deploy: it covers every commit since the last scan when it starts. */
+            waiting_reason: string | null;
+            /**
+             * Format: int64
+             * @description The GitHub repository the scan reads.
+             */
+            repository_id: number;
+            /** @description The commit the scan compares against, null while waiting or when there was none. */
+            base_sha: string | null;
+            /** @description The newest deployed commit the scan covers. */
+            head_sha: string;
+            resources: components["schemas"]["LavaflowScanResource"][];
+            /** @description Whether the scan reviewed only part of the change. A change too large to review whole keeps the files with the most changed lines, a review that stops early keeps what it found, and a repository too large to read whole skips the files past what it read. No later scan covers the rest. */
+            truncated: boolean;
+            counts: components["schemas"]["LavaflowScanCounts"];
+            /** @description The scan's findings whose runs were billed. */
+            billed: components["schemas"]["LavaflowScanBilledFinding"][];
+            /**
+             * Format: date-time
+             * @description When the first deploy the scan covers asked for it.
+             */
+            requested_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
+        PaginatedLavaflowScans: {
+            data: components["schemas"]["LavaflowScan"][];
+            /** @description Number of items per page */
+            limit: number;
+            /** @description Whether a next page exists */
+            has_more: boolean;
+            /** @description Opaque cursor for the next page, present if has_more is true. It works only for the same project_id and caller. */
+            next_cursor?: string;
         };
         NotificationSettings: {
             /** Format: uuid */
@@ -10279,138 +13938,15 @@ export interface components {
         NotificationTestResult: {
             deliveries: components["schemas"]["NotificationTestDelivery"][];
         };
-        AutofixSettings: {
-            /** Format: uuid */
-            project_id: string;
-            /** @description Whether Volcano diagnoses the project's issues with AI. */
-            enabled: boolean;
-            /** @description How far a run goes. Defaults to `pull_request`. */
-            max_stage: components["schemas"]["AutofixStage"];
-            /** @description Whether a new or regressed issue starts a run on its own. Defaults to true. When false, runs start only on request. */
-            auto_trigger: boolean;
-            /** @description Whether the owner's plan includes autofix. When false, saved settings stay stored and no run starts. Absent when a save that needed no plan succeeded but the plan could not be resolved. */
-            plan_includes_autofix?: boolean;
+        /** @description A GitHub repository, by its stable id and its name. */
+        GitRepositoryReference: {
             /**
-             * Format: date-time
-             * @description When the settings were last saved. Absent until the first save.
+             * Format: int64
+             * @description GitHub's repository id. It stays the same through a rename or a transfer.
              */
-            updated_at?: string;
-        };
-        /**
-         * @description How far a run may go. `diagnose` stops at a root-cause diagnosis. `pull_request` may also open a draft pull request with a fix in the project's connected repository.
-         * @enum {string}
-         */
-        AutofixStage: "diagnose" | "pull_request";
-        UpdateAutofixSettingsRequest: {
-            enabled: boolean;
-            /** @description How far a run goes. Omitted, it keeps the saved value, or is `pull_request` when the project has no saved settings. */
-            max_stage?: components["schemas"]["AutofixStage"];
-            /** @description Whether a new or regressed issue starts a run on its own. Omitted, it keeps the saved value, or is `true` when the project has no saved settings. */
-            auto_trigger?: boolean;
-        };
-        /**
-         * @description Where a run is. `canceled` means the project's settings or plan stopped allowing the run before it finished; `failure_code` says which.
-         * @enum {string}
-         */
-        AutofixRunStatus: "queued" | "running" | "succeeded" | "failed" | "canceled";
-        /**
-         * @description What started the run. `manual` is a request; `new_issue` and `regression` are automatic runs for an issue that appeared or reopened.
-         * @enum {string}
-         */
-        AutofixRunTrigger: "manual" | "new_issue" | "regression";
-        AutofixEvidence: {
-            /** @enum {string} */
-            kind: "log" | "code" | "other";
-            detail: string;
-            /** @description A file and line, or a log timestamp. Absent when the evidence has none. */
-            location?: string;
-        };
-        AutofixDiagnosis: {
-            /** @description One or two sentences on what goes wrong. */
-            summary: string;
-            root_cause: string;
-            evidence: components["schemas"]["AutofixEvidence"][];
-            suggested_fix: string;
-            /** @enum {string} */
-            confidence: "low" | "medium" | "high";
-            /** @description Whether a change to the project's code would fix the issue. */
-            fixable: boolean;
-            /** @description Repository paths a fix would change. */
-            files: string[];
-        };
-        /** @description One exact text replacement. An empty `old_text` creates the file. */
-        AutofixEdit: {
-            path: string;
-            old_text: string;
-            new_text: string;
-        };
-        /** @description The fix the model proposed, applied to the deployed commit. Present whenever the run opened a pull request, and when a valid fix could not be published. */
-        AutofixPatch: {
-            title: string;
-            edits: components["schemas"]["AutofixEdit"][];
-        };
-        /** @enum {string} */
-        AutofixPullRequestState: "open" | "merged" | "closed";
-        /** @description The draft pull request the run opened on the connected repository. */
-        AutofixPullRequest: {
-            /** Format: int64 */
-            number: number;
-            /** Format: uri */
-            url: string;
-            /** @description The branch the fix is on, `volcano/autofix/<run id>`. */
-            branch: string;
-            state: components["schemas"]["AutofixPullRequestState"];
-            /**
-             * Format: date-time
-             * @description When the pull request was merged or closed.
-             */
-            closed_at?: string;
-            /**
-             * Format: date-time
-             * @description When a deployment that includes the merged fix went live. The issue resolves then, unless it occurred again since. When more than 20 deployments went live after the merge before Volcano checked, it is the merge time instead.
-             */
-            deployed_at?: string;
-        };
-        /**
-         * @description Why a run whose `max_stage` is `pull_request` opened no pull request. The diagnosis stands either way.
-         * @enum {string}
-         */
-        AutofixPullRequestSkipped: "source_unavailable" | "pull_request_open" | "not_fixable" | "low_confidence" | "no_patch" | "permission_missing" | "repository_changed" | "publish_failed";
-        AutofixRun: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            project_id: string;
-            /** Format: uuid */
-            issue_id: string;
-            trigger: components["schemas"]["AutofixRunTrigger"];
-            status: components["schemas"]["AutofixRunStatus"];
-            max_stage: components["schemas"]["AutofixStage"];
-            stage_reached?: components["schemas"]["AutofixStage"];
-            diagnosis?: components["schemas"]["AutofixDiagnosis"];
-            patch?: components["schemas"]["AutofixPatch"];
-            pull_request?: components["schemas"]["AutofixPullRequest"];
-            pull_request_skipped?: components["schemas"]["AutofixPullRequestSkipped"];
-            /** @description The commit the diagnosis read, when a push to the connected repository deployed the resource. Absent when the run read logs only. */
-            commit_sha?: string;
-            /** @description Why the run failed or was canceled, or why its last attempt will be retried. A queued run paused while Autofix is unavailable reports `feature_unavailable`; it resumes without spending an attempt when Autofix returns. Other values are `model_request_rejected`, `model_unavailable`, `model_refused`, `no_diagnosis`, `budget_exhausted`, `timed_out`, `attempts_exhausted`, `autofix_disabled`, `plan_required`, `issue_not_found`, or `internal_error`. Runs that ended before Volcano picked the models for every run may also report `api_key_rejected`, `settings_changed`, or `managed_models_unavailable`; no new run reports them. */
-            failure_code?: string;
-            failure_message?: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            started_at?: string;
-            /** Format: date-time */
-            completed_at?: string;
-        };
-        PaginatedAutofixRuns: {
-            data: components["schemas"]["AutofixRun"][];
-            /** @description Number of items per page */
-            limit: number;
-            /** @description Whether a next page exists */
-            has_more: boolean;
-            /** @description Opaque cursor for the next page (present if has_more is true) */
-            next_cursor?: string;
+            id: number;
+            /** @description The repository's owner and name, such as `acme/shop`. */
+            full_name: string;
         };
         PaginatedProjectCustomDomains: {
             data: components["schemas"]["ProjectFrontendCustomDomain"][];
@@ -10605,7 +14141,7 @@ export interface components {
             variables?: components["schemas"]["ProjectConfigVariable"][];
             buckets?: components["schemas"]["ProjectConfigBucket"][];
             realtime?: components["schemas"]["ProjectConfigRealtime"];
-            autofix?: components["schemas"]["ProjectConfigAutofix"];
+            lavaflow?: components["schemas"]["ProjectConfigLavaFlow"];
             notifications?: components["schemas"]["ProjectConfigNotifications"];
             auth?: components["schemas"]["ProjectConfigAuth"];
             functions?: components["schemas"]["ProjectConfigFunction"][];
@@ -10671,6 +14207,8 @@ export interface components {
             allowed_origins?: string[];
             allow_credentials?: boolean;
             max_age?: number;
+            /** @description Allow the origins of the project's own live frontend previews. */
+            allow_frontend_previews?: boolean;
         };
         ProjectConfigAuthEmail: {
             /** @description Enable transactional email sending */
@@ -11042,12 +14580,11 @@ export interface components {
             presence_enabled?: boolean;
             postgres_changes_enabled?: boolean;
         };
-        /** @description AI diagnosis and fix settings. Omitted fields keep their current value; a project that never saved settings starts from `max_stage: pull_request` and `auto_trigger: true`. */
-        ProjectConfigAutofix: {
-            enabled?: boolean;
-            max_stage?: components["schemas"]["AutofixStage"];
-            auto_trigger?: boolean;
-        };
+        /**
+         * @deprecated
+         * @description Ignored. The manifest doesn't configure LavaFlow. A manifest that still declares this section applies as before, without it, and the result reports it as `unchanged` with a notice. Export never includes it.
+         */
+        ProjectConfigLavaFlow: Record<string, never>;
         ProjectConfigScheduler: {
             name: string;
             /** @description 5-field UTC cron expression */
@@ -11232,6 +14769,7 @@ export interface components {
             /** Format: date-time */
             completed_at?: string;
             progress?: components["schemas"]["DeploymentProgress"];
+            commit?: components["schemas"]["DeploymentCommit"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -11410,7 +14948,8 @@ export interface components {
             name: string;
             /**
              * @description Full JWT token for Authorization header.
-             *     Returned on create, get, and list (decrypted from storage).
+             *     Returned on create, get, and list (decrypted from storage). List
+             *     responses leave it out for a key that holds `ai.invoke`.
              *     **Store securely - NEVER expose in frontend code!**
              */
             key_value?: string;
@@ -11677,6 +15216,8 @@ export interface components {
             cors_allowed_origins?: string[];
             cors_allow_credentials?: boolean;
             cors_max_age?: number;
+            /** @description Allow the origins of the project's own live frontend previews. */
+            cors_allow_frontend_previews?: boolean;
             enable_anonymous_signins?: boolean;
             /**
              * @description Replaces the email domain allowlist. Empty array removes the
@@ -11966,6 +15507,23 @@ export interface components {
         OpenAPISpecDocument: {
             [key: string]: unknown;
         };
+        /** @description How the session's command executions are kept. Fixed when the session is created. */
+        SandboxSessionExecutions: {
+            /** @description When false, every command in the session keeps no output. stdout and stderr are returned once in the command's response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with empty streams. A command in such a session that sets `keep_output` to true is refused with 400 and code `sandbox_session_keeps_no_output`. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable. */
+            keep_output: boolean;
+        };
+        /** @description The share release a fork was installed from. */
+        ProjectTemplateInstallationSource: {
+            /** @enum {string} */
+            kind: "share_release";
+            /** @description The share the release belongs to. */
+            share_id: string;
+            /**
+             * Format: uuid
+             * @description The release the project was installed from.
+             */
+            release_id: string;
+        };
         /**
          * @description Template initialization progress, returned by project creation and the
          *     individual project endpoint. Omitted for projects without a template.
@@ -11977,6 +15535,31 @@ export interface components {
             status: "pending" | "running" | "ready" | "failed";
             /** @enum {string} */
             phase: "database" | "restore" | "configure" | "deploy" | "verify" | "ready";
+            source?: components["schemas"]["ProjectTemplateInstallationSource"];
+            /**
+             * @description Why the installation failed. Present only when `status` is `failed`, and
+             *     absent for installations that failed before Volcano recorded a reason.
+             *     New codes can be added, so treat an unknown one as a generic failure.
+             *     `source_withdrawn`: the deploy link was switched off or deleted, or its
+             *     project is being deleted. `source_invalid`: the source failed Volcano's checks,
+             *     such as a release archive whose digest, size or contents are wrong.
+             *     `source_access_lost`: Volcano can no longer read the source repository.
+             *     `invalid_source_configuration`: the source's `volcano-config.yaml` is
+             *     invalid, or it declares a variable the new project does not have.
+             *     `nothing_to_deploy`: the source has no function or frontend.
+             *     `database_not_supported`: the source ships database SQL.
+             *     `function_deploy_refused`: a function in the source cannot be deployed
+             *     as defined. `function_quota_exceeded`,
+             *     `durable_function_quota_exceeded`, `frontend_quota_exceeded`,
+             *     `frontend_deploy_limit` and `build_minutes_exceeded`: the project
+             *     reached a plan limit. `build_failed`: a function or frontend from the
+             *     source failed to build or deploy; its deployment's build logs say why.
+             *     `retry_budget_exhausted`: the installation kept failing and Volcano
+             *     stopped retrying. `internal_error`: Volcano failed for a reason of its
+             *     own.
+             * @example source_withdrawn
+             */
+            failure_code?: string;
         };
         ProjectGitConnectionSummary: {
             /** Format: int64 */
@@ -12151,6 +15734,25 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description The commit a deploy client reported for the deployment's source. Absent when the client reported none. A frontend deployment that publishes another deployment's build carries that deployment's commit. */
+        DeploymentCommit: {
+            /**
+             * @description GitHub repository as `owner/name`, normalized from what the client sent.
+             * @example acme/app
+             */
+            repository: string;
+            /** @description Full commit ID. */
+            sha: string;
+            /** @description `true` when the client reported that the uploaded files differ from the commit, or Volcano found an uploaded file in the project's root directory that the commit does not hold, so the deployed code may differ from the commit. */
+            dirty: boolean;
+            /** @description `true` only when `verification` is `files`: Volcano confirmed that the deployed files are the commit's. A commit verified at the `repository` level is not `verified`. */
+            verified: boolean;
+            /**
+             * @description What Volcano confirmed about the commit, through the project's GitHub connection, when it recorded the deployment. `files`: `repository` is the project's connected repository, `sha` is on its production branch, every uploaded file is the commit's file at its path, and the upload holds the commit's files under its root but those deploy clients leave out. Only a frontend upload is checked this far. `repository`: `repository` is the project's connected repository and `sha` is on its production branch, but the uploaded files were not compared with the commit, since a function upload holds build output rather than the repository's layout. Only a function upload the client reports clean is checked at this level. `none`: Volcano confirmed nothing, as for a commit the client reports dirty, one from another branch or repository, one from a project without a connection, or one it couldn't check in time.
+             * @enum {string}
+             */
+            verification: "none" | "repository" | "files";
+        };
         /** @description Who sent the message. */
         DurableMessageSender: {
             /**
@@ -12316,6 +15918,146 @@ export interface components {
              *     limit before `maxLength`.
              */
             message?: string;
+        };
+        /**
+         * @description What LavaFlow will do with a skill it learns from a writer's correction of one of its fixes, once learning ships in a later release. `auto`, the default, activates it at once. `review` keeps it `proposed` until the owner activates it. `off` learns none and loads no project skill; the project's skills stay readable and deletable. A writer of the repository can steer LavaFlow through what it learns, outside the repository's history and branch protection, so a repository that protects its guidance, or relays CI output through a bot account with write access, should use `review`. Turning learning up needs the project's `lavaflow.skills` capability.
+         * @enum {string}
+         */
+        LavaflowSkillLearning: "auto" | "review" | "off";
+        /** @description Another LavaFlow run of the same project. */
+        LavaflowRunReference: {
+            /** Format: uuid */
+            id: string;
+            /** @description The run's title, as `LavaflowRunSummary.title` gives it. */
+            title: string | null;
+        };
+        /** @description A chain of LavaFlow fixes: a merged fix, and the runs that followed up an issue traced to it or to a fix after it. */
+        LavaflowLineage: {
+            /**
+             * Format: uuid
+             * @description The lineage's root run.
+             */
+            id: string;
+            /**
+             * Format: int64
+             * @description 0 for the root fix.
+             */
+            depth: number;
+            /**
+             * @description `regression` for an issue traced to the parent's deploy, `recurrence` for an issue that came back after the parent went live. Null for the root.
+             * @enum {string|null}
+             */
+            relation: "regression" | "recurrence" | null;
+            /**
+             * @description Null for the root, and otherwise `strong`. `weak` is reserved: nothing writes it.
+             * @enum {string|null}
+             */
+            confidence: "strong" | "weak" | null;
+            /** @description The fix this run follows up. Null for the root. */
+            parent: components["schemas"]["LavaflowRunReference"] | null;
+            /** @description The run whose fix also covers this issue, so this run opened nothing. */
+            covered_by: components["schemas"]["LavaflowRunReference"] | null;
+            /**
+             * @description How the run follows up its parent. Currently always `fix`: a regression gets a follow-up fix. `revert` and `none` are reserved.
+             * @enum {string}
+             */
+            remedy: "fix" | "revert" | "none";
+            /** @enum {string} */
+            state: "active" | "settled" | "held";
+            /** @description Why the lineage holds: `lineage_cap`, `lineage_held` or `repository_changed`. New values may appear. Null unless `state` is `held`. */
+            hold_reason: string | null;
+            /**
+             * Format: int64
+             * @description Pull requests the lineage opened, counting the root's.
+             */
+            pull_requests_opened: number;
+            /**
+             * Format: int64
+             * @description The most pull requests a lineage opens before it holds.
+             */
+            pull_request_cap: number;
+        };
+        /** @description How a merged LavaFlow fix fared once it went live. */
+        LavaflowFixOutcome: {
+            /**
+             * @description `watching` for 14 days after the fix goes live, then `effective` unless its issue came back (`ineffective`) or a new issue was traced to its deploy (`regressed`). An outcome never moves back. `reverted` is reserved and not produced yet.
+             * @enum {string}
+             */
+            state: "awaiting_deploy" | "watching" | "effective" | "ineffective" | "regressed" | "reverted";
+            /** Format: date-time */
+            live_at: string | null;
+            /** Format: date-time */
+            watch_until: string | null;
+            /**
+             * Format: int64
+             * @description Runs linked to this fix.
+             */
+            follow_ups: number;
+        };
+        /**
+         * @description Where the commit a run read came from. `push`: a push to the project's connected repository deployed it. `client_reported`: the deploy client reported it, and Volcano matched the deployed files against it. `client_reported_repository`: the deploy client reported it, and Volcano confirmed only that the connected repository's production branch holds it, without matching the deployed files, which for a function are build output. A fix on such a commit opens only while the production branch still holds it. `repository`: a reported problem's run read the production branch at a commit it pinned, which need not be deployed.
+         * @enum {string}
+         */
+        LavaflowCommitOrigin: "push" | "client_reported" | "client_reported_repository" | "repository";
+        /** @description The commit a run read its source at. */
+        LavaflowSourceCommit: {
+            /** @description The commit's full SHA. */
+            sha: string;
+            /** @description Where the commit came from. Null for a run recorded before Volcano kept it. */
+            origin: components["schemas"]["LavaflowCommitOrigin"] | null;
+        };
+        /** @description What tied the run's issue to a recent LavaFlow fix. A `display` link rests on less than a strong one and joins no lineage. */
+        LavaflowLineageEvidence: {
+            /**
+             * @description `strong` or `display`. `weak` is reserved: nothing writes it.
+             * @enum {string}
+             */
+            confidence: "strong" | "weak" | "display";
+            /** @description The fix the issue was traced to. */
+            parent: components["schemas"]["LavaflowRunReference"];
+            deployment: {
+                /** @description The commit of the deployment that served the occurrence attribution judged (`opened_at`). */
+                commit_sha: string;
+                /** @description `push` for a commit Volcano built from a push, `client_reported` for one the deploy client reported. New values may appear. */
+                commit_origin: string;
+            };
+            /** @description The commit of the deployment before it. */
+            previous_commit_sha: string | null;
+            /** Format: date-time */
+            fix_live_at: string;
+            /**
+             * Format: date-time
+             * @description The occurrence attribution judged.
+             */
+            opened_at: string;
+            overlapping_functions: string[];
+            overlapping_files: string[];
+        };
+        /** @description The LavaFlow Code Quality finding behind a `code_quality` issue. */
+        IssueFinding: {
+            /** @description The rule the finding names, such as `null-dereference`. */
+            rule: string;
+            /**
+             * @description How much the problem matters, as the finding was confirmed.
+             * @enum {string}
+             */
+            severity: "nit" | "minor" | "major" | "critical";
+            /** @description The deployed commit the scan found the problem in. */
+            commit_sha: string;
+            /** @description The file, from the repository root. */
+            path: string;
+            /**
+             * Format: int64
+             * @description The first line of the problem in that commit, from 1.
+             */
+            start_line: number;
+            /**
+             * Format: int64
+             * @description The last line of the problem in that commit.
+             */
+            end_line: number;
+            /** @description What fails and on which input, as plain text. When it may contain a credential, LavaFlow withholds it whole, and it reads `LavaFlow left this explanation out because it may contain a credential`. */
+            explanation: string;
         };
         /**
          * @description The durable function that requested the approval. `id` is null once the
@@ -12615,10 +16357,48 @@ export interface components {
         DatabaseName: string;
         /** @description Frontend deployment ID */
         DeploymentId: string;
+        /**
+         * @description Page number (1-indexed). Omit it for the first page, and always with
+         *     `cursor` or `ending_before`.
+         */
+        SessionListPage: number;
+        /** @description Number of sessions per page (max 100, default 20) */
+        SessionListLimit: number;
+        /**
+         * @description Sort key. `last_activity` (default) orders by most recent activity and
+         *     supports offset pagination only. `created_at` orders by session start
+         *     and supports both offset and cursor pagination.
+         */
+        SessionListSort: "last_activity" | "created_at";
+        /**
+         * @description Filter by whether the session can still be refreshed. Omit for every
+         *     stored session, including expired ones. `expired` is not supported
+         *     with cursor pagination.
+         */
+        SessionListStatus: "active" | "expired";
+        /**
+         * @description Opaque keyset cursor from a previous response's `next_cursor`. Requires
+         *     `sort=created_at`; mutually exclusive with `page` and `ending_before`.
+         */
+        SessionListCursor: string;
+        /**
+         * @description Opaque keyset cursor from a previous response's `prev_cursor`, paging
+         *     backward. Requires `sort=created_at`; mutually exclusive with `page`
+         *     and `cursor`.
+         */
+        SessionListEndingBefore: string;
+        /**
+         * @description Bounded number of rows to skip past the cursor anchor (the hybrid
+         *     jump, maximum 100000). Ignored unless `cursor` or `ending_before` is
+         *     supplied.
+         */
+        SessionListOffset: number;
         /** @description Variable Environment ID */
         VariableEnvironmentId: string;
         /** @description Frontend ID */
         FrontendId: string;
+        /** @description Frontend Candidate ID */
+        FrontendCandidateId: string;
         /** @description Frontend Function route ID */
         FrontendFunctionRouteId: string;
         /** @description Frontend route ID */
@@ -12640,8 +16420,6 @@ export interface components {
          *     keep the same filters while paging.
          */
         IssueCursor: string;
-        /** @description Autofix run ID */
-        AutofixRunId: string;
         /**
          * @description Only approvals requested by this durable function, given by id or by
          *     name. A name also matches approvals from a deleted function of that
@@ -12656,9 +16434,9 @@ export interface components {
          */
         DurableMessageIdempotencyKey: string;
         /**
-         * @description The `client_token` the execution's start returned. Lets an anon key,
-         *     or a user who did not start the execution, reach it, and a service key
-         *     scoped to a list without `*` read and stop it.
+         * @description The `client_token` the execution's start returned. Lets an anon key, a
+         *     service key scoped to a list without `*`, or a user who did not start
+         *     the execution, reach it.
          */
         DurableClientToken: string;
         /** @description Return only messages travelling this way. */
@@ -12723,8 +16501,61 @@ export interface components {
          *     stay in keyset/search mode. Supplying `page` selects offset pagination.
          */
         Page: number;
+        /** @description Number of UTC days in the window, ending today. */
+        LavaflowDays: number;
+        /** @description Only runs for issues of this resource. */
+        LavaflowResourceIdFilter: string;
+        /** @description LavaFlow run ID */
+        LavaflowRunId: string;
+        /**
+         * @description Opaque cursor from a previous response's `next_cursor`. Pages forward,
+         *     and works only for the same `project_id` and caller; keep the same
+         *     filters while paging.
+         */
+        LavaflowRunCursor: string;
+        /** @description Number of runs per page (max 100) */
+        LavaflowRunLimit: number;
+        /** @description Number of scans per page (max 100) */
+        LavaflowScanLimit: number;
+        /** @description Only runs in this status. */
+        LavaflowRunStatusFilter: components["schemas"]["LavaflowRunStatus"];
+        /** @description LavaFlow skill ID */
+        LavaflowSkillId: string;
+        /** @description The skill whose versions to list. */
+        LavaflowSkillIdQuery: string;
+        /** @description Only skills in this status. */
+        LavaflowSkillStatusFilter: components["schemas"]["LavaflowSkillStatus"];
+        /** @description Where to send the browser after Slack's callback. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
+        SlackRedirect: string;
+        /** @description Only runs in this category; `uncategorized` for runs without one. */
+        LavaflowCategoryFilter: "bug" | "performance" | "security" | "improvement" | "configuration" | "dependency" | "external" | "uncategorized";
+        /** @description Only runs that involve this function, durable function or frontend in any role: the issue came from it, the diagnosis traced the cause to it, or the fix changes it. */
+        LavaflowInvolvedResourceFilter: string;
+        /** @description Only runs on this issue. An issue the project doesn't have answers `404`, like an unknown issue. */
+        LavaflowIssueIdFilter: string;
+        /** @description Only runs whose pull request is in this state; `none` for runs without one. */
+        LavaflowPullRequestStateFilter: "open" | "merged" | "closed" | "none";
+        /** @description Only runs created in the last `days` UTC days, today included. Omit for every run. */
+        LavaflowRunDays: number;
+        /** @description `created_at.desc` is newest first and `created_at.asc` oldest first. `issue_events.desc` orders by the issue's current `event_count`, most first, then newest first. That count grows as errors arrive or scans see a finding again, so paging this order can skip runs, not only move them between pages. To read every run, for an export say, page `created_at.desc` or `created_at.asc`. A cursor works only with the order it came from. */
+        LavaflowRunOrder: "created_at.desc" | "created_at.asc" | "issue_events.desc";
+        /** @description `counts` adds `counts` to the response. Ask on the first page; the counts don't depend on the cursor. */
+        LavaflowRunInclude: "counts"[];
         /** @description Project ID */
         ProjectId: string;
+        /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+        ProjectIdQuery: string;
+        /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+        ItemProjectIdQuery: string;
+        /** @description Share ID, the 12 characters at the end of the share's deploy URL */
+        ShareId: string;
+        /** @description The share to read. The share's own project authorizes the read; a share the caller can't read answers like one that doesn't exist. */
+        ShareIdQuery: string;
+        /**
+         * @description Opaque cursor from a previous response's `next_cursor`. Pages forward, and
+         *     works only for the same `share_id` and `limit`.
+         */
+        ShareReleaseCursor: string;
         /** @description Project access token ID */
         TokenId: string;
         /**
@@ -12734,6 +16565,8 @@ export interface components {
         Search: string;
         /** @description Database restore ID */
         RestoreId: string;
+        /** @description Database migration run ID */
+        MigrationRunId: string;
         /** @description Function scheduler ID */
         SchedulerId: string;
         /** @description Variable name. Function runtime names such as AWS_REGION are reserved and cannot be updated. */
@@ -12787,7 +16620,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List available sandbox presets */
+            /** @description List available sandbox presets. Temporarily unavailable regions are omitted. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -13066,7 +16899,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxDeployment"];
                 };
             };
-            /** @description Invalid source (400), denied access (401, 403), conflicting retry (409), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes or custom templates are not available in this environment. */
+            /** @description Invalid source (400), denied access (401, 403), conflicting retry (409), or a temporarily unavailable deployment service (503). Code `feature_unavailable` with 404 means sandboxes or custom templates are not available in this environment. A deployment builds no image in a temporarily unavailable region; code `sandbox_region_unavailable` (400) means every region is unavailable. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13247,7 +17080,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxSession"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. Code `sandbox_region_unavailable` (400) means the region is temporarily unavailable for Sandboxes; choose another from `GET /sandboxes/presets`. Code `feature_unavailable` with 400 means `network.egress` `deny_all` is not available in this environment; `GET /capabilities` lists it as `sandboxes.network_isolation`. Code `feature_unavailable` with 400 means the request keeps no output while the `sandboxes.output_not_kept` capability is unavailable. Code `sandbox_limits_unsupported` (400) means the selected image predates `limits`; redeploy the template or recreate the named Sandbox, or retry once the preset is updated. Code `sandbox_limits_exceed_session` (400) means `limits.vcpus` is more than the session has; use a larger preset size or template, or lower `limits.vcpus`. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13284,7 +17117,51 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxExecutionResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), startup hook timeout (422), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_plan_limit_exceeded` (403) means the requested resources exceed the plan. Code `sandbox_allowance_exhausted` (429) means the remaining allowance or credits cannot admit the operation. Code `sandbox_region_unavailable` (400) means the region is temporarily unavailable for Sandboxes; choose another from `GET /sandboxes/presets`. Code `feature_unavailable` with 400 means `network.egress` `deny_all` is not available in this environment; `GET /capabilities` lists it as `sandboxes.network_isolation`. Code `sandbox_image_outdated` (409) means the template's image predates what the request needs, such as `deny_all` on a template deployed to local mode before this version; redeploy the template. No command was sent. Code `feature_unavailable` with 400 means the request keeps no output while the `sandboxes.output_not_kept` capability is unavailable. Code `sandbox_start_failed` means startup failed or timed out before the command was sent. Its status is 422 for sandbox_run_hook_timeout on a custom deployment, 429 for sandbox_allowance_exhausted or sandbox_allowance_retention_expired, and 503 for managed-preset run-hook timeouts or other or unknown startup reasons. sandbox_start_timeout means the startup wait expired; sandbox_session_expired means the session lifetime ended before dispatch. Its error message includes the recorded startup reason when known, including on replay. The message is diagnostic text, not a stable machine-readable retry classification; investigate the reason before starting another billed attempt. Admission refusals include response code `sandbox_capacity_unavailable` (429), `sandbox_allowance_exhausted` (429), and `sandbox_plan_limit_exceeded` (403); no command was sent. Reusing the same Idempotency-Key replays these refusals or startup failure even after recovery; use a new key for a new attempt. A 403 or 429 without an explicit admission-refusal code or sandbox_start_failed does not prove no dispatch. Other failures may have an unknown execution outcome; do not use a new key to repeat a command with side effects. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSandboxSessionFiles: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description The session to list. A session outside `project_id` answers like one that doesn't exist. */
+                session_id: string;
+                /** @description Workspace directory to list, such as `src` or `/workspace/src`. Omit it, or pass `.` or `/workspace`, to list the workspace root. The path must be a directory; it is never reached through a symlink. */
+                path?: string;
+                /** @description List every entry below the directory. When false, list only its direct entries. */
+                recursive?: boolean;
+                /** @description Add the SHA-256 digest of each regular file's content. A call reads at most 256 MiB to hash; a page ends early, with `next_cursor`, before a file that would pass that budget. A file without a digest says why in `sha256_skipped`. */
+                include_sha256?: boolean;
+                /** @description Most entries to return. A page can hold fewer, so continue while `next_cursor` is present. */
+                limit?: number;
+                /** @description Opaque cursor from the previous page's `next_cursor`. It is valid only for the same project and session; send the same `path` and `recursive` with it. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of workspace entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFileListResult"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflict (409), capacity exhausted (429), and temporarily unavailable (503). A project the caller can't read answers 404 exactly like one that doesn't exist, and a session outside the project answers like an unknown session. A credential for the project that lacks the `sandboxes.files.read` permission answers 403. Code `sandbox_path_not_directory` with 400 means the path is missing, is not a directory, or passes through a symlink. Code `sandbox_path_unreadable` with 400 means the session user can't list the path or pass through a directory above it. Code `sandbox_image_outdated` with 409 means the session's image predates file listing. Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13445,7 +17322,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxCommandResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_session_not_running` (409) means the session cannot accept commands and the command was not sent. The same Idempotency-Key replays this refusal even after the session resumes; use a new key once the session is running. Other failures may have an unknown outcome; reuse the original key. Code `sandbox_command_capacity` with 429 means the session is already running its maximum number of commands and started nothing; retry with the same Idempotency-Key once one finishes. Code `sandbox_session_keeps_no_output` with 400 means the session keeps no command output and the request set `keep_output` to true. Code `feature_unavailable` with 400 means the command keeps no output, by its own `keep_output` or its session's, while the `sandboxes.output_not_kept` capability is unavailable. Code `sandbox_disk_full` (409) means the session's disk had no room to record the command and it started nothing; retry with the same Idempotency-Key once there is room. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13480,7 +17357,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxFileResult"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found or terminated session (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13513,7 +17390,73 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found or terminated session (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_disk_full` (409) means the write did not fit on the session's disk; delete files in the session, or, for a session started with `limits.disk_mib`, start one with a larger cap. Code `sandbox_path_conflict` (409) means a cloud session has `limits.disk_mib`, whose writes run as the session user, and that user cannot write the file's directory. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxFileArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SandboxFileArchiveForm"];
+            };
+        };
+        responses: {
+            /** @description The archive was extracted */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFileArchive"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include an invalid form or archive (400), unauthenticated (401), forbidden (403), an unknown project or session (404), a conflicting destination, an outdated session image or a full disk (409), an archive over a limit (413), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSandboxFilePart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxFilePartRequest"];
+            };
+        };
+        responses: {
+            /** @description The part was written */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxFilePart"];
+                };
+            };
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), an unknown project or session (404), a part out of order, a mismatched file, a conflicting destination, an outdated session image or a full disk (409), a request body over its limit (413), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13612,7 +17555,7 @@ export interface operations {
                     "application/json": components["schemas"]["SandboxAccess"];
                 };
             };
-            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. */
+            /** @description Request refused or unavailable. Errors include invalid input (400), unauthenticated (401), forbidden (403), not found (404), conflicting retry (409), capacity exhausted (429), and temporarily unavailable (503). Code `feature_unavailable` with 404 means sandboxes are not available in this environment. Code `sandbox_network_isolated` (400) means the session was created with `network.egress` `deny_all`, which accepts no port access. */
             default: {
                 headers: {
                     [name: string]: unknown;
@@ -13628,9 +17571,9 @@ export interface operations {
             query?: {
                 /** @description Import provider to connect. Defaults to Vercel. */
                 provider?: components["schemas"]["ImportProvider"];
-                /** @description Validated application URL used after the provider callback. */
+                /** @description Application URL used after the provider callback. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
                 redirect?: string;
-                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. */
+                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
                 callback_url?: string;
             };
             header?: never;
@@ -14241,9 +18184,9 @@ export interface operations {
             query?: {
                 /** @description Git provider to connect. Defaults to github. */
                 provider?: "github";
-                /** @description URL to redirect the browser to after the provider callback completes. */
+                /** @description URL to redirect the browser to after the provider callback completes. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
                 redirect?: string;
-                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. */
+                /** @description Same-origin browser callback used to relay provider parameters before completing the connection. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
                 callback_url?: string;
             };
             header?: never;
@@ -14750,15 +18693,99 @@ export interface operations {
             };
         };
     };
-    gitConnectCallback: {
+    revokeCurrentUserToken: {
         parameters: {
-            query: {
-                /** @description GitHub user authorization code. */
-                code?: string;
-                /** @description Signed connect state generated by startGitConnect. */
-                state: string;
-                /** @description Provider error returned by GitHub. */
-                error?: string;
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated, or not a platform token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - a project access token cannot revoke a platform token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to revoke the token */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account sessions are unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAccountSessions: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Page number (1-indexed). Omit it for the first page, and always with
+                 *     `cursor` or `ending_before`.
+                 */
+                page?: components["parameters"]["SessionListPage"];
+                /** @description Number of sessions per page (max 100, default 20) */
+                limit?: components["parameters"]["SessionListLimit"];
+                /**
+                 * @description Sort key. `last_activity` (default) orders by most recent activity and
+                 *     supports offset pagination only. `created_at` orders by session start
+                 *     and supports both offset and cursor pagination.
+                 */
+                sort?: components["parameters"]["SessionListSort"];
+                /**
+                 * @description Filter by whether the session can still be refreshed. Omit for every
+                 *     stored session, including expired ones. `expired` is not supported
+                 *     with cursor pagination.
+                 */
+                status?: components["parameters"]["SessionListStatus"];
+                /**
+                 * @description Opaque keyset cursor from a previous response's `next_cursor`. Requires
+                 *     `sort=created_at`; mutually exclusive with `page` and `ending_before`.
+                 */
+                cursor?: components["parameters"]["SessionListCursor"];
+                /**
+                 * @description Opaque keyset cursor from a previous response's `prev_cursor`, paging
+                 *     backward. Requires `sort=created_at`; mutually exclusive with `page`
+                 *     and `cursor`.
+                 */
+                ending_before?: components["parameters"]["SessionListEndingBefore"];
+                /**
+                 * @description Bounded number of rows to skip past the cursor anchor (the hybrid
+                 *     jump, maximum 100000). Ignored unless `cursor` or `ending_before` is
+                 *     supplied.
+                 */
+                offset?: components["parameters"]["SessionListOffset"];
             };
             header?: never;
             path?: never;
@@ -14766,6 +18793,233 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description A page of the account's sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSessionList"];
+                };
+            };
+            /** @description Invalid or conflicting pagination parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated, or not a platform token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - a project access token cannot read account sessions */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list sessions */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account sessions are unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeOtherAccountSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every other session ended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated, or not a platform token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - a project access token cannot end account sessions */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to end sessions */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account sessions are unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeAccountSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The session ID, from `GET /user/sessions` */
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session ended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated, or not a platform token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - a project access token cannot end account sessions */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Session not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to end the session */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account sessions are unavailable in local mode */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    gitConnectCallback: {
+        parameters: {
+            query?: {
+                /** @description GitHub user authorization code. Ignored when `state` is absent. */
+                code?: string;
+                /**
+                 * @description Signed connect state generated by startGitConnect. Absent when the
+                 *     install started on GitHub rather than in Volcano.
+                 */
+                state?: string;
+                /** @description Provider error returned by GitHub. */
+                error?: string;
+                /**
+                 * @description The GitHub App installation ID GitHub adds to the redirect. Volcano
+                 *     does not read it; a repository is connected through startGitConnect.
+                 */
+                installation_id?: string;
+                /**
+                 * @description What happened on GitHub: `install`, `update`, or `request`. Without
+                 *     `state`, one of these values redirects to the dashboard; any other
+                 *     value, or none, returns 400. With `state`, it is ignored.
+                 */
+                setup_action?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Sent only when `state` is absent and `setup_action` is `install`,
+             *     `update`, or `request`. Redirects to the dashboard's Git settings
+             *     page without connecting anything, setting a cookie, or echoing the
+             *     request's query.
+             */
+            302: {
+                headers: {
+                    /**
+                     * @description The dashboard's Git settings page with the fixed query
+                     *     `github_install=1`.
+                     */
+                    Location: string;
+                    /** @description Always `no-store`. */
+                    "Cache-Control": string;
+                    /** @description Always `no-referrer`, so the dashboard never receives the callback URL. */
+                    "Referrer-Policy": string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Redirect back to the app after a successful or failed connect attempt */
             303: {
                 headers: {
@@ -14775,7 +19029,11 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid callback request or state */
+            /**
+             * @description Invalid callback request or state, including a request without
+             *     `state` whose `setup_action` is missing or not `install`, `update`,
+             *     or `request`
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -14804,6 +19062,296 @@ export interface operations {
             };
             /** @description Git provider integration is not configured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startSlackInstall: {
+        parameters: {
+            query?: {
+                /** @description Where to send the browser after Slack's callback. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
+                redirect?: components["parameters"]["SlackRedirect"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Slack authorization URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackAuthorizationResponse"];
+                };
+            };
+            /** @description `redirect` is not on the Volcano dashboard's origin */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `feature_unavailable`; reporting problems from Slack is not available in this environment */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSlackConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's connected Slack identities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackConnectionsResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startSlackConnect: {
+        parameters: {
+            query?: {
+                /** @description Where to send the browser after Slack's callback. It must be on the Volcano dashboard's origin, or `http` to `127.0.0.1` or `[::1]` with a port. */
+                redirect?: components["parameters"]["SlackRedirect"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Slack authorization URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackAuthorizationResponse"];
+                };
+            };
+            /** @description `redirect` is not on the Volcano dashboard's origin */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `feature_unavailable`; reporting problems from Slack is not available in this environment */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSlackConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The connection to remove */
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed connection ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such connection. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSlackChannels: {
+        parameters: {
+            query: {
+                /** @description The Slack workspace. The app must be installed in it, and one of the caller's connected Slack identities must belong to it. */
+                team_id: components["schemas"]["SlackTeamId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channels the app and one of the caller's connected Slack identities are both in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackChannelsResponse"];
+                };
+            };
+            /** @description `team_id` is missing or malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The app is not installed in the workspace, or the caller's sign-in session signed in as no Slack identity there. Code `feature_unavailable` means reporting problems from Slack is not available in this environment. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Slack did not answer, or refused the app's token; try again or reinstall the app */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    slackCallback: {
+        parameters: {
+            query: {
+                /** @description Slack's authorization code */
+                code?: string;
+                /** @description The signed state the flow's start returned */
+                state: string;
+                /** @description Slack's error, such as `access_denied` */
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect back to the dashboard after a successful or failed attempt */
+            303: {
+                headers: {
+                    /** @description Redirect target */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired state, or a browser that did not start the flow */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `feature_unavailable`; reporting problems from Slack is not available in this environment */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many callback attempts from this client */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14905,7 +19453,7 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description Bad request */
+            /** @description Bad request. A `template_source` other than `null` is refused: a project is created from a share with `POST /forks`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -15862,8 +20410,9 @@ export interface operations {
             /**
              * @description The source has already been exported, the repository has already
              *     taken over as the source of truth, the confirmed production branch
-             *     is stale, a function or frontend deployment is still in progress,
-             *     or the project has no stored source to export
+             *     or repository is stale, a function or frontend deployment is still in progress,
+             *     a preview is serving one of the project's frontends, or the project
+             *     has no stored source to export
              */
             409: {
                 headers: {
@@ -15999,6 +20548,1070 @@ export interface operations {
             };
         };
     };
+    getSharePreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Share ID, the 12 characters at the end of the share's deploy URL */
+                share_id: components["parameters"]["ShareId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link's current release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePreview"];
+                };
+            };
+            /** @description The link id is malformed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The request carried the dashboard proxy's visitor headers without a valid proof
+             *     from the proxy (code `proxy_credential_rejected`, the same for every kind of
+             *     failed proof). It is never about the caller's session.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The link is not available, or deploy links are not available in this environment (code `feature_unavailable`; see `GET /capabilities`). A link of a project copied from a link that no longer allows re-sharing answers the same. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many previews from this address; try again after `Retry-After` */
+            429: {
+                headers: {
+                    /** @description Seconds until the clock hour the limit counts in ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano cannot serve requests from the visitor's location under US sanctions */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to preview the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The dashboard proxy's own project is not being served right now (code `service_unavailable`); try again shortly. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listShares: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's deploy links, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharesResponse"];
+                };
+            };
+            /** @description The `project_id` query parameter is missing or is not a project UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list deploy links */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The new deploy link */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            /** @description Malformed request body or an invalid suggested name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A project access token was used.
+             *     A person creates, changes, publishes and deletes deploy links. Code
+             *     `reshare_not_allowed` means the project is a copy made from someone else's
+             *     deploy link, and that link, or a link it was made from in turn, does not
+             *     allow re-sharing or no longer exists. Code `source_unavailable` means the
+             *     project is a copy, and a link it was made from is not available to share
+             *     from right now. Code `operator_disabled` means
+             *     Volcano took one of the project's links down (`disabled_reason`
+             *     `operator`), so the project cannot be shared until that is lifted.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project not found or not the caller's, or deploy links are not available
+             *     in this environment
+             *     (code `feature_unavailable`; see `GET /capabilities`)
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project has reached its deploy link limit */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getShare: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description Share ID, the 12 characters at the end of the share's deploy URL */
+                share_id: components["parameters"]["ShareId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deploy link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            /**
+             * @description `project_id` is malformed, or `project_id` is given and the link id is
+             *     malformed. Without `project_id`, a malformed link id answers 404, as an
+             *     unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or deploy link not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteShare: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description Share ID, the 12 characters at the end of the share's deploy URL */
+                share_id: components["parameters"]["ShareId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deploy link was deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description `project_id` is malformed, or `project_id` is given and the link id is
+             *     malformed. Without `project_id`, a malformed link id answers 404, as an
+             *     unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A project access token was used.
+             *     A person creates, changes, publishes and deletes deploy links. Code
+             *     `operator_disabled` means Volcano took the link down (`disabled_reason`
+             *     `operator`), so it is kept until Volcano lifts that.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or deploy link not found, or the project is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to delete the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateShare: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description Share ID, the 12 characters at the end of the share's deploy URL */
+                share_id: components["parameters"]["ShareId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated deploy link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            /** @description Malformed request body or an invalid suggested name. Code `feature_unavailable` means deploy links are not available in this environment, so an edit or enabling the link is refused while switching it off still works; code `edit_dropped` means the link was switched off, or for a read-only account its re-sharing turned off, and the other edit sent with it was not saved, including a re-sharing change refused because the project is a copy whose source does not allow re-sharing, or because Volcano took one of the project's links down. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A project access token was used.
+             *     A person creates, changes, publishes and deletes deploy links. Also
+             *     answered when the account is read-only and the request neither switches
+             *     the link off nor sets `allow_reshare` to false. Code `reshare_not_allowed` means the request switches the
+             *     link on or sets `allow_reshare` to true, and the project is a copy made from
+             *     someone else's deploy link that, or a link it was made from in turn, does
+             *     not allow re-sharing or no longer exists. Code `source_unavailable` means
+             *     it does so on a copy, and a link the copy was made from is not available
+             *     to share from right now. Code `operator_disabled` means
+             *     the request switches on a link Volcano took down
+             *     (`disabled_reason` `operator`), which only Volcano can lift, or switches
+             *     on a link or sets `allow_reshare` to true while Volcano has taken any of
+             *     the project's links down. Switching a link off is always allowed.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or deploy link not found, or the project is not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to update the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getShareReleaseDraft: {
+        parameters: {
+            query: {
+                /** @description The share to read. The share's own project authorizes the read; a share the caller can't read answers like one that doesn't exist. */
+                share_id: components["parameters"]["ShareIdQuery"];
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What a release would carry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareReleaseDraft"];
+                };
+            };
+            /**
+             * @description `project_id` is malformed, or `project_id` is given and the link id is
+             *     malformed. Without `project_id`, a malformed link id answers 404, as an
+             *     unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A project access token was used.
+             *     A person creates, changes, publishes and deletes deploy links. Code
+             *     `reshare_not_allowed` means the project is a copy made from someone else's
+             *     deploy link, and that link, or a link it was made from in turn, does not
+             *     allow re-sharing or no longer exists. Code `source_unavailable` means the
+             *     project is a copy, and a link it was made from is not available to share
+             *     from right now. Code `operator_disabled` means
+             *     Volcano took one of the project's links down (`disabled_reason`
+             *     `operator`), so the project cannot be shared until that is lifted.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or deploy link not found, or the project is not the caller's, or
+             *     publishing is not available in this environment (code
+             *     `feature_unavailable`). A local server without stored
+             *     source archives cannot publish, even where `GET /capabilities` lists
+             *     `shares` as available for managing links.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The project cannot be released as it is: it has no deployed function or
+             *     frontend with stored source, a function's settings would be refused, it
+             *     has more than 100 variables a release would carry or more than 100
+             *     functions reading `VOLCANO_SERVICE_KEY`, or the release would be larger
+             *     than an install reads.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description This account started too many release builds this hour (30, drafts and
+             *     publishes together; code `release_builds_limited`). Try again after
+             *     `Retry-After`.
+             */
+            429: {
+                headers: {
+                    /** @description Seconds until the clock hour the budget counts in ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to build the release draft */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Release builds on this server are busy (code `builds_busy`); try again after
+             *     `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before trying again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listShareReleases: {
+        parameters: {
+            query: {
+                /** @description The share to read. The share's own project authorizes the read; a share the caller can't read answers like one that doesn't exist. */
+                share_id: components["parameters"]["ShareIdQuery"];
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward, and
+                 *     works only for the same `share_id` and `limit`.
+                 */
+                cursor?: components["parameters"]["ShareReleaseCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the link's releases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedShareReleases"];
+                };
+            };
+            /**
+             * @description `project_id` is malformed, or `project_id` is given and the link id is
+             *     malformed, or `limit` or `cursor` is invalid, such as a cursor issued for
+             *     another share or page size. Without `project_id`, a malformed link id
+             *     answers 404, as an unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or deploy link not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to list the deploy link's releases */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishShareRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareReleaseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The published release, now the link's current release */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRelease"];
+                };
+            };
+            /**
+             * @description The body names an existing link but is otherwise malformed, such as an
+             *     unknown field or a `variables` entry of the wrong type. A body that is not
+             *     JSON, or whose `share_id` is missing or malformed, answers 404, as an
+             *     unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description A project access token was used.
+             *     A person creates, changes, publishes and deletes deploy links. Code
+             *     `reshare_not_allowed` means the project is a copy made from someone else's
+             *     deploy link, and that link, or a link it was made from in turn, does not
+             *     allow re-sharing or no longer exists. Code `source_unavailable` means the
+             *     project is a copy, and a link it was made from is not available to share
+             *     from right now. Code `operator_disabled` means
+             *     Volcano took one of the project's links down (`disabled_reason`
+             *     `operator`), so the project cannot be shared until that is lifted.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or deploy link not found, including a body that names no
+             *     well-formed `share_id`, or the project is not the caller's, or publishing
+             *     is not available in this environment (code `feature_unavailable`). A local server without stored
+             *     source archives cannot publish, even where `GET /capabilities` lists
+             *     `shares` as available for managing links.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description What was confirmed does not match a fresh build of the project (code
+             *     `draft_changed`). The body carries the fresh draft in `draft`; review it
+             *     and publish again. `error` names the confirmed variables the draft does
+             *     not have, the draft variables left out, or the service key functions the
+             *     draft expects. It says the
+             *     project changed when the confirmation matches the fresh draft but its
+             *     `draft_id` is not the one sent: the project changed since the draft was
+             *     reviewed, or while the release was being built.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareDraftChangedError"];
+                };
+            };
+            /**
+             * @description The project cannot be released as it is: it has no deployed function or
+             *     frontend with stored source, a function's settings would be refused, it
+             *     has more than 100 variables a release would carry or more than 100
+             *     functions reading `VOLCANO_SERVICE_KEY`, or the release would be larger
+             *     than an install reads.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description This account started too many release builds this hour (30, drafts and
+             *     publishes together; code `release_builds_limited`). Try again after
+             *     `Retry-After`.
+             */
+            429: {
+                headers: {
+                    /** @description Seconds until the clock hour the budget counts in ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to publish the release */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Release builds on this server are busy (code `builds_busy`); try again after
+             *     `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before trying again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getShareStats: {
+        parameters: {
+            query: {
+                /** @description The share to read. The share's own project authorizes the read; a share the caller can't read answers like one that doesn't exist. */
+                share_id: components["parameters"]["ShareIdQuery"];
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+                /** @description How many days back to count. Defaults to 30. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link's event counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareStats"];
+                };
+            };
+            /**
+             * @description `days` is outside 1 to 90, `project_id` is malformed, or `project_id` is
+             *     given and the link id is malformed. Without `project_id`, a malformed link
+             *     id answers 404, as an unknown link does.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or deploy link not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to get the deploy link stats */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFork: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes a fork safe to retry. A repeat with the same key from the same
+                 *     account answers `201` with the project the first request created, without
+                 *     confirming, counting or creating anything again. Reusing a key for a
+                 *     different request (another name, share, release or set of variable names
+                 *     with a value) answers `409` with code `idempotency_key_reused`. Variable
+                 *     values are not compared. The key is kept as long as the project exists.
+                 */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The project was created and its install queued */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description The request body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The release would exceed the plan's limits for frontends and functions, or the
+             *     account may not create projects. Code `proxy_credential_rejected` means the
+             *     request carried the dashboard proxy's visitor headers without a valid proof
+             *     from the proxy; it is never about the caller's session.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The share is not available. It does not exist, was switched off, has not
+             *     been published, or is a copy whose source no longer allows re-sharing. Code
+             *     `feature_unavailable` means forks are not available in this environment (see
+             *     `GET /capabilities`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The share has a new release since the preview (code `release_changed`): fetch
+             *     the preview again and confirm the new release. Code `idempotency_key_reused`:
+             *     the `Idempotency-Key` was already used for a different request. Code
+             *     `request_in_progress`: the first request with this `Idempotency-Key` has made
+             *     its project but not yet queued the install; retry after `Retry-After`, and the
+             *     retry answers that project once it is settled. A project name you already use
+             *     is not a conflict: the project is created under that name with a short random
+             *     suffix added. Only when no free suffixed name is found after a few tries does
+             *     the request answer `409`.
+             */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying (code `request_in_progress`). Absent otherwise. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The release cannot be installed as it is, or `variables` names a variable the
+             *     release does not declare (code `variable_not_declared`). A variable left out,
+             *     or sent empty, is created empty. The message names the variables, never their
+             *     values. Code `variables_required` means the release declares variables Volcano
+             *     could not set up; ask the person who shared it to share it again.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many forks (20 an hour) from this account; try again after `Retry-After` */
+            429: {
+                headers: {
+                    /** @description Seconds until the clock hour the limit counts in ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano cannot serve requests from the visitor's location under US sanctions (a fork confirmed through the dashboard) */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to create the project from the deploy link */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Durable functions are paused (code `feature_paused`, with a `Retry-After`
+             *     header) and the release has a durable function. Code `service_unavailable`
+             *     means the dashboard proxy's own project is not being served right now. Code
+             *     `rate_limit_unavailable` means Volcano cannot count forks right now; retry
+             *     after `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds until durable functions may be back (code `feature_paused`), or a short wait while forks cannot be counted (code `rate_limit_unavailable`). Absent otherwise. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     setProjectGitProductionBranch: {
         parameters: {
             query?: never;
@@ -16025,8 +21638,11 @@ export interface operations {
                 };
             };
             /**
-             * @description Malformed request body, or a production_branch that is not a valid
-             *     Git branch name
+             * @description Malformed request body, a production_branch that is not a valid
+             *     Git branch name, or an empty one for a repository with no commits
+             *     yet. Code `feature_unavailable` means this Volcano deployment has
+             *     no GitHub integration, so an empty production_branch cannot read
+             *     the default branch.
              */
             400: {
                 headers: {
@@ -16067,8 +21683,22 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description A Git source transition is pending */
+            /**
+             * @description A Git source transition is pending, or an empty production_branch
+             *     could not read the default branch because the project owner's
+             *     GitHub connection needs reconnecting or lost access to the
+             *     repository
+             */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub rate limited reading the default branch for an empty production_branch. Try again shortly. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16178,6 +21808,98 @@ export interface operations {
             };
         };
     };
+    getProjectGitOwnerPush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether the project owner can push to the connected repository */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGitOwnerPush"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project not found, or has no repo connection. Code
+             *     `feature_unavailable` when this deployment has no Git provider
+             *     integration.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The project, or its owner across their projects, used up the
+             *     hour's checks that ask GitHub. Try again after `Retry-After`.
+             */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget's hour ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Failed to check the project owner's access */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The check could not be answered now: GitHub did not answer or is
+             *     rate limiting the owner's account, or Volcano could not read the
+             *     budget. Try again after `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before checking again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getProjectGitConnection: {
         parameters: {
             query?: never;
@@ -16268,7 +21990,8 @@ export interface operations {
              *     valid Git branch name, no production_branch on a repository with no
              *     default branch to follow (name one to connect a repository that has
              *     no commits yet), or a production_branch other than the new
-             *     repository's default in a request that also changes repository.
+             *     repository's default in a request that also changes repository
+             *     (a repository that reports no default branch accepts any branch).
              */
             400: {
                 headers: {
@@ -16290,10 +22013,10 @@ export interface operations {
             /**
              * @description Project not owned by the caller, the selected repository is not
              *     accessible through installation_id, or the request used a project
-             *     access token. A full-scope token gets `project access tokens cannot
-             *     change a project's repository; a person changes it in the dashboard
-             *     or with a platform token`, and a read-only token gets `project
-             *     access token is read-only`.
+             *     access token or came through MCP. A full-scope token, and MCP, get
+             *     `project access tokens cannot change a project's repository; a
+             *     person changes it in the dashboard or with a platform token`, and a
+             *     read-only token gets `project access token is read-only`.
              */
             403: {
                 headers: {
@@ -16497,7 +22220,11 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectGitDeploySettings"];
                 };
             };
-            /** @description Malformed request body, or frontend_app_root without frontend_name */
+            /**
+             * @description Malformed request body, frontend_app_root without frontend_name, or
+             *     apply_migrations set to true where database migrations are not
+             *     available (code `feature_unavailable`)
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -16547,6 +22274,129 @@ export interface operations {
             };
             /** @description Failed to update project git deploy settings */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listGitDeploymentRuns: {
+        parameters: {
+            query?: {
+                /** @description Number of items per page (max 100) */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward;
+                 *     keep the same filters while paging.
+                 */
+                cursor?: components["parameters"]["IssueCursor"];
+                /** @description Return only runs in this status. */
+                status?: components["schemas"]["GitDeploymentRunStatus"];
+                /** @description Return only runs for pushes to this branch. */
+                branch?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedGitDeploymentRuns"];
+                };
+            };
+            /** @description A filter or the cursor is invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getGitDeploymentRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Deployment run ID */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDeploymentRun"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not owned by the caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project or run not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17123,6 +22973,8 @@ export interface operations {
                      *     - Node.js: nodejs22.x, nodejs24.x
                      *     - Python: python3.10, python3.11, python3.12, python3.13, python3.14
                      *     - Ruby: ruby3.3, ruby3.4, ruby4.0
+                     *
+                     *     python3.10 is deprecated: it still deploys, and Volcano will remove it before 2027-08-31.
                      * @example nodejs24.x
                      * @enum {string}
                      */
@@ -17130,7 +22982,7 @@ export interface operations {
                     /**
                      * @description The name of the function to invoke. Defaults to "handler" if not specified.
                      *     Your code must export/define a function with this name:
-                     *     - Node.js: exports.handler (in index.js)
+                     *     - Node.js: exports.handler (in index.js, index.mjs or index.cjs, or in TypeScript in index.ts, index.mts or index.cts, which the build compiles without type-checking)
                      *     - Python: def handler() (in main.py)
                      *     - Ruby: def handler() (in main.rb)
                      * @default handler
@@ -17160,6 +23012,8 @@ export interface operations {
                     variable_scope?: "all" | "scoped";
                     /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
                     variables?: string;
+                    /** @description JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`; a clean commit of the project's connected repository that its production branch holds gets `commit.verification: repository`. */
+                    commit?: string;
                 };
             };
         };
@@ -17184,7 +23038,8 @@ export interface operations {
             };
             /**
              * @description Bad request (invalid file, too large, etc.), an unknown
-             *     `visibility`, or `visibility` and `is_public` disagree
+             *     `visibility`, `visibility` and `is_public` disagree, or a
+             *     malformed `commit`
              */
             400: {
                 headers: {
@@ -17208,7 +23063,10 @@ export interface operations {
              *     by a durable function — a function cannot change kind — or the
              *     redeploy would take a function with Frontend Function routes out
              *     of `public` or out of HTTP invocation mode. The request is refused
-             *     before the deploy starts, so nothing is deployed.
+             *     before the deploy starts, so nothing is deployed. The message
+             *     `project variables changed during the upload; retry` means
+             *     `NODE_PATH` was created or deleted while the upload was processed;
+             *     send the same request again.
              */
             409: {
                 headers: {
@@ -17655,9 +23513,9 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it, and a service key
-                 *     scoped to a list without `*` read and stop it.
+                 * @description The `client_token` the execution's start returned. Lets an anon key, a
+                 *     service key scoped to a list without `*`, or a user who did not start
+                 *     the execution, reach it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -17756,9 +23614,9 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it, and a service key
-                 *     scoped to a list without `*` read and stop it.
+                 * @description The `client_token` the execution's start returned. Lets an anon key, a
+                 *     service key scoped to a list without `*`, or a user who did not start
+                 *     the execution, reach it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -17847,18 +23705,18 @@ export interface operations {
             };
             /**
              * @description Durable execution is not available in this environment, the plan
-             *     terms for the request could not be read, or the execution's state
-             *     could not be read back because reads in its region are throttled.
-             *     The first is not one to retry in a loop; the others are transient,
-             *     and a throttled read carries `Retry-After`. A stop answered with a
-             *     throttle may already have been sent, so read the execution before
-             *     stopping it again.
+             *     terms for the request could not be read, or stops or reads of
+             *     executions in its region are throttled. The first is not one to
+             *     retry in a loop; the others are transient, and a throttle carries
+             *     `Retry-After`. A stop throttled while reading the execution back may
+             *     already have been sent; repeating it is safe, because a stop of an
+             *     execution that has ended answers the state it ended in.
              */
             503: {
                 headers: {
                     /**
-                     * @description Seconds to wait before reading again. Sent only when reads in
-                     *     the execution's region are throttled.
+                     * @description Seconds to wait before trying again. Sent only when stops or
+                     *     reads of executions in the region are throttled.
                      */
                     "Retry-After"?: number;
                     [name: string]: unknown;
@@ -17883,9 +23741,9 @@ export interface operations {
             };
             header?: {
                 /**
-                 * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it, and a service key
-                 *     scoped to a list without `*` read and stop it.
+                 * @description The `client_token` the execution's start returned. Lets an anon key, a
+                 *     service key scoped to a list without `*`, or a user who did not start
+                 *     the execution, reach it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -17988,9 +23846,9 @@ export interface operations {
                  */
                 "Idempotency-Key"?: components["parameters"]["DurableMessageIdempotencyKey"];
                 /**
-                 * @description The `client_token` the execution's start returned. Lets an anon key,
-                 *     or a user who did not start the execution, reach it, and a service key
-                 *     scoped to a list without `*` read and stop it.
+                 * @description The `client_token` the execution's start returned. Lets an anon key, a
+                 *     service key scoped to a list without `*`, or a user who did not start
+                 *     the execution, reach it.
                  */
                 "X-Volcano-Client-Token"?: components["parameters"]["DurableClientToken"];
             };
@@ -18414,6 +24272,8 @@ export interface operations {
                      * @description JSON array of functions with `name`, `runtime`, optional `handler`, and `file_field`. Each `file_field` must name a multipart file field containing that function's ZIP or tar.gz source bundle.
                      *
                      *     Each entry may also declare `variable_scope` (`all` or `scoped`) and `variables` (an array of project variable names). Omitting them leaves the function's stored declaration unchanged. Volcano detects direct environment references in the uploaded source code and keeps them separate from the declared names: detected names are not written back to the declaration and do not appear in a config export. A scoped function receives its declared names plus the detected ones the project defines; a detected name the project does not define is ignored, since such a reference is often optional. Detection reads code only, so a name appearing solely in a comment or in an unrelated string is not a reference. Declare a name when the function reads it through a computed key, or when it must not deploy without the variable. The request is rejected with 400 before anything is deployed if a scoped function declares a variable the project does not define, or if the resulting environment exceeds 4096 bytes.
+                     *
+                     *     Each entry may also carry `commit`, the commit its source came from, as an object: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. It takes the same values as the `commit` field of a single function upload; `null` or `""` reports no commit. The request is rejected with 400 before anything is deployed if an entry's commit is malformed or names a repository not on GitHub.
                      */
                     functions: string;
                     /**
@@ -18464,7 +24324,10 @@ export interface operations {
             /**
              * @description A name in the batch is held by a function of the other kind — a
              *     function cannot change kind — or the project's source is managed by
-             *     Git, where deploys come from a push to the production branch.
+             *     Git, where deploys come from a push to the production branch. The
+             *     message `project variables changed during the upload; retry` means
+             *     `NODE_PATH` was created or deleted while the upload was processed;
+             *     nothing was deployed, so send the same request again.
              */
             409: {
                 headers: {
@@ -19168,7 +25031,7 @@ export interface operations {
                     variable_scope?: "all" | "scoped";
                     /** @description JSON-encoded array of project variable names this function requires, on top of the ones detected in its source. A declared name the project does not define is rejected with 400; a detected name it does not define is ignored. Only used when `variable_scope` is `scoped`. Omitting this leaves an existing function's declared names unchanged. */
                     variables?: string;
-                    /** @description JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`. */
+                    /** @description JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. All three fields are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano records a function's commit with `commit.verified: false`; a clean commit of the project's connected repository that its production branch holds gets `commit.verification: repository`. */
                     commit?: string;
                 };
             };
@@ -19219,7 +25082,9 @@ export interface operations {
             /**
              * @description Name is held by a standard function, or a deletion is queued or
              *     running. The request is refused before the deploy starts, so
-             *     nothing is deployed.
+             *     nothing is deployed. The message `project variables changed during
+             *     the upload; retry` means `NODE_PATH` was created or deleted while
+             *     the upload was processed; send the same request again.
              */
             409: {
                 headers: {
@@ -19910,19 +25775,19 @@ export interface operations {
                 };
             };
             /**
-             * @description Durable execution is not available in this environment, or the
-             *     execution's state could not be read back because reads in its region
-             *     are throttled. The first means the capability is paused or this
-             *     deployment cannot serve it, so the request is not one to retry in a
-             *     loop. A throttled read is transient and carries `Retry-After`; the
-             *     stop may already have been sent, so read the execution before
-             *     stopping it again.
+             * @description Durable execution is not available in this environment, or stops or
+             *     reads of executions in its region are throttled. The first means the
+             *     capability is paused or this deployment cannot serve it, so the
+             *     request is not one to retry in a loop. A throttle is transient and
+             *     carries `Retry-After`. A stop throttled while reading the execution
+             *     back may already have been sent; repeating it is safe, because a
+             *     stop of an execution that has ended answers the state it ended in.
              */
             503: {
                 headers: {
                     /**
-                     * @description Seconds to wait before reading again. Sent only when reads in
-                     *     the execution's region are throttled.
+                     * @description Seconds to wait before trying again. Sent only when stops or
+                     *     reads of executions in the region are throttled.
                      */
                     "Retry-After"?: number;
                     [name: string]: unknown;
@@ -20891,6 +26756,1475 @@ export interface operations {
             };
         };
     };
+    listProjectCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capabilities for this project */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityList"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLavaflowSettings: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's LavaFlow settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSettings"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateLavaflowSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSettings"];
+                };
+            };
+            /** @description The body is invalid: `project_id` missing or not a UUID, no field to change, an unknown field or autonomy, a `human_review_paths` pattern that is not relative to the repository root or holds a NUL character, or `custom_context` or `system_prompt` over 4000 characters. Code `feature_unavailable` means the save sets `autonomy: merge` or changes `merge_policy` without the project's `lavaflow.merge` capability, or turns `skill_learning` up without the project's `lavaflow.skills` capability. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means a full-scope project access token or MCP made the request, or the save turns on a setting only the project's owner may turn on, and the owner did not make it with a credential of their own that expires: a `volcano login` token whose sign-in is live, or a platform token with an expiry, never a project access token or a platform token that never expires. Those settings are `code_quality`, `allow_ungated_workflows`, `autonomy: merge`, `enabled` turned on while `autonomy` stays `merge`, a change to `merge_policy`, `custom_context` or `system_prompt` while `autonomy` is or becomes `merge`, `enabled: true` or `autonomy: merge` sent again under settings saved with automatic runs off before this API, which lets the runs LavaFlow starts on its own merge, and `skill_learning` turned up from `off` or from `review`. It also means the owner's GitHub account can't push to the project's repository, or the project has none. Code `plan_required` means the owner's plan does not include LavaFlow. Without a code: a read-only project access token made the request, the owner's account is read-only, or the owner's plan could not be read and nothing was saved; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and the save does more than turn LavaFlow, Code Quality or skill learning off on a project with LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Another save, or a change of the project's repository, changed the settings while this save checked them, and kept changing them when it tried again. Nothing was saved. Send the request again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 131,072 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The save turns on `code_quality`, `allow_ungated_workflows` or
+             *     `autonomy: merge`, turns `enabled` on under `merge`, changes
+             *     `merge_policy`, `custom_context` or `system_prompt` under `merge`,
+             *     lets the runs LavaFlow starts on its own merge again, or turns
+             *     `skill_learning` up, and the project, or its owner across their
+             *     projects, used up the hour's checks of the owner's GitHub push access.
+             *     Nothing was saved. Try again after `Retry-After`.
+             */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget's hour ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The save turns on `code_quality`, `allow_ungated_workflows` or
+             *     `autonomy: merge`, turns `enabled` on under `merge`, changes
+             *     `merge_policy`, `custom_context` or `system_prompt` under `merge`,
+             *     lets the runs LavaFlow starts on its own merge again, or turns
+             *     `skill_learning` up, and the owner's GitHub push access could not be
+             *     checked now.
+             *     Nothing was saved. Try again after `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before saving again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchLavaflowSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSettings"];
+                };
+            };
+            /** @description The body is invalid: `project_id` missing or not a UUID, no field to change, an unknown field or autonomy, a `human_review_paths` pattern that is not relative to the repository root or holds a NUL character, or `custom_context` or `system_prompt` over 4000 characters. Code `feature_unavailable` means the save sets `autonomy: merge` or changes `merge_policy` without the project's `lavaflow.merge` capability, turns `code_quality` on while Code Quality isn't released, or turns `skill_learning` up without the project's `lavaflow.skills` capability. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means a full-scope project access token made any save but turning Code Quality or skill learning off, MCP made the request, or the save turns on a setting only the project's owner may turn on, and the owner did not make it with a credential of their own that expires: a `volcano login` token whose sign-in is live, or a platform token with an expiry, never a project access token or a platform token that never expires. Those settings are `code_quality`, `allow_ungated_workflows`, `autonomy: merge`, `enabled` turned on while `autonomy` stays `merge`, a change to `merge_policy`, `custom_context` or `system_prompt` while `autonomy` is or becomes `merge`, `enabled: true` or `autonomy: merge` sent again under settings saved with automatic runs off before this API, which lets the runs LavaFlow starts on its own merge, and `skill_learning` turned up from `off` or from `review`. It also means the owner's GitHub account can't push to the project's repository, or the project has none. Code `plan_required` means the owner's plan does not include LavaFlow, or allows no Code Quality findings for a save that turns `code_quality` on. Without a code: a read-only project access token made the request, the owner's account is read-only, or the owner's plan could not be read and nothing was saved; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and the save does more than turn LavaFlow, Code Quality or skill learning off on a project with LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Another save, or a change of the project's repository, changed the settings while this save checked them, and kept changing them when it tried again. Nothing was saved. Send the request again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 131,072 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The save turns on `code_quality`, `allow_ungated_workflows` or
+             *     `autonomy: merge`, turns `enabled` on under `merge`, changes
+             *     `merge_policy`, `custom_context` or `system_prompt` under `merge`,
+             *     lets the runs LavaFlow starts on its own merge again, or turns
+             *     `skill_learning` up, and the project, or its owner across their
+             *     projects, used up the hour's checks of the owner's GitHub push access.
+             *     Nothing was saved. Try again after `Retry-After`.
+             */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget's hour ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description The save turns on `code_quality`, `allow_ungated_workflows` or
+             *     `autonomy: merge`, turns `enabled` on under `merge`, changes
+             *     `merge_policy`, `custom_context` or `system_prompt` under `merge`,
+             *     lets the runs LavaFlow starts on its own merge again, or turns
+             *     `skill_learning` up, and the owner's GitHub push access could not be
+             *     checked now.
+             *     Nothing was saved. Try again after `Retry-After`.
+             */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before saving again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowSlackChannels: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's Slack channels */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSlackChannelsResponse"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    bindLavaflowSlackChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowSlackChannelBinding"];
+            };
+        };
+        responses: {
+            /** @description The channel was already bound for the project */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSlackChannel"];
+                };
+            };
+            /** @description The channel is bound */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSlackChannel"];
+                };
+            };
+            /** @description The body is invalid, the app is not installed in the workspace, the caller's sign-in session signed in as no Slack identity there, the channel cannot report problems (it is archived, a Slack Connect channel, or shared across an organization), or the Volcano app is not in the channel yet: invite it, then bind again. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means a project access token or MCP made the request. Code `plan_required` means the owner's plan does not include LavaFlow. Without a code, the owner's account is read-only, or the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does a channel that no Slack identity the caller's sign-in session signed in as is a member of, and a private channel the Volcano app is not in, which the app cannot see. Code `feature_unavailable` means the project's `lavaflow.slack` capability is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Slack did not answer whether the owner is a member of the channel; try again */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    unbindLavaflowSlackChannel: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description The binding's ID, from listing the project's Slack channels */
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel no longer reports for the project */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `project_id` is given, and it or the binding ID is not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means a project access token or MCP made the request. Without a code, the owner's account is read-only. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such binding. A binding of a project the caller can't read, or of another project than a given `project_id`, answers exactly like one that doesn't exist. Without `project_id`, so does a binding ID that is not a UUID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowScans: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description Number of scans per page (max 100) */
+                limit?: components["parameters"]["LavaflowScanLimit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward,
+                 *     and works only for the same `project_id` and caller; keep the same
+                 *     filters while paging.
+                 */
+                cursor?: components["parameters"]["LavaflowRunCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of scans */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedLavaflowScans"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID, or the cursor or limit is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLavaflowStats: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description Number of UTC days in the window, ending today. */
+                days?: components["parameters"]["LavaflowDays"];
+                /** @description Only runs in this category; `uncategorized` for runs without one. */
+                category?: components["parameters"]["LavaflowCategoryFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's LavaFlow activity per day */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowStats"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID, `days` is outside 1 to 90, or `category` is not a category. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowResources: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description Number of UTC days in the window, ending today. */
+                days?: components["parameters"]["LavaflowDays"];
+                /** @description Only runs in this category; `uncategorized` for runs without one. */
+                category?: components["parameters"]["LavaflowCategoryFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's resources with LavaFlow's activity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowResourceList"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID, `days` is outside 1 to 90, or `category` is not a category. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowRuns: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description Number of runs per page (max 100) */
+                limit?: components["parameters"]["LavaflowRunLimit"];
+                /**
+                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward,
+                 *     and works only for the same `project_id` and caller; keep the same
+                 *     filters while paging.
+                 */
+                cursor?: components["parameters"]["LavaflowRunCursor"];
+                /** @description Only runs in this status. */
+                status?: components["parameters"]["LavaflowRunStatusFilter"];
+                /** @description Only runs for issues of this resource. */
+                resource_id?: components["parameters"]["LavaflowResourceIdFilter"];
+                /** @description Only runs in this category; `uncategorized` for runs without one. */
+                category?: components["parameters"]["LavaflowCategoryFilter"];
+                /** @description Only runs that involve this function, durable function or frontend in any role: the issue came from it, the diagnosis traced the cause to it, or the fix changes it. */
+                involved_resource_id?: components["parameters"]["LavaflowInvolvedResourceFilter"];
+                /** @description Only runs on this issue. An issue the project doesn't have answers `404`, like an unknown issue. */
+                issue_id?: components["parameters"]["LavaflowIssueIdFilter"];
+                /** @description Only runs whose pull request is in this state; `none` for runs without one. */
+                pull_request_state?: components["parameters"]["LavaflowPullRequestStateFilter"];
+                /** @description Only runs created in the last `days` UTC days, today included. Omit for every run. */
+                days?: components["parameters"]["LavaflowRunDays"];
+                /** @description `created_at.desc` is newest first and `created_at.asc` oldest first. `issue_events.desc` orders by the issue's current `event_count`, most first, then newest first. That count grows as errors arrive or scans see a finding again, so paging this order can skip runs, not only move them between pages. To read every run, for an export say, page `created_at.desc` or `created_at.asc`. A cursor works only with the order it came from. */
+                order?: components["parameters"]["LavaflowRunOrder"];
+                /** @description `counts` adds `counts` to the response. Ask on the first page; the counts don't depend on the cursor. */
+                include?: components["parameters"]["LavaflowRunInclude"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedLavaflowRuns"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID, a filter, `order`, `days`, `include` or `limit` is invalid, or the cursor is invalid or was issued for another `order`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. An `issue_id` from another project answers `issue not found`, as an unknown one does. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createLavaflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowRunCreate"];
+            };
+        };
+        responses: {
+            /** @description The run, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowRun"];
+                };
+            };
+            /** @description The body is invalid: `project_id` or `issue_id` missing or not a UUID, or an unknown field. Code `feature_unavailable` means the issue is a Code Quality issue and Code Quality is not available. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means the request didn't come from the owner's live person credential: a platform token that never expires, a `volcano login` token whose sign-in ended, a full-scope project access token, or MCP made it. Start a run with a platform token that expires, or `volcano login`. Code `plan_required` means the owner's plan does not include LavaFlow, or, for a Code Quality issue, Code Quality. Without a code: a read-only project access token made the request, the owner's account is read-only or inactive, or the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `issue_not_found` means the project has no issue `issue_id`; an issue of another project answers the same. Code `feature_unavailable` means LavaFlow is not available for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run did not start. Code `lavaflow_disabled` means LavaFlow is off for the project, or, for a Code Quality issue, Code Quality is; turn it on. Code `repository_required` means LavaFlow was turned on for a repository the project no longer links, and `repository_changed` that the project links another repository than LavaFlow was turned on for; turn LavaFlow on again. Code `lavaflow_run_in_progress` means the issue has a run in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,096 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A run limit is reached. Code `issue_run_limit_reached` means the issue started 5 runs in the last 24 hours, and `project_run_limit_reached` that the project started 200. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    /** @description Seconds until the limit has room for the run. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLavaflowRun: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description LavaFlow run ID */
+                run_id: components["parameters"]["LavaflowRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowRun"];
+                };
+            };
+            /** @description `project_id` is given and not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A run of a project the caller can't read, or of a project being deleted, answers exactly like one that doesn't exist, and so does a run of another project than a given `project_id`. Code `feature_unavailable` means LavaFlow is not available for the project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createLavaflowHeldFixOpen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowHeldFixOpen"];
+            };
+        };
+        responses: {
+            /** @description The run, queued to open its fix */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowRun"];
+                };
+            };
+            /** @description The body is invalid: `project_id` or `run_id` missing or not a UUID, `diff_sha256` or `jobs_sha256` missing or not 64 lowercase hex characters, or an unknown field. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means the request didn't come from the owner's live person credential: a full-scope project access token, MCP, a platform token that never expires, or a `volcano login` token whose sign-in ended made it, or the owner's GitHub account can't push to the project's repository, or the project has none. Open the fix with a platform token that expires, or `volcano login`. Code `plan_required` means the owner's plan does not include LavaFlow. Without a code: a read-only project access token made the request, the owner's account is read-only or inactive, or the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. A run of another project than `project_id` answers as one that doesn't exist. Code `feature_unavailable` means LavaFlow is not available for this project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Nothing was queued. Code `run_not_held` means the run holds no fix you can open: it was not held for ungated workflows, its pull request opened or is queued to, its diff is cut short or withholds a file, or LavaFlow could not list every job that held it (`held_workflows` is `null`). Code `run_changed` means the diff or the jobs are not the ones you named: read the run again. Code `run_attempts_exhausted` means the run has no attempt left. Code `lavaflow_disabled` means LavaFlow is off for the project; turn it on. Code `repository_required` means LavaFlow was turned on for a repository the project no longer links, `repository_changed` that the project links another repository than LavaFlow was turned on for, or than the fix was written for, and `repository_unreadable` that LavaFlow can no longer read the repository's workflows. Code `lavaflow_run_in_progress` means another run of the issue is in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,096 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project, or its owner across their projects, used up the hour's checks of the owner's GitHub push access. Nothing was queued. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget's hour ends. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GitHub didn't answer the owner's push check or the read of the workflows. Nothing was queued. Try again after `Retry-After`. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before trying again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowSkills: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description Only skills in this status. */
+                status?: components["parameters"]["LavaflowSkillStatusFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project's skills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSkillList"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID, or `status` is unknown. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLavaflowSkill: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description LavaFlow skill ID */
+                skill_id: components["parameters"]["LavaflowSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skill */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSkill"];
+                };
+            };
+            /** @description `project_id` is given and not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A skill of a project the caller can't read, or of a project being deleted, answers exactly like one that doesn't exist, and so does a skill of another project than a given `project_id`. Code `feature_unavailable` means LavaFlow is not available for the project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteLavaflowSkill: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description LavaFlow skill ID */
+                skill_id: components["parameters"]["LavaflowSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `project_id` is given and not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means the project's owner, signed in as a person, did not make the request: a full-scope project access token, MCP, a platform token that never expires, or a `volcano login` token whose sign-in ended made it. Without a code: a read-only project access token made it, the owner's account is read-only, or the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found, as the read answers. Code `feature_unavailable` means LavaFlow is not available for the project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project made more than 10 skill changes in the last minute. Nothing was deleted. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before changing a skill again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateLavaflowSkill: {
+        parameters: {
+            query?: {
+                /** @description Optional. The item's own project authorizes the request; when given, the item must belong to this project, or it answers like an unknown one. */
+                project_id?: components["parameters"]["ItemProjectIdQuery"];
+            };
+            header?: never;
+            path: {
+                /** @description LavaFlow skill ID */
+                skill_id: components["parameters"]["LavaflowSkillId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LavaflowSkillUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSkill"];
+                };
+            };
+            /** @description The body is invalid: no field to change, an unknown field, or a field past its size. Code `skill_refused` means the check refused the text, and `rules` names why. Code `feature_unavailable` means the change does more than retire the skill while the project's `lavaflow.skills` capability is unavailable. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSkillError"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `person_required` means the change was not made by the project's owner signed in as a person: a full-scope project access token, MCP, a platform token that never expires, or a `volcano login` token whose sign-in ended made it. For a change other than retiring, it also means the owner's GitHub account can't push to the project's repository, or the project has none. Without a code: a read-only project access token made it, the owner's account is read-only, or the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found, as the read answers. Code `feature_unavailable` means LavaFlow is not available for the project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `skill_limit_reached` means the change would take the project past a cap: 100 active or 50 proposed skills, or 1 MiB of skill text across every version the project keeps. Without a code, another change to the skill landed first, or the project now points at another repository than the push check admitted; read the skill and send the change again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 65,536 bytes */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project made more than 10 skill changes in the last minute, its changes used the day's 200 checks, or the owner's GitHub push access was checked too often. Nothing was saved. Try again after `Retry-After`. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before changing a skill again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `scan_unavailable` means the check could not run. Without a code, the owner's GitHub push access could not be checked. Either way nothing was saved. Try again after `Retry-After`. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before changing the skill again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowSkillVersions: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+                /** @description The skill whose versions to list. */
+                skill_id: components["parameters"]["LavaflowSkillIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The skill's versions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowSkillVersionList"];
+                };
+            };
+            /** @description `project_id` or `skill_id` is missing or not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and a skill of another project answers like an unknown one. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLavaflowGlobalSkills: {
+        parameters: {
+            query: {
+                /** @description The project to read. A project the caller can't read answers like one that doesn't exist. */
+                project_id: components["parameters"]["ProjectIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Volcano's global skills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LavaflowGlobalSkillList"];
+                };
+            };
+            /** @description `project_id` is missing or not a UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Code `plan_required` means the owner's plan does not include LavaFlow and the project has no LavaFlow records. Without a code, the owner's plan could not be read; retry later. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. A project the caller can't read answers exactly like one that doesn't exist, and so does one being deleted. Code `feature_unavailable` means LavaFlow is not available for this project and it has no LavaFlow records. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listIssues: {
         parameters: {
             query?: {
@@ -21016,321 +28350,6 @@ export interface operations {
             };
             /** @description Issue not found. Code `feature_unavailable` means issues are not available in this environment. */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getAutofixSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutofixSettings"];
-                };
-            };
-            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment and the project never saved settings. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The owner's plan could not be resolved. Retry later. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateAutofixSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateAutofixSettingsRequest"];
-            };
-        };
-        responses: {
-            /** @description Saved */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutofixSettings"];
-                };
-            };
-            /** @description The request body is invalid. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The owner's plan does not allow autofix (during the preview it needs the SUPERAGENT plan), or the request used a project access token. Only a person changes autofix settings. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Project not found. Code `feature_unavailable` means autofix is not available in this environment, which refuses turning it on and a project's first save. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Turning autofix on needs the owner's plan, which could not be resolved. Nothing was saved. Retry later. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    startAutofixRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-                /** @description Issue ID */
-                issueId: components["parameters"]["IssueId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Queued */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutofixRun"];
-                };
-            };
-            /** @description The request is invalid. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The owner's plan does not include autofix, or the request used a project access token. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Project or issue not found. Code `feature_unavailable` means autofix is not available in this environment. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is off for the project, or the issue already has a queued or running run. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The project started its limit of runs in the last 24 hours. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The owner's plan could not be resolved. Retry later. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listAutofixRuns: {
-        parameters: {
-            query?: {
-                /** @description Number of items per page (max 100) */
-                limit?: components["parameters"]["Limit"];
-                /**
-                 * @description Opaque cursor from a previous response's `next_cursor`. Pages forward;
-                 *     keep the same filters while paging.
-                 */
-                cursor?: components["parameters"]["IssueCursor"];
-                /** @description Return only runs for this issue. */
-                issue_id?: string;
-                /** @description Return only runs in this status. */
-                status?: components["schemas"]["AutofixRunStatus"];
-            };
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedAutofixRuns"];
-                };
-            };
-            /** @description A filter or the cursor is invalid */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Project not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getAutofixRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Project ID */
-                id: components["parameters"]["ProjectId"];
-                /** @description Autofix run ID */
-                runId: components["parameters"]["AutofixRunId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutofixRun"];
-                };
-            };
-            /** @description Project or run not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Autofix is not available in local mode. */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21775,6 +28794,8 @@ export interface operations {
                      * @description ZIP or tar.gz archive of the frontend project directory or monorepo workspace root. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB and stores a normalized tar.gz archive.
                      */
                     archive: string;
+                    /** @description JSON-encoded commit the uploaded source came from: `{"repository": "acme/app", "sha": "<40-character commit ID>", "dirty": false, "root": "apps/web"}`. `repository` is `owner/name` or a github.com remote URL (`https://github.com/acme/app.git`, `git@github.com:acme/app.git`, or `ssh://git@github.com/acme/app.git`); Volcano drops any credentials in the URL and records `owner/name`. `dirty` is `true` when the uploaded files differ from the commit. `root` is the uploaded directory's path from the repository root, `""` for the root itself. `repository`, `sha`, and `dirty` are required, and fields Volcano does not know are ignored. An empty value, `null`, or `""` reports no commit. A malformed commit, or a repository not on GitHub, returns 400 before anything is deployed. Volcano checks the commit against the project's connected repository and each uploaded file against the commit's file at `root`, and returns the result in the deployment's `commit.verified`; an uploaded file in the project's root directory that the commit does not hold sets `commit.dirty`, and one outside it leaves the commit unverified. A commit it cannot verify is still recorded and never fails the deploy. */
+                    commit?: string;
                 };
             };
         };
@@ -21833,7 +28854,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - frontend deletion is queued or running */
+            /** @description Conflict. `code: frontend_served_by_candidate` - a promoted Candidate serves the existing frontend; roll back to the frontend's own runtime before deploying it. Without a code, the frontend's deletion is queued or running. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -22077,7 +29098,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict - frontend deletion is queued or running */
+            /** @description Conflict. `code: frontend_served_by_candidate` - a promoted Candidate serves the frontend; roll back to the frontend's own runtime before redeploying it. Without a code, the frontend's deletion is queued or running. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -22885,7 +29906,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Conflict. `code: build_variables_differ` names the build-time variables whose values differ. `code: source_deployment_not_active` refuses a deployment that is not `active` or `degraded`. `code: source_build_unavailable` refuses a deployment made before Volcano kept builds, or whose build is no longer kept; redeploy the source frontend once and deploy from that deployment. `code: frontend_incompatible` refuses a different framework or app root. Without a code, the frontend's deletion is queued or running, or the project's source is managed by Git, where deploys come from a push to the production branch. */
+            /** @description Conflict. `code: build_variables_differ` names the build-time variables whose values differ. `code: source_deployment_not_active` refuses a deployment that is not `active` or `degraded`. `code: source_deployment_is_preview` refuses a preview's deployment; deploy from a frontend's own deployment. `code: source_served_by_candidate` refuses a deployment of a frontend a promoted Candidate serves, since that frontend does not serve its own build; roll the source frontend back to its own build first. `code: source_build_unavailable` refuses a deployment made before Volcano kept builds, or whose build is no longer kept; redeploy the source frontend once and deploy from that deployment. `code: frontend_incompatible` refuses a different framework or app root. `code: frontend_served_by_candidate` refuses a frontend a promoted Candidate serves; roll back to the frontend's own runtime first. Without a code, the frontend's deletion is queued or running, or the project's source is managed by Git, where deploys come from a push to the production branch. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -22923,6 +29944,732 @@ export interface operations {
             };
             /** @description Service unavailable - frontend workflow configuration missing, or the build-minutes check is temporarily unavailable; retry later. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listFrontendCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The frontend's Candidates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCandidateList"];
+                };
+            };
+            /** @description Bad request - invalid identifier */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFrontendCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description Names the Candidate within the frontend. Cannot be `production`. */
+                    name: string;
+                    /** @description Deletes the Candidate this many seconds after it is created, at most 30 days. Omit to keep it until deleted. */
+                    ttl_seconds?: number;
+                    /**
+                     * Format: binary
+                     * @description ZIP or tar.gz archive of the frontend project, as for creating a frontend. The API enforces SOURCE_ARCHIVE_SIZE_LIMIT_MB.
+                     */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Candidate created; its first deployment is running */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCandidate"];
+                };
+            };
+            /** @description Bad request - invalid name, expiry, identifier or archive, a variable the frontend declares has no value, or the resolved variables are too large */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict. `code: candidate_name_taken` - the name is taken. `code: candidate_limit_reached` - the frontend has the maximum Candidates. `code: configuration_changed` - the frontend's configuration changed during the deploy; retry. `code: frontend_deleting` or `code: project_deleting` - the frontend or project is being deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than the archive limit, SOURCE_ARCHIVE_SIZE_LIMIT_MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests - the project's build minutes for the billing cycle are used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service unavailable - frontend deployments are not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getFrontendCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Candidate ID */
+                candidateId: components["parameters"]["FrontendCandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Candidate with its latest deployment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCandidate"];
+                };
+            };
+            /** @description Bad request - invalid identifier */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or Candidate not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteFrontendCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Candidate ID */
+                candidateId: components["parameters"]["FrontendCandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deletion started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad request - invalid identifier */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or Candidate not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `code: candidate_in_use` - the frontend serves this Candidate. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    redeployFrontendCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Candidate ID */
+                candidateId: components["parameters"]["FrontendCandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description ZIP or tar.gz archive of the frontend project, as for creating a frontend.
+                     */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The deployment is running */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendCandidateDeployment"];
+                };
+            };
+            /** @description Bad request - invalid identifier or archive, a variable the frontend declares has no value, or the resolved variables are too large */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or Candidate not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict. `code: deployment_in_progress` - a deployment is already running; retry once it finishes. `code: candidate_not_deployable` - the Candidate is being deleted or is not ready to deploy to. `code: candidate_in_use` - the frontend serves it or keeps it for a rollback. `code: configuration_changed` - the frontend's configuration changed during the deploy; retry. `code: frontend_deleting` or `code: project_deleting` - the frontend or project is being deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than the archive limit, SOURCE_ARCHIVE_SIZE_LIMIT_MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests - the project's build minutes for the billing cycle are used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Service unavailable - frontend deployments are not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getFrontendServing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What the frontend serves */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendServing"];
+                };
+            };
+            /** @description Bad request - invalid identifier */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rollbackFrontendServing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    expected_revision: number;
+                    /**
+                     * @description Return to the frontend's own runtime whatever it served before.
+                     * @default false
+                     */
+                    to_production?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The frontend serves the runtime it was rolled back to */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendServing"];
+                };
+            };
+            /** @description Bad request - invalid identifier or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend not found, or `feature_unavailable` when the release gate is off and the rollback would make a candidate serve again */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict. `code: stale_revision` - the revision is stale; read `serving` again. `code: nothing_to_roll_back` - there is no earlier runtime to return to. `code: rollback_unavailable` - the runtime to roll back to is gone. `code: configuration_changed` - the Candidate to roll back to was built with a different configuration. `code: deployment_in_progress` - a deployment of the Candidate or of the frontend itself is still running; retry once it finishes. `code: source_managed_by_git` - the project's repository is the source of truth; roll back to the frontend's own runtime. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    promoteFrontendCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Frontend ID */
+                frontendId: components["parameters"]["FrontendId"];
+                /** @description Frontend Candidate ID */
+                candidateId: components["parameters"]["FrontendCandidateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The frontend serves the Candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrontendServing"];
+                };
+            };
+            /** @description Bad request - invalid identifier or body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized - invalid or missing token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden - project ownership required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Frontend or Candidate not found, or the `frontends.candidates` capability is unavailable (code `feature_unavailable`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict. `code: stale_revision` - the revision is stale; read `serving` again. `code: candidate_not_ready` - the Candidate is not ready. `code: configuration_changed` - it was built with a different configuration; redeploy it. `code: already_serving` - it already serves. `code: deployment_in_progress` - a deployment of the Candidate or of the frontend itself is still running; retry once it finishes. `code: source_managed_by_git` - the project's repository is the source of truth. `code: frontend_not_deployed` - the frontend has no deployment of its own to roll back to; deploy it first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is larger than 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24738,7 +32485,7 @@ export interface operations {
                     "application/json": components["schemas"]["DatabaseBackup"];
                 };
             };
-            /** @description Invalid backup name */
+            /** @description Invalid backup name, or one with a reserved prefix */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -25206,16 +32953,19 @@ export interface operations {
                 };
             };
             /**
-             * @description A restore is already in progress, the database is not active,
-             *     another database operation is still running, or the database is
-             *     holding as many pre-restore branches as it may.
+             * @description Code `migration_run_in_progress`: a migration run is backing up or
+             *     applying to the database, named by `run_id`. Wait for it to end,
+             *     then send the request again. Without a code: a restore is already
+             *     in progress, the database is not active, another database operation
+             *     is still running, or the database is holding as many pre-restore
+             *     branches as it may.
              */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["DatabaseRestoreConflictError"];
                 };
             };
             /** @description Backups are temporarily unavailable */
@@ -25274,6 +33024,330 @@ export interface operations {
             };
             /** @description Backups are temporarily unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrations"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Code `history_missing`: the history table is gone from a database
+             *     where migrations ran; record a baseline of the files that were
+             *     already applied. Code `history_too_large`: the history has more
+             *     than 1,000 entries. Without a code: the database is not active, so
+             *     its history cannot be read.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano could not reach the database */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    baselineDatabaseMigrations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseMigrationFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description The files are recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationBaseline"];
+                };
+            };
+            /**
+             * @description A file breaks a rule: too many files, a file over 1 MiB, a name that
+             *     is not a `.sql` file, a name repeated, or a directory other than
+             *     this database's. Nothing is recorded or queued. Code
+             *     `invalid_layout`: a path does not map to this database. Code
+             *     `invalid_file`: a name is repeated or too long. A request the
+             *     schema refuses carries no code. Without a code, the message
+             *     starting `storage limit reached`: the database is over its storage
+             *     allowance, so its writes are blocked, as they are over a
+             *     connection.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or database not found, or migration runs are not available
+             *     here (code `feature_unavailable`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Nothing was recorded. Code `checksum_mismatch`: a file is already
+             *     recorded with a different checksum. Code
+             *     `migration_run_in_progress`: a run is queued or running, named by
+             *     `run_id`. Code `history_too_large`: the history has more than 1,000
+             *     entries. Code `database_busy`: another request is changing the
+             *     database, or the database held the baseline up, such as with a lock
+             *     on its migration history; try again. Without a code: the database is not active or changed
+             *     while the request ran, or another session holds its migration
+             *     lock.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationConflictError"];
+                };
+            };
+            /** @description The request body is larger than 4 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Volcano could not reach the database */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDatabaseMigrationRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRunList"];
+                };
+            };
+            /** @description Project or database not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDatabaseMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Makes the request safe to retry. A repeat with a key this database
+                 *     has seen returns the run it started. Reusing a key for different
+                 *     files answers `409`. Up to 255 printable ASCII characters.
+                 */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseMigrationFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description A run with this `Idempotency-Key` already exists; it is returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /** @description Run accepted and queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /**
+             * @description A file breaks a rule: too many files, a file over 1 MiB, a name that
+             *     is not a `.sql` file, a name repeated, or a directory other than
+             *     this database's. Nothing is recorded or queued. Code
+             *     `invalid_layout`: a path does not map to this database. Code
+             *     `invalid_file`: a name is repeated or too long. A request the
+             *     schema refuses carries no code. Without a code, the message
+             *     starting `storage limit reached`: the database is over its storage
+             *     allowance, so its writes are blocked, as they are over a
+             *     connection.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Project or database not found, or migration runs are not available
+             *     here (code `feature_unavailable`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /**
+             * @description Code `migration_run_in_progress`: a run is already queued or running
+             *     for this database, named by `run_id`. Wait for it to end, then send
+             *     the request again. Without a code: the `Idempotency-Key` already
+             *     started a run of different files.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationConflictError"];
+                };
+            };
+            /** @description The request body is larger than 4 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDatabaseMigrationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project ID */
+                id: components["parameters"]["ProjectId"];
+                /** @description Database name (unique within project, lowercase letters, numbers, and underscores only) */
+                databaseName: components["parameters"]["DatabaseName"];
+                /** @description Database migration run ID */
+                runId: components["parameters"]["MigrationRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMigrationRun"];
+                };
+            };
+            /** @description Project, database, or run not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25561,7 +33635,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -25643,7 +33717,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -25725,7 +33799,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -25805,7 +33879,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -25883,7 +33957,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -25949,7 +34023,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26034,7 +34108,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26119,7 +34193,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26202,7 +34276,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26283,7 +34357,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Access denied */
+            /** @description Access denied. A service key whose `permissions` leave out `*` is refused with `service key scope does not include database access` once Volcano applies service key scopes to the database API. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26668,8 +34742,9 @@ export interface operations {
             /**
              * @description Forbidden - Signups disabled, anon key lacks signup permission, or the
              *     email domain is not in `allowed_email_domains`. The internal
-             *     `anonymous.volcano.internal` domain is reserved for anonymous
-             *     accounts and is refused whatever the project allows.
+             *     `anonymous.volcano.internal` and `volcano.local` domains are reserved
+             *     for the anonymous and Builder debug accounts Volcano creates, and are
+             *     refused whatever the project allows.
              */
             403: {
                 headers: {
@@ -26759,11 +34834,12 @@ export interface operations {
                 content?: never;
             };
             /**
-             * @description Forbidden - Anon key lacks signin permission, or the email domain is
-             *     not in `allowed_email_domains` while `allowed_email_domains_mode` is
-             *     `signup_and_signin`. The domain is taken from the account's canonical
-             *     email (its primary identity), which is not necessarily the address in
-             *     the request.
+             * @description Forbidden - Email/password is turned off for the project
+             *     (`enable_email_password: false`), the anon key lacks signin
+             *     permission, or the email domain is not in `allowed_email_domains`
+             *     while `allowed_email_domains_mode` is `signup_and_signin`. Both the
+             *     account's canonical email (its primary identity) and the email signed
+             *     in with must be on the list.
              */
             403: {
                 headers: {
@@ -26835,7 +34911,8 @@ export interface operations {
                 };
             };
             /**
-             * @description The account's email domain is not in `allowed_email_domains` while
+             * @description The account's canonical email, or the email of the identity the
+             *     session signed in with, is not in `allowed_email_domains` while
              *     `allowed_email_domains_mode` is `signup_and_signin`, so the session
              *     cannot be extended
              */
@@ -26968,7 +35045,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Password reset is disabled for this project */
+            /** @description Password reset or email/password is turned off for this project */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27052,6 +35129,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Password reset or email/password is turned off for this project */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Compromised-password screening is temporarily unavailable */
             503: {
@@ -27259,7 +35345,10 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The chosen email domain is not in `allowed_email_domains` */
+            /**
+             * @description The chosen email domain is not in `allowed_email_domains`, or is
+             *     reserved (`anonymous.volcano.internal`, `volcano.local`)
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27330,7 +35419,10 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The requested email domain is not in `allowed_email_domains` */
+            /**
+             * @description The requested email domain is not in `allowed_email_domains`, or is
+             *     reserved (`anonymous.volcano.internal`, `volcano.local`)
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -27702,6 +35794,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The request sent a non-empty `password` while email/password is turned off for the project; nothing is updated */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Compromised-password screening is temporarily unavailable */
             503: {
                 headers: {
@@ -27858,7 +35959,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The promoted identity's email domain is not in the project's allowed_email_domains */
+            /** @description The promoted identity's email domain is not in the project's allowed_email_domains, or is reserved (`anonymous.volcano.internal`, `volcano.local`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -29816,9 +37917,10 @@ export interface operations {
                 content?: never;
             };
             /**
-             * @description Missing/invalid code or state, the state parameter expired, or the
-             *     flow's stored redirect_url is no longer registered in
-             *     allowed_redirect_urls (re-checked at callback time)
+             * @description Missing/invalid code or state, the state parameter expired, the
+             *     provider was disabled after the flow started, or the flow's stored
+             *     redirect_url is no longer registered in allowed_redirect_urls (both
+             *     re-checked at callback time)
              */
             400: {
                 headers: {
@@ -29829,9 +37931,23 @@ export interface operations {
             /**
              * @description The provider's email domain is not in `allowed_email_domains`. Creating
              *     an account is refused under `signup` and `signup_and_signin`; signing in
-             *     an already-linked account is refused under `signup_and_signin`.
+             *     an already-linked account is refused under `signup_and_signin`, as it is
+             *     when the account's canonical email is outside the list. A new account
+             *     at a reserved domain (`anonymous.volcano.internal`, `volcano.local`) is
+             *     refused whatever the project allows.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description The provider's configuration was removed after the flow started
+             *     (re-checked at callback time), or the account a link started from
+             *     was deleted
+             */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -29906,9 +38022,9 @@ export interface operations {
                 content?: never;
             };
             /**
-             * @description Email confirmation is now required, or the account's email domain is not
-             *     in `allowed_email_domains` while `allowed_email_domains_mode` is
-             *     `signup_and_signin`. Both are re-checked here because the code outlives
+             * @description Email confirmation is now required, or the account's canonical email or
+             *     the provider identity's email is not in `allowed_email_domains` while
+             *     `allowed_email_domains_mode` is `signup_and_signin`. Both are re-checked here because the code outlives
              *     the callback that issued it.
              */
             403: {
@@ -29999,8 +38115,8 @@ export interface operations {
                 };
             };
             /**
-             * @description `access_denied` - the approving account's email domain is not in
-             *     `allowed_email_domains` while `allowed_email_domains_mode` is
+             * @description `access_denied` - the approving account's canonical email, or the email
+             *     of any of its identities, is not in `allowed_email_domains` while `allowed_email_domains_mode` is
              *     `signup_and_signin`. Re-checked here because approval and redemption
              *     are separate requests.
              */
@@ -30083,9 +38199,9 @@ export interface operations {
             };
             /**
              * @description Exchange not allowed for this session/client/project, or the
-             *     account's email domain is not in `allowed_email_domains` while
-             *     `allowed_email_domains_mode` is `signup_and_signin`. The domain is
-             *     re-checked here because the minted platform token outlives the
+             *     account's canonical email, or the email of any of its identities, is
+             *     not in `allowed_email_domains` while `allowed_email_domains_mode` is
+             *     `signup_and_signin`. The domain is re-checked here because the minted platform token outlives the
              *     session it is exchanged from.
              */
             403: {
@@ -30115,11 +38231,25 @@ export interface operations {
                 content: {
                     "application/json": {
                         providers?: {
-                            provider?: string;
+                            provider: string;
+                            /**
+                             * @description The user's account ID at the provider, as a string.
+                             *     It stays the same when the user renames the account.
+                             * @example 583231
+                             */
+                            provider_user_id: string;
+                            /**
+                             * @description The account's login at the provider when it was
+                             *     linked, such as a GitHub username. It isn't updated
+                             *     when the user renames the account. Omitted for
+                             *     providers without logins.
+                             * @example octocat
+                             */
+                            provider_login?: string;
                             /** Format: date-time */
-                            linked_at?: string;
+                            linked_at: string;
                             /** Format: date-time */
-                            updated_at?: string;
+                            updated_at: string;
                         }[];
                     };
                 };
@@ -30570,6 +38700,24 @@ export interface operations {
                     "application/json": components["schemas"]["AnonKey"];
                 };
             };
+            /** @description Invalid key name or request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Key with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getAnonKey: {
@@ -30686,6 +38834,15 @@ export interface operations {
                     "application/json": components["schemas"]["AnonKey"];
                 };
             };
+            /** @description Anon key not found, including deletion before the updated key can be returned */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     setDefaultAnonKey: {
@@ -30729,7 +38886,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Internal server error */
             500: {
@@ -31214,11 +39373,18 @@ export interface operations {
                      *     for backward compatibility. Provide an explicit list (e.g.
                      *     ["functions.invoke", "locks.manage"]) to restrict the key; "*"
                      *     grants everything. Scope enforcement applies to function invocation,
-                     *     storage object operations, project locks, and server-side auth proxy
+                     *     storage object operations, project locks, sandboxes, and server-side auth proxy
                      *     metadata (auth.signin, auth.signup, auth.refresh, auth.logout,
-                     *     auth.password_reset). A key scoped to a list without "*" reads and
-                     *     stops a durable execution only with the `client_token` its start
-                     *     returned.
+                     *     auth.password_reset). A key scoped to a list without "*" reads, stops,
+                     *     and messages a durable execution only with the `client_token` its
+                     *     start returned. Today the scope doesn't restrict the database API, and
+                     *     restricts realtime only on a durable run's channel: every service key
+                     *     queries every table with RLS bypassed, subscribes to every other channel,
+                     *     and publishes on broadcast channels. Once Volcano applies scopes to the
+                     *     database API and realtime, a key without "*" gets 403 from the database
+                     *     API, needs realtime.subscribe for broadcast and presence channels and
+                     *     realtime.publish to publish, and needs "*" for table changes. `ai.invoke`
+                     *     is reserved: this route refuses it with 400, and "*" doesn't include it.
                      * @example [
                      *       "functions.invoke",
                      *       "locks.manage"
@@ -31238,12 +39404,23 @@ export interface operations {
                     "application/json": components["schemas"]["ServiceKey"];
                 };
             };
+            /** @description Invalid key name or request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Key with this name already exists */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -31267,6 +39444,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServiceKey"];
+                };
+            };
+            /**
+             * @description The key belongs to another project, a read-only project access token asked
+             *     for a credential, or a project access token asked for a key that holds
+             *     `ai.invoke`.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Key not found */
@@ -31320,6 +39510,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServiceKey"];
+                };
+            };
+            /**
+             * @description The key belongs to another project, a read-only project access token asked
+             *     to regenerate it, or a project access token asked to regenerate a key that
+             *     holds `ai.invoke`.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -32715,11 +40918,15 @@ export interface operations {
                      *           "status": "unavailable"
                      *         },
                      *         {
-                     *           "id": "issues",
+                     *           "id": "sandboxes.network_isolation",
                      *           "status": "available"
                      *         },
                      *         {
-                     *           "id": "autofix",
+                     *           "id": "sandboxes.output_not_kept",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "issues",
                      *           "status": "available"
                      *         },
                      *         {
@@ -32729,6 +40936,18 @@ export interface operations {
                      *         {
                      *           "id": "frontend_routes",
                      *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "frontends.candidates",
+                     *           "status": "unavailable"
+                     *         },
+                     *         {
+                     *           "id": "databases.migrations",
+                     *           "status": "available"
+                     *         },
+                     *         {
+                     *           "id": "shares",
+                     *           "status": "unavailable"
                      *         }
                      *       ]
                      *     }
