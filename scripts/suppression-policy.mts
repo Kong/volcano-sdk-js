@@ -5,6 +5,20 @@ import ts from 'typescript';
 // approved. Each must sit alone on its line, so a copy cannot ride along as a trailing comment.
 const approvedComments = new Map<string, readonly string[]>([
   [
+    'src/openapi-compatibility.ts',
+    [
+      '/* oxlint-disable eslint/max-lines -- Keep the closed historical type graph together; native consumer checks verify every entry. */',
+    ],
+  ],
+  [
+    'test/fixtures/published-openapi.d.ts',
+    [
+      '// oxlint-disable-next-line typescript/no-redundant-type-constituents, typescript/no-duplicate-type-constituents -- Preserve this exact historical schema expression as independent consumer evidence.',
+      '// oxlint-disable-next-line typescript/no-redundant-type-constituents, typescript/no-duplicate-type-constituents -- Preserve this exact historical schema expression as independent consumer evidence.',
+      '/* oxlint-disable eslint/max-lines -- Keep the independent published contract intact; this fixture is never packaged. */',
+    ],
+  ],
+  [
     'src/index.ts',
     [
       '// oxlint-disable-next-line eslint/no-redeclare -- The published runtime value and public type share this name.',

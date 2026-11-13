@@ -3,100 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { lint } from './oxlint-report.mts';
-import { sourceComments } from './suppression-policy.mts';
+import { declarations } from './lint-exception-declarations.mts';
+import { requireUnsuppressed, sourceComments } from './suppression-policy.mts';
 import { array, record, stringValue } from './values.mts';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
+const root = dirname(import.meta.dirname);
 const auditRule = 'pnpm audit';
-// Each approved lint exception, in quality-exceptions.json's order, and the declaration its directive must precede.
-const declarations: [string, string][] = [
-  ['src/index.ts:QueryBuilder', 'export const QueryBuilder ='],
-  ['src/index.ts:StorageFileApi', 'export const StorageFileApi ='],
-  ['src/volcano-fetch.ts:retryAfterSeconds', 'const seconds = Number.parseInt('],
-  ['scripts/jest-completeness.cts:testNamePattern', 'this.testNamePattern = pattern'],
-  ['src/database-query.ts:QueryBuilder.then', 'then<'],
-  ['src/database-mutations.ts:MutationBuilder.then', 'then<'],
-  ['__tests__/durable-messages-subscribe-handlers.test.ts:runsReturnedThenables', 'const thenable = { then };'],
-  ['src/durable-platform-request.ts:postToPlatform.retryTimeout', 'const timeout = await retryTimeout('],
-  ['src/durable-platform-request.ts:postToPlatform.send', 'outcome = await send(url, init, request, timeout)'],
-  ['src/durable-message-stream.ts:DurableMessageStream.readPages', 'page = await this.listAfter(after)'],
-  [
-    'src/storage-file-objects.ts:deletePaths',
-    "const result = await host._storageRequest(host._buildUrl(path), { method: 'DELETE' })",
-  ],
-  ['src/storage-resumable.ts:uploadParts', 'const result = await host.uploadPart('],
-  ['src/volcano-auth.ts:imports', "import { authApi, durableApi } from './volcano-auth-facades.ts'"],
-  ['scripts/property-policy.test.mts:imports', "import { record } from './values.mts'"],
-  ['scripts/typescript-policy.test.mts:imports', "import { array, record, stringValue } from './values.mts'"],
-  ['__tests__/durable-message-runtime.test.ts:keepsPublishOrder', 'await Promise.resolve();'],
-  [
-    '__tests__/durable-messages-subscribe-retries.test.ts:backsOffBetweenRetries',
-    'await jest.advanceTimersByTimeAsync(advance);',
-  ],
-  ['__tests__/support/durable-messages-realtime.ts:until', 'await settled();'],
-  ['__tests__/functions-http.test.ts:reachesResolvedHost', 'const { error, status } = await volcano.functions.invoke('],
-  [
-    '__tests__/functions-http.test.ts:sharesResolution',
-    "const { error } = await volcano.functions.invoke('missing-function'",
-  ],
-  [
-    '__tests__/realtime-channel-lifecycle-presence.test.ts:ignoresMalformedPresence',
-    'await refreshPresence(Promise.resolve({ clients: malformed',
-  ],
-  [
-    '__tests__/errors.test.ts:preservesInheritedBrandReceiver',
-    "Object.defineProperty(String.prototype, 'isSystemError'",
-  ],
-  ['examples/nextjs-notes-app/src/app/layout.tsx:RootLayout', "import './globals.css'"],
-  ['examples/nextjs-notes-app/src/components/NoteCardEditor.tsx:NoteCardEditor', 'autoFocus'],
-  ['examples/nextjs-notes-app/src/components/NoteEditorForm.tsx:NoteEditorForm', 'autoFocus'],
-  [
-    'examples/nextjs-notes-app/src/components/useNoteEditor.ts:useNoteEditor.handleSubmit',
-    '[title, content, onCreate]',
-  ],
-  ['src/volcano-fetch.ts:volcanoFetch', 'return { data, status: response.status, headers: response.headers } as T'],
-  ['src/sdk-public-types-functions.ts:Functions.invoke', 'invoke<TPayload = JsonValue, TResult = unknown>('],
-  ['src/sdk-public-types-durable.ts:Durable.start', 'start<TInput = JsonValue>('],
-  ['src/volcano-auth-facades.ts:authApi.signUpAnonymous', 'signUpAnonymous: client.signUpAnonymous.bind(client)'],
-  ['src/volcano-auth-facades.ts:authApi.forgotPassword', 'forgotPassword: client.forgotPassword.bind(client)'],
-  ['src/volcano-auth-facades.ts:providerRedirect', 'return start;'],
-  ['scripts/audit-dependencies.mts:run', 'const run = promisify(execFile);'],
-  ['scripts/dependency-audit.test.mts:run', 'const run = promisify(execFile);'],
-  ['scripts/test-package-quickstart.mts:run', 'const run = promisify(execFile);'],
-  ['test/fixtures/published-api/durable.d.ts:Functions.invoke', 'invoke<TPayload = JsonValue, TResult = unknown>('],
-  ['test/fixtures/published-api/durable.d.ts:Durable.start', 'start<TInput = JsonValue>('],
-  ['test/fixtures/public-api-compatibility.d.ts:Exact', 'export type Exact<A, B> ='],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.InsertBuilder',
-    'Exact<Expected.InsertBuilder, Actual.InsertBuilder>',
-  ],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.UpdateBuilder',
-    'Exact<Expected.UpdateBuilder, Actual.UpdateBuilder>',
-  ],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:PublishedTypes.DeleteBuilder',
-    'Exact<Expected.DeleteBuilder, Actual.DeleteBuilder>',
-  ],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.InsertBuilder',
-    'Exact<Expected.InsertBuilder, ESM.InsertBuilder>',
-  ],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.UpdateBuilder',
-    'Exact<Expected.UpdateBuilder, ESM.UpdateBuilder>',
-  ],
-  [
-    'test/fixtures/public-api-compatibility.d.ts:EsmPublishedTypes.DeleteBuilder',
-    'Exact<Expected.DeleteBuilder, ESM.DeleteBuilder>',
-  ],
-  [
-    'examples/durable-order-pipeline/volcano/functions/orders-api/index.js:submitOrder',
-    'unwrap(await insertOrderItem(volcano, order, item));',
-  ],
-];
 
 interface Exception {
   rule: string;
@@ -110,6 +24,7 @@ interface Directive {
   // Zero-based line the directive sits on.
   line: number;
   rules: string[];
+  wholeFile: boolean;
 }
 
 async function exceptions(): Promise<Record<string, unknown>[]> {
@@ -119,6 +34,9 @@ async function exceptions(): Promise<Record<string, unknown>[]> {
 
 // The rules a directive names in its exact `-next-line <rule>, <rule> -- <reason>` form.
 function directiveRules(text: string): string[] {
+  if (/^\/\* oxlint-disable eslint\/max-lines -- \S.* \*\/$/u.test(text)) {
+    return ['eslint/max-lines'];
+  }
   const match = /^\/\/ oxlint-disable-next-line (?<rules>[\w/-]+(?:, [\w/-]+)*) -- \S/u.exec(text);
   assert.ok(match?.groups !== undefined, `${text} is not an exact directive`);
   return stringValue(match.groups['rules']).split(', ');
@@ -130,7 +48,7 @@ function directives(path: string, source: string): Directive[] {
     .filter(({ text }) => text.includes('oxlint-disable'))
     .map(({ text, line, alone }) => {
       assert.ok(alone, `${path}:${String(line + 1)} shares its line with a directive`);
-      return { line, rules: directiveRules(text) };
+      return { line, rules: directiveRules(text), wholeFile: text.startsWith('/*') };
     });
 }
 
@@ -156,22 +74,64 @@ function oxlintCode(rule: string): string {
 }
 
 // Checks every exception approved in `path` and answers how many rules the file's directives name.
-async function checkedDirectives(path: string, approved: readonly Exception[]): Promise<number> {
-  const source = await readFile(join(root, path), 'utf8');
+async function checkedDirectives(
+  path: string,
+  approved: readonly Exception[],
+  suppliedSource?: string,
+): Promise<number> {
+  const source = suppliedSource ?? (await readFile(join(root, path), 'utf8'));
   const lines = source.split('\n');
   const found = directives(path, source);
   const findings = await lintWithoutDirectives(path, lines, found);
   for (const { rule, scope, declaration, rationale, evidence } of approved.filter((item) =>
     item.scope.startsWith(`${path}:`),
   )) {
-    const target = lines.findIndex((line) => line.trim().startsWith(declaration));
-    const covering = found.find((item) => item.line === target - 1);
-    assert.ok(covering?.rules.includes(rule) === true, `${scope} needs its ${rule} directive on the line before it`);
-    assert.ok(findings.has(`${oxlintCode(rule)}:${String(target + 1)}`), `${scope} no longer needs ${rule}`);
     assert.ok(rationale.length > 30);
     assert.ok(evidence.length > 30);
+    if (archivalFileException(rule, scope)) {
+      assert.ok(
+        found.some((item) => item.wholeFile && item.rules.length === 1 && item.rules[0] === rule),
+        `${scope} needs its exact file directive`,
+      );
+      assert.ok(
+        [...findings].some((finding) => finding.startsWith(`${oxlintCode(rule)}:`)),
+        `${scope} no longer needs ${rule}`,
+      );
+      continue;
+    }
+    const target = exceptionTarget(path, source, lines, declaration);
+    const covering = found.find((item) => !item.wholeFile && item.line === target - 1);
+    assert.ok(covering?.rules.includes(rule) === true, `${scope} needs its ${rule} directive on the line before it`);
+    assert.ok(findings.has(`${oxlintCode(rule)}:${String(target + 1)}`), `${scope} no longer needs ${rule}`);
   }
   return found.reduce((sum, item) => sum + item.rules.length, 0);
+}
+
+function exceptionTarget(path: string, source: string, lines: readonly string[], declaration: string): number {
+  if (
+    path === 'test/fixtures/published-openapi.d.ts' &&
+    (declaration === 'CreateSandboxSessionRequest' || declaration === 'SandboxExecutionRequest')
+  ) {
+    const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+    const owner = file.statements.find(
+      (node): node is ts.InterfaceDeclaration => ts.isInterfaceDeclaration(node) && node.name.text === 'components',
+    );
+    const schemas = owner?.members.find((node) => node.name?.getText(file) === 'schemas');
+    if (schemas && ts.isPropertySignature(schemas) && schemas.type && ts.isTypeLiteralNode(schemas.type)) {
+      const field = schemas.type.members.find((node) => node.name?.getText(file) === declaration);
+      if (field) return file.getLineAndCharacterOfPosition(field.end - 1).line;
+    }
+    return -1;
+  }
+  return lines.findIndex((line) => line.trim().startsWith(declaration));
+}
+
+function archivalFileException(rule: string, scope: string): boolean {
+  return (
+    rule === 'eslint/max-lines' &&
+    (scope === 'src/openapi-compatibility.ts:archivalContract' ||
+      scope === 'test/fixtures/published-openapi.d.ts:baselineContract')
+  );
 }
 
 await test('every lint exception is approved, exact, and still needed', async () => {
@@ -198,5 +158,43 @@ await test('dependency audit exceptions name one advisory at one version', async
   assert.deepEqual(
     (await exceptions()).filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
     ['GHSA-gcqx-w48m-w2h4:deepmerge@4.3.1'],
+  );
+});
+
+await test('archival directives stay bound to their exact path, rule and occurrence', async () => {
+  await Promise.all(
+    [
+      ['src/openapi-compatibility.ts', 'src/openapi-compatibility.ts:archivalContract'],
+      ['test/fixtures/published-openapi.d.ts', 'test/fixtures/published-openapi.d.ts:baselineContract'],
+    ].map(async ([pathValue, scopeValue]) => {
+      const path = stringValue(pathValue);
+      const scope = stringValue(scopeValue);
+      const source = await readFile(join(root, path), 'utf8');
+      const directive = sourceComments(path, source).find(({ text }) => text.startsWith('/* oxlint-disable'))?.text;
+      assert.ok(directive !== undefined);
+      requireUnsuppressed(path, source);
+      assert.throws(() => {
+        requireUnsuppressed('src/unrelated-archive.ts', source);
+      });
+      assert.throws(() => {
+        requireUnsuppressed(path, source.replace('eslint/max-lines --', 'eslint/max-lines, eslint/no-undef --'));
+      });
+      assert.throws(() => {
+        requireUnsuppressed(path, source + '\n' + directive);
+      });
+      const registered = (await exceptions()).find((entry) => entry['scope'] === scope);
+      assert.ok(registered);
+      const approval: Exception = {
+        rule: 'eslint/max-lines',
+        scope,
+        declaration: '[archival file]',
+        rationale: stringValue(registered['rationale']),
+        evidence: stringValue(registered['evidence']),
+      };
+      await assert.rejects(
+        checkedDirectives(path, [approval], directive + '\nexport type Archive = never;\n'),
+        /no longer needs/u,
+      );
+    }),
   );
 });

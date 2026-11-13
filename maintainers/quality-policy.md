@@ -68,6 +68,25 @@ for the same line. `scripts/quality-exceptions.test.mts` fails once a rule no
 longer fires without its directive. Every other suppression comment fails the
 tracked-file policy.
 
+Two archival declaration graphs have exact file-scoped `eslint/max-lines`
+exceptions: `src/openapi-compatibility.ts` and
+`test/fixtures/published-openapi.d.ts`. Each uses one registered
+`/* oxlint-disable eslint/max-lines -- <reason> */` directive. These files keep
+the closed historical graph and independent published baseline together rather
+than scattering references across mechanical chunks. All other native lint
+rules still apply. Ordinary source retains the 300-line default.
+
+The published fixture also retains two original neutral `unknown` expressions,
+with next-line exceptions for redundant and duplicate type constituents at those
+exact schema properties. Production has no corresponding rule exceptions.
+Exception tests remove each directive and require its native file-level or
+property-level diagnostic to return. A stale exception, copied directive,
+broadened rule list, or duplicate directive fails validation. The exact scopes,
+provenance, evidence, and removal conditions live in `quality-exceptions.json`;
+these entries do not permit other archival files or declarations to opt out.
+See [Public declaration compatibility](type-compatibility.md#openapi-namespace-compatibility)
+for the independent compiler checks.
+
 ## Dependency audit exceptions
 
 The audit requires zero advisories at every severity. An advisory with no

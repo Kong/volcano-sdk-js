@@ -4,11 +4,7 @@ export type { FilterValue } from './database-filters';
  * Volcano Auth SDK Type Definitions
  */
 
-export type {
-  components as OpenAPIComponents,
-  operations as OpenAPIOperations,
-  paths as OpenAPIPaths,
-} from './generated/openapi';
+export type { OpenAPIComponents, OpenAPIOperations, OpenAPIPaths } from './openapi-compatibility.ts';
 
 export type * from './sdk-public-types-json.ts';
 export type * from './sdk-public-types-auth.ts';
