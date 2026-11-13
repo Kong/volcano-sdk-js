@@ -208,7 +208,7 @@ for (const entrypoint of [{ createServerClient, getTokenFromRequest, withAuth },
       .digest('hex'),
     digest,
   );
-  process.stdout.write(`Documented quickstart passed for package SHA256 ${digest} (synthetic HTTP).\n`);
+  process.stdout.write(`Getting-started quickstart copy passed for package SHA256 ${digest} (synthetic HTTP).\n`);
 } finally {
   server.closeAllConnections();
   if (server.listening) {
