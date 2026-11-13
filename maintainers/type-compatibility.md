@@ -19,7 +19,7 @@ package consumer project also exercises generics, CJS/ESM entrypoints, and
 expected failures for private implementation members.
 
 The approved corrections are documented in
-[TypeScript compatibility](../docs/typescript-compatibility.md). They reflect
+[TypeScript compatibility](https://docs.volcano.dev/sdk/js/typescript-compatibility). They reflect
 optional fields already present in the wire schema and runtime responses.
 Unapproved optionality or public-signature changes must fail the fixture.
 

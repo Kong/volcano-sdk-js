@@ -309,9 +309,9 @@ await volcano.auth.refreshSession();
 ## Learn More
 
 - [Volcano SDK Documentation](../README.md)
-- [Authentication Guide](../../docs/authentication/)
-- [Database Queries](../../docs/databases/query-builder-api.md)
-- [Row-Level Security](../../docs/databases/row-level-security.md)
+- [Authentication Guide](https://docs.volcano.dev/sdk/js/authentication)
+- [Database Queries](https://docs.volcano.dev/sdk/js/database)
+- [Row-Level Security](https://docs.volcano.dev/platform/databases/row-level-security)
 
 ## License
 
