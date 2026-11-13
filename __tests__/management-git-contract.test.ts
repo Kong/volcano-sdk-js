@@ -145,6 +145,7 @@ test.each([
   { type: 'commit', oid: 'c'.repeat(40) },
   { type: 'commit', oid: 'short', witness: { type: 'branch', name: 'main' } },
   { type: 'commit', oid: '0'.repeat(40), witness: { type: 'branch', name: 'main' } },
+  { type: 'commit', oid: 'c'.repeat(40), witness: { type: 'future', name: 'main' } },
   { type: 'branch', name: 'main', witness: { type: 'tag', name: 'v1' } },
   { type: 'tag', name: 'v1', witness: undefined },
   { type: 'future', name: 'main' },
@@ -164,10 +165,96 @@ test.each([
 test.each([
   { ...repository, provider: undefined },
   { ...repository, binding: undefined },
+  { ...repository, binding: { root_directory: null, production_branch: null } },
+  { ...repository, binding: { root_directory: '', production_branch: 42 } },
   { ...repository, capabilities: [{ operation: 'resolve_revision', available: 'yes', unavailable_reason: null }] },
 ])('malformed required response fields do not become successful metadata', async (response) => {
   globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(response));
   const result = await new ManagementClient({ token: 'management-token' }).git.repositories.get(repositoryId);
   expect(result.data).toBeNull();
   expect(result.error).toBeInstanceOf(Error);
+});
+
+test('a default repository list omits optional pagination parameters', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [], limit: 100, has_more: false }));
+  globalThis.fetch = fetchMock;
+  const result = await new ManagementClient({ token: 'management-token' }).git.repositories.list(projectId);
+  expect(result.data).toEqual({ repositories: [], limit: 100, hasMore: false });
+  expect([...requestURL(fetchMock).searchParams.keys()]).toEqual(['project_id']);
+});
+
+test.each([{ cursor: 'next', endingBefore: 'previous' }, { limit: 0 }, { limit: 101 }, { limit: 1.5 }])(
+  'invalid page options %j never send a request',
+  async (options) => {
+    const fetchMock = jest.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    const result = await new ManagementClient({ token: 'management-token' }).git.repositories.list(projectId, options);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(fetchMock).not.toHaveBeenCalled();
+  },
+);
+
+const operations = [
+  (client: ManagementClient) => client.git.repositories.list(projectId),
+  (client: ManagementClient) => client.git.repositories.get(repositoryId),
+  (client: ManagementClient) => client.git.revisions.resolve(projectId, repositoryId, { type: 'tag', name: 'v1' }),
+  (client: ManagementClient) => client.git.revisions.get('opaque-context'),
+];
+
+test.each(operations)(
+  'unexpected successful HTTP statuses cannot masquerade as a valid Git result (%#)',
+  async (operation) => {
+    globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json({}, { status: 201 }));
+    expect(await operation(new ManagementClient({ token: 'management-token' }))).toEqual({
+      data: null,
+      error: expect.any(Error),
+    });
+  },
+);
+
+test.each([
+  { data: [], limit: 0, has_more: false },
+  { data: [], limit: 101, has_more: false },
+  { data: [], limit: 1.5, has_more: false },
+  { data: [], limit: 2, has_more: 'false' },
+])('malformed page %j is a failed result', async (page) => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(page));
+  const result = await new ManagementClient({ token: 'management-token' }).git.repositories.list(projectId);
+  expect(result.data).toBeNull();
+  expect(result.error).toBeInstanceOf(Error);
+});
+
+test.each([
+  { ...revision, resource: { ...revision.resource, type: 'future' } },
+  { ...revision, tree_oid: 42 },
+  { ...revision, commit_oid: 'invalid' },
+])('malformed revision %j is a failed result', async (response) => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(Response.json(response));
+  const result = await new ManagementClient({ token: 'management-token' }).git.revisions.get(revision.id);
+  expect(result.error).toBeInstanceOf(Error);
+});
+
+test('commit resolution accepts an exact tag witness', async () => {
+  const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(Response.json(revision));
+  globalThis.fetch = fetchMock;
+  const result = await new ManagementClient({ token: 'management-token' }).git.revisions.resolve(
+    projectId,
+    repositoryId,
+    {
+      type: 'commit',
+      oid: revision.commit_oid,
+      witness: { type: 'tag', name: 'release/日本語' },
+    },
+  );
+  expect(result.error).toBeNull();
+  expect(requestURL(fetchMock).searchParams.get('witness_ref')).toBe('refs/tags/release/日本語');
+});
+
+test.each([42, 'invalid-uuid'])('invalid repository identifier %j is rejected before fetch', async (id) => {
+  const fetchMock = jest.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
+  const repositories = new ManagementClient({ token: 'management-token' }).git.repositories;
+  const result: unknown = await Reflect.apply(repositories.get.bind(repositories), repositories, [id]);
+  expect(result).toEqual({ data: null, error: expect.any(Error) });
+  expect(fetchMock).not.toHaveBeenCalled();
 });
