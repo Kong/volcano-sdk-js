@@ -4,7 +4,7 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 
@@ -12,7 +12,7 @@ export type SandboxTemplateStatus = typeof SandboxTemplateStatus[keyof typeof Sa
 
 
 export const SandboxTemplateStatus = {
-  ready: 'ready',
-  unavailable: 'unavailable',
-  deleting: 'deleting',
+  SandboxTemplateStatusReady: 'ready',
+  SandboxTemplateStatusUnavailable: 'unavailable',
+  SandboxTemplateStatusDeleting: 'deleting',
 } as const;
