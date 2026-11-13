@@ -53,16 +53,14 @@ All notable changes to the Volcano SDK will be documented in this file.
 
 ## [2.3.0](https://github.com/Kong/volcano-sdk-js/compare/v2.2.0...v2.3.0) (2026-11-13)
 
-
 ### Features
 
-* **durable:** read and stop executions with the application credential ([#357](https://github.com/Kong/volcano-sdk-js/issues/357)) ([a174c88](https://github.com/Kong/volcano-sdk-js/commit/a174c88d943113aa9862e8a6365a515d137946ed))
-
+- **durable:** read and stop executions with the application credential ([#357](https://github.com/Kong/volcano-sdk-js/issues/357)) ([a174c88](https://github.com/Kong/volcano-sdk-js/commit/a174c88d943113aa9862e8a6365a515d137946ed))
 
 ### Bug Fixes
 
-* **deps:** patch glob and minimatch advisories in Jest's tooling ([#369](https://github.com/Kong/volcano-sdk-js/issues/369)) ([205194f](https://github.com/Kong/volcano-sdk-js/commit/205194f0350ad62f904f24b7a133ad5db7c0dd8b))
-* **examples:** split the order pipeline's migration into one statement per file ([#356](https://github.com/Kong/volcano-sdk-js/issues/356)) ([f7604a6](https://github.com/Kong/volcano-sdk-js/commit/f7604a614f2611ae1c2624722f5400a71ad44f4d))
+- **deps:** patch glob and minimatch advisories in Jest's tooling ([#369](https://github.com/Kong/volcano-sdk-js/issues/369)) ([205194f](https://github.com/Kong/volcano-sdk-js/commit/205194f0350ad62f904f24b7a133ad5db7c0dd8b))
+- **examples:** split the order pipeline's migration into one statement per file ([#356](https://github.com/Kong/volcano-sdk-js/issues/356)) ([f7604a6](https://github.com/Kong/volcano-sdk-js/commit/f7604a614f2611ae1c2624722f5400a71ad44f4d))
 
 ## [2.2.0](https://github.com/Kong/volcano-sdk-js/compare/v2.1.0...v2.2.0) (2026-10-28)
 
