@@ -274,5 +274,41 @@
     "scope": "GHSA-gcqx-w48m-w2h4:deepmerge@4.3.1",
     "rationale": "deepmerge 4.3.1 is the latest release and has no fix. It is reached only through Jest (jest-config), which merges this repository's own Jest configuration: config defaults with overrides, and a preset's globals. No caller input reaches it, and the SDK package does not depend on it.",
     "evidence": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4 lists no patched version; npm lists 4.3.1 as latest. jest-config 30.5.2 calls deepmerge only in mergeConfig and for preset globals. Approved by Marco Palladino on 2026-10-28. Remove this entry when deepmerge publishes a fix; the audit fails while it names an advisory pnpm no longer reports."
+  },
+  {
+    "rule": "eslint/max-lines",
+    "scope": "src/openapi-compatibility.ts:archivalContract",
+    "rationale": "The finite historical declaration graph must stay closed over its own schema and operation maps; fragmenting 185 entries solely to meet a file-length rule obscures the frozen references. This is archival type data, with no runtime logic. All other lint rules and the 300-line default elsewhere remain enforced; remove this exception if this exact archive is removed or becomes short enough.",
+    "evidence": "Baseline 8dc3d45da48957405045a88eea8cfd78de7b2468 src/generated/openapi.d.ts SHA-256 81c90f85ad9dd9fc2cd9327c8a1f1cf1e1530a5d49c04398368565567f6ce5fd. Native strict CJS/ESM package consumers compare every old entry and each new current entry; the exception test removes the directive and requires the native max-lines finding."
+  },
+  {
+    "rule": "eslint/max-lines",
+    "scope": "test/fixtures/published-openapi.d.ts:baselineContract",
+    "rationale": "The complete independent published declaration is one frozen consumer artifact. Splitting its 1069 entries only for line count would replace this evidence with over a hundred mechanically coupled modules. This is archival type data, with no runtime logic. All other lint rules and the 300-line default elsewhere remain enforced; remove this exception if this exact archive is removed or becomes short enough.",
+    "evidence": "Baseline 8dc3d45da48957405045a88eea8cfd78de7b2468 src/generated/openapi.d.ts SHA-256 81c90f85ad9dd9fc2cd9327c8a1f1cf1e1530a5d49c04398368565567f6ce5fd. Native strict CJS/ESM package consumers compare every old entry and each new current entry; the exception test removes the directive and requires the native max-lines finding."
+  },
+  {
+    "rule": "typescript/no-redundant-type-constituents",
+    "scope": "test/fixtures/published-openapi.d.ts:components.schemas.CreateSandboxSessionRequest",
+    "rationale": "The independent historical fixture retains its original object & (unknown | unknown) expression. The owned production bridge simplifies the neutral intersection; the compiler proves it exactly matches this unchanged historical evidence. No production correctness rule is suppressed.",
+    "evidence": "The expression is present in the published 8dc3d45 baseline. Native Exact comparisons verify all CJS/ESM declaration entries, while the native exception-removal test requires this rule to fire at this specific schema property."
+  },
+  {
+    "rule": "typescript/no-duplicate-type-constituents",
+    "scope": "test/fixtures/published-openapi.d.ts:components.schemas.CreateSandboxSessionRequest",
+    "rationale": "The independent historical fixture retains its original object & (unknown | unknown) expression. The owned production bridge simplifies the neutral intersection; the compiler proves it exactly matches this unchanged historical evidence. No production correctness rule is suppressed.",
+    "evidence": "The expression is present in the published 8dc3d45 baseline. Native Exact comparisons verify all CJS/ESM declaration entries, while the native exception-removal test requires this rule to fire at this specific schema property."
+  },
+  {
+    "rule": "typescript/no-redundant-type-constituents",
+    "scope": "test/fixtures/published-openapi.d.ts:components.schemas.SandboxExecutionRequest",
+    "rationale": "The independent historical fixture retains its original object & (unknown | unknown) expression. The owned production bridge simplifies the neutral intersection; the compiler proves it exactly matches this unchanged historical evidence. No production correctness rule is suppressed.",
+    "evidence": "The expression is present in the published 8dc3d45 baseline. Native Exact comparisons verify all CJS/ESM declaration entries, while the native exception-removal test requires this rule to fire at this specific schema property."
+  },
+  {
+    "rule": "typescript/no-duplicate-type-constituents",
+    "scope": "test/fixtures/published-openapi.d.ts:components.schemas.SandboxExecutionRequest",
+    "rationale": "The independent historical fixture retains its original object & (unknown | unknown) expression. The owned production bridge simplifies the neutral intersection; the compiler proves it exactly matches this unchanged historical evidence. No production correctness rule is suppressed.",
+    "evidence": "The expression is present in the published 8dc3d45 baseline. Native Exact comparisons verify all CJS/ESM declaration entries, while the native exception-removal test requires this rule to fire at this specific schema property."
   }
 ]

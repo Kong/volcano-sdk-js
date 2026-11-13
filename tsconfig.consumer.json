@@ -13,6 +13,7 @@
     "test/types/package-next-middleware.ts",
     "test/types/package-realtime-surface.ts",
     "test/fixtures/**/*.d.ts",
-    "test/types/package-optional-responses.ts"
+    "test/types/package-optional-responses.ts",
+    "test/types/package-openapi-compatibility.ts"
   ]
 }
