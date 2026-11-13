@@ -81,7 +81,7 @@ The full guides live at [docs.volcano.dev/sdk/js](https://docs.volcano.dev/sdk/j
 | [Functions](https://docs.volcano.dev/sdk/js/functions)                 | Serverless function invocation                   |
 | [Durable functions](https://docs.volcano.dev/sdk/js/durable-functions) | Long-running work, human approvals, and messages |
 | [Project locks](https://docs.volcano.dev/sdk/js/locks)                 | Renewable backend leases                         |
-| [Repository source reads](https://docs.volcano.dev/sdk/js/git) | Management credentials and exact Git revisions |
+| [Repository source reads](https://docs.volcano.dev/sdk/js/git)         | Management credentials and exact Git revisions   |
 | [Next.js](https://docs.volcano.dev/sdk/js/nextjs)                      | Server components and middleware                 |
 | [TypeScript](https://docs.volcano.dev/sdk/js/typescript)               | Type definitions                                 |
 | [Error Handling](https://docs.volcano.dev/sdk/js/error-handling)       | Error patterns                                   |
