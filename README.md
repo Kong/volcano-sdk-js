@@ -69,20 +69,22 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 
 ## Documentation
 
-| Guide                                            | Description                                      |
-| ------------------------------------------------ | ------------------------------------------------ |
-| [Getting Started](./docs/getting-started.md)     | Installation and setup                           |
-| [Authentication](./docs/authentication.md)       | Sign-up, sign-in, OAuth, sessions                |
-| [Database](./docs/database.md)                   | Query builder and CRUD operations                |
-| [Storage](./docs/storage.md)                     | File upload and management                       |
-| [Realtime](./docs/realtime.md)                   | Live subscriptions and presence                  |
-| [Functions](./docs/functions.md)                 | Serverless function invocation                   |
-| [Durable functions](./docs/durable-functions.md) | Long-running work, human approvals, and messages |
-| [Project locks](./docs/locks.md)                 | Renewable backend leases                         |
-| [Repository source reads](./docs/git.md)         | Management credentials and exact Git revisions   |
-| [Next.js](./docs/nextjs.md)                      | Server components and middleware                 |
-| [TypeScript](./docs/typescript.md)               | Type definitions                                 |
-| [Error Handling](./docs/error-handling.md)       | Error patterns                                   |
+The full guides live at [docs.volcano.dev/sdk/js](https://docs.volcano.dev/sdk/js).
+
+| Guide                                                                  | Description                                      |
+| ---------------------------------------------------------------------- | ------------------------------------------------ |
+| [Getting Started](https://docs.volcano.dev/sdk/js/getting-started)     | Installation and setup                           |
+| [Authentication](https://docs.volcano.dev/sdk/js/authentication)       | Sign-up, sign-in, OAuth, sessions                |
+| [Database](https://docs.volcano.dev/sdk/js/database)                   | Query builder and CRUD operations                |
+| [Storage](https://docs.volcano.dev/sdk/js/storage)                     | File upload and management                       |
+| [Realtime](https://docs.volcano.dev/sdk/js/realtime)                   | Live subscriptions and presence                  |
+| [Functions](https://docs.volcano.dev/sdk/js/functions)                 | Serverless function invocation                   |
+| [Durable functions](https://docs.volcano.dev/sdk/js/durable-functions) | Long-running work, human approvals, and messages |
+| [Project locks](https://docs.volcano.dev/sdk/js/locks)                 | Renewable backend leases                         |
+| [Repository source reads](https://docs.volcano.dev/sdk/js/git) | Management credentials and exact Git revisions |
+| [Next.js](https://docs.volcano.dev/sdk/js/nextjs)                      | Server components and middleware                 |
+| [TypeScript](https://docs.volcano.dev/sdk/js/typescript)               | Type definitions                                 |
+| [Error Handling](https://docs.volcano.dev/sdk/js/error-handling)       | Error patterns                                   |
 
 ## Dependencies
 
@@ -93,7 +95,7 @@ Installing `@volcano.dev/sdk` pulls in two packages, both for realtime:
 | [`centrifuge`](https://www.npmjs.com/package/centrifuge) | The realtime protocol client                                         |
 | [`ws`](https://www.npmjs.com/package/ws)                 | WebSocket transport outside the browser, loaded only when it is used |
 
-Writing a [durable function](./docs/durable-functions.md) needs one more, and
+Writing a [durable function](https://docs.volcano.dev/sdk/js/durable-functions) needs one more, and
 you do not install it: Volcano adds it when it builds a function deployed as
 durable.
 

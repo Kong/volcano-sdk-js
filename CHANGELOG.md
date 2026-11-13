@@ -9,7 +9,7 @@ All notable changes to the Volcano SDK will be documented in this file.
 - Generate public declarations from the TypeScript implementation. Nine response
   types now represent optional or nullable values already returned at runtime;
   strict consumers may need additional presence checks. See
-  [TypeScript compatibility](./docs/typescript-compatibility.md).
+  [TypeScript compatibility](https://docs.volcano.dev/sdk/js/typescript-compatibility).
 
 ### Added
 
@@ -20,7 +20,7 @@ All notable changes to the Volcano SDK will be documented in this file.
   `{ attempts, initialDelay, maxDelay }`, and batches resolve to plain results.
   The durable runtime (`@aws/durable-execution-sdk-js`) is an optional peer
   dependency loaded on first invocation, so browser bundles and standard
-  functions are unaffected. See [docs/durable-functions.md](./docs/durable-functions.md).
+  functions are unaffected. See [Durable functions](https://docs.volcano.dev/sdk/js/durable-functions).
 
 - `volcano.durable.start(name, input, { executionName })` starts a durable
   execution with an application credential and returns its handle. The durable

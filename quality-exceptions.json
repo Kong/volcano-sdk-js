@@ -27,13 +27,13 @@
     "rule": "unicorn/no-thenable",
     "scope": "src/database-query.ts:QueryBuilder.then",
     "rationale": "Awaiting a query builder runs the query. That is the published database API (`await volcano.from('posts').select('*')`), so the builder must stay thenable.",
-    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. docs/database.md documents awaiting query builders, and removing `then` breaks every awaited query."
+    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. The public database guide (https://docs.volcano.dev/sdk/js/database) documents awaiting query builders, and removing `then` breaks every awaited query."
   },
   {
     "rule": "unicorn/no-thenable",
     "scope": "src/database-mutations.ts:MutationBuilder.then",
     "rationale": "Awaiting a mutation builder runs the mutation. That is the published database API (`await volcano.insert('posts', row)`), so the builder must stay thenable.",
-    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. docs/database.md documents awaiting mutation builders, and removing `then` breaks every awaited mutation."
+    "evidence": "https://github.com/sindresorhus/eslint-plugin-unicorn/blob/main/docs/rules/no-thenable.md targets accidental thenables. The public database guide (https://docs.volcano.dev/sdk/js/database) documents awaiting mutation builders, and removing `then` breaks every awaited mutation."
   },
   {
     "rule": "unicorn/no-thenable",

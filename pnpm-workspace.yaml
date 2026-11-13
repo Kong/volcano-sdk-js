@@ -32,6 +32,12 @@ overrides:
   # denial-of-service advisories; only 7.x of the selector parser is patched.
   'source-map-js@>=1.0.0 <1.2.2': ^1.2.2
   'postcss-selector-parser@<7.1.6': ^7.1.6
+  # Jest's reporters and coverage exclusion (test-exclude) resolve glob releases
+  # whose aborted async walks keep reading directories; only 14.0.2 is patched.
+  'glob@>=9.0.0 <14.0.2': ^14.0.2
+  # test-exclude resolves a minimatch release with a globparts denial-of-service
+  # advisory; 11.0.1 is patched and keeps the named minimatch export it calls.
+  'minimatch@>=7.0.0 <11.0.1': ^11.0.1
 
 allowBuilds:
   protobufjs: true

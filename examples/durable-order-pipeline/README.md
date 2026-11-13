@@ -89,7 +89,7 @@ key, which carries no user, so `orders-api` answers it with `401` by design.
 
 Enable email and password sign-in, create a user, and set `VOLCANO_ANON_KEY`,
 `VOLCANO_USER_EMAIL`, and `VOLCANO_USER_PASSWORD`, as in
-[Getting started](../../docs/getting-started.md). Then save this as
+[Getting started](https://docs.volcano.dev/sdk/js/getting-started). Then save this as
 `call-orders-api.mjs` next to an install of `@volcano.dev/sdk`:
 
 ```javascript
@@ -179,5 +179,5 @@ the same execution, taking the other branch, with the refund guarded by
 
 ## Further reading
 
-- [Durable functions in the SDK](../../docs/durable-functions.md) — the authoring API in full
+- [Durable functions in the SDK](https://docs.volcano.dev/sdk/js/durable-functions) — the authoring API in full
 - [Durable functions on the platform](https://volcano.dev/platform/functions/durable-functions) — limits, billing, and the API

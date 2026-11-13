@@ -59,14 +59,15 @@ Record the workflow URL and registry URL. Source-main tests alone do not prove t
 
 Both PR CI and the release build run `node .quality-tools/test-package-quickstart.mjs package/*.tgz`.
 The check installs that tarball outside the checkout without install scripts or publisher credentials,
-then executes the unchanged getting-started example against synthetic local auth responses.
+then executes the getting-started quickstart kept in `scripts/test-package-quickstart.mts` against synthetic local auth responses.
+`Kong/volcano-docs` owns the published copy (`content/sdk/js/getting-started.md`); change both together.
 It checks sign-in, profile retrieval and logout and records the unchanged tarball's SHA256.
 The release job uploads that tested tarball for publication. This catches package/example regressions;
 it does not replace registry installation or approved live platform acceptance.
 
 ## Recover from a bad release
 
-For an application regression, first restore its previously tested application revision and dependency lock using [the public guide](../docs/versions.md).
+For an application regression, first restore its previously tested application revision and dependency lock using [the public guide](https://docs.volcano.dev/sdk/js/versions).
 Confirm compatibility with current server configuration and data; an SDK downgrade does not roll either back.
 
 Record the affected versions, symptom, safe previous version, artifact digests and any required data/server remediation in the incident or release issue.
