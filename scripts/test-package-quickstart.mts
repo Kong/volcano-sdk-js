@@ -19,12 +19,35 @@ const tarball = resolve(artifact);
 const digest = createHash('sha256')
   .update(await readFile(tarball))
   .digest('hex');
-const document = await readFile(new URL('../docs/getting-started.md', import.meta.url), 'utf8');
-const section = document.split('## Sign in and read a profile\n')[1]?.split(/\n#{2,3} /u)[0];
-const examples = [...(section?.matchAll(/```javascript\n([\s\S]*?)\n```/gu) ?? [])];
-assert.equal(examples.length, 1, 'Expected one complete documented quickstart');
-const quickstart = examples[0]?.[1];
-assert.ok(quickstart !== undefined);
+// The getting-started quickstart, as published in Kong/volcano-docs
+// content/sdk/js/getting-started.md ("Sign in and read a profile"). Change both together.
+const quickstart = `import { VolcanoClient } from '@volcano.dev/sdk';
+
+const { VOLCANO_ANON_KEY, VOLCANO_USER_EMAIL, VOLCANO_USER_PASSWORD } = process.env;
+if (!VOLCANO_ANON_KEY || !VOLCANO_USER_EMAIL || !VOLCANO_USER_PASSWORD) {
+  throw new Error('Set VOLCANO_ANON_KEY, VOLCANO_USER_EMAIL, and VOLCANO_USER_PASSWORD');
+}
+
+const client = new VolcanoClient({
+  anonKey: VOLCANO_ANON_KEY,
+  apiUrl: process.env.VOLCANO_API_URL ?? 'https://api.volcano.dev',
+});
+const { user: signedInUser, error: signInError } = await client.auth.signIn({
+  email: VOLCANO_USER_EMAIL,
+  password: VOLCANO_USER_PASSWORD,
+});
+if (signInError) throw signInError;
+
+try {
+  const { user, error } = await client.auth.getUser();
+  if (error) throw error;
+  if (!user || user.id !== signedInUser.id) throw new Error('Unexpected user');
+  console.log(\`Signed in as \${user.email}\`);
+} finally {
+  const { error } = await client.auth.signOut();
+  if (error) throw error;
+}
+`;
 
 const user = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -185,7 +208,7 @@ for (const entrypoint of [{ createServerClient, getTokenFromRequest, withAuth },
       .digest('hex'),
     digest,
   );
-  process.stdout.write(`Documented quickstart passed for package SHA256 ${digest} (synthetic HTTP).\n`);
+  process.stdout.write(`Getting-started quickstart copy passed for package SHA256 ${digest} (synthetic HTTP).\n`);
 } finally {
   server.closeAllConnections();
   if (server.listening) {

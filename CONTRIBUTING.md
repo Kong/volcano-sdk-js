@@ -45,7 +45,6 @@ this SDK as a customer would during Staging Validation.
 - `openapi/openapi.yaml` is the vendored public API contract.
 - `src/generated/openapi.d.ts` is generated from that contract and must not be
   edited by hand.
-- `docs/` contains user-facing guides.
 - `examples/nextjs-notes-app/` contains the Next.js example app.
 
 The package publishes built files from `dist/`. Do not hand-edit generated
@@ -114,8 +113,9 @@ actual live results separately from discovery or package checks.
 
 ### Documentation and release boundaries
 
-`docs/` is published to the developer documentation site. Put user-facing
-examples there and maintainer instructions in this file or beside the code.
+Public guides live in `Kong/volcano-docs` under `content/sdk/js` and publish
+to https://docs.volcano.dev/sdk/js. Put user-facing examples there in a
+companion PR, and maintainer instructions in this file or beside the code.
 Keep equivalent language examples current in the same coordinated change.
 Package checks validate artifacts; they do not authorize publication. Treat
 registry-installed quickstarts and release approval as separate release work.
@@ -127,7 +127,8 @@ registry-installed quickstarts and release approval as separate release work.
   `feat(storage): add upload progress` or `docs(auth): clarify session adoption`.
 - Keep PRs focused to one bug fix, feature, or cohesive documentation update.
 - Include tests for behavior changes.
-- Update docs or examples when changing user-facing APIs.
+- Update examples, and open a companion `Kong/volcano-docs` PR, when changing
+  user-facing APIs.
 - Run `pnpm check:openapi`, `pnpm lint`, `pnpm test`, and `pnpm build` before
   pushing when code changes are included.
 
