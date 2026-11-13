@@ -4,17 +4,23 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 
 export interface SandboxExecutionResult {
+  /** The first 1 MiB (1,048,576 bytes) the command wrote to stdout. Empty in a replay of a command that kept no output. */
   stdout: string;
+  /** The first 1 MiB (1,048,576 bytes) the command wrote to stderr. Empty in a replay of a command that kept no output. */
   stderr: string;
   exit_code: number;
+  /** True when the command wrote more than 1 MiB to stdout. False in a replay of a command that kept no output. */
   stdout_truncated: boolean;
+  /** True when the command wrote more than 1 MiB to stderr. False in a replay of a command that kept no output. */
   stderr_truncated: boolean;
   timed_out: boolean;
+  /** False when the command kept no output. Its streams appear only in the response to the request that ran it, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns them empty. */
+  output_kept: boolean;
   session_id: string;
   region: string;
   /** @minimum 0 */

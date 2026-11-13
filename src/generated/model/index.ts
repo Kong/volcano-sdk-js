@@ -4,7 +4,7 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 
@@ -98,12 +98,21 @@ export * from './sandboxExecutionResult';
 export * from './sandboxFileReadRequest';
 export * from './sandboxFileResult';
 export * from './sandboxFileWriteRequest';
+export * from './sandboxLimitsApplied';
 export * from './sandboxPagination';
 export * from './sandboxPreset';
 export * from './sandboxPresetList';
 export * from './sandboxPresetMemoryMb';
 export * from './sandboxSession';
+export * from './sandboxSessionAppliedLimits';
 export * from './sandboxSessionDesiredState';
+export * from './sandboxSessionExecutions';
+export * from './sandboxSessionLimits';
+export * from './sandboxSessionNetwork';
+export * from './sandboxSessionNetworkApplied';
+export * from './sandboxSessionNetworkEgress';
+export * from './sandboxSessionNetworkRequest';
+export * from './sandboxSessionNetworkRequestEgress';
 export * from './sandboxSessionPage';
 export * from './sandboxSessionState';
 export * from './sandboxSubjectGrantRequest';

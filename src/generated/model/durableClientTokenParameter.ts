@@ -4,13 +4,13 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 
 /**
- * The `client_token` the execution's start returned. Lets an anon key,
- * or a user who did not start the execution, reach it, and a service key
- * scoped to a list without `*` read and stop it.
+ * The `client_token` the execution's start returned. Lets an anon key, a
+ * service key scoped to a list without `*`, or a user who did not start
+ * the execution, reach it.
  */
 export type DurableClientTokenParameter = string;
