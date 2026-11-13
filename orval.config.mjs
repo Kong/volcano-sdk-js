@@ -1,6 +1,10 @@
 import { defineConfig, defineTransformer } from 'orval';
 
 const sdkOperations = new Set([
+  'listGitRepositories',
+  'getGitRepository',
+  'resolveGitRevision',
+  'getGitRevision',
   'getSandboxDeploymentLogs',
   'deploySandbox',
   'listSandboxDeployments',

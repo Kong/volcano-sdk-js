@@ -1,4 +1,84 @@
 import { volcanoFetch } from '../volcano-fetch';
+export const getListGitRepositoriesUrl = (params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/git/repositories?${stringifiedParams}` : `/git/repositories`;
+};
+/**
+ * Lists this project's Volcano repository identities, including retained identities after disconnection. A retained identity does not promise that its source is available. Capabilities describe currently known admission conditions; source reads recheck permissions and provider access. Results use cursor pagination, newest identity first, with the ID breaking creation-time ties. This list does not create a repository or change its binding.
+ * @summary List project repositories
+ */
+export const listGitRepositories = async (params, options) => {
+    return volcanoFetch(getListGitRepositoriesUrl(params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetGitRepositoryUrl = (repositoryId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/git/repositories/${repositoryId}?${stringifiedParams}` : `/git/repositories/${repositoryId}`;
+};
+/**
+ * Returns one Volcano repository identity and its effective read capabilities. Its own project authorizes the request. An identity outside a supplied project, or one the caller cannot access, answers like an unknown identity. This reads metadata without promising retained source or probing live provider access.
+ * @summary Inspect a repository
+ */
+export const getGitRepository = async (repositoryId, params, options) => {
+    return volcanoFetch(getGetGitRepositoryUrl(repositoryId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getResolveGitRevisionUrl = (params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/git/revisions?${stringifiedParams}` : `/git/revisions`;
+};
+/**
+ * Resolves one explicitly typed selector and returns one immutable read context, without creating stored state or a retention promise. Branches and tags use their exact namespaces; names containing slashes stay names. A commit selector is a complete lowercase SHA-1 OID, never an abbreviated hash or Git revision expression. Commit selectors do not peel tags. Commit selection requires an explicit eligible witness_ref whose observed history contains that commit. Provider object availability alone is insufficient. Annotated tags may traverse at most 16 distinct tags and must end at a commit. Source reads cover the repository root; the deployment root directory is not a source-access boundary. A changed repository binding or deployment layout makes the returned context stale. Signing-key retirement can also invalidate a context without losing source bytes. Re-resolve the same commit only with a qualifying witness; an orphan OID alone cannot recover admission. Never substitute a current head.
+ * @summary Resolve an exact source revision
+ */
+export const resolveGitRevision = async (params, options) => {
+    return volcanoFetch(getResolveGitRevisionUrl(params), {
+        ...options,
+        method: 'GET'
+    });
+};
+export const getGetGitRevisionUrl = (revisionId, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : String(value));
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/git/revisions/${revisionId}?${stringifiedParams}` : `/git/revisions/${revisionId}`;
+};
+/**
+ * Reauthorizes the repository and reads the exact commit in this read context. The context carries no authority and does not retain source. Branch movement cannot change its commit. A binding or deployment-layout change returns git_revision_stale; unavailable source never falls back to a current head. Its own project authorizes the request, including for project access tokens.
+ * @summary Inspect an exact source revision
+ */
+export const getGitRevision = async (revisionId, params, options) => {
+    return volcanoFetch(getGetGitRevisionUrl(revisionId, params), {
+        ...options,
+        method: 'GET'
+    });
+};
 export const getListSandboxPresetsUrl = () => {
     return `/sandboxes/presets`;
 };
@@ -475,11 +555,11 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId) => {
  * A `private` durable function answers every credential but a service key
  * exactly as a missing one, with 404.
  *
- * The start returns a `client_token`. An anon key, or a user who did not
- * start the execution, sends it as `X-Volcano-Client-Token` to read the
- * execution, stop it, and reach its messages. A service key scoped to a
- * list without `*` sends it to read and stop the execution. An anon key is shared by
- * everyone who loads the page, so the id alone never reaches an
+ * The start returns a `client_token`. An anon key, a service key scoped
+ * to a list without `*`, or a user who did not start the execution,
+ * sends it as `X-Volcano-Client-Token` to read the execution, stop it,
+ * and reach its messages. An anon key is shared by everyone who loads
+ * the page, so the id alone never reaches an
  * execution. Listing executions takes the project owner's token or a
  * project access token.
  *
@@ -587,7 +667,11 @@ export const getSendDurableMessageFromApplicationUrl = (functionId, executionId)
  * Messages never decide an approval: a workflow waiting in
  * `ctx.waitForApproval` is not resumed by one.
  *
- * **With a service key:** any execution in the project.
+ * **With a service key:** any execution in the project when the key holds
+ * `*`, the default. A key scoped to a list without `*`, such as
+ * `["functions.invoke"]`, reaches an execution whose
+ * `X-Volcano-Client-Token` the request carries, as an anon key does; the
+ * start returns that token.
  *
  * **With an auth user token:** an execution the user started, or one
  * whose `X-Volcano-Client-Token` the request carries, of a durable
@@ -919,7 +1003,7 @@ export const getQueryDatabaseSelectUrl = (databaseName) => {
  *
  * **Authentication:** Requires auth user access token (from signup/signin)
  *
- * **Row-Level Security:** Automatically enforced - you see only data you have access to
+ * **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
  *
  * **Use Cases:**
  * - Query from browser/mobile apps

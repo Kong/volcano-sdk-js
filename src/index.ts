@@ -8,6 +8,8 @@ import type {
 import { StorageFileApi as RuntimeStorageFileApi } from './storage-file.ts';
 
 export type * from './sdk-public-types.ts';
+export type * from './management-types.ts';
+export { ManagementClient } from './management-client.ts';
 
 /** Lazy-load realtime without adding it to ordinary SDK initialization. */
 export async function loadRealtime(): Promise<RealtimeModule> {
