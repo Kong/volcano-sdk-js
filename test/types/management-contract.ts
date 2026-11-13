@@ -6,6 +6,9 @@ export const commitSelector: GitRevisionSelector = {
   witness: { type: 'branch', name: 'release/日本語' },
 };
 export const branchSelector: GitRevisionSelector = { type: 'branch', name: 'main' };
+const branchWithWitness = { type: 'branch' as const, name: 'main', witness: { type: 'tag' as const, name: 'v1' } };
+// @ts-expect-error Predeclared branch selectors also cannot carry witness intent.
+export const invalidBranchVariable: GitRevisionSelector = branchWithWitness;
 // @ts-expect-error Commit selection requires a witness.
 export const missingWitness: GitRevisionSelector = { type: 'commit', oid: 'c'.repeat(40) };
 export const unexpectedWitness: GitRevisionSelector = {

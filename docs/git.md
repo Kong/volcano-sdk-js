@@ -85,7 +85,7 @@ Set constructor `timeoutMs` or per-call `timeoutMs` to a positive integer up to
 not subsequent CPU parsing. Each call also accepts `signal: AbortSignal`.
 Already-canceled calls perform no request.
 
-Errors retain a safe message and, when supplied, scalar `status`, `code`, and
+Errors use constant safe messages and, when supplied, scalar `status`, `code`, and
 `retryAfter` metadata. They omit raw response bodies and request objects and
 redact the configured token. A `401` returns directly without another credential
 or application authentication attempt.

@@ -57,7 +57,7 @@ test('all error fields are fresh and redacted, retaining only safe scalar metada
   );
   const result = await new ManagementClient({ token }).git.repositories.get(repositoryId);
   expect(result.error).toMatchObject({ status: 429, retryAfter: 7, code: 'provider_[redacted]' });
-  expect(result.error?.message).toBe('Bearer [redacted] again [redacted]');
+  expect(result.error?.message).toBe('Management request failed with status 429');
   expect(result.error).not.toHaveProperty('info');
   expect(result.error).not.toHaveProperty('cause');
   expect(inspect(result, { showHidden: true, depth: 10 })).not.toContain(token);
@@ -81,7 +81,7 @@ test('already-canceled calls perform no fetch and redact the caller reason', asy
   const result = await new ManagementClient({ token }).git.repositories.get(repositoryId, {
     signal: controller.signal,
   });
-  expect(result.error?.message).toBe('caller echoed [redacted]');
+  expect(result.error?.message).toBe('Management request failed');
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -108,7 +108,7 @@ test('timeout cancels stalled response headers with no retry', async () => {
   );
   globalThis.fetch = fetchMock;
   const result = await new ManagementClient({ token, timeoutMs: 20 }).git.repositories.get(repositoryId);
-  expect(result.error?.message).toMatch(/timeout/iu);
+  expect(result.error).toBeInstanceOf(Error);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(signalFor(fetchMock.mock.calls[0]?.[1]).aborted).toBe(true);
 });
@@ -134,7 +134,7 @@ test('timeout remains active after response headers while reading the body', asy
     .mockImplementation((_url, options) => Promise.resolve(stalledBody(signalFor(options))));
   globalThis.fetch = fetchMock;
   const result = await new ManagementClient({ token, timeoutMs: 20 }).git.repositories.get(repositoryId);
-  expect(result.error?.message).toMatch(/timeout/iu);
+  expect(result.error).toBeInstanceOf(Error);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(signalFor(fetchMock.mock.calls[0]?.[1]).aborted).toBe(true);
 });
@@ -155,7 +155,7 @@ test('caller cancellation reaches an active body read and never retains its raw 
   await started;
   caller.abort(new Error(`cancel ${token}`));
   const result = await request;
-  expect(result.error?.message).toBe('cancel [redacted]');
+  expect(result.error?.message).toBe('Management request failed');
   expect(result.error).not.toHaveProperty('cause');
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
@@ -169,4 +169,50 @@ test('success and failure clean up timers and caller listeners', async () => {
   await new ManagementClient({ token }).git.repositories.get(repositoryId, { signal: caller.signal });
   expect(clear).toHaveBeenCalledTimes(1);
   expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+});
+
+test.each(['message', 'status', 'code', 'retryAfter'])(
+  'cancellation reason %s accessors are never invoked',
+  async (key) => {
+    const fetchMock = jest.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    const accessor = jest.fn(() => {
+      throw new Error(`raw ${token}`);
+    });
+    const reason = new Error(`cancel ${token}`);
+    Object.defineProperty(reason, key, { get: accessor });
+    const caller = new AbortController();
+    caller.abort(reason);
+    const result = await new ManagementClient({ token }).git.repositories.get(repositoryId, { signal: caller.signal });
+    expect(result.error?.message).toBe('Management request failed');
+    expect(inspect(result, { showHidden: true, depth: 10 })).not.toContain(token);
+    expect(accessor).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  },
+);
+
+test('a revoked proxy reason cannot escape the result envelope', async () => {
+  const fetchMock = jest.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
+  const reason = Proxy.revocable({}, {});
+  reason.revoke();
+  const caller = new AbortController();
+  caller.abort(reason.proxy);
+  const result = await new ManagementClient({ token }).git.repositories.get(repositoryId, { signal: caller.signal });
+  expect(result.error?.message).toBe('Management request failed');
+  expect(result.error).not.toHaveProperty('cause');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test.each([200, 401])('malformed JSON with a credential never exposes parser excerpts (HTTP %s)', async (status) => {
+  globalThis.fetch = jest.fn<typeof fetch>().mockResolvedValue(
+    new Response(token, {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+  const result = await new ManagementClient({ token }).git.repositories.get(repositoryId);
+  expect(result.error?.message).toBe('Management request failed');
+  expect(inspect(result, { showHidden: true, depth: 10 })).not.toContain(token.slice(0, 10));
+  expect(JSON.stringify(result)).not.toContain(token.slice(0, 10));
 });

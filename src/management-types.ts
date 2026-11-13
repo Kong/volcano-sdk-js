@@ -23,6 +23,7 @@ export interface GitRepositoryListOptions extends GitRequestOptions {
 export interface GitRefSelector {
   type: 'branch' | 'tag';
   name: string;
+  witness?: never;
 }
 
 export type GitRevisionSelector = GitRefSelector | { type: 'commit'; oid: string; witness: GitRefSelector };

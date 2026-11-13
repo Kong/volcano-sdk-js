@@ -151,13 +151,13 @@ test.each([
 ])('invalid runtime selection %j fails before network I/O', async (selector) => {
   const fetchMock = jest.fn<typeof fetch>();
   globalThis.fetch = fetchMock;
-  const result = await new ManagementClient({ token: 'management-token' }).git.revisions.resolve(
+  const revisions = new ManagementClient({ token: 'management-token' }).git.revisions;
+  const result: unknown = await Reflect.apply(revisions.resolve.bind(revisions), revisions, [
     projectId,
     repositoryId,
-    // @ts-expect-error Runtime callers can bypass the public tagged selector type.
     selector,
-  );
-  expect(result.error).toBeInstanceOf(Error);
+  ]);
+  expect(result).toEqual({ data: null, error: expect.any(Error) });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

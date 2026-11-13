@@ -13,6 +13,17 @@ function invalidBaseSpelling(value: string): boolean {
   return false;
 }
 
+function ownDataProperty(value: unknown, key: string): unknown {
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+    return undefined;
+  }
+  try {
+    return Object.getOwnPropertyDescriptor(value, key)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
 function timeoutValue(value = 60000): number {
   if (!Number.isInteger(value) || value < 1 || value > 2147483647) {
     throw new Error('timeoutMs must be an integer from 1 to 2147483647');
@@ -107,23 +118,21 @@ export class ManagementTransport {
 
   safeError(value: unknown): Error {
     const redact = (text: string): string => text.replaceAll(this.#token, '[redacted]');
-    const error = new Error(redact(value instanceof Error ? value.message : 'Management request failed'));
-    if (typeof value === 'object' && value !== null) {
-      if (
-        'status' in value &&
-        typeof value.status === 'number' &&
-        Number.isInteger(value.status) &&
-        value.status >= 100 &&
-        value.status <= 599
-      ) {
-        Object.assign(error, { status: value.status });
-      }
-      if ('code' in value && typeof value.code === 'string') {
-        Object.assign(error, { code: redact(value.code) });
-      }
-      if ('retryAfter' in value && typeof value.retryAfter === 'number' && Number.isFinite(value.retryAfter)) {
-        Object.assign(error, { retryAfter: value.retryAfter });
-      }
+    const status = ownDataProperty(value, 'status');
+    const code = ownDataProperty(value, 'code');
+    const retryAfter = ownDataProperty(value, 'retryAfter');
+    const validStatus = typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599;
+    const error = new Error(
+      redact(validStatus ? `Management request failed with status ${String(status)}` : 'Management request failed'),
+    );
+    if (validStatus) {
+      Object.assign(error, { status });
+    }
+    if (typeof code === 'string') {
+      Object.assign(error, { code: redact(code) });
+    }
+    if (typeof retryAfter === 'number' && Number.isFinite(retryAfter)) {
+      Object.assign(error, { retryAfter });
     }
     return error;
   }
