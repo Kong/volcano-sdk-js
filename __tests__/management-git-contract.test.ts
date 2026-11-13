@@ -146,6 +146,12 @@ test.each([
   { type: 'commit', oid: 'short', witness: { type: 'branch', name: 'main' } },
   { type: 'commit', oid: '0'.repeat(40), witness: { type: 'branch', name: 'main' } },
   { type: 'commit', oid: 'c'.repeat(40), witness: { type: 'future', name: 'main' } },
+  {
+    type: 'commit',
+    oid: 'c'.repeat(40),
+    witness: { type: 'branch', name: 'main', witness: { type: 'tag', name: 'v1' } },
+  },
+  { type: 'commit', oid: 'c'.repeat(40), witness: { type: 'tag', name: 'v1', witness: undefined } },
   { type: 'branch', name: 'main', witness: { type: 'tag', name: 'v1' } },
   { type: 'tag', name: 'v1', witness: undefined },
   { type: 'future', name: 'main' },

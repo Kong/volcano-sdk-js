@@ -100,7 +100,7 @@ export function selectorParameters(selector: GitRevisionSelector): {
   witness_ref?: string;
 } {
   if (selector.type === 'commit') {
-    if (selector.witness.type !== 'branch' && selector.witness.type !== 'tag') {
+    if ((selector.witness.type !== 'branch' && selector.witness.type !== 'tag') || 'witness' in selector.witness) {
       throw new Error('A commit selection requires a branch or tag witness');
     }
     return {
