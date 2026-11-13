@@ -79,6 +79,7 @@ For browser realtime connections, make sure the browser app's origin is allowed 
 | [Functions](./docs/functions.md)                 | Serverless function invocation                   |
 | [Durable functions](./docs/durable-functions.md) | Long-running work, human approvals, and messages |
 | [Project locks](./docs/locks.md)                 | Renewable backend leases                         |
+| [Repository source reads](./docs/git.md)         | Management credentials and exact Git revisions   |
 | [Next.js](./docs/nextjs.md)                      | Server components and middleware                 |
 | [TypeScript](./docs/typescript.md)               | Type definitions                                 |
 | [Error Handling](./docs/error-handling.md)       | Error patterns                                   |

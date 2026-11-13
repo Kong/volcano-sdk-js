@@ -9,8 +9,8 @@
  */
 
 /**
- * The `client_token` the execution's start returned. Lets an anon key,
- * or a user who did not start the execution, reach it, and a service key
- * scoped to a list without `*` read and stop it.
+ * The `client_token` the execution's start returned. Lets an anon key, a
+ * service key scoped to a list without `*`, or a user who did not start
+ * the execution, reach it.
  */
 export type DurableClientTokenParameter = string;

@@ -30,6 +30,7 @@ The SDK is designed to work seamlessly in browsers, React/Next.js applications, 
 | [Functions](./functions.md)                 | Invoke serverless functions                                   |
 | [Durable functions](./durable-functions.md) | Write functions that checkpoint and resume for up to 366 days |
 | [Project locks](./locks.md)                 | Leases that keep one holder at a time on backend work         |
+| [Repository source reads](./git.md)         | Management credentials and exact Git revisions                |
 | [Logs](./logs.md)                           | Search project logs and read activity buckets                 |
 | [Next.js Integration](./nextjs.md)          | Server components, middleware, and SSR considerations         |
 | [TypeScript](./typescript.md)               | Type definitions and best practices                           |
