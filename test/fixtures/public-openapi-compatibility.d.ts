@@ -30,7 +30,12 @@ export type CJSNewSchemas = EveryEntry<
     CJS.OpenAPIComponents['schemas']
   >
 >;
-export type CJSResponses = EveryEntry<[Exact<Current.components['responses'], CJS.OpenAPIComponents['responses']>]>;
+export type CJSResponses = EveryEntry<
+  EntryChecks<Expected.components['responses'], CJS.OpenAPIComponents['responses']>
+>;
+export type CJSCurrentResponses = EveryEntry<
+  [Exact<Current.components['responses'], CJS.OpenAPIComponents['responses']>]
+>;
 export type CJSParameters = EveryEntry<
   EntryChecks<Expected.components['parameters'], CJS.OpenAPIComponents['parameters']>
 >;
@@ -46,7 +51,8 @@ export type CJSNewParameters = EveryEntry<
 export type CJSRequestBodies = EveryEntry<
   [Exact<Current.components['requestBodies'], CJS.OpenAPIComponents['requestBodies']>]
 >;
-export type CJSHeaders = EveryEntry<[Exact<Current.components['headers'], CJS.OpenAPIComponents['headers']>]>;
+export type CJSHeaders = EveryEntry<EntryChecks<Expected.components['headers'], CJS.OpenAPIComponents['headers']>>;
+export type CJSCurrentHeaders = EveryEntry<[Exact<Current.components['headers'], CJS.OpenAPIComponents['headers']>]>;
 export type CJSPathItems = EveryEntry<[Exact<Current.components['pathItems'], CJS.OpenAPIComponents['pathItems']>]>;
 export type ESMPaths = EveryEntry<EntryChecks<Expected.paths, ESM.OpenAPIPaths>>;
 export type ESMNewPaths = EveryEntry<
@@ -69,7 +75,12 @@ export type ESMNewSchemas = EveryEntry<
     ESM.OpenAPIComponents['schemas']
   >
 >;
-export type ESMResponses = EveryEntry<[Exact<Current.components['responses'], ESM.OpenAPIComponents['responses']>]>;
+export type ESMResponses = EveryEntry<
+  EntryChecks<Expected.components['responses'], ESM.OpenAPIComponents['responses']>
+>;
+export type ESMCurrentResponses = EveryEntry<
+  [Exact<Current.components['responses'], ESM.OpenAPIComponents['responses']>]
+>;
 export type ESMParameters = EveryEntry<
   EntryChecks<Expected.components['parameters'], ESM.OpenAPIComponents['parameters']>
 >;
@@ -85,5 +96,6 @@ export type ESMNewParameters = EveryEntry<
 export type ESMRequestBodies = EveryEntry<
   [Exact<Current.components['requestBodies'], ESM.OpenAPIComponents['requestBodies']>]
 >;
-export type ESMHeaders = EveryEntry<[Exact<Current.components['headers'], ESM.OpenAPIComponents['headers']>]>;
+export type ESMHeaders = EveryEntry<EntryChecks<Expected.components['headers'], ESM.OpenAPIComponents['headers']>>;
+export type ESMCurrentHeaders = EveryEntry<[Exact<Current.components['headers'], ESM.OpenAPIComponents['headers']>]>;
 export type ESMPathItems = EveryEntry<[Exact<Current.components['pathItems'], ESM.OpenAPIComponents['pathItems']>]>;
