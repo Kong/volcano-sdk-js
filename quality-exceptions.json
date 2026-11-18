@@ -271,8 +271,8 @@
   },
   {
     "rule": "pnpm audit",
-    "scope": "GHSA-gcqx-w48m-w2h4:deepmerge@4.3.1",
-    "rationale": "deepmerge 4.3.1 is the latest release and has no fix. It is reached only through Jest (jest-config), which merges this repository's own Jest configuration: config defaults with overrides, and a preset's globals. No caller input reaches it, and the SDK package does not depend on it.",
-    "evidence": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4 lists no patched version; npm lists 4.3.1 as latest. jest-config 30.5.2 calls deepmerge only in mergeConfig and for preset globals. Approved by Marco Palladino on 2026-10-28. Remove this entry when deepmerge publishes a fix; the audit fails while it names an advisory pnpm no longer reports."
+    "scope": "GHSA-fc5q-39xc-vjpf:picomatch@4.0.7",
+    "rationale": "picomatch 4.0.7 is the latest release and has no fix. It is reached only through development tooling: Jest (jest-haste-map, jest-message-util, anymatch), Rollup's pluginutils, and the example app's file watchers. Those tools compile glob patterns from this repository's own configuration, not caller input, and the published SDK does not depend on picomatch.",
+    "evidence": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf lists every version through 4.0.7 as affected with no patched version; npm lists 4.0.7 as latest. pnpm why picomatch shows only devDependency and example-app paths, and the pnpm-workspace.yaml override resolves the picomatch 2 consumers to 4.0.7 so this is the only reported version. Approved by Luke Jolly on 2026-11-18. Remove this entry when picomatch publishes a fix; the audit fails while it names an advisory pnpm no longer reports."
   }
 ]
