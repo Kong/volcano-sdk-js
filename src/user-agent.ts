@@ -73,7 +73,14 @@ export function buildUserAgent(environment: object): string | null {
   return runtime === undefined ? null : `volcano-sdk-js/${SDK_VERSION} (${describeRuntime(runtime)})`;
 }
 
-const USER_AGENT = buildUserAgent(globalThis);
+// Detected on first use rather than at import, so loading the module runs no
+// detection code.
+let detected: { userAgent: string | null } | undefined;
+
+function currentUserAgent(): string | null {
+  detected ??= { userAgent: buildUserAgent(globalThis) };
+  return detected.userAgent;
+}
 
 /** Adds `userAgent`, when there is one, unless the caller set a User-Agent. */
 export function addUserAgent(init: RequestInit, userAgent: string | null): RequestInit {
@@ -94,10 +101,10 @@ export function addUserAgent(init: RequestInit, userAgent: string | null): Reque
 
 /** Adds the SDK's User-Agent outside browsers, keeping one the caller set. */
 export function withUserAgent(init: RequestInit): RequestInit {
-  return addUserAgent(init, USER_AGENT);
+  return addUserAgent(init, currentUserAgent());
 }
 
 /** The SDK's User-Agent in this runtime, or null where none is sent. */
 export function sdkUserAgent(): string | null {
-  return USER_AGENT;
+  return currentUserAgent();
 }
