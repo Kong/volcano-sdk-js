@@ -38,10 +38,13 @@ overrides:
   # test-exclude resolves a minimatch release with a globparts denial-of-service
   # advisory; 11.0.1 is patched and keeps the named minimatch export it calls.
   'minimatch@>=7.0.0 <11.0.1': ^11.0.1
-  # picomatch has no release that fixes GHSA-fc5q-39xc-vjpf. Jest's anymatch 3
-  # and Tailwind's readdirp 3 pin picomatch 2; one version lets the approval in
-  # quality-exceptions.json name a single scope. Both only call
-  # picomatch(pattern, options), which 4.x keeps.
+  # picomatch has no release that fixes GHSA-fc5q-39xc-vjpf. Jest's anymatch 3,
+  # Tailwind's readdirp 3, and micromatch 4 (Tailwind and fast-glob) pin
+  # picomatch 2; one version lets the approval in quality-exceptions.json name a
+  # single scope. anymatch and readdirp only call picomatch(pattern, options).
+  # micromatch also uses scan, makeRe, parse, the returnState matcher's state,
+  # and picomatch/lib/utils (isObject, isWindows, toPosixSlashes); 4.x keeps all
+  # of them.
   'picomatch@<4.0.0': 4.0.7
 
 allowBuilds:
