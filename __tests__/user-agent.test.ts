@@ -62,6 +62,10 @@ const runtimes: [string, object, string | null][] = [
   ['a null process', { process: null }, null],
   ['an unrecognized runtime', {}, null],
   ['a browser', { ...node, window: { document: {} } }, null],
+  ['a browser worker', { self: {}, navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' } }, null],
+  ['an Electron worker with Node.js', { ...node, navigator: { userAgent: 'Mozilla/5.0 Electron/38.0.0' } }, null],
+  ['a polyfilled process', { process: { env: {}, versions: {} } }, null],
+  ['React Native', { window: {}, process: { env: {} } }, null],
 ];
 
 describe('runtime detection', () => {

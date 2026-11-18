@@ -98,7 +98,7 @@ class VolcanoRealtime {
    * @param {Object} [config.volcanoClient] - VolcanoAuth client for auto-fetching lightweight notifications
    * @param {string} [config.databaseName] - Database name for auto-fetch queries
    * @param {Object} [config.fetchConfig] - Configuration for auto-fetch behavior
-   * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage
+   * @param {Function} [config.webSocket] - Optional WebSocket implementation for Node.js tests/advanced usage; the SDK's User-Agent is only sent through the WebSocket it loads itself
    */
   constructor(config: RealtimeConfig) {
     this.apiUrl = requiredApiUrl(config.apiUrl);

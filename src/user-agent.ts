@@ -63,6 +63,12 @@ export function buildUserAgent(environment: object): string | null {
   if (property(property(environment, 'window'), 'document') !== undefined) {
     return null;
   }
+  // Browser workers, including Electron workers that also expose Node's
+  // `process`, report a browser User-Agent and have no `window`.
+  const navigatorAgent = text(property(property(environment, 'navigator'), 'userAgent'));
+  if (navigatorAgent?.startsWith('Mozilla/') === true) {
+    return null;
+  }
   const runtime = detectRuntime(environment);
   return runtime === undefined ? null : `volcano-sdk-js/${SDK_VERSION} (${describeRuntime(runtime)})`;
 }
