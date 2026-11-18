@@ -197,6 +197,6 @@ await test('every lint exception is approved, exact, and still needed', async ()
 await test('dependency audit exceptions name one advisory at one version', async () => {
   assert.deepEqual(
     (await exceptions()).filter((item) => item['rule'] === auditRule).map((item) => item['scope']),
-    ['GHSA-fc5q-39xc-vjpf:picomatch@4.0.7'],
+    [],
   );
 });
