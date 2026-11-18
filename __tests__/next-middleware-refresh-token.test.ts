@@ -2,6 +2,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { createServerClient } from '../src/next/middleware.ts';
 import { config } from './support/next-middleware-fixtures.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 function refusesMissingRefreshTokens(): void {
   test('refreshToken refuses a missing token without making a request', async () => {
@@ -42,6 +43,7 @@ function requestsReplacementTokens(): void {
       headers: {
         'X-Anon-Key': config.anonKey,
         'Content-Type': 'application/json',
+        'User-Agent': NODE_USER_AGENT,
       },
       body: JSON.stringify({ refresh_token: 'current-refresh' }),
     });

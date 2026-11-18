@@ -14,6 +14,7 @@ import {
   run,
   shipping,
 } from './support/durable-approval-double.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 jest.mock('@aws/durable-execution-sdk-js', () => mockApprovalRuntime(), { virtual: true });
 
@@ -45,7 +46,7 @@ function registersTheApproval(): void {
     expect(url).toBe('https://api.test.com/durable-approvals');
     expect(init?.method).toBe('POST');
     // The route takes no credential: the callback id is what authorizes it.
-    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json', 'User-Agent': NODE_USER_AGENT });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(bodyAt(0)).toEqual({
       execution_ref: EXECUTION_ARN,

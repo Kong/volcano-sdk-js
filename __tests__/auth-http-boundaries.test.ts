@@ -4,6 +4,7 @@ import { anonFetch, authFetchUrl, authFetchWithContext, type AuthHttpHost } from
 import { AuthSessionOperations } from '../src/auth-session.ts';
 import type { AuthContext, RefreshResult, SignOutResult } from '../src/auth-session-lifecycle.ts';
 import { AuthRefreshDiscardedError } from '../src/errors.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 const context: AuthContext = {
   generation: 1,
@@ -46,7 +47,7 @@ test('default authenticated options send the captured token and preserve the res
   expect(fetch).toHaveBeenCalledWith(
     `${host.apiUrl}/auth/user`,
     expect.objectContaining({
-      headers: { Authorization: 'Bearer access', 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer access', 'Content-Type': 'application/json', 'User-Agent': NODE_USER_AGENT },
     }),
   );
 });
@@ -103,6 +104,7 @@ test('header overrides replace defaults case-insensitively without combining wir
     Authorization: 'Bearer custom',
     'Content-Type': 'text/plain',
     'x-trace': 'from-headers',
+    'User-Agent': NODE_USER_AGENT,
   });
   expect(new Headers(authenticated).get('authorization')).toBe('Bearer custom');
   expect(new Headers(authenticated).get('content-type')).toBe('text/plain');
@@ -112,6 +114,7 @@ test('header overrides replace defaults case-insensitively without combining wir
     Authorization: 'Bearer anonymous-override',
     'Content-Type': 'application/vnd.volcano+json',
     'X-Trace': 'last',
+    'User-Agent': NODE_USER_AGENT,
   });
   expect(new Headers(anonymous).get('authorization')).toBe('Bearer anonymous-override');
 });

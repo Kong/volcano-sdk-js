@@ -16,6 +16,10 @@ release gate is required.
 The checked-in release and publish workflows own versioning and publication.
 This checklist does not authorize a release, a registry mutation or an environment approval.
 
+The release PR also updates `SDK_VERSION` in `src/version.ts` through
+Release Please's `extra-files`. The SDK sends that version in its `User-Agent`
+from server runtimes, and a unit test fails if it differs from `package.json`.
+
 ## Dependabot updates
 
 Dependabot titles every update `chore(deps)` or `chore(deps-dev)`, so merging one

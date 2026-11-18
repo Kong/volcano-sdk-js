@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { fetchWithTimeout } from '../src/fetch-lifecycle.ts';
 import { expectNoPendingTimers } from './support/fake-timer-leaks.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 const endpoint = 'https://api.example.test/resource';
 
@@ -52,8 +53,13 @@ test('returns the response and preserves request options', async () => {
   const result: Response = await fetchWithTimeout(endpoint, options);
 
   expect(result).toBe(response);
-  expect(request).toHaveBeenCalledWith(endpoint, { ...options, signal: expect.any(AbortSignal) });
+  expect(request).toHaveBeenCalledWith(endpoint, {
+    ...options,
+    headers: { 'x-request': 'value', 'User-Agent': NODE_USER_AGENT },
+    signal: expect.any(AbortSignal),
+  });
   expect(options.signal).toBeUndefined();
+  expect(options.headers).toEqual({ 'x-request': 'value' });
 });
 
 test.each<[undefined | null, RequestInit]>([

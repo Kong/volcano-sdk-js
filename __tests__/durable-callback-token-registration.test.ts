@@ -21,6 +21,7 @@ import {
   timedOut,
   TOKEN,
 } from './support/durable-callback-double.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 jest.mock('@aws/durable-execution-sdk-js', () => mockCallbackRuntime(), { virtual: true });
 
@@ -40,7 +41,10 @@ function registersTheCallback(): void {
     noRetry(config);
     expect(fetchMock()).toHaveBeenCalledTimes(1);
     expect(fetchMock().mock.calls[0]?.[0]).toBe('https://api.test.com/durable-callbacks');
-    expect(fetchMock().mock.calls[0]?.[1]?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(fetchMock().mock.calls[0]?.[1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'User-Agent': NODE_USER_AGENT,
+    });
     expect(bodyAt(0)).toStrictEqual({
       execution_ref: EXECUTION_ARN,
       callback_id: 'cb-1',

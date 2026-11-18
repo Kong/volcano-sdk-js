@@ -1,3 +1,5 @@
+import { sdkUserAgent } from './user-agent.ts';
+
 type WebSocketConstructor = new (...args: never[]) => unknown;
 
 let webSocketConstructor: WebSocketConstructor | undefined;
@@ -19,6 +21,19 @@ export function webSocketFrom(loaded: unknown): WebSocketConstructor {
   return candidate;
 }
 
+/** Sends the SDK's User-Agent in the handshake of a socket `ws` opens. */
+export function identifiedWebSocket(WebSocket: WebSocketConstructor, userAgent: string | null): WebSocketConstructor {
+  if (userAgent === null) {
+    return WebSocket;
+  }
+  return new Proxy(WebSocket, {
+    construct(target, [address, protocols]: unknown[]): object {
+      const socket: unknown = Reflect.construct(target, [address, protocols, { headers: { 'User-Agent': userAgent } }]);
+      return new Object(socket);
+    },
+  });
+}
+
 /** Use the browser WebSocket or load the required Node.js dependency on demand. */
 export async function loadWebSocket(): Promise<WebSocketConstructor> {
   if (webSocketConstructor !== undefined) {
@@ -36,6 +51,6 @@ export async function loadWebSocket(): Promise<WebSocketConstructor> {
       'Unable to load a WebSocket implementation. In Node.js, reinstall @volcano.dev/sdk or pass a custom webSocket implementation.',
     );
   }
-  webSocketConstructor = webSocketFrom(loaded);
+  webSocketConstructor = identifiedWebSocket(webSocketFrom(loaded), sdkUserAgent());
   return webSocketConstructor;
 }
