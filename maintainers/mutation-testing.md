@@ -3,7 +3,7 @@
 `pnpm quality` runs Stryker against every handwritten runtime file under `src/`.
 Generated files, declarations, and tests are outside the mutation target. A
 local run checks the complete target. CI splits the same gate: one job runs the
-nonmutation quality checks and tests, and 32 required shards run
+nonmutation quality checks and tests, and 48 required shards run
 `pnpm mutation:full` on Node 22.
 
 Pull requests and merge groups set `MUTATION_BASE` to their base commit, so
@@ -17,6 +17,35 @@ locally with `MUTATION_BASE=origin/main pnpm mutation:full`.
 mutant counts with Stryker's unfiltered inventory, so a missing range or empty
 shard fails the gate. It counts mutants with a no-op test runner, because
 Stryker instruments before its dry run.
+
+## Shard balance
+
+Each shard job has a 90-minute limit, so the slowest shard sets how long the
+gate takes. Mutants differ widely in cost, and line counts do not predict it:
+a mutant that breaks a shared path such as `src/user-agent.ts` or
+`src/fetch-lifecycle.ts` fails hundreds of tests, many after a timeout.
+Stryker's own estimates come from the dry run, so they miss that too.
+
+`scripts/mutation-scope.mts` therefore splits the target by measured cost, from
+`mutation-costs.json`: milliseconds by source file and by the line each mutant
+starts on. Every shard job computes the same split from the sources and that
+table. A file the table lacks costs the measured average per line, so new code
+is balanced but not precisely. Without a table, every line costs 1.
+
+`scripts/mutation-timing-reporter.mts` is a Stryker reporter that charges each
+mutant the wall time since the previous result. Each shard uploads its timings
+as `mutation-timing-node-22-shard-<n>`, including a shard that times out. To
+refresh the table, download those artifacts from a full run on `main`, then run:
+
+```sh
+pnpm build:tooling
+node .quality-tools/update-mutation-costs.mjs path/to/mutation-timing-node-22-shard-*/mutation-timing.json
+```
+
+Each file the timings cover replaces that file's whole entry, and files they do
+not cover keep their costs. Prefer a run where every shard finished: a shard
+that timed out measured only part of its files. Refresh the table when the
+slowest shard grows well past the others.
 
 Stryker selects the mutants and enforces its native 100% threshold. Its score
 also treats `Timeout` as detected, so `scripts/check-mutation-report.mts`

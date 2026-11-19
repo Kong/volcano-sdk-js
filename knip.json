@@ -13,6 +13,8 @@
         "scripts/check-openapi.mts",
         "scripts/run-mutation.mts",
         "scripts/verify-mutation-shards.mts",
+        "scripts/update-mutation-costs.mts",
+        "scripts/mutation-timing-reporter.mts",
         "scripts/clean-openapi.mts",
         "scripts/audit-dependencies.mts",
         "scripts/copy-types.mts",

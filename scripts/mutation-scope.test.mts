@@ -230,3 +230,43 @@ await test('dense modules shorter than 200 lines split only between complete fun
     unlinkSync(path);
   }
 });
+
+await test('measured costs, not line counts, balance the shards', () => {
+  const paths = indexes(4).map((index) => `src/mutation-cost-fixture-${String(process.pid)}-${String(index)}.ts`);
+  for (const path of paths) {
+    writeFileSync(
+      path,
+      `${indexes(10)
+        .map((line) => `export const v${String(line)} = ${String(line)};`)
+        .join('\n')}\n`,
+    );
+  }
+  try {
+    const heavy = stringValue(paths[0]);
+    const light = stringValue(paths[1]);
+    const newFile = stringValue(paths[2]);
+    const typesOnly = stringValue(paths[3]);
+    // By line count the four equal files would pair up; the measured heavy file
+    // needs a shard to itself. The unmeasured file costs the measured average per
+    // line: (900 + 30 + 0) / 30 lines = 31 per line, 310 in all.
+    const costs = new Map([
+      [heavy, new Map([[1, 900]])],
+      [light, new Map([[2, 30]])],
+      [typesOnly, new Map<number, number>()],
+    ]);
+    const shards = indexes(2).map((shard) => shardMutationPatterns(paths, shard, 2, costs));
+    assert.deepEqual(shards, [[heavy], [newFile, light, typesOnly]]);
+    assert.deepEqual(changedShardPatterns(paths, 1, 2, costs), [newFile, light, typesOnly]);
+    assert.deepEqual(
+      indexes(2).map((shard) => shardMutationPatterns(paths, shard, 2, new Map())),
+      [
+        [heavy, newFile],
+        [light, typesOnly],
+      ],
+    );
+  } finally {
+    for (const path of paths) {
+      unlinkSync(path);
+    }
+  }
+});

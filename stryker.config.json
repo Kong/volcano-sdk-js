@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "mutate": ["src/**/*.{js,ts}", "!src/**/*.d.ts", "!src/generated/**", "!src/generated-runtime/**"],
   "testRunner": "jest",
-  "plugins": ["@stryker-mutator/jest-runner"],
+  "plugins": ["@stryker-mutator/jest-runner", "./.quality-tools/mutation-timing-reporter.mjs"],
   "jest": {
     "projectType": "custom",
     "configFile": "jest.mutation.config.cjs"
@@ -13,7 +13,7 @@
   "timeoutMS": 600000,
   "fileLogLevel": "debug",
   "cleanTempDir": "always",
-  "reporters": ["clear-text", "json"],
+  "reporters": ["clear-text", "json", "mutation-timing"],
   "clearTextReporter": {
     "logTests": false,
     "reportTests": false,
