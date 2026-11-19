@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { formatMutationCosts, mergeMutationCosts, mutationCostsPath, readMutationCosts } from './mutation-costs.mts';
 import { type MutantTiming, parseMutantTimings, readMutantTimings, timingCosts } from './mutation-timing.mts';
 
@@ -9,8 +9,10 @@ if (inputs.length === 0) {
   throw new Error('Pass the mutation-timing artifact directories or .jsonl files from a full mutation run');
 }
 
+// Decides by name rather than checking the path first, which a concurrent
+// change could invalidate between the check and the read.
 function timings(path: string): MutantTiming[] {
-  return statSync(path).isDirectory() ? readMutantTimings(path) : parseMutantTimings(readFileSync(path, 'utf8'), path);
+  return path.endsWith('.jsonl') ? parseMutantTimings(readFileSync(path, 'utf8'), path) : readMutantTimings(path);
 }
 
 const measured = inputs.flatMap((path) => timings(path));
