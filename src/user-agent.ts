@@ -91,8 +91,11 @@ export function addUserAgent(init: RequestInit, userAgent: string | null): Reque
     return init;
   }
   const { headers } = init;
-  if (new Headers(headers).has('user-agent')) {
-    return init;
+  // A loop, not Headers.has, so a malformed name cannot make every request throw.
+  for (const name of new Headers(headers).keys()) {
+    if (name === 'user-agent') {
+      return init;
+    }
   }
   if (headers instanceof Headers || Array.isArray(headers)) {
     const merged = new Headers(headers);
