@@ -73,10 +73,15 @@ export function buildUserAgent(environment: object): string | null {
   return runtime === undefined ? null : `volcano-sdk-js/${SDK_VERSION} (${describeRuntime(runtime)})`;
 }
 
-// Detected per request rather than at import: it is a few property reads, and
-// loading the module then runs no detection code.
+// Detected on first use, not at import, so loading the module runs no
+// detection code. The runtime cannot change, so the result is kept.
+let detectedUserAgent: string | null | undefined;
+
 function currentUserAgent(): string | null {
-  return buildUserAgent(globalThis);
+  if (detectedUserAgent === undefined) {
+    detectedUserAgent = buildUserAgent(globalThis);
+  }
+  return detectedUserAgent;
 }
 
 /** Adds `userAgent`, when there is one, unless the caller set a User-Agent. */

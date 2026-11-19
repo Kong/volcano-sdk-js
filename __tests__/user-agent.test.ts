@@ -68,6 +68,17 @@ const runtimes: [string, object, string | null][] = [
   ['React Native', { window: {}, process: { env: {} } }, null],
 ];
 
+test('detects the runtime once and keeps the result', () => {
+  const first = sdkUserAgent();
+  const nodeVersion = process.versions.node;
+  Object.defineProperty(process.versions, 'node', { value: '0.0.0', configurable: true });
+  try {
+    expect(sdkUserAgent()).toBe(first);
+  } finally {
+    Object.defineProperty(process.versions, 'node', { value: nodeVersion, configurable: true });
+  }
+});
+
 describe('runtime detection', () => {
   it.each(runtimes)('%s', (_name, environment, expected) => {
     expect(buildUserAgent(environment)).toBe(expected);
