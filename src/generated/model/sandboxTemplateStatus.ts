@@ -12,7 +12,7 @@ export type SandboxTemplateStatus = typeof SandboxTemplateStatus[keyof typeof Sa
 
 
 export const SandboxTemplateStatus = {
-  ready: 'ready',
-  unavailable: 'unavailable',
-  deleting: 'deleting',
+  SandboxTemplateStatusReady: 'ready',
+  SandboxTemplateStatusUnavailable: 'unavailable',
+  SandboxTemplateStatusDeleting: 'deleting',
 } as const;

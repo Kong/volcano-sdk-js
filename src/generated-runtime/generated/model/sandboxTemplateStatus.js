@@ -8,7 +8,7 @@
  * OpenAPI spec version: 3.0.0
  */
 export const SandboxTemplateStatus = {
-    ready: 'ready',
-    unavailable: 'unavailable',
-    deleting: 'deleting',
+    SandboxTemplateStatusReady: 'ready',
+    SandboxTemplateStatusUnavailable: 'unavailable',
+    SandboxTemplateStatusDeleting: 'deleting',
 };

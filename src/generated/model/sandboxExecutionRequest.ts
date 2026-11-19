@@ -9,6 +9,7 @@
  */
 import type { SandboxExecutionRequestEnvironment } from './sandboxExecutionRequestEnvironment';
 import type { SandboxExecutionRequestMemoryMb } from './sandboxExecutionRequestMemoryMb';
+import type { SandboxSessionNetworkRequest } from './sandboxSessionNetworkRequest';
 
 export type SandboxExecutionRequest = (unknown & {
   /** Preset ID from the available Sandbox preset catalog. */
@@ -17,7 +18,7 @@ export type SandboxExecutionRequest = (unknown & {
   /** Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits. */
   memory_mb?: SandboxExecutionRequestMemoryMb;
   /**
-     * Region such as `us-east-1`. Region IDs issued by earlier versions of the API are still accepted.
+     * Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`.
      * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
      */
   region: string;
@@ -39,4 +40,39 @@ export type SandboxExecutionRequest = (unknown & {
      */
   timeout_seconds?: number;
   environment?: SandboxExecutionRequestEnvironment;
+  network?: SandboxSessionNetworkRequest;
+  /** Set false to keep no output. stdout and stderr are returned once in this response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with `output_kept` false and empty streams, without running the command again. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable. */
+  keep_output?: boolean;
+}) | (unknown & {
+  /** Preset ID from the available Sandbox preset catalog. */
+  preset?: string;
+  sandbox_id?: string;
+  /** Baseline memory in MiB. Cloud HOBBY supports 1024; SUPERAGENT supports 1024 or 2048. Omission uses the preset or template default; a template requiring more than the plan permits is rejected. Local sessions are exempt from cloud plan limits. */
+  memory_mb?: SandboxExecutionRequestMemoryMb;
+  /**
+     * Region such as `us-east-1`, from the preset catalog. Region IDs issued by earlier versions of the API are still accepted. A temporarily unavailable region answers 400 with code `sandbox_region_unavailable`.
+     * @pattern ^(aws-)?[a-z]{2}(-[a-z]+)+-[0-9]+$
+     */
+  region: string;
+  /**
+     * Absolute VM lifetime including startup, bounded by environment capacity policy. Inherits the template TTL when omitted (cloud default 3600 seconds; local default 0, unlimited). Cloud HOBBY accepts 30–3600 seconds; SUPERAGENT accepts 30–28800 seconds. Inherited template defaults are clamped to the plan limit; explicit values above it are rejected. Local accepts 0 for unlimited or a positive lifetime. The VM is reclaimed early when the command finishes.
+     * @minimum 0
+     * @maximum 2147483647
+     */
+  max_duration_seconds?: number;
+  /**
+     * @minLength 1
+     * @maxLength 65536
+     */
+  command: string;
+  /**
+     * Command execution time from process start. Cloud defaults to 60 seconds and accepts 1–28800; local defaults to 0 (unlimited) and accepts nonnegative values. VM expiry always takes precedence. Cloud synchronous requests must return within the public connection idle limit (1000 seconds); use a session with a background process and short polling requests for longer work.
+     * @minimum 0
+     * @maximum 2147483647
+     */
+  timeout_seconds?: number;
+  environment?: SandboxExecutionRequestEnvironment;
+  network?: SandboxSessionNetworkRequest;
+  /** Set false to keep no output. stdout and stderr are returned once in this response, and Volcano's control plane never stores them in the execution journal, database, logs or traces. This does not cover the Sandbox's memory or a suspended session's snapshot. A retry with the same Idempotency-Key returns the exit code with `output_kept` false and empty streams, without running the command again. False is refused with 400 and code `feature_unavailable` while the `sandboxes.output_not_kept` capability is unavailable. */
+  keep_output?: boolean;
 });

@@ -7,12 +7,17 @@
  * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
  * OpenAPI spec version: 3.0.0
  */
+import type { SandboxSessionAppliedLimits } from './sandboxSessionAppliedLimits';
 import type { SandboxSessionDesiredState } from './sandboxSessionDesiredState';
+import type { SandboxSessionExecutions } from './sandboxSessionExecutions';
+import type { SandboxSessionNetwork } from './sandboxSessionNetwork';
 import type { SandboxSessionState } from './sandboxSessionState';
 
 export interface SandboxSession {
   id: string;
   project_id: string;
+  /** Last recorded lifecycle reason, such as sandbox_run_hook_timeout or sandbox_authority_or_expiry. Historical information, not a current error; use state for the current session state. Retained when later observations supply no reason, including after termination or recovery. Omitted when no reason is known. Values may be added; this field does not imply whether a command ran or whether it can be retried. */
+  last_error_code?: string;
   /**
      * Explicit template used to create the session. Null when created directly from a preset.
      * @nullable
@@ -29,4 +34,7 @@ export interface SandboxSession {
      * @nullable
      */
   expires_at: string | null;
+  network: SandboxSessionNetwork;
+  executions: SandboxSessionExecutions;
+  limits?: SandboxSessionAppliedLimits;
 }
