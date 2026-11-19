@@ -91,7 +91,9 @@ export function addUserAgent(init: RequestInit, userAgent: string | null): Reque
     return init;
   }
   const { headers } = init;
-  // A loop, not Headers.has, so a malformed name cannot make every request throw.
+  // A loop, not Headers.has: Stryker's empty-string mutant of the name would
+  // make has('') throw on every request and stall the durable retry tests
+  // past the mutant timeout instead of failing them.
   for (const name of new Headers(headers).keys()) {
     if (name === 'user-agent') {
       return init;
