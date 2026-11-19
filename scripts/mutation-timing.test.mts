@@ -147,7 +147,7 @@ await test('the timing runner records each mutant run and logs slow ones', async
       { file: 'src/a.ts', line: 7, mutator: 'StringLiteral', ms: 1200, tests: 40, status: 'killed' },
       { file: 'src/b.ts', line: 1, mutator: 'StringLiteral', ms: slowMutantMs, tests: 40, status: 'killed' },
     ]);
-    assert.deepEqual(logged, ['Slow mutant src/b.ts:1 StringLiteral 30.0s, 40 tests, killed']);
+    assert.deepEqual(logged, ['Slow mutant src/b.ts:1 StringLiteral 120.0s, 40 tests, killed']);
     assert.match(
       readFileSync(join(directory, mutationTimingDirectory, `${String(process.pid)}.jsonl`), 'utf8'),
       /\n$/u,
@@ -175,7 +175,7 @@ await test('without a project root the timing runner only logs', async () => {
     await runner.init();
     await runner.mutantRun(mutantOptions(join(process.cwd(), 'src', 'c.ts'), 2));
     await runner.dispose();
-    assert.deepEqual(logged, ['Slow mutant src/c.ts:3 StringLiteral 60.0s, 0 tests, error']);
+    assert.deepEqual(logged, ['Slow mutant src/c.ts:3 StringLiteral 240.0s, 0 tests, error']);
     mkdirSync(join(directory, 'empty'));
     assert.deepEqual(readMutantTimings(join(directory, 'empty')), []);
   });

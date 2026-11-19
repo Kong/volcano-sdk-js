@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
-import ts from 'typescript';
+import { type LineRange, MAX_SHARD_LINES, safeChunks } from './mutation-chunks.mts';
 import { type MutationCosts, readMutationCosts } from './mutation-costs.mts';
-import { declaresTypesOnly, itemWeight, type ShardItem, unmeasuredLineCost } from './mutation-weights.mts';
-
-interface LineRange {
-  start: number;
-  end: number;
-}
+import {
+  declaresTypesOnly,
+  itemWeight,
+  measuredCost,
+  type ShardItem,
+  unmeasuredLineCost,
+} from './mutation-weights.mts';
 
 interface MutationShard {
   patterns: string[];
@@ -23,8 +24,6 @@ interface SourceGroup {
 }
 
 // Stryker accepts file/line ranges but has no native CI shard selector.
-// Split small, mutation-dense modules without cutting through syntax nodes.
-const MAX_SHARD_LINES = 80;
 export const mutationShardCount = 48;
 function handwrittenRuntime(path: string): boolean {
   return (
@@ -39,45 +38,6 @@ export function mutationPatterns(paths: readonly string[]): string[] {
   return [...new Set(paths.filter((path) => handwrittenRuntime(path) && existsSync(path)))].toSorted((left, right) =>
     left.localeCompare(right),
   );
-}
-
-function nodeEndLine(sourceFile: ts.SourceFile, node: ts.Node): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.end - 1).line + 1;
-}
-
-function safeCutLines(path: string, source: string, lineCount: number): number[] {
-  // A line-range boundary inside a method can omit a multiline Stryker mutant.
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
-  const cuts = new Set([lineCount]);
-  for (const statement of sourceFile.statements) {
-    cuts.add(nodeEndLine(sourceFile, statement));
-    if (ts.isClassDeclaration(statement)) {
-      for (const member of statement.members) {
-        cuts.add(nodeEndLine(sourceFile, member));
-      }
-    }
-  }
-  return [...cuts].toSorted((left, right) => left - right);
-}
-
-function chunkEnd(cuts: readonly number[], start: number): number | undefined {
-  const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
-  return preferred.at(-1) ?? cuts.find((line) => line >= start);
-}
-
-function safeChunks(path: string, source: string, lineCount: number): LineRange[] {
-  const cuts = safeCutLines(path, source, lineCount);
-  const chunks: LineRange[] = [];
-  let start = 1;
-  while (start <= lineCount) {
-    const end = chunkEnd(cuts, start);
-    if (end === undefined) {
-      throw new Error(`${path}: no safe mutation shard boundary after line ${String(start)}`);
-    }
-    chunks.push({ start, end });
-    start = end + 1;
-  }
-  return chunks;
 }
 
 function selectedRanges(group: SourceGroup, start: number, end: number): ShardItem {
@@ -100,11 +60,23 @@ function selectedRanges(group: SourceGroup, start: number, end: number): ShardIt
   return { path, patterns: ranges, lines: selected, typesOnly: group.typesOnly };
 }
 
-function shardItems(group: SourceGroup): ShardItem[] {
-  if (group.lines.size <= MAX_SHARD_LINES) {
-    return [{ path: group.path, patterns: group.patterns, lines: [...group.lines], typesOnly: group.typesOnly }];
+function wholeItem(group: SourceGroup): ShardItem {
+  return { path: group.path, patterns: group.patterns, lines: [...group.lines], typesOnly: group.typesOnly };
+}
+
+// A file too long, or measured as too costly, for one item splits between
+// statements or class members, so one slow file cannot set the slowest shard.
+function shardItems(
+  group: SourceGroup,
+  weigh: (item: ShardItem) => number,
+  target: number,
+  measured: boolean,
+): ShardItem[] {
+  if (group.lines.size <= MAX_SHARD_LINES && !(measured && weigh(wholeItem(group)) > target)) {
+    return [wholeItem(group)];
   }
-  return safeChunks(group.path, group.source, group.lineCount)
+  const fits = (start: number, end: number): boolean => weigh(selectedRanges(group, start, end)) <= target;
+  return safeChunks(group.path, group.source, group.lineCount, fits)
     .map(({ start, end }) => selectedRanges(group, start, end))
     .filter((item) => item.lines.length > 0);
 }
@@ -194,9 +166,14 @@ function distributeShardItems(
     weight: 0,
   }));
   const unmeasured = unmeasuredLineCost(groups.values(), costs);
+  const weigh = (item: ShardItem): number => itemWeight(item, costs, unmeasured);
+  // Size pieces against the full run, so a pull request's few changed files
+  // split only as far as they would in the complete target.
+  const selected = [...groups.values()].reduce((sum, group) => sum + weigh(wholeItem(group)), 0);
+  const total = Math.max(measuredCost(costs), selected);
   const ordered = [...groups.values()]
-    .flatMap((group) => shardItems(group))
-    .map((item) => ({ patterns: item.patterns, weight: itemWeight(item, costs, unmeasured) }))
+    .flatMap((group) => shardItems(group, weigh, total / shardCount, costs.has(group.path)))
+    .map((item) => ({ patterns: item.patterns, weight: weigh(item) }))
     .toSorted((left, right) => {
       const weightOrder = right.weight - left.weight;
       return weightOrder === 0 ? firstPattern(left).localeCompare(firstPattern(right)) : weightOrder;

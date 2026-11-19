@@ -87,12 +87,16 @@ await test('a base commit limits mutation to changed and untracked runtime files
     'src/lock-clock.ts',
   ]);
   assert.deepEqual(selectMutationPatterns('base-sha', git), ['src/json-clone.ts', 'src/lock-clock.ts']);
-  const shards = Array.from({ length: 4 }, (_, index) => selectMutationPatterns('base-sha', git, { index, count: 4 }));
+  // Measured files may split into line ranges, but no other file joins them,
+  // and most shards stay empty.
+  const shards = Array.from({ length: 8 }, (_, index) => selectMutationPatterns('base-sha', git, { index, count: 8 }));
   assert.deepEqual(
-    shards.flat().toSorted((left, right) => left.localeCompare(right)),
+    [...new Set(shards.flat().map((pattern) => stringValue(pattern.split(':')[0])))].toSorted((left, right) =>
+      left.localeCompare(right),
+    ),
     ['src/json-clone.ts', 'src/lock-clock.ts'],
   );
-  assert.deepEqual(shards.slice(2), [[], []]);
+  assert.ok(shards.filter((selected) => selected.length === 0).length >= 4);
 });
 
 await test('only the complete scope rejects an empty shard', () => {

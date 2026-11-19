@@ -47,6 +47,16 @@ export function unmeasuredLineCost(sources: Iterable<WeightedSource>, costs: Mut
   return cost > 0 && lines > 0 ? cost / lines : 1;
 }
 
+export function measuredCost(costs: MutationCosts): number {
+  let total = 0;
+  for (const lines of costs.values()) {
+    for (const cost of lines.values()) {
+      total += cost;
+    }
+  }
+  return total;
+}
+
 export function itemWeight(item: ShardItem, costs: MutationCosts, unmeasured: number): number {
   if (item.typesOnly) {
     return 0;

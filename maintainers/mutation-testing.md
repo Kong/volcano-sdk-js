@@ -44,7 +44,10 @@ Stryker's own estimates come from the dry run, so they miss that too.
 `scripts/mutation-scope.mts` therefore splits the target by measured cost, from
 `mutation-costs.json`: worker milliseconds by source file and by the line each
 mutant starts on. Every shard job computes the same split from the sources and
-that table. A file of type declarations costs nothing, because Stryker finds no
+that table. A measured file that costs more than one shard's share of the full
+run splits between statements or class members, as a file longer than 80 lines
+does, so one slow file cannot set the slowest shard. A file of type declarations
+costs nothing, because Stryker finds no
 mutants in it. Code the table has no timings for, a new file or a new chunk of
 a measured one, costs the measured average per line. Without a table, every
 line costs 1.
@@ -54,10 +57,10 @@ Stryker runs each mutant through `timed-jest`
 each mutant inside the worker that runs it. A reporter cannot: Stryker reports
 results without start times, from several workers at once. Each worker appends
 its timings to `reports/mutation-timing/<pid>.jsonl`, and the shard log shows
-every mutant slower than 30 seconds as it finishes:
+every mutant slower than 2 minutes as it finishes:
 
 ```text
-Slow mutant src/user-agent.ts:107 ObjectLiteral 48.2s, 727 tests, killed
+Slow mutant src/path-segments.ts:3 StringLiteral 264.9s, 1706 tests, killed
 ```
 
 knip's Stryker plugin reads the `testRunner` name as a package,

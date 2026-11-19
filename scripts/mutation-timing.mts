@@ -22,7 +22,7 @@ export const projectRootVariable = 'MUTATION_TIMING_ROOT';
 
 // Mutants at least this slow are logged while the shard runs, so a shard that
 // times out still shows what it was spending time on.
-export const slowMutantMs = 30_000;
+export const slowMutantMs = 120_000;
 
 function parseTiming(line: string, source: string): MutantTiming {
   const value: unknown = JSON.parse(line);

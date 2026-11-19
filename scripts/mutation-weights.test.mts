@@ -94,19 +94,30 @@ await test('measured costs, not line counts, balance the shards', () => {
     const light = stringValue(paths[1]);
     const newFile = stringValue(paths[2]);
     const typesOnly = stringValue(paths[3]);
-    // By line count the files would pair up; the measured heavy file needs a
-    // shard to itself. The unmeasured file costs the measured average per line,
-    // (900 + 30) / 20 lines = 46.5, so 465 in all. Charged that average too, the
-    // types-only file would split the second shard: [[heavy, light], [new, types]].
+    // The measured heavy file costs more than half the total, so it splits
+    // between statements: line 1 carries its 900, and lines 2-10 have no
+    // measured cost and count as unmeasured code. The unmeasured file costs the
+    // measured average per line, (900 + 30) / 20 lines = 46.5, so 465 in all.
+    // The types-only file costs 0; charged the average, it would have moved.
     const costs = new Map([
       [heavy, new Map([[1, 900]])],
       [light, new Map([[2, 30]])],
     ]);
     assert.deepEqual(
       indexes(2).map((shard) => shardMutationPatterns(paths, shard, 2, costs)),
+      [
+        [`${heavy}:1-1`, typesOnly],
+        [newFile, `${heavy}:2-10`, light],
+      ],
+    );
+    assert.deepEqual(changedShardPatterns(paths, 1, 2, costs), [newFile, `${heavy}:2-10`, light]);
+    // Pieces are sized against the whole table, so when other files make up
+    // most of the full run, the heavy file stays whole.
+    const fullRun = new Map([...costs, ['src/elsewhere.ts', new Map([[1, 100_000]])]]);
+    assert.deepEqual(
+      indexes(2).map((shard) => changedShardPatterns(paths, shard, 2, fullRun)),
       [[heavy], [newFile, light, typesOnly]],
     );
-    assert.deepEqual(changedShardPatterns(paths, 1, 2, costs), [newFile, light, typesOnly]);
     assert.deepEqual(
       indexes(2).map((shard) => shardMutationPatterns(paths, shard, 2, new Map())),
       [
