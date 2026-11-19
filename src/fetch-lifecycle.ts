@@ -1,3 +1,5 @@
+import { withUserAgent } from './user-agent.ts';
+
 const defaultTimeoutMs = 60000;
 
 type ResponseConsumer<Result> = (response: Response, signal: AbortSignal) => Result | Promise<Result>;
@@ -34,7 +36,7 @@ async function performFetch(
   }, timeoutMs);
 
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...withUserAgent(options), signal: controller.signal });
     return await consume(response, controller.signal);
   } catch (error) {
     if (isRequestTimeout(error, timedOut, caller)) {

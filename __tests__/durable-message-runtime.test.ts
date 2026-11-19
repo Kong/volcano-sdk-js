@@ -5,6 +5,7 @@ import type { DurableHandler } from '../src/durable-types.ts';
 import { expectInstanceOf } from './support/assertions.ts';
 import { fetchRoutes } from './support/fetch-routes.ts';
 import { settledRun } from './support/settled-run.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 // durable-message.test.ts stands a double in for the runtime. These run the
 // same calls through the runtime Volcano installs and its local checkpoint
@@ -92,6 +93,7 @@ function publishRequest(key: number, body: unknown): { headers: Record<string, s
       'Content-Type': 'application/json',
       'X-Volcano-Durable-Session': 'vdms_session',
       'Idempotency-Key': `${SESSION_HASH}:${String(key)}`,
+      'User-Agent': NODE_USER_AGENT,
     },
     body,
   };

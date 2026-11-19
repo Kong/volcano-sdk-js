@@ -20,6 +20,7 @@
  * ```
  */
 
+import { withUserAgent } from '../user-agent.ts';
 import { getTokenFromRequest } from './request.ts';
 
 export type { MiddlewareRequest } from './request.ts';
@@ -171,6 +172,10 @@ async function refreshResponse(response: Response): Promise<RefreshTokenResult> 
   return { ...pair, error: null };
 }
 
+function send(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, withUserAgent(init));
+}
+
 export function createServerClient(config: ServerClientConfig): ServerClient {
   const configuredUrl: unknown = config.apiUrl;
   const apiUrl = isNonEmptyString(configuredUrl) ? configuredUrl : 'https://api.volcano.dev';
@@ -182,7 +187,7 @@ export function createServerClient(config: ServerClientConfig): ServerClient {
         return { user: null, error: new Error('No access token provided') };
       }
       try {
-        const response = await fetch(`${apiUrl}/auth/user`, {
+        const response = await send(`${apiUrl}/auth/user`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -205,7 +210,7 @@ export function createServerClient(config: ServerClientConfig): ServerClient {
         };
       }
       try {
-        const response = await fetch(`${apiUrl}/auth/refresh`, {
+        const response = await send(`${apiUrl}/auth/refresh`, {
           method: 'POST',
           headers: {
             'X-Anon-Key': anonKey,

@@ -16,6 +16,7 @@ import {
   unreadable,
 } from './support/durable-message-fixtures.ts';
 import { rejectWithForeignValue } from './support/non-error-rejection.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 jest.mock('@aws/durable-execution-sdk-js', () => mockDurableRuntime(), { virtual: true });
 
@@ -45,7 +46,7 @@ function registersWaits(): void {
     expect(url).toBe('https://api.test.com/durable-messages/waits');
     expect(init?.method).toBe('POST');
     // The callback id is what authorizes the route.
-    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json', 'User-Agent': NODE_USER_AGENT });
     expect(bodyAt(0)).toStrictEqual({
       execution_ref: EXECUTION_ARN,
       callback_id: 'cb-1',

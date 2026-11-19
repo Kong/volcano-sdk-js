@@ -1,4 +1,5 @@
 import { apiRequestError } from './api-errors.ts';
+import { withUserAgent } from './user-agent.ts';
 
 /** A request a workflow makes to Volcano's runtime routes. */
 export interface PlatformRequest {
@@ -91,7 +92,7 @@ async function send(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      ...init,
+      ...withUserAgent(init),
       signal: AbortSignal.timeout(timeout),
     });
     if (response.ok && request.readsAnswer !== true) {

@@ -22,6 +22,7 @@ import {
   SESSION_HASH,
   SESSION_TOKEN,
 } from './support/durable-message-fixtures.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 jest.mock('@aws/durable-execution-sdk-js', () => mockDurableRuntime(), { virtual: true });
 
@@ -45,7 +46,7 @@ function opensSessions(): void {
     noRetry(config);
     expect(requestAt(0)).toEqual({
       url: 'https://api.test.com/durable-messages/sessions',
-      init: expect.objectContaining({ headers: { 'Content-Type': 'application/json' } }),
+      init: expect.objectContaining({ headers: { 'Content-Type': 'application/json', 'User-Agent': NODE_USER_AGENT } }),
     });
     expect(bodyAt(0)).toStrictEqual({ execution_ref: EXECUTION_ARN, callback_id: 'cb-1' });
 
@@ -58,6 +59,7 @@ function opensSessions(): void {
           'Content-Type': 'application/json',
           'X-Volcano-Durable-Session': SESSION_TOKEN,
           'Idempotency-Key': `${SESSION_HASH}:1`,
+          'User-Agent': NODE_USER_AGENT,
         },
       }),
     });

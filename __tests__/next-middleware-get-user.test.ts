@@ -2,6 +2,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { createServerClient } from '../src/next/middleware.ts';
 import { config, user } from './support/next-middleware-fixtures.ts';
+import { NODE_USER_AGENT } from './support/user-agent.ts';
 
 function refusesMissingAccessTokens(): void {
   test('getUser refuses a missing token without making a request', async () => {
@@ -39,6 +40,7 @@ function returnsValidatedUsers(): void {
         Authorization: 'Bearer access-token',
         'X-Anon-Key': config.anonKey,
         'Content-Type': 'application/json',
+        'User-Agent': NODE_USER_AGENT,
       },
     });
   });
