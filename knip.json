@@ -13,6 +13,8 @@
         "scripts/check-openapi.mts",
         "scripts/run-mutation.mts",
         "scripts/verify-mutation-shards.mts",
+        "scripts/update-mutation-costs.mts",
+        "scripts/mutation-timing-runner.mts",
         "scripts/clean-openapi.mts",
         "scripts/audit-dependencies.mts",
         "scripts/copy-types.mts",
@@ -33,7 +35,7 @@
         "examples/durable-order-pipeline/volcano/functions/**/*.js",
         "test/fixtures/**/*.d.ts"
       ],
-      "ignoreDependencies": ["@types/convert-source-map"]
+      "ignoreDependencies": ["@types/convert-source-map", "@stryker-mutator/timed-jest-runner"]
     },
     "examples/nextjs-notes-app": {
       "project": ["src/**/*.{ts,tsx,css}!", "*.config.{js,ts}"],

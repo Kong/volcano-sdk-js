@@ -3,7 +3,7 @@
 `pnpm quality` runs Stryker against every handwritten runtime file under `src/`.
 Generated files, declarations, and tests are outside the mutation target. A
 local run checks the complete target. CI splits the same gate: one job runs the
-nonmutation quality checks and tests, and 32 required shards run
+nonmutation quality checks and tests, and 48 required shards run
 `pnpm mutation:full` on Node 22.
 
 Pull requests and merge groups set `MUTATION_BASE` to their base commit, so
@@ -32,6 +32,55 @@ fails about 620 tests, and about 70 of them only after their 2- or 5-second wait
 expires: about 160 seconds on a fast machine. The 600-second per-mutant
 allowance keeps those slow kills from turning into timeouts on slower CI
 runners. Reaching it still fails.
+
+## Shard balance
+
+Each shard job has a 90-minute limit, so the slowest shard sets how long the
+gate takes. Mutants differ widely in cost, and line counts do not predict it:
+a mutant on a shared path such as `src/fetch-lifecycle.ts` reruns hundreds of
+tests, and a mutant that breaks one fails many of them after a timeout.
+Stryker's own estimates come from the dry run, so they miss that too.
+
+`scripts/mutation-scope.mts` therefore splits the target by measured cost, from
+`mutation-costs.json`: worker milliseconds by source file and by the line each
+mutant starts on. Every shard job computes the same split from the sources and
+that table. A measured file that costs more than one shard's share of the full
+run splits between statements or class members, as a file longer than 80 lines
+does, so one slow file cannot set the slowest shard. A file of type declarations
+costs nothing, because Stryker finds no
+mutants in it. Code the table has no timings for, a new file or a new chunk of
+a measured one, costs the measured average per line. Without a table, every
+line costs 1.
+
+Stryker runs each mutant through `timed-jest`
+(`scripts/mutation-timing-runner.mts`), which wraps the Jest runner and times
+each mutant inside the worker that runs it. A reporter cannot: Stryker reports
+results without start times, from several workers at once. Each worker appends
+its timings to `reports/mutation-timing/<pid>.jsonl`, and the shard log shows
+every mutant slower than 2 minutes as it finishes:
+
+```text
+Slow mutant src/path-segments.ts:3 StringLiteral 264.9s, 1706 tests, killed
+```
+
+knip's Stryker plugin reads the `testRunner` name as a package,
+`@stryker-mutator/timed-jest-runner`, so `knip.json` ignores that name.
+
+After Stryker exits, `scripts/run-mutation.mts` prints the slowest mutants and
+the costliest files. The mutation step times out at 85 minutes, before the
+job's 90, so a shard that is too slow still uploads the timings it measured as
+`mutation-timing-node-22-shard-<n>`. To refresh the table, download those
+artifacts from a full run on `main`, then run:
+
+```sh
+pnpm build:tooling
+node .quality-tools/update-mutation-costs.mjs path/to/mutation-timing-node-22-shard-*
+```
+
+Each file the timings cover replaces that file's whole entry, and files they do
+not cover keep their costs. Prefer a run where every shard finished: a shard
+that timed out measured only part of its files. Refresh the table when the
+slowest shard grows well past the others.
 
 ## Runner lifetime
 

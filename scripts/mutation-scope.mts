@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
-import ts from 'typescript';
-
-interface LineRange {
-  start: number;
-  end: number;
-}
+import { type LineRange, MAX_SHARD_LINES, safeChunks } from './mutation-chunks.mts';
+import { type MutationCosts, readMutationCosts } from './mutation-costs.mts';
+import {
+  declaresTypesOnly,
+  itemWeight,
+  measuredCost,
+  type ShardItem,
+  unmeasuredLineCost,
+} from './mutation-weights.mts';
 
 interface MutationShard {
   patterns: string[];
@@ -17,12 +20,11 @@ interface SourceGroup {
   lines: Set<number>;
   source: string;
   lineCount: number;
+  typesOnly: boolean;
 }
 
 // Stryker accepts file/line ranges but has no native CI shard selector.
-// Split small, mutation-dense modules without cutting through syntax nodes.
-const MAX_SHARD_LINES = 80;
-export const mutationShardCount = 32;
+export const mutationShardCount = 48;
 function handwrittenRuntime(path: string): boolean {
   return (
     /^src\/.+\.(?:js|ts)$/u.test(path) &&
@@ -38,46 +40,8 @@ export function mutationPatterns(paths: readonly string[]): string[] {
   );
 }
 
-function nodeEndLine(sourceFile: ts.SourceFile, node: ts.Node): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.end - 1).line + 1;
-}
-
-function safeCutLines(path: string, source: string, lineCount: number): number[] {
-  // A line-range boundary inside a method can omit a multiline Stryker mutant.
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
-  const cuts = new Set([lineCount]);
-  for (const statement of sourceFile.statements) {
-    cuts.add(nodeEndLine(sourceFile, statement));
-    if (ts.isClassDeclaration(statement)) {
-      for (const member of statement.members) {
-        cuts.add(nodeEndLine(sourceFile, member));
-      }
-    }
-  }
-  return [...cuts].toSorted((left, right) => left - right);
-}
-
-function chunkEnd(cuts: readonly number[], start: number): number | undefined {
-  const preferred = cuts.filter((line) => line >= start && line < start + MAX_SHARD_LINES);
-  return preferred.at(-1) ?? cuts.find((line) => line >= start);
-}
-
-function safeChunks(path: string, source: string, lineCount: number): LineRange[] {
-  const cuts = safeCutLines(path, source, lineCount);
-  const chunks: LineRange[] = [];
-  let start = 1;
-  while (start <= lineCount) {
-    const end = chunkEnd(cuts, start);
-    if (end === undefined) {
-      throw new Error(`${path}: no safe mutation shard boundary after line ${String(start)}`);
-    }
-    chunks.push({ start, end });
-    start = end + 1;
-  }
-  return chunks;
-}
-
-function selectedRanges(path: string, lines: ReadonlySet<number>, start: number, end: number): MutationShard {
+function selectedRanges(group: SourceGroup, start: number, end: number): ShardItem {
+  const { path, lines } = group;
   const selected = [...lines].filter((line) => line >= start && line <= end).toSorted((a, b) => a - b);
   const ranges: string[] = [];
   let current: LineRange | undefined;
@@ -93,16 +57,28 @@ function selectedRanges(path: string, lines: ReadonlySet<number>, start: number,
   if (current !== undefined) {
     ranges.push(`${path}:${String(current.start)}-${String(current.end)}`);
   }
-  return { patterns: ranges, weight: selected.length };
+  return { path, patterns: ranges, lines: selected, typesOnly: group.typesOnly };
 }
 
-function shardItems(group: SourceGroup): MutationShard[] {
-  if (group.lines.size <= MAX_SHARD_LINES) {
-    return [{ patterns: group.patterns, weight: group.lines.size }];
+function wholeItem(group: SourceGroup): ShardItem {
+  return { path: group.path, patterns: group.patterns, lines: [...group.lines], typesOnly: group.typesOnly };
+}
+
+// A file too long, or measured as too costly, for one item splits between
+// statements or class members, so one slow file cannot set the slowest shard.
+function shardItems(
+  group: SourceGroup,
+  weigh: (item: ShardItem) => number,
+  target: number,
+  measured: boolean,
+): ShardItem[] {
+  if (group.lines.size <= MAX_SHARD_LINES && !(measured && weigh(wholeItem(group)) > target)) {
+    return [wholeItem(group)];
   }
-  return safeChunks(group.path, group.source, group.lineCount)
-    .map(({ start, end }) => selectedRanges(group.path, group.lines, start, end))
-    .filter((item) => item.weight > 0);
+  const fits = (start: number, end: number): boolean => weigh(selectedRanges(group, start, end)) <= target;
+  return safeChunks(group.path, group.source, group.lineCount, fits)
+    .map(({ start, end }) => selectedRanges(group, start, end))
+    .filter((item) => item.lines.length > 0);
 }
 
 function validateShardSelection(shardIndex: number, shardCount: number): void {
@@ -150,6 +126,7 @@ function addPatternGroup(groups: Map<string, SourceGroup>, pattern: string): voi
     lines: new Set<number>(),
     source,
     lineCount,
+    typesOnly: declaresTypesOnly(path, source),
   };
   group.patterns.push(pattern);
   for (let line = start; line <= end; line += 1) {
@@ -179,13 +156,24 @@ function lightestShard(shards: readonly MutationShard[]): MutationShard {
   return target;
 }
 
-function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCount: number): MutationShard[] {
+function distributeShardItems(
+  groups: ReadonlyMap<string, SourceGroup>,
+  shardCount: number,
+  costs: MutationCosts,
+): MutationShard[] {
   const shards: MutationShard[] = Array.from({ length: shardCount }, () => ({
     patterns: [],
     weight: 0,
   }));
+  const unmeasured = unmeasuredLineCost(groups.values(), costs);
+  const weigh = (item: ShardItem): number => itemWeight(item, costs, unmeasured);
+  // Size pieces against the full run, so a pull request's few changed files
+  // split only as far as they would in the complete target.
+  const selected = [...groups.values()].reduce((sum, group) => sum + weigh(wholeItem(group)), 0);
+  const total = Math.max(measuredCost(costs), selected);
   const ordered = [...groups.values()]
-    .flatMap((group) => shardItems(group))
+    .flatMap((group) => shardItems(group, weigh, total / shardCount, costs.has(group.path)))
+    .map((item) => ({ patterns: item.patterns, weight: weigh(item) }))
     .toSorted((left, right) => {
       const weightOrder = right.weight - left.weight;
       return weightOrder === 0 ? firstPattern(left).localeCompare(firstPattern(right)) : weightOrder;
@@ -198,17 +186,24 @@ function distributeShardItems(groups: ReadonlyMap<string, SourceGroup>, shardCou
   return shards;
 }
 
-function mutationShards(patterns: readonly string[], shardCount: number): string[][] {
+function mutationShards(patterns: readonly string[], shardCount: number, costs: MutationCosts): string[][] {
   const groups = new Map<string, SourceGroup>();
   for (const pattern of patterns) {
     addPatternGroup(groups, pattern);
   }
-  return distributeShardItems(groups, shardCount).map((shard) => shard.patterns);
+  return distributeShardItems(groups, shardCount, costs).map((shard) => shard.patterns);
 }
 
-export function shardMutationPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
+// Every shard job must compute the same split, so weights come only from the
+// sources and the committed cost table.
+export function shardMutationPatterns(
+  patterns: readonly string[],
+  shardIndex: number,
+  shardCount: number,
+  costs: MutationCosts = readMutationCosts(),
+): string[] {
   validateShardSelection(shardIndex, shardCount);
-  const selected = mutationShards(patterns, shardCount)[shardIndex];
+  const selected = mutationShards(patterns, shardCount, costs)[shardIndex];
   if (selected === undefined || selected.length === 0) {
     throw new Error(`Mutation shard ${String(shardIndex)}/${String(shardCount)} selected no source`);
   }
@@ -216,9 +211,14 @@ export function shardMutationPatterns(patterns: readonly string[], shardIndex: n
 }
 
 // A change that touches a few files leaves most shards empty; those pass without Stryker.
-export function changedShardPatterns(patterns: readonly string[], shardIndex: number, shardCount: number): string[] {
+export function changedShardPatterns(
+  patterns: readonly string[],
+  shardIndex: number,
+  shardCount: number,
+  costs: MutationCosts = readMutationCosts(),
+): string[] {
   validateShardSelection(shardIndex, shardCount);
-  return mutationShards(patterns, shardCount)[shardIndex] ?? [];
+  return mutationShards(patterns, shardCount, costs)[shardIndex] ?? [];
 }
 
 function outputLines(output: string): string[] {
