@@ -18,35 +18,6 @@ mutant counts with Stryker's unfiltered inventory, so a missing range or empty
 shard fails the gate. It counts mutants with a no-op test runner, because
 Stryker instruments before its dry run.
 
-## Shard balance
-
-Each shard job has a 90-minute limit, so the slowest shard sets how long the
-gate takes. Mutants differ widely in cost, and line counts do not predict it:
-a mutant that breaks a shared path such as `src/user-agent.ts` or
-`src/fetch-lifecycle.ts` fails hundreds of tests, many after a timeout.
-Stryker's own estimates come from the dry run, so they miss that too.
-
-`scripts/mutation-scope.mts` therefore splits the target by measured cost, from
-`mutation-costs.json`: milliseconds by source file and by the line each mutant
-starts on. Every shard job computes the same split from the sources and that
-table. A file the table lacks costs the measured average per line, so new code
-is balanced but not precisely. Without a table, every line costs 1.
-
-`scripts/mutation-timing-reporter.mts` is a Stryker reporter that charges each
-mutant the wall time since the previous result. Each shard uploads its timings
-as `mutation-timing-node-22-shard-<n>`, including a shard that times out. To
-refresh the table, download those artifacts from a full run on `main`, then run:
-
-```sh
-pnpm build:tooling
-node .quality-tools/update-mutation-costs.mjs path/to/mutation-timing-node-22-shard-*/mutation-timing.json
-```
-
-Each file the timings cover replaces that file's whole entry, and files they do
-not cover keep their costs. Prefer a run where every shard finished: a shard
-that timed out measured only part of its files. Refresh the table when the
-slowest shard grows well past the others.
-
 Stryker selects the mutants and enforces its native 100% threshold. Its score
 also treats `Timeout` as detected, so `scripts/check-mutation-report.mts`
 checks the JSON report separately: every valid mutant must be `Killed`, while
@@ -61,6 +32,52 @@ fails about 620 tests, and about 70 of them only after their 2- or 5-second wait
 expires: about 160 seconds on a fast machine. The 600-second per-mutant
 allowance keeps those slow kills from turning into timeouts on slower CI
 runners. Reaching it still fails.
+
+## Shard balance
+
+Each shard job has a 90-minute limit, so the slowest shard sets how long the
+gate takes. Mutants differ widely in cost, and line counts do not predict it:
+a mutant on a shared path such as `src/fetch-lifecycle.ts` reruns hundreds of
+tests, and a mutant that breaks one fails many of them after a timeout.
+Stryker's own estimates come from the dry run, so they miss that too.
+
+`scripts/mutation-scope.mts` therefore splits the target by measured cost, from
+`mutation-costs.json`: worker milliseconds by source file and by the line each
+mutant starts on. Every shard job computes the same split from the sources and
+that table. A file of type declarations costs nothing, because Stryker finds no
+mutants in it. Code the table has no timings for, a new file or a new chunk of
+a measured one, costs the measured average per line. Without a table, every
+line costs 1.
+
+Stryker runs each mutant through `timed-jest`
+(`scripts/mutation-timing-runner.mts`), which wraps the Jest runner and times
+each mutant inside the worker that runs it. A reporter cannot: Stryker reports
+results without start times, from several workers at once. Each worker appends
+its timings to `reports/mutation-timing/<pid>.jsonl`, and the shard log shows
+every mutant slower than 30 seconds as it finishes:
+
+```text
+Slow mutant src/user-agent.ts:107 ObjectLiteral 48.2s, 727 tests, killed
+```
+
+knip's Stryker plugin reads the `testRunner` name as a package,
+`@stryker-mutator/timed-jest-runner`, so `knip.json` ignores that name.
+
+After Stryker exits, `scripts/run-mutation.mts` prints the slowest mutants and
+the costliest files. The mutation step times out at 85 minutes, before the
+job's 90, so a shard that is too slow still uploads the timings it measured as
+`mutation-timing-node-22-shard-<n>`. To refresh the table, download those
+artifacts from a full run on `main`, then run:
+
+```sh
+pnpm build:tooling
+node .quality-tools/update-mutation-costs.mjs path/to/mutation-timing-node-22-shard-*
+```
+
+Each file the timings cover replaces that file's whole entry, and files they do
+not cover keep their costs. Prefer a run where every shard finished: a shard
+that timed out measured only part of its files. Refresh the table when the
+slowest shard grows well past the others.
 
 ## Runner lifetime
 

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { type MutationCosts, readMutationCosts } from './mutation-costs.mts';
+import { declaresTypesOnly, itemWeight, type ShardItem, unmeasuredLineCost } from './mutation-weights.mts';
 
 interface LineRange {
   start: number;
@@ -12,18 +13,13 @@ interface MutationShard {
   weight: number;
 }
 
-interface ShardItem {
-  path: string;
-  patterns: string[];
-  lines: number[];
-}
-
 interface SourceGroup {
   path: string;
   patterns: string[];
   lines: Set<number>;
   source: string;
   lineCount: number;
+  typesOnly: boolean;
 }
 
 // Stryker accepts file/line ranges but has no native CI shard selector.
@@ -84,7 +80,8 @@ function safeChunks(path: string, source: string, lineCount: number): LineRange[
   return chunks;
 }
 
-function selectedRanges(path: string, lines: ReadonlySet<number>, start: number, end: number): ShardItem {
+function selectedRanges(group: SourceGroup, start: number, end: number): ShardItem {
+  const { path, lines } = group;
   const selected = [...lines].filter((line) => line >= start && line <= end).toSorted((a, b) => a - b);
   const ranges: string[] = [];
   let current: LineRange | undefined;
@@ -100,39 +97,16 @@ function selectedRanges(path: string, lines: ReadonlySet<number>, start: number,
   if (current !== undefined) {
     ranges.push(`${path}:${String(current.start)}-${String(current.end)}`);
   }
-  return { path, patterns: ranges, lines: selected };
+  return { path, patterns: ranges, lines: selected, typesOnly: group.typesOnly };
 }
 
 function shardItems(group: SourceGroup): ShardItem[] {
   if (group.lines.size <= MAX_SHARD_LINES) {
-    return [{ path: group.path, patterns: group.patterns, lines: [...group.lines] }];
+    return [{ path: group.path, patterns: group.patterns, lines: [...group.lines], typesOnly: group.typesOnly }];
   }
   return safeChunks(group.path, group.source, group.lineCount)
-    .map(({ start, end }) => selectedRanges(group.path, group.lines, start, end))
+    .map(({ start, end }) => selectedRanges(group, start, end))
     .filter((item) => item.lines.length > 0);
-}
-
-// A file without measured costs, such as a new one, costs the measured
-// average per line; with no measurements, every line costs 1.
-function unmeasuredLineCost(groups: ReadonlyMap<string, SourceGroup>, costs: MutationCosts): number {
-  let cost = 0;
-  let lines = 0;
-  for (const group of groups.values()) {
-    const measured = costs.get(group.path);
-    if (measured !== undefined) {
-      cost += [...measured.values()].reduce((total, lineCost) => total + lineCost, 0);
-      lines += group.lineCount;
-    }
-  }
-  return cost > 0 && lines > 0 ? cost / lines : 1;
-}
-
-function itemWeight(item: ShardItem, costs: MutationCosts, unmeasured: number): number {
-  const measured = costs.get(item.path);
-  if (measured === undefined) {
-    return item.lines.length * unmeasured;
-  }
-  return item.lines.reduce((total, line) => total + (measured.get(line) ?? 0), 0);
 }
 
 function validateShardSelection(shardIndex: number, shardCount: number): void {
@@ -180,6 +154,7 @@ function addPatternGroup(groups: Map<string, SourceGroup>, pattern: string): voi
     lines: new Set<number>(),
     source,
     lineCount,
+    typesOnly: declaresTypesOnly(path, source),
   };
   group.patterns.push(pattern);
   for (let line = start; line <= end; line += 1) {
@@ -218,7 +193,7 @@ function distributeShardItems(
     patterns: [],
     weight: 0,
   }));
-  const unmeasured = unmeasuredLineCost(groups, costs);
+  const unmeasured = unmeasuredLineCost(groups.values(), costs);
   const ordered = [...groups.values()]
     .flatMap((group) => shardItems(group))
     .map((item) => ({ patterns: item.patterns, weight: itemWeight(item, costs, unmeasured) }))

@@ -188,7 +188,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fails the step before the job's limit cancels it, so the timing upload
+      # below still runs for a shard that is too slow.
       - name: Run mutation testing
+        timeout-minutes: 85
         env:
           MUTATION_SHARD_INDEX: ${{ matrix.mutation-shard }}
           MUTATION_SHARD_COUNT: '48'
@@ -202,7 +205,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-timing-node-22-shard-${{ matrix.mutation-shard }}
-          path: reports/mutation-timing.json
+          path: reports/mutation-timing/
           if-no-files-found: ignore
 
       - name: Preserve mutation results

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,7 +11,6 @@ import {
   parseMutationCosts,
   readMutationCosts,
 } from './mutation-costs.mts';
-import { MutationTimingReporter } from './mutation-timing-reporter.mts';
 import { record } from './values.mts';
 
 function withDirectory(run: (directory: string) => void): void {
@@ -83,53 +82,40 @@ await test('the formatted table sorts files and lines and round-trips', () => {
   assert.equal(formatMutationCosts(parseMutationCosts(text)), text);
 });
 
-await test('the timing reporter charges each mutant the wall time since the previous result', () => {
-  withDirectory((directory) => {
-    const output = join(directory, 'reports', 'mutation-timing.json');
-    const clock = [0, 1000, 1500, 4000, 4250];
-    let tick = 0;
-    const reporter = new MutationTimingReporter(() => Number(clock[tick++]), output);
-    reporter.onMutationTestingPlanReady();
-    reporter.onMutantTested({ fileName: join(process.cwd(), 'src', 'a.ts'), location: { start: { line: 3 } } });
-    reporter.onMutantTested({ fileName: 'src/a.ts', location: { start: { line: 3 } } });
-    reporter.onMutantTested({ fileName: 'src/b.ts', location: { start: { line: 8 } } });
-    assert.deepEqual(JSON.parse(readFileSync(output, 'utf8')), {
-      files: { 'src/a.ts': { 3: 3000 }, 'src/b.ts': { 8: 250 } },
-    });
-  });
-});
-
-await test('Stryker loads the timing reporter on every mutation run', () => {
+await test('Stryker runs every mutant through the timing test runner', () => {
   const config = record(JSON.parse(readFileSync('stryker.config.json', 'utf8')));
-  assert.deepEqual(config['plugins'], [
-    '@stryker-mutator/jest-runner',
-    './.quality-tools/mutation-timing-reporter.mjs',
-  ]);
-  assert.deepEqual(config['reporters'], ['clear-text', 'json', 'mutation-timing']);
+  assert.equal(config['testRunner'], 'timed-jest');
+  assert.deepEqual(config['plugins'], ['@stryker-mutator/jest-runner', './.quality-tools/mutation-timing-runner.mjs']);
+  assert.deepEqual(config['reporters'], ['clear-text', 'json']);
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  assert.match(workflow, /- name: Run mutation testing\n {8}timeout-minutes: 85\n/u);
   assert.match(
     workflow,
-    /- name: Preserve mutation timings\n {8}if: \$\{\{ always\(\) \}\}\n(?:.*\n){2} {10}name: mutation-timing-node-22-shard-\$\{\{ matrix\.mutation-shard \}\}\n {10}path: reports\/mutation-timing\.json\n/u,
+    /- name: Preserve mutation timings\n {8}if: \$\{\{ always\(\) \}\}\n(?:.*\n){2} {10}name: mutation-timing-node-22-shard-\$\{\{ matrix\.mutation-shard \}\}\n {10}path: reports\/mutation-timing\/\n/u,
   );
 });
 
-await test('the update script merges timing files into the cost table', () => {
+function timing(file: string, line: number, ms: number): string {
+  return `${JSON.stringify({ file, line, mutator: 'BlockStatement', ms, tests: 3, status: 'killed' })}\n`;
+}
+
+await test('the update script merges worker timing files into the cost table', () => {
   withDirectory((directory) => {
     writeFileSync(join(directory, mutationCostsPath), '{"files":{"src/b.ts":{"2":7}}}');
-    writeFileSync(join(directory, 'shard-0.json'), '{"files":{"src/a.ts":{"1":5}}}');
-    writeFileSync(join(directory, 'shard-1.json'), '{"files":{"src/a.ts":{"4":6}}}');
+    mkdirSync(join(directory, 'shard-0'));
+    writeFileSync(join(directory, 'shard-0', '101.jsonl'), timing('src/a.ts', 1, 5) + timing('src/a.ts', 1, 2));
+    writeFileSync(join(directory, 'shard-0', 'ignored.txt'), 'not timings');
+    writeFileSync(join(directory, 'shard-1.jsonl'), timing('src/a.ts', 4, 6));
     const script = join(process.cwd(), '.quality-tools', 'update-mutation-costs.mjs');
-    const run = spawnSync(process.execPath, [script, 'shard-0.json', 'shard-1.json'], {
-      cwd: directory,
-      encoding: 'utf8',
-    });
+    const run = spawnSync(process.execPath, [script, 'shard-0', 'shard-1.jsonl'], { cwd: directory, encoding: 'utf8' });
     assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /from 3 mutant timings/u);
     assert.equal(
       readFileSync(join(directory, mutationCostsPath), 'utf8'),
-      `${JSON.stringify({ files: { 'src/a.ts': { 1: 5, 4: 6 }, 'src/b.ts': { 2: 7 } } }, undefined, 2)}\n`,
+      `${JSON.stringify({ files: { 'src/a.ts': { 1: 7, 4: 6 }, 'src/b.ts': { 2: 7 } } }, undefined, 2)}\n`,
     );
     const empty = spawnSync(process.execPath, [script], { cwd: directory, encoding: 'utf8' });
     assert.notEqual(empty.status, 0);
-    assert.match(empty.stderr, /Pass the mutation-timing\.json files/u);
+    assert.match(empty.stderr, /Pass the mutation-timing artifact directories/u);
   });
 });
