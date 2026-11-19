@@ -77,7 +77,8 @@ export function buildUserAgent(environment: object): string | null {
 // detection code. The runtime cannot change, so the result is kept.
 let detectedUserAgent: string | null | undefined;
 
-function currentUserAgent(): string | null {
+/** The SDK's User-Agent in this runtime, or null where none is sent. */
+export function sdkUserAgent(): string | null {
   if (detectedUserAgent === undefined) {
     detectedUserAgent = buildUserAgent(globalThis);
   }
@@ -90,7 +91,7 @@ export function addUserAgent(init: RequestInit, userAgent: string | null): Reque
     return init;
   }
   const { headers } = init;
-  if ([...new Headers(headers).keys()].includes('user-agent')) {
+  if (new Headers(headers).has('user-agent')) {
     return init;
   }
   if (headers instanceof Headers || Array.isArray(headers)) {
@@ -103,10 +104,5 @@ export function addUserAgent(init: RequestInit, userAgent: string | null): Reque
 
 /** Adds the SDK's User-Agent outside browsers, keeping one the caller set. */
 export function withUserAgent(init: RequestInit): RequestInit {
-  return addUserAgent(init, currentUserAgent());
-}
-
-/** The SDK's User-Agent in this runtime, or null where none is sent. */
-export function sdkUserAgent(): string | null {
-  return currentUserAgent();
+  return addUserAgent(init, sdkUserAgent());
 }
