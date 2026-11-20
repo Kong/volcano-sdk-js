@@ -4,7 +4,7 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 import type {
@@ -13,6 +13,7 @@ import type {
   BandwidthCapExceededResponse,
   CreateSandboxSessionRequest,
   CreateSandboxTemplateRequest,
+  DatabaseBranchQueryUnavailableResponse,
   DatabaseQueryCapExceededResponse,
   DatabaseQueryResult,
   DatabaseSelectRequest,
@@ -1333,11 +1334,11 @@ export const getStartDurableExecutionFromApplicationUrl = (functionId: string,) 
  * A `private` durable function answers every credential but a service key
  * exactly as a missing one, with 404.
  *
- * The start returns a `client_token`. An anon key, or a user who did not
- * start the execution, sends it as `X-Volcano-Client-Token` to read the
- * execution, stop it, and reach its messages. A service key scoped to a
- * list without `*` sends it to read and stop the execution. An anon key is shared by
- * everyone who loads the page, so the id alone never reaches an
+ * The start returns a `client_token`. An anon key, a service key scoped
+ * to a list without `*`, or a user who did not start the execution,
+ * sends it as `X-Volcano-Client-Token` to read the execution, stop it,
+ * and reach its messages. An anon key is shared by everyone who loads
+ * the page, so the id alone never reaches an
  * execution. Listing executions takes the project owner's token or a
  * project access token.
  *
@@ -1626,7 +1627,11 @@ export const getSendDurableMessageFromApplicationUrl = (functionId: string,
  * Messages never decide an approval: a workflow waiting in
  * `ctx.waitForApproval` is not resumed by one.
  *
- * **With a service key:** any execution in the project.
+ * **With a service key:** any execution in the project when the key holds
+ * `*`, the default. A key scoped to a list without `*`, such as
+ * `["functions.invoke"]`, reaches an execution whose
+ * `X-Volcano-Client-Token` the request carries, as an anon key does; the
+ * start returns that token.
  *
  * **With an auth user token:** an execution the user started, or one
  * whose `X-Volcano-Client-Token` the request carries, of a durable
@@ -2472,15 +2477,25 @@ export type queryDatabaseSelectResponse404 = {
   status: 404
 }
 
+export type queryDatabaseSelectResponse413 = {
+  data: Error
+  status: 413
+}
+
 export type queryDatabaseSelectResponse429 = {
   data: DatabaseQueryCapExceededResponse
   status: 429
 }
 
+export type queryDatabaseSelectResponse503 = {
+  data: DatabaseBranchQueryUnavailableResponse
+  status: 503
+}
+
 export type queryDatabaseSelectResponseSuccess = (queryDatabaseSelectResponse200) & {
   headers: Headers;
 };
-export type queryDatabaseSelectResponseError = (queryDatabaseSelectResponse400 | queryDatabaseSelectResponse401 | queryDatabaseSelectResponse403 | queryDatabaseSelectResponse404 | queryDatabaseSelectResponse429) & {
+export type queryDatabaseSelectResponseError = (queryDatabaseSelectResponse400 | queryDatabaseSelectResponse401 | queryDatabaseSelectResponse403 | queryDatabaseSelectResponse404 | queryDatabaseSelectResponse413 | queryDatabaseSelectResponse429 | queryDatabaseSelectResponse503) & {
   headers: Headers;
 };
 
@@ -2499,7 +2514,7 @@ export const getQueryDatabaseSelectUrl = (databaseName: string,) => {
  *
  * **Authentication:** Requires auth user access token (from signup/signin)
  *
- * **Row-Level Security:** Automatically enforced - you see only data you have access to
+ * **Row-Level Security:** Applied on tables with RLS enabled. A table without RLS returns every row your role is granted
  *
  * **Use Cases:**
  * - Query from browser/mobile apps
