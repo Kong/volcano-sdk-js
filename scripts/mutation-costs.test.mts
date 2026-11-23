@@ -114,6 +114,12 @@ await test('the update script merges worker timing files into the cost table', (
       readFileSync(join(directory, mutationCostsPath), 'utf8'),
       `${JSON.stringify({ files: { 'src/a.ts': { 1: 7, 4: 6 }, 'src/b.ts': { 2: 7 } } }, undefined, 2)}\n`,
     );
+    mkdirSync(join(directory, 'shard-empty'));
+    for (const missing of ['shard-9', 'shard-empty']) {
+      const rejected = spawnSync(process.execPath, [script, 'shard-0', missing], { cwd: directory, encoding: 'utf8' });
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, new RegExp(`${missing}: no mutant timings; check the artifact path`, 'u'));
+    }
     const empty = spawnSync(process.execPath, [script], { cwd: directory, encoding: 'utf8' });
     assert.notEqual(empty.status, 0);
     assert.match(empty.stderr, /Pass the mutation-timing artifact directories/u);

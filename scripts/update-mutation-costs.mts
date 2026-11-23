@@ -11,8 +11,16 @@ if (inputs.length === 0) {
 
 // Decides by name rather than checking the path first, which a concurrent
 // change could invalidate between the check and the read.
+// A mistyped or undownloaded artifact would otherwise leave its files' old
+// costs in place while the refresh reports success.
 function timings(path: string): MutantTiming[] {
-  return path.endsWith('.jsonl') ? parseMutantTimings(readFileSync(path, 'utf8'), path) : readMutantTimings(path);
+  const measured = path.endsWith('.jsonl')
+    ? parseMutantTimings(readFileSync(path, 'utf8'), path)
+    : readMutantTimings(path);
+  if (measured.length === 0) {
+    throw new Error(`${path}: no mutant timings; check the artifact path`);
+  }
+  return measured;
 }
 
 const measured = inputs.flatMap((path) => timings(path));
