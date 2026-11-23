@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { changedShardPatterns, shardMutationPatterns } from './mutation-scope.mts';
-import { declaresTypesOnly, itemWeight, unmeasuredLineCost } from './mutation-weights.mts';
+import { itemWeight, runtimeLines, unmeasuredLineCost } from './mutation-weights.mts';
 import { stringValue } from './values.mts';
 
 function indexes(length: number): number[] {
@@ -42,29 +42,32 @@ function withFixtures(sources: Readonly<Record<string, string>>, run: (paths: st
   }
 }
 
-await test('a file of type declarations is recognized as having no runtime code', () => {
-  assert.equal(
-    declaresTypesOnly(
-      'types.ts',
-      [
-        "import type { Readable } from 'node:stream';",
-        'export interface Shape { size: number }',
-        'export type Alias = Readable;',
-        "export type { Other } from './other.ts';",
-        'declare const injected: string;',
-      ].join('\n'),
-    ),
-    true,
-  );
-  for (const source of [
-    "import { Readable } from 'node:stream';",
-    'export const value = 1;',
+await test('only statements Stryker can mutate count as runtime lines', () => {
+  const declarations = [
+    "import type { Readable } from 'node:stream';",
+    "import { Writable } from 'node:stream';",
+    'export interface Shape {',
+    '  size: number;',
+    '}',
+    'export type Alias = Readable;',
+    "export type { Other } from './other.ts';",
     "export { value } from './value.ts';",
-    'export function run() {}',
-    'export enum Kind { A }',
-  ]) {
-    assert.equal(declaresTypesOnly('runtime.ts', source), false, source);
-  }
+    "export * from './all.ts';",
+    'declare const injected: string;',
+  ].join('\n');
+  assert.deepEqual([...runtimeLines('types.ts', declarations)], []);
+  const mixed = [
+    "import { join } from 'node:path';",
+    '// A comment before runtime code.',
+    'export function run() {',
+    "  return join('a', 'b');",
+    '}',
+    'export type Result = string;',
+    'export enum Kind {',
+    '  A,',
+    '}',
+  ].join('\n');
+  assert.deepEqual([...runtimeLines('mixed.ts', mixed)], [3, 4, 5, 7, 8, 9]);
 });
 
 await test('item weights come from measured lines, the unmeasured average, or nothing', () => {
@@ -78,11 +81,11 @@ await test('item weights come from measured lines, the unmeasured average, or no
   );
   assert.equal(unmeasured, 30);
   assert.equal(unmeasuredLineCost([{ path: 'src/new.ts', lineCount: 9 }], costs), 1);
-  const item = { path: 'src/a.ts', patterns: ['src/a.ts'], lines: [1, 2, 3], typesOnly: false };
+  const item = { path: 'src/a.ts', patterns: ['src/a.ts'], lines: [1, 2, 3], mutantFree: false };
   assert.equal(itemWeight(item, costs, unmeasured), 300);
   assert.equal(itemWeight({ ...item, lines: [5, 6] }, costs, unmeasured), 60);
   assert.equal(itemWeight({ ...item, path: 'src/new.ts' }, costs, unmeasured), 90);
-  assert.equal(itemWeight({ ...item, typesOnly: true }, costs, unmeasured), 0);
+  assert.equal(itemWeight({ ...item, mutantFree: true }, costs, unmeasured), 0);
 });
 
 await test('measured costs, not line counts, balance the shards', () => {
@@ -113,7 +116,7 @@ await test('measured costs, not line counts, balance the shards', () => {
     assert.deepEqual(changedShardPatterns(paths, 1, 2, costs), [newFile, `${heavy}:2-10`, light]);
     // Pieces are sized against the whole table, so when other files make up
     // most of the full run, the heavy file stays whole.
-    const fullRun = new Map([...costs, ['src/elsewhere.ts', new Map([[1, 100_000]])]]);
+    const fullRun = new Map([...costs, ['src/index.ts', new Map([[1, 100_000]])]]);
     assert.deepEqual(
       indexes(2).map((shard) => changedShardPatterns(paths, shard, 2, fullRun)),
       [[heavy], [newFile, light, typesOnly]],
@@ -144,6 +147,32 @@ await test('a chunk added to a measured file costs the unmeasured average, not n
     assert.deepEqual(
       shards.map((selected) => selected.length > 0),
       [true, true, true],
+    );
+  });
+});
+
+await test('a chunk of a measured file with no runtime code costs nothing', () => {
+  const declarations = indexes(40)
+    .map((line) => `export interface I${String(line)} {\n  value: number;\n}`)
+    .join('\n');
+  withFixtures({ declared: `${declarations}\n${functions(1)}`, other: functions(2) }, (paths) => {
+    const declared = stringValue(paths[0]);
+    const other = stringValue(paths[1]);
+    // The first 120 lines are interfaces in two chunks with no measured lines
+    // but also no runtime code, so they cost 0 and fill the lighter shard.
+    // The other file's 82 lines split into a measured chunk and one costing
+    // the average, (500 + 500) / 243 lines, about 168. Charged that average
+    // too, the interface chunks would weigh about 320 and 172 and move.
+    const costs = new Map([
+      [declared, new Map([[122, 500]])],
+      [other, new Map([[2, 500]])],
+    ]);
+    assert.deepEqual(
+      indexes(2).map((shard) => shardMutationPatterns(paths, shard, 2, costs)),
+      [
+        [`${declared}:121-161`, `${other}:42-82`],
+        [`${other}:1-41`, `${declared}:1-78`, `${declared}:79-120`],
+      ],
     );
   });
 });

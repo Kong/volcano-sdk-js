@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { formatMutationCosts, mergeMutationCosts, mutationCostsPath, readMutationCosts } from './mutation-costs.mts';
 import { type MutantTiming, parseMutantTimings, readMutantTimings, timingCosts } from './mutation-timing.mts';
 
@@ -24,5 +24,8 @@ function timings(path: string): MutantTiming[] {
 }
 
 const measured = inputs.flatMap((path) => timings(path));
-writeFileSync(mutationCostsPath, formatMutationCosts(mergeMutationCosts(readMutationCosts(), [timingCosts(measured)])));
+// Entries for deleted or renamed files would otherwise stay forever.
+const merged = mergeMutationCosts(readMutationCosts(), [timingCosts(measured)]);
+const current = new Map([...merged].filter(([path]) => existsSync(path)));
+writeFileSync(mutationCostsPath, formatMutationCosts(current));
 process.stdout.write(`Updated ${mutationCostsPath} from ${String(measured.length)} mutant timings\n`);

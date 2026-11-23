@@ -1,13 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { type LineRange, MAX_SHARD_LINES, safeChunks } from './mutation-chunks.mts';
 import { type MutationCosts, readMutationCosts } from './mutation-costs.mts';
-import {
-  declaresTypesOnly,
-  itemWeight,
-  measuredCost,
-  type ShardItem,
-  unmeasuredLineCost,
-} from './mutation-weights.mts';
+import { itemWeight, measuredCost, runtimeLines, type ShardItem, unmeasuredLineCost } from './mutation-weights.mts';
 
 interface MutationShard {
   patterns: string[];
@@ -20,7 +14,7 @@ interface SourceGroup {
   lines: Set<number>;
   source: string;
   lineCount: number;
-  typesOnly: boolean;
+  runtimeLines: ReadonlySet<number>;
 }
 
 // Stryker accepts file/line ranges but has no native CI shard selector.
@@ -57,11 +51,22 @@ function selectedRanges(group: SourceGroup, start: number, end: number): ShardIt
   if (current !== undefined) {
     ranges.push(`${path}:${String(current.start)}-${String(current.end)}`);
   }
-  return { path, patterns: ranges, lines: selected, typesOnly: group.typesOnly };
+  return {
+    path,
+    patterns: ranges,
+    lines: selected,
+    mutantFree: !selected.some((line) => group.runtimeLines.has(line)),
+  };
 }
 
 function wholeItem(group: SourceGroup): ShardItem {
-  return { path: group.path, patterns: group.patterns, lines: [...group.lines], typesOnly: group.typesOnly };
+  const lines = [...group.lines];
+  return {
+    path: group.path,
+    patterns: group.patterns,
+    lines,
+    mutantFree: !lines.some((line) => group.runtimeLines.has(line)),
+  };
 }
 
 // A file too long, or measured as too costly, for one item splits between
@@ -126,7 +131,7 @@ function addPatternGroup(groups: Map<string, SourceGroup>, pattern: string): voi
     lines: new Set<number>(),
     source,
     lineCount,
-    typesOnly: declaresTypesOnly(path, source),
+    runtimeLines: runtimeLines(path, source),
   };
   group.patterns.push(pattern);
   for (let line = start; line <= end; line += 1) {

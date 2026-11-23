@@ -101,7 +101,11 @@ function timing(file: string, line: number, ms: number): string {
 
 await test('the update script merges worker timing files into the cost table', () => {
   withDirectory((directory) => {
-    writeFileSync(join(directory, mutationCostsPath), '{"files":{"src/b.ts":{"2":7}}}');
+    // src/gone.ts was deleted since the last refresh, so its entry is dropped.
+    mkdirSync(join(directory, 'src'));
+    writeFileSync(join(directory, 'src', 'a.ts'), 'export const a = 1;\n');
+    writeFileSync(join(directory, 'src', 'b.ts'), 'export const b = 1;\n');
+    writeFileSync(join(directory, mutationCostsPath), '{"files":{"src/b.ts":{"2":7},"src/gone.ts":{"1":9}}}');
     mkdirSync(join(directory, 'shard-0'));
     writeFileSync(join(directory, 'shard-0', '101.jsonl'), timing('src/a.ts', 1, 5) + timing('src/a.ts', 1, 2));
     writeFileSync(join(directory, 'shard-0', 'ignored.txt'), 'not timings');
