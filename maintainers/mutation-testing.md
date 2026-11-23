@@ -46,11 +46,11 @@ Stryker's own estimates come from the dry run, so they miss that too.
 mutant starts on. Every shard job computes the same split from the sources and
 that table. A measured file that costs more than one shard's share of the full
 run splits between statements or class members, as a file longer than 80 lines
-does, so one slow file cannot set the slowest shard. A file of type declarations
-costs nothing, because Stryker finds no
-mutants in it. Code the table has no timings for, a new file or a new chunk of
-a measured one, costs the measured average per line. Without a table, every
-line costs 1.
+does, so one slow file cannot set the slowest shard. A file or chunk with only
+type declarations, imports, re-exports, or `declare` statements costs nothing,
+because Stryker finds no mutants in it. Other code the table has no timings
+for, a new file or a new chunk of a measured one, costs the measured average
+per line. Without a table, every line costs 1.
 
 Stryker runs each mutant through `timed-jest`
 (`scripts/mutation-timing-runner.mts`), which wraps the Jest runner and times
@@ -77,8 +77,9 @@ pnpm build:tooling
 node .quality-tools/update-mutation-costs.mjs path/to/mutation-timing-node-22-shard-*
 ```
 
-Each file the timings cover replaces that file's whole entry, and files they do
-not cover keep their costs. Prefer a run where every shard finished: a shard
+Each file the timings cover replaces that file's whole entry, files they do not
+cover keep their costs, and entries for files that no longer exist are dropped.
+The refresh fails on an input that holds no timings, such as a mistyped path. Prefer a run where every shard finished: a shard
 that timed out measured only part of its files. Refresh the table when the
 slowest shard grows well past the others.
 
