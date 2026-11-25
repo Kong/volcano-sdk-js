@@ -1,6 +1,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { mutantCount } from './mutant-inventory.mts';
+import {
+  mutationTimingDirectory,
+  mutationTimingSummary,
+  projectRootVariable,
+  readMutantTimings,
+} from './mutation-timing.mts';
 import { selectMutationPatterns } from './mutation-scope.mts';
 
 function git(...args: readonly string[]): string {
@@ -33,9 +39,12 @@ if (patterns.length === 0 || (base !== undefined && mutantCount(patterns) === 0)
   process.stdout.write(`No mutable runtime code changed since ${String(base)} in this shard; skipping Stryker.\n`);
 } else {
   rmSync('reports/mutation.json', { force: true });
+  rmSync(mutationTimingDirectory, { recursive: true, force: true });
   const stryker = spawnSync('./node_modules/.bin/stryker', ['run', '--mutate', patterns.join(',')], {
     stdio: 'inherit',
+    env: { ...process.env, [projectRootVariable]: process.cwd() },
   });
+  process.stdout.write(mutationTimingSummary(readMutantTimings(mutationTimingDirectory)));
   const report = spawnSync(process.execPath, ['.quality-tools/check-mutation-report.mjs'], {
     stdio: 'inherit',
   });
