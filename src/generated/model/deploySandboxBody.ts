@@ -4,7 +4,7 @@
  * Volcano API
  * Public API for Volcano clients, SDKs, and CLI tooling (Port 8000).
  *
- * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal and Builder operations.
+ * This specification intentionally excludes first-party/internal APIs. See api/openapi-internal.yaml for non-public internal operations.
  * OpenAPI spec version: 3.0.0
  */
 import type { DeploySandboxBodyMemoryMb } from './deploySandboxBodyMemoryMb';
@@ -12,10 +12,12 @@ import type { DeploySandboxBodyMemoryMb } from './deploySandboxBodyMemoryMb';
 export type DeploySandboxBody = {
   /** @pattern ^[a-z][a-z0-9-]{0,62}$ */
   name: string;
-  /** Source tar.gz archive, limited to 32 MiB compressed and expanded. */
-  code: Blob | File;
+  /** Source tar.gz archive, limited to 32 MiB compressed and expanded. Required for customer templates. Omit for the managed Builder template. */
+  code?: Blob | File;
   /** Memory in MiB. Defaults to 1024 when omitted. */
   memory_mb?: DeploySandboxBodyMemoryMb;
   /** JSON array of application ports that must become ready before activation, for example [8080]. */
   ports?: string;
+  /** Run a rootless container engine (Docker Engine with Compose) in every session of this template. Commands reach it through `DOCKER_HOST` and keep the same privileges as in any other session. Disabled by default. Only the operator-authorized Builder caller in local mode can deploy its reserved platform template, with no code archive or ports. Disabled or unsupported opt-ins answer `400 feature_unavailable`. An unauthorized caller receives 403; incompatible form fields receive 400. */
+  containers?: boolean;
 };
